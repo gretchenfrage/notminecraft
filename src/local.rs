@@ -6,23 +6,24 @@ use std::{
 };
 
 
-/// Local Block Coord.
+/// Local block coord.
 ///
 /// Panics if coords are out of bounds. 
-pub fn lbc<X, Y, Z>(x: X, y: Y, z: Z) -> LocalBlockCoord
+pub fn lbc<X, Y, Z>(x: X, y: Y, z: Z) -> Lbc
 where
     X: TryInto<u16>,
     Y: TryInto<u16>,
     Z: TryInto<u16>,
 {
-    LocalBlockCoord::new(
+    Lbc::new(
         x.try_into().ok().unwrap(),
         y.try_into().ok().unwrap(),
         z.try_into().ok().unwrap(),
     )
 }
 
-
+/// Local block coord.
+///
 /// Coordinate of a block within a chunk.
 ///
 /// Represented as a `u16` bitfield, but has the semantics of a structure of
@@ -34,7 +35,7 @@ where
 ///   length of `0x10000`.
 /// - Iterating through the indices of this array with a u16 can be done with
 ///   the range `0..=0xffff`.
-/// - Converting between an array index and a `LocalBlockCoord` is a no-op,
+/// - Converting between an array index and a `Lbc` is a no-op,
 ///   done by wrapping / unwrapping the `u16` index.
 ///
 /// The layout of the bit field is as such:
@@ -52,18 +53,18 @@ where
 /// inner `u16` as an array index, blocks which are nearby in 3D space are
 /// nearby in the array, thus facilitating spatial locality. 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct LocalBlockCoord(pub u16);
+pub struct Lbc(pub u16);
 
-impl LocalBlockCoord {
+impl Lbc {
     /// Construct from <X, Y, Z> coords.
     ///
     /// Panics if coords are out of range.
     pub fn new(x: u16, y: u16, z: u16) -> Self {
-        assert!(x <= 0xf, "LocalBlockCoord x={} is too high", x);
-        assert!(y <= 0xff, "LocalBlockCoord y={} is too high", y);
-        assert!(z <= 0xf, "LocalBlockCoord z={} is too high", z);
+        assert!(x <= 0xf, "Lbc x={} is too high", x);
+        assert!(y <= 0xff, "Lbc y={} is too high", y);
+        assert!(z <= 0xf, "Lbc z={} is too high", z);
         
-        LocalBlockCoord(
+        Lbc(
             ((y & 0xf0) >> 4)
             | (x << 4)
             | ((y & 0x0f) << 8)
@@ -76,7 +77,7 @@ impl LocalBlockCoord {
         (self.0 & 0x00f0) >> 4
     }
     
-    /// Get the Z coord.
+    /// Get the Y coord.
     pub fn y(&self) -> u16 {
         ((self.0 & 0x000f) << 4) | ((self.0 & 0x0f00) >> 8)
     }
@@ -90,7 +91,7 @@ impl LocalBlockCoord {
     ///
     /// Panics if coord is out of range.
     pub fn set_x(&mut self, x: u16) {
-        assert!(x <= 0xf, "LocalBlockCoord x={} is too high", x);
+        assert!(x <= 0xf, "Lbc x={} is too high", x);
         self.0 &= 0xff0f;
         self.0 |= x << 4;
     }
@@ -99,7 +100,7 @@ impl LocalBlockCoord {
     /// 
     /// Panics if coord is out of range.
     pub fn set_y(&mut self, y: u16) {
-        assert!(y <= 0xff, "LocalBlockCoord y={} is too high", y);
+        assert!(y <= 0xff, "Lbc y={} is too high", y);
         self.0 &= 0xf0f0;
         self.0 |= (y & 0xf0) >> 4;
         self.0 |= (y & 0x0f) << 8;
@@ -109,7 +110,7 @@ impl LocalBlockCoord {
     ///
     /// Panics if coord is out of range.
     pub fn set_z(&mut self, z: u16) {
-        assert!(z <= 0xf, "LocalBlockCoord z={} is too high", z);
+        assert!(z <= 0xf, "Lbc z={} is too high", z);
         self.0 &= 0x0fff;
         self.0 |= z << 12;
     }
@@ -122,7 +123,7 @@ impl LocalBlockCoord {
 
 macro_rules! impl_fmt_local_block_coord {
     ($t:ident, $fstr:literal)=>{
-        impl fmt::$t for LocalBlockCoord {
+        impl fmt::$t for Lbc {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(
                     f, $fstr, 

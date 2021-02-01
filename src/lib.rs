@@ -6,15 +6,15 @@ mod chunk;
 
 pub use crate::{
     local::{
-        LocalBlockCoord,
+        Lbc,
         lbc,
     },
     global::{
-        GlobalBlockCoord,
+        Gbc,
         gbc,
     },
     chunk::{
-        ChunkCoord,
+        Chc,
         chc,
     },
 };
@@ -23,7 +23,7 @@ pub use crate::{
 #[test]
 fn test_block_coord_packing() {
     for i in 0..=0xffff {
-        let c = LocalBlockCoord(i);
+        let c = Lbc(i);
         assert_eq!(
             i,
             lbc(c.x(), c.y(), c.z()).0,
@@ -40,7 +40,7 @@ fn test_coord_splitting_joining() {
                 let c = gbc(x, y, z);
                 assert_eq!(
                     c,
-                    GlobalBlockCoord::from_parts(
+                    Gbc::from_parts(
                         c.to_chunk(),
                         c.to_local(),
                     )
