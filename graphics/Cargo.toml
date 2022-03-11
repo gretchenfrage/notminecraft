@@ -7,4 +7,4 @@ edition = "2021"
 wgpu = "0.12"
 tracing = "0.1"
 anyhow = "1"
-winit-main = "0.1"
+winit-main = { path = "../winit-main" }

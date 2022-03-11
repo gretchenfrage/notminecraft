@@ -1,0 +1,13 @@
+[package]
+name = "winit-main"
+version = "0.1.3-POSTRELEASE"
+authors = ["Phoenix Kahlo <kahlo.phoenix@gmail.com>"]
+edition = "2018"
+repository = "https://gitlab.com/gretchenfrage/winit-main"
+description = "Abstract away winit's event-loop inversion of control"
+license-file = "../LICENSE.md"
+readme = "../README.md"
+publish = false
+
+[dependencies]
+winit = "0.26"
