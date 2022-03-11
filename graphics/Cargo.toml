@@ -1,0 +1,10 @@
+[package]
+name = "graphics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wgpu = "0.12"
+tracing = "0.1"
+anyhow = "1"
+winit-main = "0.1"
