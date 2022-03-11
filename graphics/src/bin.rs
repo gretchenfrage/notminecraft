@@ -16,6 +16,7 @@ use winit_main::{
         WindowEvent,
     },
 };
+use tracing_subscriber::FmtSubscriber;
 
 
 fn draw_frame(mut canvas: Canvas2d) {
@@ -50,6 +51,9 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 }
 
 fn main() {
+    let subscriber = FmtSubscriber::builder().finish();
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     winit_main::run(|event_loop, events| async move {
         let result = window_main(event_loop, events).await;
         if let Err(e) = result {

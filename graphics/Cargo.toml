@@ -13,7 +13,9 @@ path = "src/bin.rs"
 
 [dependencies]
 tracing = "0.1"
+tracing-subscriber = "0.3"
 anyhow = "1"
+shaderc = "0.7"
 
 [dependencies.winit-main]
 path = "../winit-main"
@@ -21,3 +23,7 @@ path = "../winit-main"
 [dependencies.wgpu]
 version = "0.12"
 features = ["spirv"]
+
+[dependencies.tokio]
+version = "1"
+features = ["fs"]
