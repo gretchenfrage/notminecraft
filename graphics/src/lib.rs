@@ -1,16 +1,20 @@
 
 use std::sync::Arc;
 use anyhow::Result;
-use winit_main::{
-    EventLoopHandle,
-    reexports::window::Window,
+use winit_main::reexports::{
+    window::Window,
+    dpi::PhysicalSize,
 };
 use wgpu::*;
 
 
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
-    window: Arc<Window>,
+    surface: Surface,
+    device: Device,
+    queue: Queue,
+    render_pipeline: RenderPipeline,
+    config: SurfaceConfiguration,
 }
 
 impl Renderer {
@@ -24,18 +28,117 @@ impl Renderer {
                 power_preference: PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+            })
+            .await
+            .ok_or_else(|| anyhow::Error::msg("failed to find an appropriate adapter"))?;
+
+        let (device, queue) = adapter
+            .request_device(
+                &DeviceDescriptor {
+                    label: None,
+                    features: Features::empty(),
+                    limits: Limits::default(),
+                },
+                None,
+            )
+            .await?;
+
+        let vs_module = device
+            .create_shader_module(&include_spirv!("shader.vert.spv"));
+        let fs_module = device
+            .create_shader_module(&include_spirv!("shader.frag.spv"));
+
+        let pipeline_layout = device
+            .create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
             });
 
+        let swapchain_format = TextureFormat::Bgra8Unorm;
+
+        let render_pipeline = device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                vertex: VertexState {
+                    module: &vs_module,
+                    entry_point: "main",
+                    buffers: &[],
+                },
+                fragment: Some(FragmentState {
+                    module: &fs_module,
+                    entry_point: "main",
+                    targets: &[swapchain_format.into()],
+                }),
+                primitive: PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: MultisampleState::default(),
+                multiview: None,
+            });
+
+        let config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            format: swapchain_format,
+            width: size.width,
+            height: size.height,
+            present_mode: PresentMode::Mailbox,
+        };
+
+        surface.configure(&device, &config);
+
+
         Ok(Renderer {
-            window,
+            surface,
+            device,
+            queue,
+            render_pipeline,
+            config,
         })
+    }
+
+    /// Resize the surface, in reponse to a change in window size.
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.config.width = size.width;
+        self.config.height = size.height;
+        self.surface.configure(&self.device, &self.config);
     }
 
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
     /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
     /// right corner).
-    pub fn draw_frame(&mut self, f: impl FnOnce(Canvas2d)) {
+    pub fn draw_frame(&mut self, f: impl FnOnce(Canvas2d)) -> Result<()> {
+        let frame = self.surface
+            .get_current_texture()?;
+        let view = frame
+            .texture
+            .create_view(&TextureViewDescriptor::default());
+        let mut encoder = self.device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: None,
+            });
+        let mut pass = encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: None,
+                color_attachments: &[
+                    RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::GREEN),
+                            store: true,
+                        }
+                    }
+                ],
+                depth_stencil_attachment: None,
+            });
+        pass.set_pipeline(&self.render_pipeline);
+        pass.draw(0..3, 0..1);
+        drop(pass);
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
 
+        Ok(())
     }
 }
 

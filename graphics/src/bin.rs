@@ -7,7 +7,7 @@ use graphics::{
     Canvas2d,
 };
 use std::sync::Arc;
-use anyhow::Result;
+use anyhow::*;
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
@@ -31,12 +31,15 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
         match events.recv().await {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => break,
+                WindowEvent::Resized(size) => {
+                    renderer.resize(size);
+                },
                 _ => (),
             },
             Event::RedrawRequested(_) => {
                 renderer.draw_frame(|canvas| {
                     draw_frame(canvas);
-                });
+                })?;
                 window.request_redraw();
             },
             _ => (),

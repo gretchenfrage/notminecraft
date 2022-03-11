@@ -3,8 +3,21 @@ name = "graphics"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "graphics"
+path  = "src/lib.rs"
+
+[[bin]]
+name = "graphics"
+path = "src/bin.rs"
+
 [dependencies]
-wgpu = "0.12"
 tracing = "0.1"
 anyhow = "1"
-winit-main = { path = "../winit-main" }
+
+[dependencies.winit-main]
+path = "../winit-main"
+
+[dependencies.wgpu]
+version = "0.12"
+features = ["spirv"]
