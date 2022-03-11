@@ -1,5 +1,4 @@
 
-use std::sync::mpsc;
 use winit::{
     event_loop::EventLoopWindowTarget,
     monitor::MonitorHandle,
@@ -10,6 +9,7 @@ use winit::{
     },
     error::OsError,
 };
+use tokio::sync::oneshot;
 
 
 /// Request for some function to be evaluated in the context of the event loop
@@ -26,7 +26,7 @@ pub trait Request: Sized + Send {
 /// simulated main thread.
 pub struct RequestCallback<R: Request> {
     pub request: R,
-    pub callback: mpsc::Sender<R::Response>,
+    pub callback: oneshot::Sender<R::Response>,
 }
 
 impl<R: Request> RequestCallback<R> {

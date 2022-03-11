@@ -15,7 +15,7 @@ pub struct Renderer {
 
 impl Renderer {
     /// Create a new renderer on a given window.
-    pub fn new(window: Arc<Window>) -> Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&*window) };

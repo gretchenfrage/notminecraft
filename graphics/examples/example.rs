@@ -22,13 +22,13 @@ fn draw_frame(mut canvas: Canvas2d) {
     canvas.draw_solid();
 }
 
-fn window_main(event_loop: EventLoopHandle, events: EventReceiver) -> Result<()> {
-    let window = event_loop.create_window(Default::default())?;
+async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
+    let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
-    let mut renderer = Renderer::new(Arc::clone(&window))?;
+    let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
-    for event in events.iter() {
-        match event {
+    loop {
+        match events.recv().await {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => break,
                 _ => (),
@@ -47,8 +47,8 @@ fn window_main(event_loop: EventLoopHandle, events: EventReceiver) -> Result<()>
 }
 
 fn main() {
-    winit_main::run(|event_loop, events| {
-        let result = window_main(event_loop, events);
+    winit_main::run(|event_loop, events| async move {
+        let result = window_main(event_loop, events).await;
         if let Err(e) = result {
             error!("{}", e);
         }

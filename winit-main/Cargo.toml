@@ -11,3 +11,7 @@ publish = false
 
 [dependencies]
 winit = "0.26"
+
+[dependencies.tokio]
+version = "1"
+features = ["sync", "rt-multi-thread"]

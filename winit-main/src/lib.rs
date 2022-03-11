@@ -78,7 +78,7 @@
 //! }
 //! ```
 //! 
-//! ### With `winit-main` (no proc macro):
+//! ### With `winit-main`:
 //!
 //! ```rust,no_run
 //! use winit_main::reexports::{
@@ -106,29 +106,8 @@
 //!     });
 //! }
 //! ```
-//! 
-//! #[winit_main::main]
-//! fn main(event_loop: EventLoopHandle, events: EventReceiver) {
-//!     let window = event_loop
-//!         .create_window(WindowAttributes::default())
-//!         .unwrap();
-//! 
-//!     for event in events.iter() {
-//!         if matches!(
-//!             event,
-//!             Event::WindowEvent {
-//!                 event: WindowEvent::CloseRequested,
-//!                 window_id,
-//!             } if window_id == window.id()
-//!         ) {
-//!             break;
-//!         }
-//!     }
-//! }
-//! ```
 
 use std::{
-    sync::mpsc,
     thread,
     time::Duration,
     iter,
@@ -136,6 +115,8 @@ use std::{
         catch_unwind,
         AssertUnwindSafe,
     },
+    sync::mpsc as std_mpsc,
+    future::Future,
 };
 use winit::{
     event_loop::{
@@ -158,6 +139,13 @@ use crate::request::{
     GetAvailableMonitors,
     GetPrimaryMonitor,
     CreateWindow,
+};
+use tokio::{
+    sync::{
+        oneshot,
+        mpsc as tokio_mpsc,
+    },
+    runtime::Runtime,
 };
 
 
@@ -201,7 +189,7 @@ pub struct EventLoopHandle {
     // use this to wake the event loop up and trigger it to process messages
     wake_sender: EventLoopProxy<()>,
     // use this to actually send the message
-    msg_send: mpsc::Sender<Message>,
+    msg_send: std_mpsc::Sender<Message>,
 }
 
 fn sleep_forever() -> ! {
@@ -212,13 +200,13 @@ fn sleep_forever() -> ! {
 
 impl EventLoopHandle {
     /// Send a request, wait for a response.
-    fn request_wait<R>(&self, request: R) -> R::Response
+    async fn request_wait<R>(&self, request: R) -> R::Response
     where
         R: Request,
         RequestMessage: From<RequestCallback<R>>,
     {
         // pair the request with a channel for the response to return on
-        let (send_response, recv_response) = mpsc::channel();
+        let (send_response, recv_response) = oneshot::channel();
         let request = RequestMessage::from(RequestCallback {
             request,
             callback: send_response,
@@ -230,9 +218,9 @@ impl EventLoopHandle {
         let _ = self.wake_sender.send_event(());
 
         // wait for the response
-        match recv_response.recv() {
+        match recv_response.await {
             Ok(response) => response,
-            Err(mpsc::RecvError) => sleep_forever(),
+            Err(_) => sleep_forever(),
         }
     }
 
@@ -240,30 +228,30 @@ impl EventLoopHandle {
     ///
     /// Equivalent to
     /// `winit::event_loop::EventLoopWindowTarget::available_monitors`.
-    pub fn available_monitors(&self) -> Vec<MonitorHandle> {
-        self.request_wait(GetAvailableMonitors)
+    pub async fn available_monitors(&self) -> Vec<MonitorHandle> {
+        self.request_wait(GetAvailableMonitors).await
     }
 
     /// The primary monitor of the system.
     /// 
     /// Equivalent to
     /// `winit::event_loop::EventLoopWindowTarget::primary_monitor`.
-    pub fn primary_monitor(&self) -> Option<MonitorHandle> {
-        self.request_wait(GetPrimaryMonitor)
+    pub async fn primary_monitor(&self) -> Option<MonitorHandle> {
+        self.request_wait(GetPrimaryMonitor).await
     }
 
     /// Attempt to create a new window.
     ///
     /// Equivalent to `winit::window::WindowBuilder::build`.
-    pub fn create_window(&self, attributes: WindowAttributes) -> Result<Window, OsError> {
-        self.request_wait(CreateWindow(attributes))
+    pub async fn create_window(&self, attributes: WindowAttributes) -> Result<Window, OsError> {
+        self.request_wait(CreateWindow(attributes)).await
     }
 }
 
 /// Concurrency structure, emitted as a user event immediately after certain 
 /// other events are emitted, which blocks the event loop until this `Blocker`
 /// is dropped.
-pub struct Blocker(mpsc::Sender<Message>);
+pub struct Blocker(std_mpsc::Sender<Message>);
 
 impl Drop for Blocker {
     fn drop(&mut self) {
@@ -287,45 +275,30 @@ impl Blocker {
 /// between the main event loop beginning to shut down, and the process as a 
 /// whole exiting. Therefore, when this receives a disconnection error from
 /// the underlying receiver, it enters an infinite sleep cycle as it waits for
-/// the OS to kill the process. 
-pub struct EventReceiver(mpsc::Receiver<Event<'static, Blocker>>);
+/// the OS to kill the process. TODO update all comments
+pub struct EventReceiver(tokio_mpsc::UnboundedReceiver<Event<'static, Blocker>>);
 
 impl EventReceiver {
     /// Receive an event, blocking until one is available. 
-    pub fn recv(&self) -> Event<'static, Blocker> {
-        match self.0.recv() {
-            Ok(event) => event,
-            Err(mpsc::RecvError) => sleep_forever(),
-        }
-    }
-
-    /// Attempt to receive an event, blocking until one is available, or the
-    /// `timeout` duration has passed.
-    pub fn recv_timeout(&self, timeout: Duration) -> Option<Event<'static, Blocker>> {
-        match self.0.recv_timeout(timeout) {
-            Ok(event) => Some(event),
-            Err(mpsc::RecvTimeoutError::Timeout) => None,
-            Err(mpsc::RecvTimeoutError::Disconnected) => sleep_forever(),
+    pub async fn recv(&mut self) -> Event<'static, Blocker> {
+        match self.0.recv().await {
+            Some(event) => event,
+            None => sleep_forever(),
         }
     }
 
     /// Try to receive an event immediately, never blocking.
-    pub fn try_recv(&self) -> Option<Event<'static, Blocker>> {
+    pub fn try_recv(&mut self) -> Option<Event<'static, Blocker>> {
         match self.0.try_recv() {
             Ok(event) => Some(event),
-            Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => sleep_forever(),
+            Err(tokio_mpsc::error::TryRecvError::Empty) => None,
+            Err(tokio_mpsc::error::TryRecvError::Disconnected) => sleep_forever(),
         }
-    }
-
-    /// Iterator form of `self.recv()`. Blocking iterator that never ends.
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=Event<'static, Blocker>> + 'a {
-        iter::from_fn(move || Some(self.recv()))
     }
 
     /// Iterator form of `self.try_recv()`. Non-blocking iterator that drains
     /// the events currently in the queue. 
-    pub fn try_iter<'a>(&'a self) -> impl Iterator<Item=Event<'static, Blocker>> + 'a {
+    pub fn try_iter<'a>(&'a mut self) -> impl Iterator<Item=Event<'static, Blocker>> + 'a {
         iter::from_fn(move || self.try_recv())
     }
 }
@@ -338,16 +311,17 @@ impl EventReceiver {
 /// also exit loop. This is this is the primary abstraction of this crate, as
 /// it abstracts away `winit`'s inversion of control, and allows `winit` to be
 /// used more like any other library.
-pub fn run<F>(f: F) -> !
+pub fn run<F, Fut>(f: F) -> !
 where
-    F: FnOnce(EventLoopHandle, EventReceiver) + Send + 'static
+    F: FnOnce(EventLoopHandle, EventReceiver) -> Fut + Send + 'static,
+    Fut: Future<Output=()>,
 {
     // create event loop
     let event_loop = EventLoop::with_user_event();
 
     // create queues
-    let (event_send, event_recv) = mpsc::channel();
-    let (msg_send, msg_recv) = mpsc::channel();
+    let (event_send, event_recv) = tokio_mpsc::unbounded_channel();
+    let (msg_send, msg_recv) = std_mpsc::channel();
     let msg_send_1 = msg_send;
     let msg_send_2 = msg_send_1.clone();
     let msg_send_3 = msg_send_1.clone();
@@ -363,7 +337,11 @@ where
         let receiver = EventReceiver(event_recv);
 
         // run the user code
-        let _ = catch_unwind(AssertUnwindSafe(move || f(handle, receiver)));
+        let _ = catch_unwind(AssertUnwindSafe(move || {
+            Runtime::new()
+                .expect("failure to create tokio runtime")
+                .block_on(f(handle, receiver));
+        }));
 
         // send the exit message to the event loop
         let _ = msg_send_2.send(Message::Exit);
