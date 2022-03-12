@@ -34,7 +34,7 @@ pub struct Renderer {
     clear_pipeline: RenderPipeline,
     
     solid_pipeline: RenderPipeline,
-    solid_bind_group_layout: BindGroupLayout,
+    solid_uniform_bind_group_layout: BindGroupLayout,
 }
 
 impl Renderer {
@@ -71,13 +71,13 @@ impl Renderer {
             .create_shader_module(&load_shader("clear.frag").await?);
         let clear_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: None,
+                label: Some("clear pipeline layout"),
                 bind_group_layouts: &[],
                 push_constant_ranges: &[],
             });
         let clear_pipeline = device
             .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("clear"),
+                label: Some("clear pipeline"),
                 layout: Some(&clear_pipeline_layout),
                 vertex: VertexState {
                     module: &clear_vs_module,
@@ -99,9 +99,9 @@ impl Renderer {
             .create_shader_module(&load_shader("solid.vert").await?);
         let solid_fs_module = device
             .create_shader_module(&load_shader("solid.frag").await?);
-        let solid_bind_group_layout = device
+        let solid_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: None,
+                label: Some("solid bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
@@ -109,7 +109,7 @@ impl Renderer {
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: false,
-                            min_binding_size: None, /*Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),*/
+                            min_binding_size: Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),
                         },
                         count: None,
                     },
@@ -117,9 +117,9 @@ impl Renderer {
             });
         let solid_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: None,
+                label: Some("solid pipeline layout"),
                 bind_group_layouts: &[
-                    &solid_bind_group_layout,
+                    &solid_uniform_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -162,7 +162,7 @@ impl Renderer {
             clear_pipeline,
 
             solid_pipeline,
-            solid_bind_group_layout,
+            solid_uniform_bind_group_layout,
         })
     }
 
@@ -182,6 +182,7 @@ impl Renderer {
         let view = frame
             .texture
             .create_view(&TextureViewDescriptor::default());
+
         let mut encoder = self.device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: None,
@@ -204,17 +205,17 @@ impl Renderer {
 
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..0, 0..1);
+        drop(pass);
+        self.queue.submit(Some(encoder.finish()));
         
         f(Canvas2d {
             renderer: self,
-            pass: &mut pass,
+            target: &view,
 
-            transform: Mat3::<f32>::translation_2d::<Vec2<f32>>(Vec2::new(0.25f32, 0.5f32)) * Mat3::identity(),
+            transform: Mat3::identity(),
             color: Rgba::white(),
         });
         
-        drop(pass);
-        self.queue.submit(Some(encoder.finish()));
         frame.present();
 
         Ok(())
@@ -255,9 +256,9 @@ impl From<Mat3<f32>> for Std140Mat3 {
 #[repr(align(64))]
 struct SolidUniforms {
     transform: Std140Mat3,
-    //pad: u32,
     color: [f32; 4],
 }
+
 
 async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
     let path = Path::new("src/shaders").join(name);
@@ -289,50 +290,103 @@ async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'stati
 
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
-pub struct Canvas2d<'a, 'b> {
+pub struct Canvas2d<'a> {
     renderer: &'a Renderer,
-    pass: &'b mut RenderPass<'a>,
+    target: &'a TextureView,
 
     transform: Mat3<f32>,
     color: Rgba<f32>,
 }
 
-impl<'a, 'b> Canvas2d<'a, 'b> {
+impl<'a> Canvas2d<'a> {
+    /// Borrow as a canvas which, when drawn to, draws to self with the given
+    /// translation.
+    pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
+        Canvas2d {
+            transform: Mat3::<f32>::translation_2d(t) * self.transform,
+            ..*self
+        }
+    }
+    
+    /// Borrow as a canvas which, when drawn to, draws to self with the given
+    /// scaling.
+    pub fn with_scale<'b>(&'b mut self, s: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
+        let s = s.into();
+        Canvas2d {
+            transform: Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]) * self.transform,
+            ..*self
+        }
+    }
+
+    /// Borrow as a canvas which, when drawn to, multiplies all colors by the
+    /// given color value before drawing to self.
+    pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
+        Canvas2d {
+            color: self.color * c.into().map(|b| b as f32 / 256.0),
+            ..*self
+        }
+    }
+
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
-        self.pass.set_pipeline(&self.renderer.solid_pipeline);
-
-        let u_struct = SolidUniforms {
+        let mut encoder = self.renderer.device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("solid command encoder"),
+            });
+        
+        let uniform_struct = SolidUniforms {
             transform: Std140Mat3::from(self.transform),
-            //pad: 0,
             color: self.color.into_array(),
         };
-        let u_bytes = unsafe { &*(&u_struct as *const SolidUniforms as *const [u8; size_of::<SolidUniforms>()]) };
+        let uniform_bytes: &[u8] = unsafe {
+            &*(
+                &uniform_struct
+                as *const SolidUniforms
+                as *const [u8; size_of::<SolidUniforms>()]
+            )
+        };
 
-        let u_buffer = self.renderer.device
+        let uniform_buffer = self.renderer.device
             .create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: u_bytes,
+                label: Some("solid uniform buffer"),
+                contents: uniform_bytes,
                 usage: BufferUsages::UNIFORM,
             });
-        let u_bind_group = self.renderer.device
+        let uniform_bind_group = self.renderer.device
             .create_bind_group(&BindGroupDescriptor {
-                label: None,
-                layout: &self.renderer.solid_bind_group_layout,
+                label: Some("solid uniform bind group"),
+                layout: &self.renderer.solid_uniform_bind_group_layout,
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
                         resource: BindingResource::Buffer(BufferBinding {
-                            buffer: &u_buffer,
+                            buffer: &uniform_buffer,
                             offset: 0,
                             size: Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),
                         }),
-                    },
+                    }
                 ],
             });
-        let u_bind_group = Box::leak(Box::new(u_bind_group)); // TODO: hehehe
-        self.pass.set_bind_group(0, u_bind_group, &[]);
 
-        self.pass.draw(0..6, 0..1);
+        let mut pass = encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: Some("solid render pass"),
+                color_attachments: &[
+                    RenderPassColorAttachment {
+                        view: &*self.target,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        },
+                    },
+                ],
+                depth_stencil_attachment: None,
+            });
+        pass.set_pipeline(&self.renderer.solid_pipeline);
+        pass.set_bind_group(0, &uniform_bind_group, &[]);
+        pass.draw(0..6, 0..1);
+        drop(pass);
+        self.renderer.queue.submit(Some(encoder.finish()));
     }
 }

@@ -8,7 +8,6 @@ use graphics::{
 };
 use std::sync::Arc;
 use anyhow::*;
-use vek::*;
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
@@ -21,7 +20,14 @@ use tracing_subscriber::FmtSubscriber;
 
 
 fn draw_frame(mut canvas: Canvas2d) {
-    canvas.draw_solid();
+    canvas
+        .with_translate([0.25, 0.5])
+        .draw_solid();
+    canvas
+        .with_scale([0.2, 0.2])
+        .with_translate([0.4, 0.4])
+        .with_color([0xff, 0, 0xff, 0xff / 2])
+        .draw_solid();
 }
 
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
