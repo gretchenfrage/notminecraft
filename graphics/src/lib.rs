@@ -2,18 +2,26 @@
 use std::{
     sync::Arc,
     path::Path,
+    mem::size_of,
 };
 use anyhow::Result;
 use winit_main::reexports::{
     window::Window,
     dpi::PhysicalSize,
 };
-use wgpu::*;
+use wgpu::{
+    *,
+    util::{
+        DeviceExt,
+        BufferInitDescriptor,
+    },
+};
 use tokio::fs;
 use shaderc::{
     Compiler,
     ShaderKind,
 };
+use vek::*;
 
 
 /// Top-level resource for drawing frames onto a window.
@@ -22,8 +30,11 @@ pub struct Renderer {
     device: Device,
     queue: Queue,
     config: SurfaceConfiguration,
+
     clear_pipeline: RenderPipeline,
+    
     solid_pipeline: RenderPipeline,
+    solid_bind_group_layout: BindGroupLayout,
 }
 
 impl Renderer {
@@ -88,10 +99,28 @@ impl Renderer {
             .create_shader_module(&load_shader("solid.vert").await?);
         let solid_fs_module = device
             .create_shader_module(&load_shader("solid.frag").await?);
+        let solid_bind_group_layout = device
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None, /*Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),*/
+                        },
+                        count: None,
+                    },
+                ],
+            });
         let solid_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[],
+                bind_group_layouts: &[
+                    &solid_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let solid_pipeline = device
@@ -129,8 +158,11 @@ impl Renderer {
             device,
             queue,
             config,
+
             clear_pipeline,
+
             solid_pipeline,
+            solid_bind_group_layout,
         })
     }
 
@@ -176,6 +208,9 @@ impl Renderer {
         f(Canvas2d {
             renderer: self,
             pass: &mut pass,
+
+            transform: Mat3::<f32>::translation_2d::<Vec2<f32>>(Vec2::new(0.25f32, 0.5f32)) * Mat3::identity(),
+            color: Rgba::white(),
         });
         
         drop(pass);
@@ -184,6 +219,44 @@ impl Renderer {
 
         Ok(())
     }
+}
+
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+#[repr(align(16))]
+struct Std140Vec3 {
+    xyz: [f32; 3],
+    pad: u32,
+}
+
+impl From<Vec3<f32>> for Std140Vec3 {
+    fn from(vec: Vec3<f32>) -> Std140Vec3 {
+        Std140Vec3 {
+            xyz: vec.into_array(),
+            pad: 0,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+#[repr(align(16))]
+struct Std140Mat3([Std140Vec3; 3]);
+
+impl From<Mat3<f32>> for Std140Mat3 {
+    fn from(mat: Mat3<f32>) -> Std140Mat3 {
+        Std140Mat3(mat.cols.into_array().map(Std140Vec3::from))
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+#[repr(align(64))]
+struct SolidUniforms {
+    transform: Std140Mat3,
+    //pad: u32,
+    color: [f32; 4],
 }
 
 async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
@@ -219,12 +292,47 @@ async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'stati
 pub struct Canvas2d<'a, 'b> {
     renderer: &'a Renderer,
     pass: &'b mut RenderPass<'a>,
+
+    transform: Mat3<f32>,
+    color: Rgba<f32>,
 }
 
 impl<'a, 'b> Canvas2d<'a, 'b> {
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
         self.pass.set_pipeline(&self.renderer.solid_pipeline);
+
+        let u_struct = SolidUniforms {
+            transform: Std140Mat3::from(self.transform),
+            //pad: 0,
+            color: self.color.into_array(),
+        };
+        let u_bytes = unsafe { &*(&u_struct as *const SolidUniforms as *const [u8; size_of::<SolidUniforms>()]) };
+
+        let u_buffer = self.renderer.device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: u_bytes,
+                usage: BufferUsages::UNIFORM,
+            });
+        let u_bind_group = self.renderer.device
+            .create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: &self.renderer.solid_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::Buffer(BufferBinding {
+                            buffer: &u_buffer,
+                            offset: 0,
+                            size: Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),
+                        }),
+                    },
+                ],
+            });
+        let u_bind_group = Box::leak(Box::new(u_bind_group)); // TODO: hehehe
+        self.pass.set_bind_group(0, u_bind_group, &[]);
+
         self.pass.draw(0..6, 0..1);
     }
 }

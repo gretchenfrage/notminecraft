@@ -8,6 +8,7 @@ use graphics::{
 };
 use std::sync::Arc;
 use anyhow::*;
+use vek::*;
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
