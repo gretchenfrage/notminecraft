@@ -1,8 +1,8 @@
 
+use crate::std140::Std140;
 use std::{
     sync::Arc,
     path::Path,
-    mem::size_of,
 };
 use anyhow::Result;
 use winit_main::reexports::{
@@ -24,12 +24,16 @@ use shaderc::{
 use vek::*;
 
 
+mod std140;
+
+
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
     surface: Surface,
     device: Device,
     queue: Queue,
     config: SurfaceConfiguration,
+    uniform_buffer_state: Option<UniformBufferState>,
 
     clear_pipeline: RenderPipeline,
     
@@ -37,9 +41,17 @@ pub struct Renderer {
     solid_uniform_bind_group_layout: BindGroupLayout,
 }
 
+struct UniformBufferState {
+    uniform_buffer: Buffer,
+    uniform_buffer_len: usize,
+
+    solid_uniform_bind_group: BindGroup,
+}
+
 impl Renderer {
     /// Create a new renderer on a given window.
     pub async fn new(window: Arc<Window>) -> Result<Self> {
+        dbg!(DrawSolidUniformData::SIZE);
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&*window) };
@@ -101,15 +113,15 @@ impl Renderer {
             .create_shader_module(&load_shader("solid.frag").await?);
         let solid_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("solid bind group layout"),
+                label: Some("solid uniform bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
                         visibility: ShaderStages::VERTEX,
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: Some((size_of::<SolidUniforms>() as u64).try_into().unwrap()),
+                            has_dynamic_offset: true,
+                            min_binding_size: None, // TODO Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
                         },
                         count: None,
                     },
@@ -158,6 +170,7 @@ impl Renderer {
             device,
             queue,
             config,
+            uniform_buffer_state: None,
 
             clear_pipeline,
 
@@ -205,24 +218,151 @@ impl Renderer {
 
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..0, 0..1);
-        drop(pass);
-        self.queue.submit(Some(encoder.finish()));
-        
-        f(Canvas2d {
-            renderer: self,
-            target: &view,
 
+        let mut uniform_data = Vec::new();
+        let mut draw_solid_calls = Vec::new();
+        f(Canvas2d {
+            uniform_data: &mut uniform_data,
+            draw_solid_calls: &mut draw_solid_calls,
             transform: Mat3::identity(),
             color: Rgba::white(),
         });
-        
-        frame.present();
 
+        if !uniform_data.is_empty() {
+            let dst = self
+                .uniform_buffer_state
+                .as_ref()
+                .filter(|state| state.uniform_buffer_len >= uniform_data.len());
+            if let Some(dst) = dst {
+                self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_data);
+            } else {
+                let uniform_buffer = self.device
+                    .create_buffer_init(&BufferInitDescriptor {
+                        label: Some("uniform buffer"),
+                        contents: &uniform_data,
+                        usage: BufferUsages::UNIFORM,
+                    });
+                let solid_uniform_bind_group = self.device
+                    .create_bind_group(&BindGroupDescriptor {
+                        label: Some("solid uniform bind group"),
+                        layout: &self.solid_uniform_bind_group_layout,
+                        entries: &[
+                            BindGroupEntry {
+                                binding: 0,
+                                resource: BindingResource::Buffer(BufferBinding {
+                                    buffer: &uniform_buffer,
+                                    offset: 0,
+                                    size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
+                                }),
+                            },
+                        ],
+                    });
+                self.uniform_buffer_state = Some(UniformBufferState {
+                    uniform_buffer,
+                    uniform_buffer_len: uniform_data.len(),
+                    solid_uniform_bind_group
+                });
+            }
+        }
+
+        if !draw_solid_calls.is_empty() {
+            let uniform_buffer_state = self
+                .uniform_buffer_state
+                .as_ref()
+                .unwrap();
+
+            pass.set_pipeline(&self.solid_pipeline);
+            for offset in draw_solid_calls {
+                pass.set_bind_group(
+                    0,
+                    &uniform_buffer_state.solid_uniform_bind_group,
+                    &[offset as u32],
+                );
+                pass.draw(0..6, 0..1);
+            }
+        }
+/*
+
+        pass.set_pipeline(&self.)
+        for offset in draw_solid_calls {
+            let bind_group = device
+                .create_bind_group(&BindGroupDescriptor {
+                    label: Some("solid bind group"),
+                    layout: &self.solid_uniform_bind_group_layout,
+                    entries: &[
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: BindingResource::Buffer(BufferBinding {
+                                buffer: &self.solid_uniform_buffer,
+                                offset,
+                                size: Some(DrawSolidUniformData::SIZE.try_into().unwrap()),
+                            }),
+                        },
+                    ],
+                })
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.draw()
+        }
+
+
+        drop(pass);
+        self.queue.submit(Some(encoder.finish()));        
+        frame.present();
+*/
+    /*
+        let frame = self.surface
+            .get_current_texture()?;
+        let view = frame
+            .texture
+            .create_view(&TextureViewDescriptor::default());
+
+        f(Canvas2d {
+            renderer: self,
+            transform: Mat3::identity(),
+            color: Rgba::white(),
+        });
+
+        for solid_uniform_data in self.solid_uniform_data.drain(..) {
+            solid_uniform_data.pad_write(&mut self.solid_uniform_data_bytes);
+        }
+
+        // TODO
+
+        self.solid_draw_calls.clear();
+        self.solid_uniform_data.clear();
+
+        let mut encoder = self.device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: None,
+            });
+        let mut pass = encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: None,
+                color_attachments: &[
+                    RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::WHITE),
+                            store: true,
+                        }
+                    }
+                ],
+                depth_stencil_attachment: None,
+            });
+
+        pass.set_pipeline(&self.clear_pipeline);
+        pass.draw(0..0, 0..1);
+
+        drop(pass);
+        self.queue.submit(Some(encoder.finish()));        
+        frame.present();
+*/
         Ok(())
     }
 }
 
-
+/*
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 #[repr(align(16))]
@@ -258,7 +398,7 @@ struct SolidUniforms {
     transform: Std140Mat3,
     color: [f32; 4],
 }
-
+*/
 
 async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
     let path = Path::new("src/shaders").join(name);
@@ -291,18 +431,34 @@ async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'stati
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
 pub struct Canvas2d<'a> {
-    renderer: &'a Renderer,
-    target: &'a TextureView,
+    uniform_data: &'a mut Vec<u8>,
+    draw_solid_calls: &'a mut Vec<usize>,
 
     transform: Mat3<f32>,
     color: Rgba<f32>,
 }
+
+#[derive(Debug, Copy, Clone)]
+struct DrawSolidUniformData {
+    transform: Mat3<f32>,
+    color: Rgba<f32>,
+}
+
+std140_struct! {
+    DrawSolidUniformData {
+        transform: Mat3<f32>,
+        color: Rgba<f32>,
+    }
+}
+
 
 impl<'a> Canvas2d<'a> {
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// translation.
     pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
             transform: Mat3::<f32>::translation_2d(t) * self.transform,
             ..*self
         }
@@ -313,6 +469,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_scale<'b>(&'b mut self, s: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         let s = s.into();
         Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
             transform: Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]) * self.transform,
             ..*self
         }
@@ -322,6 +480,8 @@ impl<'a> Canvas2d<'a> {
     /// given color value before drawing to self.
     pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
         Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
             color: self.color * c.into().map(|b| b as f32 / 256.0),
             ..*self
         }
@@ -329,6 +489,19 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
+        let uniform_data = DrawSolidUniformData {
+            transform: self.transform,
+            color: self.color.map(|b| b as f32 / 0xFF as f32),
+        };
+        let uniform_offset = uniform_data.pad_write(self.uniform_data);
+        self.draw_solid_calls.push(uniform_offset);
+        /*
+        self.renderer.solid_draw_calls.push(SolidDrawCall {
+            transform: self.transform,
+            color: self.color,
+        });*/
+
+        /*
         let mut encoder = self.renderer.device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("solid command encoder"),
@@ -388,5 +561,6 @@ impl<'a> Canvas2d<'a> {
         pass.draw(0..6, 0..1);
         drop(pass);
         self.renderer.queue.submit(Some(encoder.finish()));
+        */
     }
 }
