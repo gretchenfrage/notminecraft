@@ -21,8 +21,9 @@ pub struct Renderer {
     surface: Surface,
     device: Device,
     queue: Queue,
-    render_pipeline: RenderPipeline,
     config: SurfaceConfiguration,
+    clear_pipeline: RenderPipeline,
+    solid_pipeline: RenderPipeline,
 }
 
 impl Renderer {
@@ -51,36 +52,59 @@ impl Renderer {
             )
             .await?;
 
-        /*
-        let vs_module = device
-            .create_shader_module(&include_spirv!("shader.vert.spv"));
-        let fs_module = device
-            .create_shader_module(&include_spirv!("shader.frag.spv"));*/
-        let vs_module = device
-            .create_shader_module(&load_shader("shader.vert").await?);
-        let fs_module = device
-            .create_shader_module(&load_shader("shader.frag").await?);
+        let swapchain_format = TextureFormat::Bgra8Unorm;
 
-        let pipeline_layout = device
+        let clear_vs_module = device
+            .create_shader_module(&load_shader("clear.vert").await?);
+        let clear_fs_module = device
+            .create_shader_module(&load_shader("clear.frag").await?);
+        let clear_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[],
                 push_constant_ranges: &[],
             });
-
-        let swapchain_format = TextureFormat::Bgra8Unorm;
-
-        let render_pipeline = device
+        let clear_pipeline = device
             .create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
+                label: Some("clear"),
+                layout: Some(&clear_pipeline_layout),
                 vertex: VertexState {
-                    module: &vs_module,
+                    module: &clear_vs_module,
                     entry_point: "main",
                     buffers: &[],
                 },
                 fragment: Some(FragmentState {
-                    module: &fs_module,
+                    module: &clear_fs_module,
+                    entry_point: "main",
+                    targets: &[swapchain_format.into()],
+                }),
+                primitive: PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: MultisampleState::default(),
+                multiview: None,
+            });
+
+        let solid_vs_module = device
+            .create_shader_module(&load_shader("solid.vert").await?);
+        let solid_fs_module = device
+            .create_shader_module(&load_shader("solid.frag").await?);
+        let solid_pipeline_layout = device
+            .create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+        let solid_pipeline = device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("solid"),
+                layout: Some(&solid_pipeline_layout),
+                vertex: VertexState {
+                    module: &solid_vs_module,
+                    entry_point: "main",
+                    buffers: &[],
+                },
+                fragment: Some(FragmentState {
+                    module: &solid_fs_module,
                     entry_point: "main",
                     targets: &[swapchain_format.into()],
                 }),
@@ -100,13 +124,13 @@ impl Renderer {
 
         surface.configure(&device, &config);
 
-
         Ok(Renderer {
             surface,
             device,
             queue,
-            render_pipeline,
             config,
+            clear_pipeline,
+            solid_pipeline,
         })
     }
 
@@ -138,15 +162,22 @@ impl Renderer {
                         view: &view,
                         resolve_target: None,
                         ops: Operations {
-                            load: LoadOp::Clear(Color::GREEN),
+                            load: LoadOp::Clear(Color::WHITE),
                             store: true,
                         }
                     }
                 ],
                 depth_stencil_attachment: None,
             });
-        pass.set_pipeline(&self.render_pipeline);
-        pass.draw(0..3, 0..1);
+
+        pass.set_pipeline(&self.clear_pipeline);
+        pass.draw(0..0, 0..1);
+        
+        f(Canvas2d {
+            renderer: self,
+            pass: &mut pass,
+        });
+        
         drop(pass);
         self.queue.submit(Some(encoder.finish()));
         frame.present();
@@ -156,7 +187,7 @@ impl Renderer {
 }
 
 async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
-    let path = Path::new("src").join(name);
+    let path = Path::new("src/shaders").join(name);
     let glsl = fs::read(&path).await?;
     let glsl = String::from_utf8(glsl)
         .map_err(|_| anyhow::Error::msg("shader not utf-8"))?;
@@ -185,13 +216,15 @@ async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'stati
 
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
-pub struct Canvas2d {
-
+pub struct Canvas2d<'a, 'b> {
+    renderer: &'a Renderer,
+    pass: &'b mut RenderPass<'a>,
 }
 
-impl Canvas2d {
+impl<'a, 'b> Canvas2d<'a, 'b> {
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
-
+        self.pass.set_pipeline(&self.renderer.solid_pipeline);
+        self.pass.draw(0..6, 0..1);
     }
 }
