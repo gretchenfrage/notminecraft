@@ -269,7 +269,6 @@ impl<T: Std140 + Std140Scalar> Std140 for Mat4<T> {
 
 /// Macro for implementing `Std140` on a struct of types which implement
 /// `Std140`.
-#[macro_export]
 macro_rules! std140_struct {
     ($struct:ident {$(
         $field:ident: $type:ty
@@ -310,7 +309,8 @@ macro_rules! std140_struct {
                 if size % Self::ALIGN != 0 {
                     size += Self::ALIGN - (size % Self::ALIGN);
                 }
-                size
+                //size
+                256 // TODO LOL
             };
 
             fn write(&self, dst: &mut Vec<u8>) {
@@ -325,3 +325,5 @@ macro_rules! std140_struct {
         }
     };
 }
+
+pub(crate) use std140_struct;

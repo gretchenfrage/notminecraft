@@ -1,10 +1,14 @@
 
-use crate::std140::Std140;
+use crate::std140::{
+    Std140,
+    std140_struct,
+};
 use std::{
     sync::Arc,
     path::Path,
 };
 use anyhow::Result;
+use tracing::*;
 use winit_main::reexports::{
     window::Window,
     dpi::PhysicalSize,
@@ -51,7 +55,6 @@ struct UniformBufferState {
 impl Renderer {
     /// Create a new renderer on a given window.
     pub async fn new(window: Arc<Window>) -> Result<Self> {
-        dbg!(DrawSolidUniformData::SIZE);
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&*window) };
@@ -190,12 +193,30 @@ impl Renderer {
     /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
     /// right corner).
     pub fn draw_frame(&mut self, f: impl FnOnce(Canvas2d)) -> Result<()> {
-        let frame = self.surface
-            .get_current_texture()?;
+        // acquire frame to draw onto
+        let mut attempts = 0;
+        let frame = loop {
+            match self.surface.get_current_texture() {
+                Ok(frame) => break frame,
+                Err(e) => {
+                    if attempts < 10 {
+                        warn!(error=%e, "get_current_texture error, retrying");
+                        attempts += 1;
+                        self.surface.configure(&self.device, &self.config);
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            }
+        };
+        if attempts > 0 {
+            info!("successfully recreated swap chain surface");
+        }
         let view = frame
             .texture
             .create_view(&TextureViewDescriptor::default());
 
+        // begin encoder and pass
         let mut encoder = self.device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: None,
@@ -216,9 +237,11 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
+        // clear the screen
         pass.set_pipeline(&self.clear_pipeline);
-        pass.draw(0..0, 0..1);
-
+        pass.draw(0..1, 0..1);
+        
+        // accumulate uniform data for this frame
         let mut uniform_data = Vec::new();
         let mut draw_solid_calls = Vec::new();
         f(Canvas2d {
@@ -228,6 +251,7 @@ impl Renderer {
             color: Rgba::white(),
         });
 
+        // write uniform data to uniform buffer
         if !uniform_data.is_empty() {
             let dst = self
                 .uniform_buffer_state
@@ -240,7 +264,7 @@ impl Renderer {
                     .create_buffer_init(&BufferInitDescriptor {
                         label: Some("uniform buffer"),
                         contents: &uniform_data,
-                        usage: BufferUsages::UNIFORM,
+                        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                     });
                 let solid_uniform_bind_group = self.device
                     .create_bind_group(&BindGroupDescriptor {
@@ -265,6 +289,7 @@ impl Renderer {
             }
         }
 
+        // make draw calls
         if !draw_solid_calls.is_empty() {
             let uniform_buffer_state = self
                 .uniform_buffer_state
@@ -281,6 +306,11 @@ impl Renderer {
                 pass.draw(0..6, 0..1);
             }
         }
+        
+        // finish
+        drop(pass);
+        self.queue.submit(Some(encoder.finish()));        
+        frame.present();
 /*
 
         pass.set_pipeline(&self.)
@@ -305,10 +335,8 @@ impl Renderer {
         }
 
 
-        drop(pass);
-        self.queue.submit(Some(encoder.finish()));        
-        frame.present();
 */
+     
     /*
         let frame = self.surface
             .get_current_texture()?;

@@ -45,9 +45,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 _ => (),
             },
             Event::RedrawRequested(_) => {
-                renderer.draw_frame(|canvas| {
+                let result = renderer.draw_frame(|canvas| {
                     draw_frame(canvas);
-                })?;
+                });
+                if let Err(e) = result {
+                    error!(error=%e, "draw_frame error");
+                }
                 window.request_redraw();
             },
             _ => (),
@@ -64,7 +67,7 @@ fn main() {
     winit_main::run(|event_loop, events| async move {
         let result = window_main(event_loop, events).await;
         if let Err(e) = result {
-            error!("{}", e);
+            error!("{:?}", e);
         }
     });
 }
