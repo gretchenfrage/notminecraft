@@ -36,6 +36,16 @@ struct Graphics {
 
 impl Graphics {
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
+        canvas
+            .with_scale([0.75, 0.75])
+            .with_color([0xFF, 0x00, 0x00, 0xFF / 2])
+            .draw_solid();
+        canvas
+            .with_translate([0.25, 0.25])
+            .with_scale([0.75, 0.75])
+            .with_color([0x00, 0x00, 0xFF, 0xFF / 2])
+            .draw_solid();
+        /*
         let elapsed = self.start_time.elapsed().unwrap().as_millis() as f32 / 1000.0;
         let scale = elapsed.sin() * 0.4 + 0.6;
         trace!(%scale);
@@ -47,7 +57,7 @@ impl Graphics {
             .with_clip_max_y(0.6)
             .with_scale([scale, scale])
             .with_translate([translate, translate])
-            .draw_solid();
+            .draw_solid();*/
     }
 }
 

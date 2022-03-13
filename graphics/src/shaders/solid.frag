@@ -10,7 +10,7 @@ layout(set=0, binding=0) uniform u {
 };
 
 layout(location=0) in vec2 i_pos;
-layout(location=1) in vec4 i_color;
+//layout(location=1) in vec4 i_color;
 
 layout(location=0) out vec4 o_color;
 
@@ -27,5 +27,6 @@ void main() {
     if (i_pos.y > u_clip_max_y) {
         discard;
     }
-    o_color = i_color;
+    //o_color = i_color;
+    o_color = u_color;
 }

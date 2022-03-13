@@ -151,7 +151,13 @@ impl Renderer {
                 fragment: Some(FragmentState {
                     module: &solid_fs_module,
                     entry_point: "main",
-                    targets: &[swapchain_format.into()],
+                    targets: &[
+                        ColorTargetState {
+                            format: swapchain_format,
+                            blend: Some(BlendState::ALPHA_BLENDING),
+                            write_mask: ColorWrites::all(),
+                        },
+                    ],
                 }),
                 primitive: PrimitiveState::default(),
                 depth_stencil: None,
@@ -402,7 +408,7 @@ impl Canvas2dTransform {
     /// Apply translation.
     fn with_translate(self, t: Vec2<f32>) -> Self {
         Canvas2dTransform {
-            affine: Mat3::<f32>::translation_2d(t) * self.affine,
+            affine: self.affine * Mat3::<f32>::translation_2d(t),
             ..self
         }
     }
@@ -414,7 +420,7 @@ impl Canvas2dTransform {
     /// TODO: Figure out a more mathematically robust clipping logic.
     fn with_scale(self, s: Vec2<f32>) -> Self {
         Canvas2dTransform {
-            affine: Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]) * self.affine,
+            affine: self.affine * Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]),
             ..self
         }
     }

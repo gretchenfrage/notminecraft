@@ -1,7 +1,7 @@
 //! Serialization of data into the std140 layout format, suitable for use in
 //! uniform buffers, as described in:
 //!
-//! https://www.oreilly.com/library/view/opengl-programming-guide/9780132748445/app09lev1sec2.html
+//! <https://www.oreilly.com/library/view/opengl-programming-guide/9780132748445/app09lev1sec2.html>
 
 use vek::*;
 
