@@ -2,6 +2,7 @@
 use crate::std140::{
     Std140,
     std140_struct,
+    pad,
 };
 use std::{
     sync::Arc,
@@ -243,10 +244,13 @@ impl Renderer {
         
         // accumulate uniform data for this frame
         let mut uniform_data = Vec::new();
-        let mut draw_solid_calls = Vec::new();
-        f(Canvas2d {
+        let mut draw_solid_calls = Vec::new()
+;        f(Canvas2d {
             uniform_data: &mut uniform_data,
             draw_solid_calls: &mut draw_solid_calls,
+
+            uniform_offset_align: self.device.limits().min_uniform_buffer_offset_alignment as usize,
+
             transform: Mat3::identity(),
             color: Rgba::white(),
         });
@@ -349,6 +353,9 @@ pub struct Canvas2d<'a> {
     uniform_data: &'a mut Vec<u8>,
     draw_solid_calls: &'a mut Vec<usize>,
 
+    // alignment for all offsets into uniform_data
+    uniform_offset_align: usize,
+
     transform: Mat3<f32>,
     color: Rgba<f32>,
 }
@@ -408,6 +415,7 @@ impl<'a> Canvas2d<'a> {
             transform: self.transform,
             color: self.color,
         };
+        pad(self.uniform_data, self.uniform_offset_align);
         let uniform_offset = uniform_data.pad_write(self.uniform_data);
         self.draw_solid_calls.push(uniform_offset);
     }

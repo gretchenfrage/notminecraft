@@ -26,14 +26,21 @@ pub trait Std140: Sized + Clone {
     /// `dst` where started writing self's actual data (not self's padding
     /// bytes).
     fn pad_write(&self, dst: &mut Vec<u8>) -> usize {
-        while dst.len() % Self::ALIGN != 0 {
-            dst.push(0);
-        }
+        pad(dst, Self::ALIGN);
         let offset = dst.len();
         self.write(dst);
         offset
     }
 }
+
+
+/// Write padding bytes to `dst` until its length is a multiple of `align`.
+pub fn pad(dst: &mut Vec<u8>, align: usize) {
+    while dst.len() % align != 0 {
+        dst.push(0);
+    }
+}
+
 
 /// Marker trait for `Std140` types which are considered "scalars".
 pub trait Std140Scalar {}
@@ -55,9 +62,9 @@ impl Std140 for bool {
 
     fn write(&self, dst: &mut Vec<u8>) {
         if *self {
-            dst.push(1);
+            1u32.write(dst);
         } else {
-            dst.push(0);
+            0u32.write(dst);
         }
     }
 }
@@ -245,7 +252,7 @@ impl<T: Std140 + Std140ScalarOrVector, const LEN: usize> Std140 for [T; LEN] {
 
 impl<T: Std140 + Std140Scalar> Std140 for Mat3<T> {
     const ALIGN: usize = <[Vec3<T>; 3]>::ALIGN;
-    const SIZE: usize = <[Vec3<T>; 3]>::ALIGN;
+    const SIZE: usize = <[Vec3<T>; 3]>::SIZE;
 
     fn write(&self, dst: &mut Vec<u8>) {
         let as_array: [Vec3<T>; 3] = self.cols.clone().into_array();
@@ -255,7 +262,7 @@ impl<T: Std140 + Std140Scalar> Std140 for Mat3<T> {
 
 impl<T: Std140 + Std140Scalar> Std140 for Mat4<T> {
     const ALIGN: usize = <[Vec4<T>; 4]>::ALIGN;
-    const SIZE: usize = <[Vec4<T>; 4]>::ALIGN;
+    const SIZE: usize = <[Vec4<T>; 4]>::SIZE;
 
     fn write(&self, dst: &mut Vec<u8>) {
         let as_array: [Vec4<T>; 4] = self.cols.clone().into_array();
@@ -309,8 +316,7 @@ macro_rules! std140_struct {
                 if size % Self::ALIGN != 0 {
                     size += Self::ALIGN - (size % Self::ALIGN);
                 }
-                //size
-                256 // TODO LOL
+                size
             };
 
             fn write(&self, dst: &mut Vec<u8>) {
