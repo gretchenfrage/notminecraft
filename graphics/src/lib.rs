@@ -244,12 +244,12 @@ impl Renderer {
         trace!("clearing screen");
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..1, 0..1);
-        /*
+        
         // accumulate uniform data for this frame
         trace!("accumulating uniform data");
         let mut uniform_data = Vec::new();
-        let mut draw_solid_calls = Vec::new()
-;        f(Canvas2d {
+        let mut draw_solid_calls = Vec::new();
+        f(Canvas2d {
             uniform_data: &mut uniform_data,
             draw_solid_calls: &mut draw_solid_calls,
 
@@ -319,7 +319,7 @@ impl Renderer {
                 pass.draw(0..6, 0..1);
             }
         }
-        */
+        
         // finish
         trace!("finishing frame");
         trace!("dropping pass");

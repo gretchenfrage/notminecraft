@@ -370,7 +370,7 @@ where
                 // send out event
                 let triggers_block = matches!(
                     &nonuser_event,
-                    &Event::RedrawRequested(_)
+                    &Event::MainEventsCleared
                 );
                 
                 let _ = event_send.send(nonuser_event);

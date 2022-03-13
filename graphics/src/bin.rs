@@ -52,27 +52,25 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
     loop {
         let event = events.recv().await;
-        debug!(?event, "received event");
+        trace!(?event, "received event");
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => break,
                 WindowEvent::Resized(size) => {
-                    info!("resizing window");
+                    trace!("resizing window");
                     renderer.resize(size);
                 },
                 _ => (),
             },
-            Event::RedrawRequested(_) => {
-                info!("drawing frame");
+            Event::MainEventsCleared => {
+                trace!("drawing frame");
                 let result = renderer.draw_frame(|canvas| {
                     draw_frame(canvas);
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
                 }
-                info!("done drawing frame, requesting redraw");
                 window.request_redraw();
-                info!("done requesting redraw");
             },
             _ => (),
         };
@@ -90,7 +88,7 @@ fn main() {
     winit_main::run(|event_loop, events| async move {
         let result = window_main(event_loop, events).await;
         if let Err(e) = result {
-            error!("{:?}", e);
+            error!(error=%e, "exit with error");
         }
     });
 }
