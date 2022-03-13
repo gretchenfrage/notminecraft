@@ -48,7 +48,7 @@ fn draw_frame(mut canvas: Canvas2d) {
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
-    //let mut renderer = Renderer::new(Arc::clone(&window)).await?;
+    let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
     loop {
         let event = events.recv().await;
