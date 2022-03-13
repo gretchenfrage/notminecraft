@@ -121,7 +121,7 @@ impl Renderer {
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: ShaderStages::VERTEX,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: true,
@@ -251,8 +251,7 @@ impl Renderer {
 
             uniform_offset_align: self.device.limits().min_uniform_buffer_offset_alignment as usize,
 
-            transform: Mat3::identity(),
-            color: Rgba::white(),
+            transform: Canvas2dTransform::identity(),
         });
 
         // write uniform data to uniform buffer
@@ -356,20 +355,86 @@ pub struct Canvas2d<'a> {
     // alignment for all offsets into uniform_data
     uniform_offset_align: usize,
 
-    transform: Mat3<f32>,
-    color: Rgba<f32>,
+    transform: Canvas2dTransform,
 }
+
+
+/// Accumulated transforms on a `Canvas2d`.
+#[derive(Debug, Copy, Clone)]
+struct Canvas2dTransform {
+    affine: Mat3<f32>,
+    color: Rgba<f32>,
+
+    clip_min_x: Option<f32>,
+}
+
+impl Canvas2dTransform {
+    /// Identity transform.
+    fn identity() -> Self {
+        Canvas2dTransform {
+            affine: Mat3::identity(),
+            color: Rgba::white(),
+            clip_min_x: None,
+        }
+    }
+
+    /// Apply affine transform.
+    ///
+    /// Assumes no rotation, no negative scaling. those would break the
+    /// clipping logic. TODO: Figure out a more mathematically robust
+    /// clipping logic.
+    fn with_affine(self, a: Mat3<f32>) -> Self {
+        Canvas2dTransform {
+            affine: a * self.affine,
+            ..self
+        }
+    }
+
+    /// Apply translation.
+    fn with_translate(self, t: Vec2<f32>) -> Self {
+        self.with_affine(Mat3::<f32>::translation_2d(t))
+    }
+
+    /// Apply scaling.
+    ///
+    /// Assumes no negative scaling, that would break the clipping logic.
+    fn with_scale(self, s: Vec2<f32>) -> Self {
+        self.with_affine(Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]))
+    }
+
+    /// Apply color multiplication.
+    fn with_color(self, c: Rgba<f32>) -> Self {
+        Canvas2dTransform {
+            color: self.color * c,
+            ..self
+        }
+    }
+
+    /// Apply min-x clipping.
+    fn with_clip_min_x(self, min_x: f32) -> Self {
+        let min_x = (self.affine * Vec3::new(min_x, 0.0, 1.0)).x;
+        Canvas2dTransform {
+            clip_min_x: Some(self.clip_min_x
+                .map(|x| f32::min(x, min_x))
+                .unwrap_or(min_x)),
+            ..self
+        }
+    }
+}
+
 
 #[derive(Debug, Copy, Clone)]
 struct DrawSolidUniformData {
     transform: Mat3<f32>,
     color: Rgba<f32>,
+    clip_min_x: f32,
 }
 
 std140_struct! {
     DrawSolidUniformData {
         transform: Mat3<f32>,
         color: Rgba<f32>,
+        clip_min_x: f32,
     }
 }
 
@@ -381,19 +446,23 @@ impl<'a> Canvas2d<'a> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
             draw_solid_calls: &mut *self.draw_solid_calls,
-            transform: Mat3::<f32>::translation_2d(t) * self.transform,
+            transform: self.transform.with_translate(t.into()),
             ..*self
         }
     }
     
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// scaling.
+    ///
+    /// Panics if either axis is negative.
     pub fn with_scale<'b>(&'b mut self, s: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         let s = s.into();
+        assert!(s.x >= 0.0, "negative scaling");
+        assert!(s.y >= 0.0, "negative scaling");
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
             draw_solid_calls: &mut *self.draw_solid_calls,
-            transform: Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]) * self.transform,
+            transform: self.transform.with_scale(s),
             ..*self
         }
     }
@@ -401,10 +470,22 @@ impl<'a> Canvas2d<'a> {
     /// Borrow as a canvas which, when drawn to, multiplies all colors by the
     /// given color value before drawing to self.
     pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
+        let c = c.into().map(|b| b as f32 / 0xFF as f32);
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
             draw_solid_calls: &mut *self.draw_solid_calls,
-            color: self.color * c.into().map(|b| b as f32 / 0xFF as f32),
+            transform: self.transform.with_color(c),
+            ..*self
+        }
+    }
+
+    /// Borrow as a canvas which, when drawn to, clips out everything below a
+    /// certain x value before drawing to self.
+    pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
+        Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
+            transform: self.transform.with_clip_min_x(min_x),
             ..*self
         }
     }
@@ -412,8 +493,9 @@ impl<'a> Canvas2d<'a> {
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
         let uniform_data = DrawSolidUniformData {
-            transform: self.transform,
-            color: self.color,
+            transform: self.transform.affine,
+            color: self.transform.color,
+            clip_min_x: self.transform.clip_min_x.unwrap_or(f32::NEG_INFINITY),
         };
         pad(self.uniform_data, self.uniform_offset_align);
         let uniform_offset = uniform_data.pad_write(self.uniform_data);
