@@ -397,7 +397,7 @@ impl<'a> Canvas2d<'a> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
             draw_solid_calls: &mut *self.draw_solid_calls,
-            color: self.color * c.into().map(|b| b as f32 / 256.0),
+            color: self.color * c.into().map(|b| b as f32 / 0xFF as f32),
             ..*self
         }
     }
@@ -406,7 +406,7 @@ impl<'a> Canvas2d<'a> {
     pub fn draw_solid(&mut self) {
         let uniform_data = DrawSolidUniformData {
             transform: self.transform,
-            color: self.color.map(|b| b as f32 / 0xFF as f32),
+            color: self.color,
         };
         let uniform_offset = uniform_data.pad_write(self.uniform_data);
         self.draw_solid_calls.push(uniform_offset);
