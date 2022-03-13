@@ -1,13 +1,13 @@
 
-use crate::std140::{
-    Std140,
-    std140_struct,
-    pad,
+use crate::{
+    std140::{
+        Std140,
+        std140_struct,
+        pad,
+    },
+    shader::load_shader,
 };
-use std::{
-    sync::Arc,
-    path::Path,
-};
+use std::sync::Arc;
 use anyhow::Result;
 use tracing::*;
 use winit_main::reexports::{
@@ -21,15 +21,11 @@ use wgpu::{
         BufferInitDescriptor,
     },
 };
-use tokio::fs;
-use shaderc::{
-    Compiler,
-    ShaderKind,
-};
 use vek::*;
 
 
 mod std140;
+mod shader;
 
 
 /// Top-level resource for drawing frames onto a window.
@@ -328,44 +324,14 @@ impl Renderer {
         
         // finish
         trace!("finishing frame");
-        trace!("dropping pass");
         drop(pass);
-        trace!("submitting queue");
         self.queue.submit(Some(encoder.finish()));        
-        trace!("presenting frame");
         frame.present();
-        trace!("done");
         Ok(())
     }
 }
 
-async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
-    let path = Path::new("src/shaders").join(name);
-    let glsl = fs::read(&path).await?;
-    let glsl = String::from_utf8(glsl)
-        .map_err(|_| anyhow::Error::msg("shader not utf-8"))?;
 
-    let kind =
-        if name.ends_with(".vert") { ShaderKind::Vertex }
-        else if name.ends_with(".frag") { ShaderKind::Fragment }
-        else { return Err(anyhow::Error::msg("unknown chader kind")) };
-
-    let mut compiler = Compiler::new()
-        .ok_or_else(|| anyhow::Error::msg("not shaderc compiler"))?;
-
-    let artifact = compiler.compile_into_spirv(
-        &glsl,
-        kind,
-        name,
-        "main",
-        None,
-    )?;
-
-    Ok(ShaderModuleDescriptor {
-        label: Some(name),
-        source: ShaderSource::SpirV(artifact.as_binary().to_owned().into()),
-    })
-}
 
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
