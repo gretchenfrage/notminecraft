@@ -195,13 +195,14 @@ impl Renderer {
     /// right corner).
     pub fn draw_frame(&mut self, f: impl FnOnce(Canvas2d)) -> Result<()> {
         // acquire frame to draw onto
+        trace!("acquiring frame");
         let mut attempts = 0;
         let frame = loop {
             match self.surface.get_current_texture() {
                 Ok(frame) => break frame,
                 Err(e) => {
                     if attempts < 10 {
-                        warn!(error=%e, "get_current_texture error, retrying");
+                        trace!(error=%e, "get_current_texture error, retrying");
                         attempts += 1;
                         self.surface.configure(&self.device, &self.config);
                     } else {
@@ -211,13 +212,14 @@ impl Renderer {
             }
         };
         if attempts > 0 {
-            info!("successfully recreated swap chain surface");
+            trace!("successfully recreated swap chain surface");
         }
         let view = frame
             .texture
             .create_view(&TextureViewDescriptor::default());
 
         // begin encoder and pass
+        trace!("creating encoder and pass");
         let mut encoder = self.device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: None,
@@ -239,10 +241,12 @@ impl Renderer {
             });
 
         // clear the screen
+        trace!("clearing screen");
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..1, 0..1);
-        
+        /*
         // accumulate uniform data for this frame
+        trace!("accumulating uniform data");
         let mut uniform_data = Vec::new();
         let mut draw_solid_calls = Vec::new()
 ;        f(Canvas2d {
@@ -255,14 +259,19 @@ impl Renderer {
         });
 
         // write uniform data to uniform buffer
+        trace!("writing uniform data");
         if !uniform_data.is_empty() {
             let dst = self
                 .uniform_buffer_state
                 .as_ref()
                 .filter(|state| state.uniform_buffer_len >= uniform_data.len());
             if let Some(dst) = dst {
+                // buffer already exists and is big enough to hold data
+                trace!("re-using uniform buffer");
                 self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_data);
             } else {
+                // buffer doesn't exist or isn't big enough
+                trace!("creating new uniform buffer");
                 let uniform_buffer = self.device
                     .create_buffer_init(&BufferInitDescriptor {
                         label: Some("uniform buffer"),
@@ -293,6 +302,7 @@ impl Renderer {
         }
 
         // make draw calls
+        trace!("making draw calls");
         if !draw_solid_calls.is_empty() {
             let uniform_buffer_state = self
                 .uniform_buffer_state
@@ -309,11 +319,16 @@ impl Renderer {
                 pass.draw(0..6, 0..1);
             }
         }
-        
+        */
         // finish
+        trace!("finishing frame");
+        trace!("dropping pass");
         drop(pass);
+        trace!("submitting queue");
         self.queue.submit(Some(encoder.finish()));        
+        trace!("presenting frame");
         frame.present();
+        trace!("done");
         Ok(())
     }
 }
@@ -366,6 +381,9 @@ struct Canvas2dTransform {
     color: Rgba<f32>,
 
     clip_min_x: Option<f32>,
+    clip_max_x: Option<f32>,
+    clip_min_y: Option<f32>,
+    clip_max_y: Option<f32>,
 }
 
 impl Canvas2dTransform {
@@ -375,31 +393,30 @@ impl Canvas2dTransform {
             affine: Mat3::identity(),
             color: Rgba::white(),
             clip_min_x: None,
-        }
-    }
-
-    /// Apply affine transform.
-    ///
-    /// Assumes no rotation, no negative scaling. those would break the
-    /// clipping logic. TODO: Figure out a more mathematically robust
-    /// clipping logic.
-    fn with_affine(self, a: Mat3<f32>) -> Self {
-        Canvas2dTransform {
-            affine: a * self.affine,
-            ..self
+            clip_max_x: None,
+            clip_min_y: None,
+            clip_max_y: None,
         }
     }
 
     /// Apply translation.
     fn with_translate(self, t: Vec2<f32>) -> Self {
-        self.with_affine(Mat3::<f32>::translation_2d(t))
+        Canvas2dTransform {
+            affine: Mat3::<f32>::translation_2d(t) * self.affine,
+            ..self
+        }
     }
 
     /// Apply scaling.
     ///
     /// Assumes no negative scaling, that would break the clipping logic.
+    ///
+    /// TODO: Figure out a more mathematically robust clipping logic.
     fn with_scale(self, s: Vec2<f32>) -> Self {
-        self.with_affine(Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]))
+        Canvas2dTransform {
+            affine: Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]) * self.affine,
+            ..self
+        }
     }
 
     /// Apply color multiplication.
@@ -415,8 +432,41 @@ impl Canvas2dTransform {
         let min_x = (self.affine * Vec3::new(min_x, 0.0, 1.0)).x;
         Canvas2dTransform {
             clip_min_x: Some(self.clip_min_x
-                .map(|x| f32::min(x, min_x))
+                .map(|x| f32::max(x, min_x))
                 .unwrap_or(min_x)),
+            ..self
+        }
+    }
+
+    /// Apply max-x clipping.
+    fn with_clip_max_x(self, max_x: f32) -> Self {
+        let max_x = (self.affine * Vec3::new(max_x, 0.0, 1.0)).x;
+        Canvas2dTransform {
+            clip_max_x: Some(self.clip_max_x
+                .map(|x| f32::min(x, max_x))
+                .unwrap_or(max_x)),
+            ..self
+        }
+    }
+
+    /// Apply min-y clipping.
+    fn with_clip_min_y(self, min_y: f32) -> Self {
+        let min_y = (self.affine * Vec3::new(0.0, min_y, 1.0)).y;
+        Canvas2dTransform {
+            clip_min_y: Some(self.clip_min_y
+                .map(|x| f32::max(x, min_y))
+                .unwrap_or(min_y)),
+            ..self
+        }
+    }
+
+    /// Apply max-y clipping.
+    fn with_clip_max_y(self, max_y: f32) -> Self {
+        let max_y = (self.affine * Vec3::new(0.0, max_y, 1.0)).y;
+        Canvas2dTransform {
+            clip_max_y: Some(self.clip_max_y
+                .map(|x| f32::min(x, max_y))
+                .unwrap_or(max_y)),
             ..self
         }
     }
@@ -428,6 +478,9 @@ struct DrawSolidUniformData {
     transform: Mat3<f32>,
     color: Rgba<f32>,
     clip_min_x: f32,
+    clip_max_x: f32,
+    clip_min_y: f32,
+    clip_max_y: f32,
 }
 
 std140_struct! {
@@ -435,6 +488,9 @@ std140_struct! {
         transform: Mat3<f32>,
         color: Rgba<f32>,
         clip_min_x: f32,
+        clip_max_x: f32,
+        clip_min_y: f32,
+        clip_max_y: f32,
     }
 }
 
@@ -467,6 +523,50 @@ impl<'a> Canvas2d<'a> {
         }
     }
 
+    /// Borrow as a canvas which, when drawn to, clips out everything below a
+    /// certain x value before drawing to self.
+    pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
+        Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
+            transform: self.transform.with_clip_min_x(min_x),
+            ..*self
+        }
+    }
+
+    /// Borrow as a canvas which, when drawn to, clips out everything above a
+    /// certain x value before drawing to self.
+    pub fn with_clip_max_x<'b>(&'b mut self, max_x: f32) -> Canvas2d<'b> {
+        Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
+            transform: self.transform.with_clip_max_x(max_x),
+            ..*self
+        }
+    }
+    
+    /// Borrow as a canvas which, when drawn to, clips out everything below a
+    /// certain y value before drawing to self.
+    pub fn with_clip_min_y<'b>(&'b mut self, min_y: f32) -> Canvas2d<'b> {
+        Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
+            transform: self.transform.with_clip_min_y(min_y),
+            ..*self
+        }
+    }
+    
+    /// Borrow as a canvas which, when drawn to, clips out everything above a
+    /// certain y value before drawing to self.
+    pub fn with_clip_max_y<'b>(&'b mut self, max_y: f32) -> Canvas2d<'b> {
+        Canvas2d {
+            uniform_data: &mut *self.uniform_data,
+            draw_solid_calls: &mut *self.draw_solid_calls,
+            transform: self.transform.with_clip_max_y(max_y),
+            ..*self
+        }
+    }
+
     /// Borrow as a canvas which, when drawn to, multiplies all colors by the
     /// given color value before drawing to self.
     pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
@@ -479,23 +579,15 @@ impl<'a> Canvas2d<'a> {
         }
     }
 
-    /// Borrow as a canvas which, when drawn to, clips out everything below a
-    /// certain x value before drawing to self.
-    pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
-        Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
-            transform: self.transform.with_clip_min_x(min_x),
-            ..*self
-        }
-    }
-
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
         let uniform_data = DrawSolidUniformData {
             transform: self.transform.affine,
             color: self.transform.color,
             clip_min_x: self.transform.clip_min_x.unwrap_or(f32::NEG_INFINITY),
+            clip_max_x: self.transform.clip_max_x.unwrap_or(f32::INFINITY),
+            clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
+            clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
         };
         pad(self.uniform_data, self.uniform_offset_align);
         let uniform_offset = uniform_data.pad_write(self.uniform_data);

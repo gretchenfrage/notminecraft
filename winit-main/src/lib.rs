@@ -117,6 +117,7 @@ use std::{
     },
     sync::mpsc as std_mpsc,
     future::Future,
+    fmt::{self, Debug, Formatter},
 };
 use winit::{
     event_loop::{
@@ -252,6 +253,12 @@ impl EventLoopHandle {
 /// other events are emitted, which blocks the event loop until this `Blocker`
 /// is dropped.
 pub struct Blocker(std_mpsc::Sender<Message>);
+
+impl Debug for Blocker {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("Blocker(_)")
+    }
+}
 
 impl Drop for Blocker {
     fn drop(&mut self) {

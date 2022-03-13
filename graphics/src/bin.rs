@@ -16,14 +16,24 @@ use winit_main::{
         WindowEvent,
     },
 };
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{
+    FmtSubscriber,
+    EnvFilter,
+};
 
 
 fn draw_frame(mut canvas: Canvas2d) {
     canvas
+        .with_clip_min_x(0.1)
+        .with_clip_min_y(0.2)
+        .with_clip_max_x(0.7)
+        .with_clip_max_y(0.6)
+        .draw_solid();
+    /*
+    canvas
         .with_clip_min_x(0.5)
         .with_translate([0.25, 0.25])
-        .draw_solid();
+        .draw_solid();*/
     /*
     canvas
         .with_translate([0.25, 0.5])
@@ -38,25 +48,31 @@ fn draw_frame(mut canvas: Canvas2d) {
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
-    let mut renderer = Renderer::new(Arc::clone(&window)).await?;
+    //let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
     loop {
-        match events.recv().await {
+        let event = events.recv().await;
+        debug!(?event, "received event");
+        match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => break,
                 WindowEvent::Resized(size) => {
+                    info!("resizing window");
                     renderer.resize(size);
                 },
                 _ => (),
             },
             Event::RedrawRequested(_) => {
+                info!("drawing frame");
                 let result = renderer.draw_frame(|canvas| {
                     draw_frame(canvas);
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
                 }
+                info!("done drawing frame, requesting redraw");
                 window.request_redraw();
+                info!("done requesting redraw");
             },
             _ => (),
         };
@@ -66,7 +82,9 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 }
 
 fn main() {
-    let subscriber = FmtSubscriber::builder().finish();
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     winit_main::run(|event_loop, events| async move {

@@ -4,6 +4,9 @@ layout(set=0, binding=0) uniform u {
     mat3 u_transform;
     vec4 u_color;
     float u_clip_min_x;
+    float u_clip_max_x;
+    float u_clip_min_y;
+    float u_clip_max_y;
 };
 
 layout(location=0) out vec2 o_pos;
