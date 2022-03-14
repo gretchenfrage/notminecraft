@@ -10,7 +10,7 @@ layout(set=0, binding=0) uniform u {
 };
 
 layout(location=0) out vec2 o_pos;
-//layout(location=1) out vec4 o_color;
+layout(location=1) out vec2 o_tex;
 
 void main() {
     int corner;
@@ -23,21 +23,22 @@ void main() {
     case 5: corner = 2; break;
     }
 
+    vec2 pos;
     switch (corner) {
     case 0:
-        o_pos = vec2(0, 0);
+        o_tex = vec2(0, 0);
         break;
     case 1:
-        o_pos = vec2(1, 0);
+        o_tex = vec2(1, 0);
         break;
     case 2:
-        o_pos = vec2(1, 1);
+        o_tex = vec2(1, 1);
         break;
     case 3:
-        o_pos = vec2(0, 1);
+        o_tex = vec2(0, 1);
         break;
     }
-    o_pos = (u_transform * vec3(o_pos, 1)).xy;
+    o_pos = (u_transform * vec3(o_tex, 1)).xy;
 
     // the fix matrix
     // to convert from our coordinate system, in which:

@@ -7,7 +7,10 @@ use crate::{
     },
     shader::load_shader,
 };
-use std::sync::Arc;
+use std::{
+    path::Path,
+    sync::Arc,
+};
 use anyhow::Result;
 use tracing::*;
 use winit_main::reexports::{
@@ -22,6 +25,7 @@ use wgpu::{
     },
 };
 use vek::*;
+use tokio::fs;
 
 
 mod std140;
@@ -40,6 +44,10 @@ pub struct Renderer {
     
     solid_pipeline: RenderPipeline,
     solid_uniform_bind_group_layout: BindGroupLayout,
+
+    image_pipeline: RenderPipeline,
+    image_texture_bind_group_layout: BindGroupLayout,
+    image_sampler: Sampler,
 }
 
 struct UniformBufferState {
@@ -49,9 +57,28 @@ struct UniformBufferState {
     solid_uniform_bind_group: BindGroup,
 }
 
+/// 2D RGBA image loaded into a GPU texture.
+///
+/// Internally reference-counted.
+#[derive(Clone)]
+pub struct GpuImage(Arc<GpuImageInner>);
+
+struct GpuImageInner {
+    size: Extent2<u32>,
+    texture_bind_group: BindGroup,
+}
+
+impl GpuImage {
+    /// Get image size in pixels.
+    pub fn size(&self) -> Extent2<u32> {
+        self.0.size
+    }
+}
+
 impl Renderer {
     /// Create a new renderer on a given window.
     pub async fn new(window: Arc<Window>) -> Result<Self> {
+        // create the instance, surface, and adapter
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&*window) };
@@ -64,6 +91,7 @@ impl Renderer {
             .await
             .ok_or_else(|| anyhow::Error::msg("failed to find an appropriate adapter"))?;
 
+        // create the device and queue
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
@@ -77,6 +105,7 @@ impl Renderer {
 
         let swapchain_format = TextureFormat::Bgra8Unorm;
 
+        // create the clear pipeline
         let clear_vs_module = device
             .create_shader_module(&load_shader("clear.vert").await?);
         let clear_fs_module = device
@@ -107,6 +136,7 @@ impl Renderer {
                 multiview: None,
             });
 
+        // create the solid pipeline
         let solid_vs_module = device
             .create_shader_module(&load_shader("solid.vert").await?);
         let solid_fs_module = device
@@ -121,7 +151,7 @@ impl Renderer {
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: true,
-                            min_binding_size: None, // TODO Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
+                            min_binding_size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
                         },
                         count: None,
                     },
@@ -137,7 +167,7 @@ impl Renderer {
             });
         let solid_pipeline = device
             .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("solid"),
+                label: Some("solid pipeline"),
                 layout: Some(&solid_pipeline_layout),
                 vertex: VertexState {
                     module: &solid_vs_module,
@@ -161,6 +191,78 @@ impl Renderer {
                 multiview: None,
             });
 
+        // create the image pipeline
+        let image_vs_module = device
+            .create_shader_module(&load_shader("image.vert").await?);
+        let image_fs_module = device
+            .create_shader_module(&load_shader("image.frag").await?);
+        // the image pipeline's uniform bind group layout is exactly the same
+        // as the solid uniform bind group layout, so literally just use that
+        let image_texture_bind_group_layout = device
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("image sampler bind group layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float {
+                                filterable: false,
+                            },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
+            });
+        let image_pipeline_layout = device
+            .create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: Some("image pipeline layout"),
+                bind_group_layouts: &[
+                    &solid_uniform_bind_group_layout,
+                    &image_texture_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+        let image_pipeline = device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("image pipeline"),
+                layout: Some(&image_pipeline_layout),
+                vertex: VertexState {
+                    module: &image_vs_module,
+                    entry_point: "main",
+                    buffers: &[],
+                },
+                fragment: Some(FragmentState {
+                    module: &image_fs_module,
+                    entry_point: "main",
+                    targets: &[
+                        ColorTargetState {
+                            format: swapchain_format,
+                            blend: Some(BlendState::ALPHA_BLENDING),
+                            write_mask: ColorWrites::all(),
+                        },
+                    ],
+                }),
+                primitive: PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: MultisampleState::default(),
+                multiview: None,
+            });
+        let image_sampler = device
+            .create_sampler(&SamplerDescriptor {
+                label: Some("image sampler"),
+                ..Default::default()
+            });
+
+        // set up the swapchain
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: swapchain_format,
@@ -168,9 +270,9 @@ impl Renderer {
             height: size.height,
             present_mode: PresentMode::Mailbox,
         };
-
         surface.configure(&device, &config);
 
+        // done
         Ok(Renderer {
             surface,
             device,
@@ -182,6 +284,10 @@ impl Renderer {
 
             solid_pipeline,
             solid_uniform_bind_group_layout,
+
+            image_pipeline,
+            image_texture_bind_group_layout,
+            image_sampler,
         })
     }
 
@@ -220,124 +326,216 @@ impl Renderer {
             .texture
             .create_view(&TextureViewDescriptor::default());
 
-        // begin encoder and pass
-        trace!("creating encoder and pass");
-        let mut encoder = self.device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: None,
-            });
-        let mut pass = encoder
-            .begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[
-                    RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(Color::WHITE),
-                            store: true,
-                        }
-                    }
-                ],
-                depth_stencil_attachment: None,
-            });
-
-        // clear the screen
-        trace!("clearing screen");
-        pass.set_pipeline(&self.clear_pipeline);
-        pass.draw(0..1, 0..1);
-        
-        // accumulate uniform data for this frame
-        trace!("accumulating uniform data");
+        // accumulate draw data from the callback
+        trace!("accumulating draw data");
         let mut uniform_data = Vec::new();
-        let mut draw_solid_calls = Vec::new();
+        let mut images = Vec::new();
+        let mut draw_calls = Vec::new();
         f(Canvas2d {
             uniform_data: &mut uniform_data,
-            draw_solid_calls: &mut draw_solid_calls,
+            images: &mut images,
+            draw_calls: &mut draw_calls,
 
             uniform_offset_align: self.device.limits().min_uniform_buffer_offset_alignment as usize,
 
             transform: Canvas2dTransform::identity(),
         });
 
-        // write uniform data to uniform buffer
-        trace!("writing uniform data");
-        if !uniform_data.is_empty() {
-            let dst = self
-                .uniform_buffer_state
-                .as_ref()
-                .filter(|state| state.uniform_buffer_len >= uniform_data.len());
-            if let Some(dst) = dst {
-                // buffer already exists and is big enough to hold data
-                trace!("re-using uniform buffer");
-                self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_data);
-            } else {
-                // buffer doesn't exist or isn't big enough
-                trace!("creating new uniform buffer");
-                let uniform_buffer = self.device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: Some("uniform buffer"),
-                        contents: &uniform_data,
-                        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                    });
-                let solid_uniform_bind_group = self.device
-                    .create_bind_group(&BindGroupDescriptor {
-                        label: Some("solid uniform bind group"),
-                        layout: &self.solid_uniform_bind_group_layout,
-                        entries: &[
-                            BindGroupEntry {
-                                binding: 0,
-                                resource: BindingResource::Buffer(BufferBinding {
-                                    buffer: &uniform_buffer,
-                                    offset: 0,
-                                    size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
-                                }),
-                            },
-                        ],
-                    });
-                self.uniform_buffer_state = Some(UniformBufferState {
-                    uniform_buffer,
-                    uniform_buffer_len: uniform_data.len(),
-                    solid_uniform_bind_group
+        // begin encoder and pass
+        trace!("creating encoder and pass");
+        let mut encoder = self.device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: None,
+            });
+        {
+            let mut pass = encoder
+                .begin_render_pass(&RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[
+                        RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: Operations {
+                                load: LoadOp::Clear(Color::WHITE),
+                                store: true,
+                            }
+                        }
+                    ],
+                    depth_stencil_attachment: None,
                 });
-            }
-        }
 
-        // make draw calls
-        trace!("making draw calls");
-        if !draw_solid_calls.is_empty() {
-            let uniform_buffer_state = self
-                .uniform_buffer_state
-                .as_ref()
-                .unwrap();
+            // clear the screen
+            trace!("clearing screen");
+            pass.set_pipeline(&self.clear_pipeline);
+            pass.draw(0..1, 0..1);
+            
 
-            pass.set_pipeline(&self.solid_pipeline);
-            for offset in draw_solid_calls {
-                pass.set_bind_group(
-                    0,
-                    &uniform_buffer_state.solid_uniform_bind_group,
-                    &[offset as u32],
-                );
-                pass.draw(0..6, 0..1);
+            // write uniform data to uniform buffer
+            trace!("writing uniform data");
+            if !uniform_data.is_empty() {
+                let dst = self
+                    .uniform_buffer_state
+                    .as_ref()
+                    .filter(|state| state.uniform_buffer_len >= uniform_data.len());
+                if let Some(dst) = dst {
+                    // buffer already exists and is big enough to hold data
+                    trace!("re-using uniform buffer");
+                    self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_data);
+                } else {
+                    // buffer doesn't exist or isn't big enough
+                    trace!("creating new uniform buffer");
+                    let uniform_buffer = self.device
+                        .create_buffer_init(&BufferInitDescriptor {
+                            label: Some("uniform buffer"),
+                            contents: &uniform_data,
+                            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                        });
+                    let solid_uniform_bind_group = self.device
+                        .create_bind_group(&BindGroupDescriptor {
+                            label: Some("solid uniform bind group"),
+                            layout: &self.solid_uniform_bind_group_layout,
+                            entries: &[
+                                BindGroupEntry {
+                                    binding: 0,
+                                    resource: BindingResource::Buffer(BufferBinding {
+                                        buffer: &uniform_buffer,
+                                        offset: 0,
+                                        size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
+                                    }),
+                                },
+                            ],
+                        });
+                    self.uniform_buffer_state = Some(UniformBufferState {
+                        uniform_buffer,
+                        uniform_buffer_len: uniform_data.len(),
+                        solid_uniform_bind_group
+                    });
+                }
             }
+
+            // make draw calls
+            trace!("making draw calls");
+            if !draw_calls.is_empty() {
+                let uniform_buffer_state = self
+                    .uniform_buffer_state
+                    .as_ref()
+                    .unwrap();
+
+                for draw_call in draw_calls {
+                    match draw_call {
+                        Canvas2dDrawCall::Solid { uniform_offset } => {
+                            pass.set_pipeline(&self.solid_pipeline);
+                            pass.set_bind_group(
+                                0,
+                                &uniform_buffer_state.solid_uniform_bind_group,
+                                &[uniform_offset as u32],
+                            );
+                            pass.draw(0..6, 0..1);
+                        },
+                        Canvas2dDrawCall::Image {
+                            uniform_offset,
+                            image_index,
+                        } => {
+                            let image = &images[image_index];
+                            pass.set_pipeline(&self.image_pipeline);
+                            pass.set_bind_group(
+                                0,
+                                &uniform_buffer_state.solid_uniform_bind_group,
+                                &[uniform_offset as u32],
+                            );
+                            pass.set_bind_group(
+                                1,
+                                &image.0.texture_bind_group,
+                                &[],
+                            );
+                        },
+                    };
+                }
+            }
+            
+            // finish
+            trace!("finishing frame");
+
+            // end scope to drop
         }
-        
-        // finish
-        trace!("finishing frame");
-        drop(pass);
         self.queue.submit(Some(encoder.finish()));        
         frame.present();
         Ok(())
     }
-}
 
+    /// Read a PNG / JPG / etc image from a file and load it onto the GPU.
+    pub async fn load_image_file(&self, path: impl AsRef<Path>) -> Result<GpuImage> {
+        let file_data = fs::read(path).await?;
+        self.load_image(&file_data)
+    }
+
+    /// Load an image onto the GPU from PNG / JPG / etc file data.
+    pub fn load_image(&self, file_data: &[u8]) -> Result<GpuImage> {
+        let texture_format = TextureFormat::Rgba8Unorm;
+
+        // load image
+        let image = image::load_from_memory(file_data)?
+            .into_rgba8();
+
+        // create texture
+        let texture = self.device
+            .create_texture_with_data(
+                &self.queue,
+                &TextureDescriptor {
+                    label: Some("image texture"),
+                    size: Extent3d {
+                        width: image.width(),
+                        height: image.height(),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: TextureDimension::D2,
+                    format: texture_format,
+                    usage: TextureUsages::TEXTURE_BINDING,
+                },
+                image.as_raw(),
+            );
+
+        // create texture view
+        let texture_view = texture
+            .create_view(&TextureViewDescriptor {
+                label: Some("image texture view"),
+                ..Default::default()
+            });
+
+        // create bind group
+        let texture_bind_group = self.device
+            .create_bind_group(&BindGroupDescriptor {
+                label: Some("image texture bind group"),
+                layout: &self.image_texture_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&self.image_sampler),
+                    },
+                ],
+            });
+
+        // done
+        Ok(GpuImage(Arc::new(GpuImageInner {
+            texture_bind_group,
+            size: Extent2::new(image.width(), image.height()),
+        })))
+    }
+}
 
 
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
 pub struct Canvas2d<'a> {
     uniform_data: &'a mut Vec<u8>,
-    draw_solid_calls: &'a mut Vec<usize>,
+    images: &'a mut Vec<GpuImage>,
+    draw_calls: &'a mut Vec<Canvas2dDrawCall>,
 
     // alignment for all offsets into uniform_data
     uniform_offset_align: usize,
@@ -345,6 +543,13 @@ pub struct Canvas2d<'a> {
     transform: Canvas2dTransform,
 }
 
+enum Canvas2dDrawCall {
+    Solid { uniform_offset: usize },
+    Image {
+        uniform_offset: usize,
+        image_index: usize,
+    }
+}
 
 /// Accumulated transforms on a `Canvas2d`.
 #[derive(Debug, Copy, Clone)]
@@ -444,7 +649,6 @@ impl Canvas2dTransform {
     }
 }
 
-
 #[derive(Debug, Copy, Clone)]
 struct DrawSolidUniformData {
     transform: Mat3<f32>,
@@ -466,14 +670,14 @@ std140_struct! {
     }
 }
 
-
 impl<'a> Canvas2d<'a> {
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// translation.
     pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_translate(t.into()),
             ..*self
         }
@@ -489,7 +693,8 @@ impl<'a> Canvas2d<'a> {
         assert!(s.y >= 0.0, "negative scaling");
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_scale(s),
             ..*self
         }
@@ -500,7 +705,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_clip_min_x(min_x),
             ..*self
         }
@@ -511,7 +717,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_max_x<'b>(&'b mut self, max_x: f32) -> Canvas2d<'b> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_clip_max_x(max_x),
             ..*self
         }
@@ -522,7 +729,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_min_y<'b>(&'b mut self, min_y: f32) -> Canvas2d<'b> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_clip_min_y(min_y),
             ..*self
         }
@@ -533,7 +741,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_max_y<'b>(&'b mut self, max_y: f32) -> Canvas2d<'b> {
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_clip_max_y(max_y),
             ..*self
         }
@@ -545,7 +754,8 @@ impl<'a> Canvas2d<'a> {
         let c = c.into().map(|b| b as f32 / 0xFF as f32);
         Canvas2d {
             uniform_data: &mut *self.uniform_data,
-            draw_solid_calls: &mut *self.draw_solid_calls,
+            draw_calls: &mut *self.draw_calls,
+            images: &mut *self.images,
             transform: self.transform.with_color(c),
             ..*self
         }
@@ -553,6 +763,7 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
+        // push uniform data
         let uniform_data = DrawSolidUniformData {
             transform: self.transform.affine,
             color: self.transform.color,
@@ -563,6 +774,34 @@ impl<'a> Canvas2d<'a> {
         };
         pad(self.uniform_data, self.uniform_offset_align);
         let uniform_offset = uniform_data.pad_write(self.uniform_data);
-        self.draw_solid_calls.push(uniform_offset);
+
+        // push draw call
+        self.draw_calls.push(Canvas2dDrawCall::Solid { uniform_offset });
+    }
+
+    /// Draw the given image from <0, 0> to <1, 1>.
+    pub fn draw_image(&mut self, image: &GpuImage) {
+        // push uniform data
+        // TODO: dedup
+        let uniform_data = DrawSolidUniformData {
+            transform: self.transform.affine,
+            color: self.transform.color,
+            clip_min_x: self.transform.clip_min_x.unwrap_or(f32::NEG_INFINITY),
+            clip_max_x: self.transform.clip_max_x.unwrap_or(f32::INFINITY),
+            clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
+            clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
+        };
+        pad(self.uniform_data, self.uniform_offset_align);
+        let uniform_offset = uniform_data.pad_write(self.uniform_data);
+
+        // push image
+        let image_index = self.images.len();
+        self.images.push(image.clone());
+
+        // push draw call
+        self.draw_calls.push(Canvas2dDrawCall::Image {
+            uniform_offset,
+            image_index,
+        });
     }
 }

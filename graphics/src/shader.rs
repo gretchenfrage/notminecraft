@@ -10,6 +10,7 @@ use shaderc::{
 };
 
 
+/// Load and compile a shader with the given name.
 pub async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
     let path = Path::new("src/shaders").join(name);
     let glsl = fs::read(&path).await?;

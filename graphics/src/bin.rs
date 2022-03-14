@@ -5,6 +5,7 @@ extern crate tracing;
 use graphics::{
     Renderer,
     Canvas2d,
+    GpuImage,
 };
 use std::{
     sync::Arc,
@@ -31,7 +32,10 @@ use tracing_subscriber::{
 
 
 struct Graphics {
+    #[allow(dead_code)]
     start_time: SystemTime,
+    #[allow(dead_code)]
+    dog_image: GpuImage
 }
 
 impl Graphics {
@@ -39,7 +43,8 @@ impl Graphics {
         canvas
             .with_scale([0.75, 0.75])
             .with_color([0xFF, 0x00, 0x00, 0xFF / 2])
-            .draw_solid();
+            .draw_image(&self.dog_image);
+            //.draw_solid();
         canvas
             .with_translate([0.25, 0.25])
             .with_scale([0.75, 0.75])
@@ -65,8 +70,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
+
+    let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
+
     let mut graphics = Graphics {
         start_time: SystemTime::now(),
+        dog_image,
     };
 
     let frames_per_second = 60;
