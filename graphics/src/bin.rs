@@ -8,6 +8,7 @@ use graphics::{
     GpuImage,
 };
 use std::{
+    panic,
     sync::Arc,
     time::{
         SystemTime,
@@ -15,6 +16,7 @@ use std::{
         Duration,
     },
     thread::sleep,
+    env,
 };
 use anyhow::*;
 use winit_main::{
@@ -29,6 +31,7 @@ use tracing_subscriber::{
     FmtSubscriber,
     EnvFilter,
 };
+use backtrace::Backtrace;
 
 
 struct Graphics {
@@ -81,6 +84,9 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
 
+    panic!("pissy shitties");
+
+
     loop {
         let event = events.recv().await;
         trace!(?event, "received event");
@@ -126,10 +132,21 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 fn main() {
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
+        .with_ansi(false).with_writer(std::fs::File::create("log.txt").unwrap())
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
+    info!("starting program");
+
+    panic::set_hook(Box::new(|info| {
+        error!("{}", info);
+        if env::var("RUST_BACKTRACE").map(|val| val == "1").unwrap_or(false) {
+            error!("{:?}", Backtrace::new());
+        }
+    }));
+    trace!("installed custom panic hook");
 
     winit_main::run(|event_loop, events| async move {
+        trace!("successfully bootstrapped winit + tokio");
         let result = window_main(event_loop, events).await;
         if let Err(e) = result {
             error!(error=%e, "exit with error");

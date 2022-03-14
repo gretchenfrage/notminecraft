@@ -78,10 +78,16 @@ impl GpuImage {
 impl Renderer {
     /// Create a new renderer on a given window.
     pub async fn new(window: Arc<Window>) -> Result<Self> {
+        trace!("beginning initializing renderer");
+
         // create the instance, surface, and adapter
+        trace!("creating instance");
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
+        trace!("creating surface");
         let surface = unsafe { instance.create_surface(&*window) };
+
+        trace!("creating adapter");
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
                 power_preference: PowerPreference::default(),
@@ -92,6 +98,7 @@ impl Renderer {
             .ok_or_else(|| anyhow::Error::msg("failed to find an appropriate adapter"))?;
 
         // create the device and queue
+        trace!("creating device and queue");
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
@@ -106,6 +113,7 @@ impl Renderer {
         let swapchain_format = TextureFormat::Bgra8Unorm;
 
         // create the clear pipeline
+        trace!("creating clear pipeline");
         let clear_vs_module = device
             .create_shader_module(&load_shader("clear.vert").await?);
         let clear_fs_module = device
@@ -137,6 +145,7 @@ impl Renderer {
             });
 
         // create the solid pipeline
+        trace!("creating solid pipeline");
         let solid_vs_module = device
             .create_shader_module(&load_shader("solid.vert").await?);
         let solid_fs_module = device
@@ -192,6 +201,7 @@ impl Renderer {
             });
 
         // create the image pipeline
+        trace!("creating image pipeline");
         let image_vs_module = device
             .create_shader_module(&load_shader("image.vert").await?);
         let image_fs_module = device
@@ -263,6 +273,7 @@ impl Renderer {
             });
 
         // set up the swapchain
+        trace!("configuring swapchain");
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: swapchain_format,
@@ -273,6 +284,7 @@ impl Renderer {
         surface.configure(&device, &config);
 
         // done
+        trace!("done initializing renderer");
         Ok(Renderer {
             surface,
             device,
