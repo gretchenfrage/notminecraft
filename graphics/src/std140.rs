@@ -13,7 +13,7 @@ pub trait Std140: Sized + Clone {
     /// Required alignment of this type in the uniform buffer.
     const ALIGN: usize;
 
-    /// Amount of size this type takes in the uniform buffer. A multiple of
+    /// Amount of bytes this type takes in the uniform buffer. A multiple of
     /// `Self::ALIGN`.
     const SIZE: usize;
 
@@ -48,6 +48,7 @@ pub trait Std140Scalar {}
 /// Marker trait for `Std140` types which are considered either "scalars" or
 /// "vectors".
 pub trait Std140ScalarOrVector {}
+
 
 // scalars
 
@@ -208,10 +209,6 @@ std140_vec_4!(Rgba, r, g, b, a);
 
 
 // arrays of scalars or vectors
-//
-// note: I'm not sure if this correctly handles arrays of matrices or
-//       structures, but it should correctly handle arrays of scalars or
-//       vectors
 
 const fn arr_elem_size(elem_type_size: usize) -> usize {
     // "the size of each element in the array will be the size of the element

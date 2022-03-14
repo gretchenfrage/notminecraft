@@ -477,6 +477,8 @@ impl Renderer {
     }
 
     /// Read a PNG / JPG / etc image from a file and load it onto the GPU.
+    ///
+    /// Just reads the file with tokio then passes it to `self.load_image`.
     pub async fn load_image_file(&self, path: impl AsRef<Path>) -> Result<GpuImage> {
         let file_data = fs::read(path).await?;
         self.load_image(&file_data)

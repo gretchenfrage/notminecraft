@@ -45,14 +45,17 @@ impl Graphics {
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
         canvas
             .with_scale([0.75, 0.75])
-            .with_color([0xFF, 0x00, 0x00, 0xFF / 2])
+            .with_clip_min_x(0.25)
+            //.with_color([0xFF, 0xFF, 0x00, 0xFF])
             .draw_image(&self.dog_image);
             //.draw_solid();
         canvas
             .with_translate([0.25, 0.25])
             .with_scale([0.75, 0.75])
-            .with_color([0x00, 0x00, 0xFF, 0xFF / 2])
-            .draw_solid();
+            .with_color([0xFF, 0xFF, 0xFF, 0xFF / 2])
+            .with_scale([0.6, 0.6])
+            .draw_image(&self.dog_image);
+            //.draw_solid();
         /*
         let elapsed = self.start_time.elapsed().unwrap().as_millis() as f32 / 1000.0;
         let scale = elapsed.sin() * 0.4 + 0.6;
