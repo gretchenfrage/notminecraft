@@ -84,9 +84,6 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
 
-    panic!("pissy shitties");
-
-
     loop {
         let event = events.recv().await;
         trace!(?event, "received event");
@@ -132,7 +129,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 fn main() {
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
-        .with_ansi(false).with_writer(std::fs::File::create("log.txt").unwrap())
+        //.with_ansi(false).with_writer(std::fs::File::create("log.txt").unwrap())
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     info!("starting program");

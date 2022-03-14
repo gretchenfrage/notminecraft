@@ -460,6 +460,7 @@ impl Renderer {
                                 &image.0.texture_bind_group,
                                 &[],
                             );
+                            pass.draw(0..6, 0..1);
                         },
                     };
                 }

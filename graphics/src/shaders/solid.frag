@@ -14,6 +14,7 @@ layout(location=0) in vec2 i_pos;
 layout(location=0) out vec4 o_color;
 
 void main() {
+    o_color = u_color;
     if (i_pos.x < u_clip_min_x) {
         discard;
     }
@@ -26,5 +27,4 @@ void main() {
     if (i_pos.y > u_clip_max_y) {
         discard;
     }
-    o_color = u_color;
 }
