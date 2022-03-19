@@ -63,8 +63,9 @@ pub struct Renderer {
     text_pipeline: RenderPipeline,    
     glyph_brush: GlyphBrush<TextQuad, GlyphExtra>,
     fonts: Vec<FontArc>,
-    glyph_cache_texture: Texture,
     glyph_cache_sampler: Sampler,
+    glyph_cache_texture: Texture,
+    glyph_cache_bind_group_layout: BindGroupLayout,
     glyph_cache_bind_group: BindGroup,
     text_vertex_buffer_state: Option<TextVertexBufferState>,
 }
@@ -128,6 +129,54 @@ impl GpuImage {
     pub fn size(&self) -> Extent2<u32> {
         self.0.size
     }
+}
+
+/// Create a glyph cache texture with the given size, then create a glyph cache
+/// bind group using that texture and a pre-created sampler and layout.
+///
+/// This logic is shared between the initial construction of the glyph cache,
+/// and the resizing of the glyph cache.
+fn finish_glyph_cache_creation(
+    device: &Device,
+    glyph_cache_sampler: &Sampler,
+    glyph_cache_bind_group_layout: &BindGroupLayout,
+    size: Extent2<u32>,
+) -> (Texture, BindGroup) {
+    let glyph_cache_texture = device
+        .create_texture(&TextureDescriptor {
+            label: Some("glyph cache texture"),
+            size: Extent3d {
+                width: size.w,
+                height: size.h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::R8Unorm,
+            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+        });
+    let glyph_cache_texture_view = glyph_cache_texture
+        .create_view(&TextureViewDescriptor {
+            label: Some("glyph cache texture view"),
+            ..Default::default()
+        });
+    let glyph_cache_bind_group = device
+        .create_bind_group(&BindGroupDescriptor {
+            label: Some("glyph cache bind group"),
+            layout: glyph_cache_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&glyph_cache_texture_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(glyph_cache_sampler),
+                },
+            ],
+        });
+    (glyph_cache_texture, glyph_cache_bind_group)
 }
 
 impl Renderer {
@@ -334,7 +383,7 @@ impl Renderer {
         let text_fs_module = device
             .create_shader_module(&load_shader("text.frag").await?);
         let glyph_brush = GlyphBrushBuilder::using_fonts::<FontArc>(Vec::new())
-            .build();
+            .build();/*
         let glyph_cache_texture = device
             .create_texture(&TextureDescriptor {
                 label: Some("glyph cache texture"),
@@ -353,7 +402,7 @@ impl Renderer {
             .create_view(&TextureViewDescriptor {
                 label: Some("glyph cache texture view"),
                 ..Default::default()
-            });
+            });*/
         let glyph_cache_sampler = device
             .create_sampler(&SamplerDescriptor {
                 label: Some("glyph cache sampler"),
@@ -383,6 +432,13 @@ impl Renderer {
                     },
                 ],
             });
+        let (glyph_cache_texture, glyph_cache_bind_group) = finish_glyph_cache_creation(
+            &device,
+            &glyph_cache_sampler,
+            &glyph_cache_bind_group_layout,
+            glyph_brush.texture_dimensions().into(),
+        );
+        /*
         let glyph_cache_bind_group = device
             .create_bind_group(&BindGroupDescriptor {
                 label: Some("text texture bind group"),
@@ -397,7 +453,7 @@ impl Renderer {
                         resource: BindingResource::Sampler(&glyph_cache_sampler),
                     },
                 ],
-            });
+            });*/
         let text_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("text pipeline layout"),
@@ -471,8 +527,9 @@ impl Renderer {
             text_pipeline,
             glyph_brush,
             fonts: Vec::new(),
-            glyph_cache_texture,
             glyph_cache_sampler,
+            glyph_cache_texture,
+            glyph_cache_bind_group_layout,
             glyph_cache_bind_group,
             text_vertex_buffer_state: None,
         })
@@ -676,10 +733,20 @@ impl Renderer {
                     break;
                 },
                 Ok(gb::BrushAction::ReDraw) => break, // reuse existing vertex buffer
-                Err(gb::BrushError::TextureTooSmall { suggested }) => {
-
-                    // TODO increase texture size
-                    unimplemented!()
+                Err(gb::BrushError::TextureTooSmall {
+                    suggested: (w, h),
+                }) => {
+                    // increase glyph cache texture size and try again
+                    trace!("increasing glyph cache texture size");
+                    self.glyph_brush.resize_texture(w, h);
+                    let (glyph_cache_texture, glyph_cache_bind_group) = finish_glyph_cache_creation(
+                        &self.device,
+                        &self.glyph_cache_sampler,
+                        &self.glyph_cache_bind_group_layout,
+                        Extent2::new(w, h),
+                    );
+                    self.glyph_cache_texture = glyph_cache_texture;
+                    self.glyph_cache_bind_group = glyph_cache_bind_group;
                 },
             };
         }
