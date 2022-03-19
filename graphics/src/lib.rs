@@ -67,13 +67,13 @@ pub struct Renderer {
     glyph_cache_texture: Texture,
     glyph_cache_bind_group_layout: BindGroupLayout,
     glyph_cache_bind_group: BindGroup,
-    text_vertex_buffer_state: Option<TextVertexBufferState>,
+    text_vertex_state: Option<TextVertexState>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 struct GlyphExtra {
     color: Rgba<u8>,
-    draw_text_call_index: u32,
+    draw_text_call_index: usize,
 }
 
 
@@ -82,7 +82,7 @@ struct TextQuad {
     src: (Vec2<f32>, Extent2<f32>),
     dst: (Vec2<f32>, Extent2<f32>), // TODO are either of these extraneous?
     color: Rgba<u8>,
-    draw_text_call_index: u32,
+    draw_text_call_index: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -107,10 +107,11 @@ struct UniformBufferState {
     solid_uniform_bind_group: BindGroup,
 }
 
-struct TextVertexBufferState {
+struct TextVertexState {
     text_vertex_buffer: Buffer,
     text_vertex_buffer_len: usize,
     num_text_vertices: usize,
+    draw_text_call_ranges: Vec<Option<(usize, usize)>>,
 }
 
 /// 2D RGBA image loaded into a GPU texture.
@@ -531,7 +532,7 @@ impl Renderer {
             glyph_cache_texture,
             glyph_cache_bind_group_layout,
             glyph_cache_bind_group,
-            text_vertex_buffer_state: None,
+            text_vertex_state: None,
         })
     }
 
@@ -589,8 +590,6 @@ impl Renderer {
 
             transform: Canvas2dTransform::identity(),
         });
-
-
 
         // process the queued glyph brush data
         // update the glyph cache texture as necessary
@@ -694,6 +693,33 @@ impl Renderer {
                             }))
                         .collect::<Vec<_>>();
 
+                    // compute the array that maps from draw_text call index to
+                    // range of vertices
+                    let mut ranges = Vec::new();
+                    let mut quad_idx = 0;
+                    for draw_idx in 0..canvas_out_vars.next_draw_text_call_index {
+                        // simply multiply start and end by 6 to convert from
+                        // quad index to vertex index
+                        let start = quad_idx * 6;
+                        while 
+                            quad_idx < quads.len()
+                            && quads[quad_idx].draw_text_call_index == draw_idx
+                        {
+                            quad_idx += 1;
+                        }
+                        debug_assert!(
+                            quad_idx == quads.len()
+                            || quads[quad_idx].draw_text_call_index > draw_idx,
+                        );
+                        let end = quad_idx * 6;
+
+                        if end > start {
+                            ranges.push(Some((start, end)));
+                        } else {
+                            ranges.push(None);
+                        }
+                    }
+
                     // convert the vertices into bytes
                     let mut vertex_bytes = Vec::new();
                     for vertex in &vertex_vec {
@@ -703,15 +729,17 @@ impl Renderer {
                     // write to the vertex buffer, allocating/reallocating if necessary
                     if !vertex_bytes.is_empty() {
                         let dst = self
-                            .text_vertex_buffer_state
+                            .text_vertex_state
                             .as_mut()
                             .filter(|state| state.text_vertex_buffer_len >= vertex_bytes.len());
                         if let Some(dst) = dst {
                             // vertex buffer exists and is big enough
-                            // update data
+                            // write to buffer
                             self.queue.write_buffer(&dst.text_vertex_buffer, 0, &vertex_bytes);
+                            // update other data
                             dst.text_vertex_buffer_len = vertex_bytes.len();
                             dst.num_text_vertices = vertex_vec.len();
+                            dst.draw_text_call_ranges = ranges;
                         } else {
                             // cannot reuse existing vertex buffer
                             // create new one
@@ -721,10 +749,11 @@ impl Renderer {
                                     contents: &vertex_bytes,
                                     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                                 });
-                            self.text_vertex_buffer_state = Some(TextVertexBufferState {
+                            self.text_vertex_state = Some(TextVertexState {
                                 text_vertex_buffer,
                                 text_vertex_buffer_len: vertex_bytes.len(),
                                 num_text_vertices: vertex_vec.len(),
+                                draw_text_call_ranges: ranges,
                             });
                         }
                     }
@@ -868,8 +897,8 @@ impl Renderer {
                         uniform_offset,
                         draw_text_call_index,
                     } => {
-                        let text_vertex_buffer_state = self
-                            .text_vertex_buffer_state
+                        let text_vertex_state = self
+                            .text_vertex_state
                             .as_ref()
                             .unwrap();
                         let uniform_buffer_state = self
@@ -877,25 +906,29 @@ impl Renderer {
                             .as_ref()
                             .unwrap();
 
-                        pass.set_pipeline(&self.text_pipeline);
-                        pass.set_vertex_buffer(
-                            0,
-                            text_vertex_buffer_state.text_vertex_buffer.slice(..),
-                        );
-                        pass.set_bind_group(
-                            0,
-                            &uniform_buffer_state.solid_uniform_bind_group,
-                            &[uniform_offset as u32],
-                        );
-                        pass.set_bind_group(
-                            1,
-                            &self.glyph_cache_bind_group,
-                            &[],
-                        );
-                        pass.draw(
-                            0..text_vertex_buffer_state.num_text_vertices as u32,
-                            0..1,
-                        ); // TODO dont draw them all
+                        let vertex_range = text_vertex_state
+                            .draw_text_call_ranges[draw_text_call_index];
+                        if let Some((start, end)) = vertex_range {
+                            pass.set_pipeline(&self.text_pipeline);
+                            pass.set_vertex_buffer(
+                                0,
+                                text_vertex_state.text_vertex_buffer.slice(..),
+                            );
+                            pass.set_bind_group(
+                                0,
+                                &uniform_buffer_state.solid_uniform_bind_group,
+                                &[uniform_offset as u32],
+                            );
+                            pass.set_bind_group(
+                                1,
+                                &self.glyph_cache_bind_group,
+                                &[],
+                            );
+                            pass.draw(
+                                start as u32..end as u32,
+                                0..1,
+                            );
+                        }
                     },
                 };
             }
@@ -1055,7 +1088,7 @@ struct Canvas2dOutVars {
     uniform_data_buf: Vec<u8>,
     image_array: Vec<GpuImage>,
     draw_calls: Vec<Canvas2dDrawCall>,
-    next_draw_text_call_index: u32,
+    next_draw_text_call_index: usize,
 }
 
 enum Canvas2dDrawCall {
@@ -1068,7 +1101,7 @@ enum Canvas2dDrawCall {
     },
     Text {
         uniform_offset: usize,
-        draw_text_call_index: u32,
+        draw_text_call_index: usize,
     },
 }
 

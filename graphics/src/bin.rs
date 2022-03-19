@@ -61,7 +61,7 @@ impl Graphics {
                     text: "hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world ",
                     font_id: font,
                     font_size: pt_to_px(12.0),
-                    color: Rgba::black(),
+                    color: Rgba::white(),
                 },
             ],
             horizontal_align: HorizontalAlign::Left {
@@ -104,6 +104,15 @@ impl Graphics {
                 1.0 / self.size.w as f32,
                 1.0 / self.size.h as f32,
             ])
+            .with_color(Rgba::black())
+            .draw_text(&self.layed_out_hello_world);
+        canvas
+            .with_scale([
+                1.0 / self.size.w as f32,
+                1.0 / self.size.h as f32,
+            ])
+            .with_scale([10.0, 10.0])
+            .with_color(Rgba::red())
             .draw_text(&self.layed_out_hello_world);
 
         //canvas
@@ -131,7 +140,7 @@ impl Graphics {
                     text: "hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world ",
                     font_id: self.font,
                     font_size: pt_to_px(12.0),
-                    color: Rgba::black(),
+                    color: Rgba::white(),
                 },
             ],
             horizontal_align: HorizontalAlign::Left {
