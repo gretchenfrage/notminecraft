@@ -1275,6 +1275,8 @@ impl<'a> Canvas2d<'a> {
         }
     }
 
+    /// Push canvas2d uniform data onto `self.uniform_data_buf` based on
+    /// current transform, and return the offset.
     fn push_uniform_data(&mut self) -> usize {
         let uniform_data = DrawSolidUniformData {
             transform: self.transform.affine,
@@ -1330,6 +1332,7 @@ impl<'a> Canvas2d<'a> {
             .iter()
             .map(|glyph| glyph.section_glyph.clone())
             .collect();
+
         // produce the matching extra data for the text block
         let extra = text_block
             .glyphs
