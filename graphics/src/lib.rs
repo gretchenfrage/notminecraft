@@ -1336,19 +1336,19 @@ pub enum VerticalAlign {
 }
 
 /// Index for a font loaded into a `Renderer`.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FontId(pub usize);
 
 /// Span of text with specification of how to display it.
 #[derive(Debug, Copy, Clone)]
 pub struct TextSpan<'a> {
-    /// The actual text.
+    /// The actual string of text.
     pub text: &'a str,
     /// Which font to use.
     pub font_id: FontId,
-    /// Font height units.
+    /// Text height units.
     pub font_size: f32,
-    /// Font color. Default white.
+    /// Text color.
     pub color: Rgba<u8>,
 }
 

@@ -29,13 +29,9 @@ use anyhow::*;
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
-    reexports::{
-        window::Window,
-        dpi::LogicalSize,
-        event::{
-            Event,
-            WindowEvent,
-        },
+    reexports::event::{
+        Event,
+        WindowEvent,
     },
 };
 use tracing_subscriber::{
@@ -56,7 +52,7 @@ struct Graphics {
 }
 
 impl Graphics {
-    async fn new(window: Arc<Window>, renderer: &mut Renderer) -> Result<Self> {
+    async fn new(renderer: &mut Renderer) -> Result<Self> {
         let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
         let font = renderer.load_font_file("src/assets/DejaVuSans.ttf").await?;
         let hello_world = TextBlock {
@@ -154,7 +150,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
-    let mut graphics = Graphics::new(Arc::clone(&window), &mut renderer).await?;
+    let mut graphics = Graphics::new(&mut renderer).await?;
 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
