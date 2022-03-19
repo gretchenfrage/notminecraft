@@ -50,11 +50,11 @@ pub struct Renderer {
     queue: Queue,
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
+    canvas2d_uniform_bind_group_layout: BindGroupLayout,
 
     clear_pipeline: RenderPipeline,
     
     solid_pipeline: RenderPipeline,
-    solid_uniform_bind_group_layout: BindGroupLayout,
 
     image_pipeline: RenderPipeline,
     image_texture_bind_group_layout: BindGroupLayout,
@@ -104,7 +104,7 @@ struct UniformBufferState {
     uniform_buffer: Buffer,
     uniform_buffer_len: usize,
 
-    solid_uniform_bind_group: BindGroup,
+    canvas2d_uniform_bind_group: BindGroup,
 }
 
 struct TextVertexState {
@@ -217,6 +217,25 @@ impl Renderer {
 
         let swapchain_format = TextureFormat::Bgra8Unorm;
 
+        // create the layout for the standard bind group all canvas2d shaders
+        // use for canvas2d transformations
+        let canvas2d_uniform_bind_group_layout = device
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("solid uniform bind group layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
         // create the clear pipeline
         trace!("creating clear pipeline");
         let clear_vs_module = device
@@ -255,27 +274,12 @@ impl Renderer {
             .create_shader_module(&load_shader("solid.vert").await?);
         let solid_fs_module = device
             .create_shader_module(&load_shader("solid.frag").await?);
-        let solid_uniform_bind_group_layout = device
-            .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("solid uniform bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: true,
-                            min_binding_size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
-                        },
-                        count: None,
-                    },
-                ],
-            });
+        
         let solid_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("solid pipeline layout"),
                 bind_group_layouts: &[
-                    &solid_uniform_bind_group_layout,
+                    &canvas2d_uniform_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -311,8 +315,6 @@ impl Renderer {
             .create_shader_module(&load_shader("image.vert").await?);
         let image_fs_module = device
             .create_shader_module(&load_shader("image.frag").await?);
-        // the image pipeline's uniform bind group layout is exactly the same
-        // as the solid uniform bind group layout, so literally just use that
         let image_texture_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("image texture bind group layout"),
@@ -341,7 +343,7 @@ impl Renderer {
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("image pipeline layout"),
                 bind_group_layouts: &[
-                    &solid_uniform_bind_group_layout,
+                    &canvas2d_uniform_bind_group_layout,
                     &image_texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -424,7 +426,7 @@ impl Renderer {
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("text pipeline layout"),
                 bind_group_layouts: &[
-                    &solid_uniform_bind_group_layout, // TODO rename this
+                    &canvas2d_uniform_bind_group_layout, // TODO rename this
                     &glyph_cache_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -480,11 +482,11 @@ impl Renderer {
             queue,
             config,
             uniform_buffer_state: None,
+            canvas2d_uniform_bind_group_layout,
 
             clear_pipeline,
 
             solid_pipeline,
-            solid_uniform_bind_group_layout,
 
             image_pipeline,
             image_texture_bind_group_layout,
@@ -765,10 +767,10 @@ impl Renderer {
                         contents: &canvas_out_vars.uniform_data_buf,
                         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                     });
-                let solid_uniform_bind_group = self.device
+                let canvas2d_uniform_bind_group = self.device
                     .create_bind_group(&BindGroupDescriptor {
                         label: Some("solid uniform bind group"),
-                        layout: &self.solid_uniform_bind_group_layout,
+                        layout: &self.canvas2d_uniform_bind_group_layout,
                         entries: &[
                             BindGroupEntry {
                                 binding: 0,
@@ -783,7 +785,7 @@ impl Renderer {
                 self.uniform_buffer_state = Some(UniformBufferState {
                     uniform_buffer,
                     uniform_buffer_len: canvas_out_vars.uniform_data_buf.len(),
-                    solid_uniform_bind_group
+                    canvas2d_uniform_bind_group
                 });
             }
         }
@@ -830,7 +832,7 @@ impl Renderer {
                         pass.set_pipeline(&self.solid_pipeline);
                         pass.set_bind_group(
                             0,
-                            &uniform_buffer_state.solid_uniform_bind_group,
+                            &uniform_buffer_state.canvas2d_uniform_bind_group,
                             &[uniform_offset as u32],
                         );
                         pass.draw(0..6, 0..1);
@@ -848,7 +850,7 @@ impl Renderer {
                         pass.set_pipeline(&self.image_pipeline);
                         pass.set_bind_group(
                             0,
-                            &uniform_buffer_state.solid_uniform_bind_group,
+                            &uniform_buffer_state.canvas2d_uniform_bind_group,
                             &[uniform_offset as u32],
                         );
                         pass.set_bind_group(
@@ -881,7 +883,7 @@ impl Renderer {
                             );
                             pass.set_bind_group(
                                 0,
-                                &uniform_buffer_state.solid_uniform_bind_group,
+                                &uniform_buffer_state.canvas2d_uniform_bind_group,
                                 &[uniform_offset as u32],
                             );
                             pass.set_bind_group(

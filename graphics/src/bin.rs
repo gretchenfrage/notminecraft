@@ -84,13 +84,13 @@ impl Graphics {
         /*canvas
             .with_scale([0.75, 0.75])
             .with_clip_min_x(0.25)
-            .draw_image(&self.dog_image);
+            .draw_image(&self.dog_image);*/
         canvas
             .with_translate([0.25, 0.25])
             .with_scale([0.75, 0.75])
             .with_color([0xFF, 0xFF, 0xFF, 0xFF / 2])
             .with_scale([0.6, 0.6])
-            .draw_image(&self.dog_image);*/
+            .draw_image(&self.dog_image);
         
         /*let size = LogicalSize::<f64>::from_physical(
             self.window.inner_size(),
