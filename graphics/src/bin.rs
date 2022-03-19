@@ -12,6 +12,7 @@ use graphics::{
     HorizontalAlign,
     VerticalAlign,
     LayedOutTextBlock,
+    pt_to_px,
 };
 use std::{
     panic,
@@ -28,9 +29,13 @@ use anyhow::*;
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
-    reexports::event::{
-        Event,
-        WindowEvent,
+    reexports::{
+        window::Window,
+        dpi::LogicalSize,
+        event::{
+            Event,
+            WindowEvent,
+        },
     },
 };
 use tracing_subscriber::{
@@ -41,18 +46,44 @@ use backtrace::Backtrace;
 use vek::*;
 
 
+#[allow(dead_code)]
 struct Graphics {
-    #[allow(dead_code)]
+    size: Extent2<u32>,
     start_time: SystemTime,
-    #[allow(dead_code)]
     dog_image: GpuImage,
-    #[allow(dead_code)]
     font: FontId,
-    #[allow(dead_code)]
     layed_out_hello_world: LayedOutTextBlock,
 }
 
 impl Graphics {
+    async fn new(window: Arc<Window>, renderer: &mut Renderer) -> Result<Self> {
+        let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
+        let font = renderer.load_font_file("src/assets/DejaVuSans.ttf").await?;
+        let hello_world = TextBlock {
+            spans: &[
+                TextSpan {
+                    text: "hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world ",
+                    font_id: font,
+                    font_size: pt_to_px(12.0),
+                    color: Rgba::black(),
+                },
+            ],
+            horizontal_align: HorizontalAlign::Left {
+                width: Some(renderer.size().w as f32),
+            },
+            vertical_align: VerticalAlign::Top,
+        };
+        let layed_out_hello_world = renderer.lay_out_text(&hello_world);
+
+        Ok(Graphics {
+            size: renderer.size(),
+            start_time: SystemTime::now(),
+            font,
+            dog_image,
+            layed_out_hello_world,
+        })
+    }
+
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
         /*canvas
             .with_scale([0.75, 0.75])
@@ -65,8 +96,18 @@ impl Graphics {
             .with_scale([0.6, 0.6])
             .draw_image(&self.dog_image);*/
         
+        /*let size = LogicalSize::<f64>::from_physical(
+            self.window.inner_size(),
+            self.window.scale_factor(),
+        );*/
+        //let size = self.window.inner_size();
+        // TODO figure out DPI awareness
+
         canvas
-            .with_scale([0.01, 0.01])
+            .with_scale([
+                1.0 / self.size.w as f32,
+                1.0 / self.size.h as f32,
+            ])
             .draw_text(&self.layed_out_hello_world);
 
         //canvas
@@ -85,35 +126,35 @@ impl Graphics {
             .with_translate([translate, translate])
             .draw_solid();*/
     }
+
+    fn resize(&mut self, renderer: &mut Renderer) {
+        self.size = renderer.size();
+        let hello_world = TextBlock {
+            spans: &[
+                TextSpan {
+                    text: "hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world hello world ",
+                    font_id: self.font,
+                    font_size: pt_to_px(12.0),
+                    color: Rgba::black(),
+                },
+            ],
+            horizontal_align: HorizontalAlign::Left {
+                width: Some(renderer.size().w as f32),
+            },
+            vertical_align: VerticalAlign::Top,
+        };
+        self.layed_out_hello_world = renderer.lay_out_text(&hello_world);
+    }
 }
+
+
 
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
-    let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
-    let font = renderer.load_font_file("src/assets/DejaVuSans.ttf").await?;
-    let layed_out_hello_world = renderer.lay_out_text(&TextBlock {
-            spans: &[
-                TextSpan {
-                    text: "hello world",
-                    //text: "h",
-                    font_id: font,
-                    font_size: 12.0,
-                    color: Rgba::black(),
-                },
-            ],
-            horizontal_align: HorizontalAlign::Left { width: None },
-            vertical_align: VerticalAlign::Top,
-        });
-
-    let mut graphics = Graphics {
-        start_time: SystemTime::now(),
-        font,
-        dog_image,
-        layed_out_hello_world,
-    };
+    let mut graphics = Graphics::new(Arc::clone(&window), &mut renderer).await?;
 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -127,6 +168,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 WindowEvent::Resized(size) => {
                     trace!("resizing window");
                     renderer.resize(size);
+                    graphics.resize(&mut renderer);
                 },
                 _ => (),
             },

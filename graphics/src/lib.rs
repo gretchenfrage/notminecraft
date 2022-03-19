@@ -478,7 +478,7 @@ impl Renderer {
         })
     }
 
-    /// Get the current surface size.
+    /// Get the current surface physical size.
     pub fn size(&self) -> Extent2<u32> {
         Extent2::new(self.config.width, self.config.height)
     }
@@ -1352,6 +1352,10 @@ pub struct TextSpan<'a> {
     pub color: Rgba<u8>,
 }
 
+/// Convert from font points (1/72 in) to logical pixels (1/92 in).
+pub fn pt_to_px(pt: f32) -> f32 {
+    pt * 4.0 / 3.0
+}
 
 impl<'a> TextBlock<'a> {
     /// Produce a corresponding glyph_brush `Layout`.
