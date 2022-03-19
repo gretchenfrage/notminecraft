@@ -2,6 +2,11 @@
 use crate::{
     pipelines::{
         clear::ClearPipeline,
+        solid::{
+            SolidPipeline,
+            DrawCallSolid,
+            prep_draw_solid_call,
+        },
     },
     std140::{
         Std140,
@@ -55,8 +60,7 @@ pub struct Renderer {
     uniform_buffer_state: Option<UniformBufferState>,
     canvas2d_uniform_bind_group_layout: BindGroupLayout,
     clear_pipeline: ClearPipeline,
-    
-    solid_pipeline: RenderPipeline,
+    solid_pipeline: SolidPipeline,
 
     image_pipeline: RenderPipeline,
     image_texture_bind_group_layout: BindGroupLayout,
@@ -244,44 +248,10 @@ impl Renderer {
 
         // create the solid pipeline
         trace!("creating solid pipeline");
-        let solid_vs_module = device
-            .create_shader_module(&load_shader("solid.vert").await?);
-        let solid_fs_module = device
-            .create_shader_module(&load_shader("solid.frag").await?);
-        
-        let solid_pipeline_layout = device
-            .create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: Some("solid pipeline layout"),
-                bind_group_layouts: &[
-                    &canvas2d_uniform_bind_group_layout,
-                ],
-                push_constant_ranges: &[],
-            });
-        let solid_pipeline = device
-            .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("solid pipeline"),
-                layout: Some(&solid_pipeline_layout),
-                vertex: VertexState {
-                    module: &solid_vs_module,
-                    entry_point: "main",
-                    buffers: &[],
-                },
-                fragment: Some(FragmentState {
-                    module: &solid_fs_module,
-                    entry_point: "main",
-                    targets: &[
-                        ColorTargetState {
-                            format: SWAPCHAIN_FORMAT,
-                            blend: Some(BlendState::ALPHA_BLENDING),
-                            write_mask: ColorWrites::all(),
-                        },
-                    ],
-                }),
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                multiview: None,
-            });
+        let solid_pipeline = SolidPipeline::new(
+            &device,
+            &canvas2d_uniform_bind_group_layout,
+        ).await?;
 
         // create the image pipeline
         trace!("creating image pipeline");
@@ -458,7 +428,6 @@ impl Renderer {
             uniform_buffer_state: None,
             canvas2d_uniform_bind_group_layout,
             clear_pipeline,
-
             solid_pipeline,
 
             image_pipeline,
@@ -794,20 +763,12 @@ impl Renderer {
             trace!("making draw calls");
             for draw_call in canvas_out_vars.draw_calls {
                 match draw_call {
-                    Canvas2dDrawCall::Solid { uniform_offset } => {
-                        let uniform_buffer_state = self
-                            .uniform_buffer_state
-                            .as_ref()
-                            .unwrap();
-
-                        pass.set_pipeline(&self.solid_pipeline);
-                        pass.set_bind_group(
-                            0,
-                            &uniform_buffer_state.canvas2d_uniform_bind_group,
-                            &[uniform_offset as u32],
-                        );
-                        pass.draw(0..6, 0..1);
-                    },
+                    Canvas2dDrawCall::Solid(call) => self.solid_pipeline
+                        .render_call(
+                            call,
+                            &mut pass,
+                            &self.uniform_buffer_state,
+                        ),
                     Canvas2dDrawCall::Image {
                         uniform_offset,
                         image_index,
@@ -1030,9 +991,7 @@ struct Canvas2dOutVars {
 }
 
 enum Canvas2dDrawCall {
-    Solid {
-        uniform_offset: usize,
-    },
+    Solid(DrawCallSolid),
     Image {
         uniform_offset: usize,
         image_index: usize,
@@ -1264,11 +1223,7 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
-        // push uniform data
-        let uniform_offset = self.push_uniform_data();
-
-        // push draw call
-        self.out_vars.draw_calls.push(Canvas2dDrawCall::Solid { uniform_offset });
+        prep_draw_solid_call(self);
     }
 
     /// Draw the given image from <0, 0> to <1, 1>.
