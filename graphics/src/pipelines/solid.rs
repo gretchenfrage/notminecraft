@@ -28,7 +28,7 @@ pub fn prep_draw_solid_call(canvas: &mut Canvas2d) {
 }
 
 impl SolidPipeline {
-    pub async fn new(
+    pub(crate) async fn new(
         device: &Device,
         canvas2d_uniform_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self> {

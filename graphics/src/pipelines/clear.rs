@@ -13,7 +13,7 @@ pub struct ClearPipeline {
 }
 
 impl ClearPipeline {
-    pub async fn new(device: &Device) -> Result<Self> {
+    pub(crate) async fn new(device: &Device) -> Result<Self> {
         let clear_vs_module = device
             .create_shader_module(&load_shader("clear.vert").await?);
         let clear_fs_module = device
@@ -47,7 +47,7 @@ impl ClearPipeline {
         Ok(ClearPipeline { clear_pipeline })
     }
 
-    pub fn clear_screen<'a>(&'a self, pass: &mut RenderPass<'a>) {
+    pub(crate) fn clear_screen<'a>(&'a self, pass: &mut RenderPass<'a>) {
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..1, 0..1);
     }

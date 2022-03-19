@@ -7,6 +7,11 @@ use crate::{
             DrawCallSolid,
             prep_draw_solid_call,
         },
+        image::{
+            ImagePipeline,
+            DrawCallImage,
+            prep_draw_image_call,
+        },
     },
     std140::{
         Std140,
@@ -22,6 +27,7 @@ use crate::{
 use std::{
     path::Path,
     sync::Arc,
+    mem::take,
 };
 use anyhow::Result;
 use tracing::*;
@@ -61,10 +67,7 @@ pub struct Renderer {
     canvas2d_uniform_bind_group_layout: BindGroupLayout,
     clear_pipeline: ClearPipeline,
     solid_pipeline: SolidPipeline,
-
-    image_pipeline: RenderPipeline,
-    image_texture_bind_group_layout: BindGroupLayout,
-    image_sampler: Sampler,
+    image_pipeline: ImagePipeline,    
 
     text_pipeline: RenderPipeline,    
     glyph_brush: GlyphBrush<TextQuad, GlyphExtra>,
@@ -122,23 +125,7 @@ struct TextVertexState {
     draw_text_call_ranges: Vec<Option<(usize, usize)>>,
 }
 
-/// 2D RGBA image loaded into a GPU texture.
-///
-/// Internally reference-counted.
-#[derive(Clone)]
-pub struct GpuImage(Arc<GpuImageInner>);
-
-struct GpuImageInner {
-    size: Extent2<u32>,
-    texture_bind_group: BindGroup,
-}
-
-impl GpuImage {
-    /// Get image size in pixels.
-    pub fn size(&self) -> Extent2<u32> {
-        self.0.size
-    }
-}
+pub use crate::pipelines::image::GpuImage;
 
 /// Create a glyph cache texture with the given size, then create a glyph cache
 /// bind group using that texture and a pre-created sampler and layout.
@@ -255,73 +242,10 @@ impl Renderer {
 
         // create the image pipeline
         trace!("creating image pipeline");
-        let image_vs_module = device
-            .create_shader_module(&load_shader("image.vert").await?);
-        let image_fs_module = device
-            .create_shader_module(&load_shader("image.frag").await?);
-        let image_texture_bind_group_layout = device
-            .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("image texture bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float {
-                                filterable: false,
-                            },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                        count: None,
-                    },
-                ],
-            });
-        let image_pipeline_layout = device
-            .create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: Some("image pipeline layout"),
-                bind_group_layouts: &[
-                    &canvas2d_uniform_bind_group_layout,
-                    &image_texture_bind_group_layout,
-                ],
-                push_constant_ranges: &[],
-            });
-        let image_pipeline = device
-            .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("image pipeline"),
-                layout: Some(&image_pipeline_layout),
-                vertex: VertexState {
-                    module: &image_vs_module,
-                    entry_point: "main",
-                    buffers: &[],
-                },
-                fragment: Some(FragmentState {
-                    module: &image_fs_module,
-                    entry_point: "main",
-                    targets: &[
-                        ColorTargetState {
-                            format: SWAPCHAIN_FORMAT,
-                            blend: Some(BlendState::ALPHA_BLENDING),
-                            write_mask: ColorWrites::all(),
-                        },
-                    ],
-                }),
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                multiview: None,
-            });
-        let image_sampler = device
-            .create_sampler(&SamplerDescriptor {
-                label: Some("image sampler"),
-                ..Default::default()
-            });
+        let image_pipeline = ImagePipeline::new(
+            &device,
+            &canvas2d_uniform_bind_group_layout,
+        ).await?;    
 
         // create the text pipeline
         trace!("creating text pipeline");
@@ -431,8 +355,6 @@ impl Renderer {
             solid_pipeline,
 
             image_pipeline,
-            image_texture_bind_group_layout,
-            image_sampler,
             
             text_pipeline,
             glyph_brush,
@@ -761,37 +683,23 @@ impl Renderer {
 
             // make draw calls
             trace!("making draw calls");
-            for draw_call in canvas_out_vars.draw_calls {
+            for draw_call in take(&mut canvas_out_vars.draw_calls) {
                 match draw_call {
-                    Canvas2dDrawCall::Solid(call) => self.solid_pipeline
+                    Canvas2dDrawCall::Solid(call) => self
+                        .solid_pipeline
                         .render_call(
                             call,
                             &mut pass,
                             &self.uniform_buffer_state,
                         ),
-                    Canvas2dDrawCall::Image {
-                        uniform_offset,
-                        image_index,
-                    } => {
-                        let uniform_buffer_state = self
-                            .uniform_buffer_state
-                            .as_ref()
-                            .unwrap();
-
-                        let image = &canvas_out_vars.image_array[image_index];
-                        pass.set_pipeline(&self.image_pipeline);
-                        pass.set_bind_group(
-                            0,
-                            &uniform_buffer_state.canvas2d_uniform_bind_group,
-                            &[uniform_offset as u32],
-                        );
-                        pass.set_bind_group(
-                            1,
-                            &image.0.texture_bind_group,
-                            &[],
-                        );
-                        pass.draw(0..6, 0..1);
-                    },
+                    Canvas2dDrawCall::Image(call) => self
+                        .image_pipeline
+                        .render_call(
+                            call,
+                            &mut pass,
+                            &self.uniform_buffer_state,
+                            &canvas_out_vars,
+                        ),
                     Canvas2dDrawCall::Text {
                         uniform_offset,
                         draw_text_call_index,
@@ -852,61 +760,7 @@ impl Renderer {
 
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: &[u8]) -> Result<GpuImage> {
-        let texture_format = TextureFormat::Rgba8Unorm;
-
-        // load image
-        let image = image::load_from_memory(file_data)?
-            .into_rgba8();
-
-        // create texture
-        let texture = self.device
-            .create_texture_with_data(
-                &self.queue,
-                &TextureDescriptor {
-                    label: Some("image texture"),
-                    size: Extent3d {
-                        width: image.width(),
-                        height: image.height(),
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format: texture_format,
-                    usage: TextureUsages::TEXTURE_BINDING,
-                },
-                image.as_raw(),
-            );
-
-        // create texture view
-        let texture_view = texture
-            .create_view(&TextureViewDescriptor {
-                label: Some("image texture view"),
-                ..Default::default()
-            });
-
-        // create bind group
-        let texture_bind_group = self.device
-            .create_bind_group(&BindGroupDescriptor {
-                label: Some("image texture bind group"),
-                layout: &self.image_texture_bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&texture_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&self.image_sampler),
-                    },
-                ],
-            });
-
-        // done
-        Ok(GpuImage(Arc::new(GpuImageInner {
-            texture_bind_group,
-            size: Extent2::new(image.width(), image.height()),
-        })))
+        self.image_pipeline.load_image(file_data, &self.device, &self.queue)
     }
 
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
@@ -992,10 +846,7 @@ struct Canvas2dOutVars {
 
 enum Canvas2dDrawCall {
     Solid(DrawCallSolid),
-    Image {
-        uniform_offset: usize,
-        image_index: usize,
-    },
+    Image(DrawCallImage),
     Text {
         uniform_offset: usize,
         draw_text_call_index: usize,
@@ -1228,18 +1079,7 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw the given image from <0, 0> to <1, 1>.
     pub fn draw_image(&mut self, image: &GpuImage) {
-        // push uniform data
-        let uniform_offset = self.push_uniform_data();
-
-        // push image
-        let image_index = self.out_vars.image_array.len();
-        self.out_vars.image_array.push(image.clone());
-
-        // push draw call
-        self.out_vars.draw_calls.push(Canvas2dDrawCall::Image {
-            uniform_offset,
-            image_index,
-        });
+        prep_draw_image_call(self, image);
     }
 
     /// Draw the given text block with <0, 0> as the top-left corner.
