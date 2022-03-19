@@ -384,26 +384,7 @@ impl Renderer {
         let text_fs_module = device
             .create_shader_module(&load_shader("text.frag").await?);
         let glyph_brush = GlyphBrushBuilder::using_fonts::<FontArc>(Vec::new())
-            .build();/*
-        let glyph_cache_texture = device
-            .create_texture(&TextureDescriptor {
-                label: Some("glyph cache texture"),
-                size: Extent3d {
-                    width: glyph_brush.texture_dimensions().0,
-                    height: glyph_brush.texture_dimensions().1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::R8Unorm,
-                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-            });
-        let glyph_cache_texture_view = glyph_cache_texture
-            .create_view(&TextureViewDescriptor {
-                label: Some("glyph cache texture view"),
-                ..Default::default()
-            });*/
+            .build();
         let glyph_cache_sampler = device
             .create_sampler(&SamplerDescriptor {
                 label: Some("glyph cache sampler"),
@@ -439,22 +420,6 @@ impl Renderer {
             &glyph_cache_bind_group_layout,
             glyph_brush.texture_dimensions().into(),
         );
-        /*
-        let glyph_cache_bind_group = device
-            .create_bind_group(&BindGroupDescriptor {
-                label: Some("text texture bind group"),
-                layout: &glyph_cache_bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&glyph_cache_texture_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&glyph_cache_sampler),
-                    },
-                ],
-            });*/
         let text_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("text pipeline layout"),
