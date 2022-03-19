@@ -5,6 +5,10 @@ use crate::{
         std140_struct,
         pad,
     },
+    vertex::{
+        VertexStruct,
+        vertex_struct,
+    },
     shader::load_shader,
 };
 use std::{
@@ -26,11 +30,18 @@ use wgpu::{
 };
 use vek::*;
 use tokio::fs;
+use glyph_brush::{
+    self as gb,
+    ab_glyph::FontArc,
+    GlyphBrush,
+    GlyphBrushBuilder,
+    GlyphPositioner,
+};
 
 
 mod std140;
 mod shader;
-
+mod vertex;
 
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
@@ -48,6 +59,42 @@ pub struct Renderer {
     image_pipeline: RenderPipeline,
     image_texture_bind_group_layout: BindGroupLayout,
     image_sampler: Sampler,
+
+    text_pipeline: RenderPipeline,    
+    glyph_brush: GlyphBrush<MyGlyphVertex, GlyphExtra>,
+    fonts: Vec<FontArc>,
+    glyph_cache_texture: Texture,
+    glyph_cache_sampler: Sampler,
+    glyph_cache_bind_group: BindGroup,
+    text_vertex_buffer_state: Option<TextVertexBufferState>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+struct GlyphExtra {
+    color: Rgba<u8>,
+    draw_text_call_index: u32,
+}
+
+
+#[derive(Debug, Clone)]
+struct MyGlyphVertex {
+    src: (Vec2<f32>, Extent2<f32>),
+    dst: (Vec2<f32>, Extent2<f32>), // TODO are either of these extraneous?
+    color: Rgba<u8>,
+    draw_text_call_index: u32,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct TextVertex {
+    pos: Vec2<f32>,
+    tex: Vec2<f32>,
+}
+
+vertex_struct! {
+    TextVertex {
+        (pos: Vec2<f32>) (layout(location=0) in vec2),
+        (tex: Vec2<f32>) (layout(location=1) in vec2),
+    }
 }
 
 struct UniformBufferState {
@@ -55,6 +102,12 @@ struct UniformBufferState {
     uniform_buffer_len: usize,
 
     solid_uniform_bind_group: BindGroup,
+}
+
+struct TextVertexBufferState {
+    text_vertex_buffer: Buffer,
+    text_vertex_buffer_len: usize,
+    num_text_vertices: usize,
 }
 
 /// 2D RGBA image loaded into a GPU texture.
@@ -210,7 +263,7 @@ impl Renderer {
         // as the solid uniform bind group layout, so literally just use that
         let image_texture_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("image sampler bind group layout"),
+                label: Some("image texture bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
@@ -272,6 +325,117 @@ impl Renderer {
                 ..Default::default()
             });
 
+        // create the text pipeline
+        trace!("creating text pipeline");
+        let glyph_brush = GlyphBrushBuilder::using_fonts::<FontArc>(Vec::new())
+            .build();
+        let glyph_cache_texture = device
+            .create_texture(&TextureDescriptor {
+                label: Some("glyph cache texture"),
+                size: Extent3d {
+                    width: glyph_brush.texture_dimensions().0,
+                    height: glyph_brush.texture_dimensions().1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::R8Unorm,
+                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            });
+        let glyph_cache_texture_view = glyph_cache_texture
+            .create_view(&TextureViewDescriptor {
+                label: Some("glyph cache texture view"),
+                ..Default::default()
+            });
+        let glyph_cache_sampler = device
+            .create_sampler(&SamplerDescriptor {
+                label: Some("glyph cache sampler"),
+                ..Default::default()
+            });
+        let text_vs_module = device
+            .create_shader_module(&load_shader("text.vert").await?);
+        let text_fs_module = device
+            .create_shader_module(&load_shader("text.frag").await?);
+        let glyph_cache_bind_group_layout = device
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("text texture bind group layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float {
+                                filterable: false,
+                            },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
+            });
+        let glyph_cache_bind_group = device
+            .create_bind_group(&BindGroupDescriptor {
+                label: Some("text texture bind group"),
+                layout: &glyph_cache_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&glyph_cache_texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&glyph_cache_sampler),
+                    },
+                ],
+            });
+        let text_pipeline_layout = device
+            .create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: Some("text pipeline layout"),
+                bind_group_layouts: &[
+                    &glyph_cache_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+        let text_pipeline = device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("text pipeline"),
+                layout: Some(&text_pipeline_layout),
+                vertex: VertexState {
+                    module: &text_vs_module,
+                    entry_point: "main",
+                    buffers: &[
+                        VertexBufferLayout {
+                            array_stride: TextVertex::SIZE as u64,
+                            step_mode: VertexStepMode::Vertex,
+                            attributes: TextVertex::ATTRIBUTES,
+                        },
+                    ],
+                },
+                fragment: Some(FragmentState {
+                    module: &text_fs_module,
+                    entry_point: "main",
+                    targets: &[
+                        ColorTargetState {
+                            format: swapchain_format,
+                            blend: Some(BlendState::ALPHA_BLENDING),
+                            write_mask: ColorWrites::all(),
+                        },
+                    ],
+                }),
+                primitive: PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: MultisampleState::default(),
+                multiview: None,
+            });
+
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -300,6 +464,14 @@ impl Renderer {
             image_pipeline,
             image_texture_bind_group_layout,
             image_sampler,
+            
+            text_pipeline,
+            glyph_brush,
+            fonts: Vec::new(),
+            glyph_cache_texture,
+            glyph_cache_sampler,
+            glyph_cache_bind_group,
+            text_vertex_buffer_state: None,
         })
     }
 
@@ -340,18 +512,206 @@ impl Renderer {
 
         // accumulate draw data from the callback
         trace!("accumulating draw data");
-        let mut uniform_data = Vec::new();
-        let mut images = Vec::new();
-        let mut draw_calls = Vec::new();
+        let mut canvas_out_vars = Canvas2dOutVars::default();
+        let uniform_offset_align = self.device
+            .limits()
+            .min_uniform_buffer_offset_alignment as usize;
         f(Canvas2d {
-            uniform_data: &mut uniform_data,
-            images: &mut images,
-            draw_calls: &mut draw_calls,
+            renderer: self,
+            out_vars: &mut canvas_out_vars,
 
-            uniform_offset_align: self.device.limits().min_uniform_buffer_offset_alignment as usize,
+            uniform_offset_align,
 
             transform: Canvas2dTransform::identity(),
         });
+
+
+        fn rect_to_src_extent(rect: gb::ab_glyph::Rect) -> (Vec2<f32>, Extent2<f32>) {
+            (
+                Vec2::new(rect.min.x, rect.min.y),
+                Extent2::new(rect.max.x, rect.max.y) - Extent2::new(rect.min.x, rect.min.y),
+            )
+        }
+
+        // TODO this whole thing is generally a mess
+        // TODO
+        let mut padded_data = Vec::new();
+        for attempt in 0.. {
+            assert!(attempt <= 1, "TODO TODO TODO");
+
+            debug_assert!(padded_data.is_empty());
+            let result = self.glyph_brush
+                .process_queued(
+                    |rect, unpadded_data| {
+                        let unpadded_bytes_per_row = rect.width();
+                        let padded_bytes_per_row =
+                            if unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT == 0 {
+                                unpadded_bytes_per_row
+                            } else {
+                                unpadded_bytes_per_row - (unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT) + COPY_BYTES_PER_ROW_ALIGNMENT
+                            };
+
+                        let num_rows = rect.height();
+
+                        debug_assert!(padded_data.is_empty());
+                        for row in 0..num_rows {
+                            let start = row * unpadded_bytes_per_row;
+                            let end = row * unpadded_bytes_per_row + unpadded_bytes_per_row;
+                            padded_data.extend(unpadded_data[start as usize..end as usize].iter().copied());
+                            for _ in 0..padded_bytes_per_row - unpadded_bytes_per_row {
+                                padded_data.push(0);
+                            }
+                        }
+
+                        debug!("writing a {}x{} section to the glyph cache texture", rect.width(), rect.height());
+
+                        self.queue
+                            .write_texture(
+                                self.glyph_cache_texture.as_image_copy(),
+                                &padded_data,
+                                ImageDataLayout {
+                                    offset: 0,
+                                    bytes_per_row: Some(padded_bytes_per_row.try_into().unwrap()),
+                                    rows_per_image: Some(num_rows.try_into().unwrap()),
+                                },
+                                Extent3d {
+                                    width: rect.width(),
+                                    height: rect.height(),
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+
+                        padded_data.clear();
+                    },
+                    |glyph_vertex| MyGlyphVertex {
+                        src: rect_to_src_extent(glyph_vertex.tex_coords),
+                        dst: {
+                            let (mut s, mut e) = rect_to_src_extent(glyph_vertex.pixel_coords);
+                            let w = self.config.width as f32;
+                            let h = self.config.height as f32;
+                            s.x /= w;
+                            s.y /= h;
+                            e.w /= w;
+                            e.h /= h;
+                            (s, e) // TODO
+                        },
+                        color: glyph_vertex.extra.color,
+                        draw_text_call_index: glyph_vertex.extra.draw_text_call_index,
+                    },
+                );
+            match result {
+                Ok(gb::BrushAction::Draw(mut brush_action)) => {
+                    brush_action.sort_by_key(|vert| vert.draw_text_call_index);
+                    //debug!(len=%self.brush_action.len(), "new brush action vec formed:");
+                    //debug!("{:#?}", self.brush_action);
+                    let vertex_iter = brush_action
+                        .iter()
+                        .flat_map(|vert| (0..6)
+                            .map(|i| {
+                                let corner = [0, 2, 1, 0, 3, 2][i];
+                                let (a, b) = [
+                                    (0, 0),
+                                    (1, 0),
+                                    (1, 1),
+                                    (0, 1),
+                                ][corner];
+                                TextVertex {
+                                    pos: (vert.dst.0 + Vec2::new(
+                                        [0.0, vert.dst.1.w][a],
+                                        [0.0, vert.dst.1.h][b],
+                                    )), // TODO
+                                    tex: vert.src.0 + Vec2::new(
+                                        [0.0, vert.src.1.w][a],
+                                        [0.0, vert.src.1.h][b],
+                                    ),
+                                }
+                            }));
+                    let mut vertex_data_buf = Vec::new();
+                    for mut vertex in vertex_iter {
+                        //vertex.pos.x /= self.config.width as f32;
+                        //vertex.pos.y /= self.config.height as f32; // TODO
+                        debug!(?vertex);
+                        vertex.write(&mut vertex_data_buf);
+                    }
+
+
+                    if !vertex_data_buf.is_empty() {
+                        let dst = self
+                            .text_vertex_buffer_state
+                            .as_mut()
+                            .filter(|state| state.text_vertex_buffer_len >= vertex_data_buf.len());
+                        if let Some(dst) = dst {
+                            self.queue.write_buffer(&dst.text_vertex_buffer, 0, &vertex_data_buf);
+                            dst.text_vertex_buffer_len = vertex_data_buf.len();
+                            dst.num_text_vertices = brush_action.len() * 6;
+                        } else {
+                            let text_vertex_buffer = self.device
+                                .create_buffer_init(&BufferInitDescriptor {
+                                    label: Some("text vertex buffer"),
+                                    contents: &vertex_data_buf,
+                                    usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                                });
+                            self.text_vertex_buffer_state = Some(TextVertexBufferState {
+                                text_vertex_buffer,
+                                text_vertex_buffer_len: vertex_data_buf.len(),
+                                num_text_vertices: brush_action.len() * 6,
+                            });
+                        }
+                    }
+                    break;
+                },
+                Ok(gb::BrushAction::ReDraw) => break,
+                Err(gb::BrushError::TextureTooSmall { suggested }) => {
+                    // TODO increase texture size
+                    unimplemented!()
+                },
+            };
+        }
+
+        // TODO ok then uh do other stuff I guess
+
+        // write uniform data to uniform buffer
+        trace!("writing uniform data");
+        if !canvas_out_vars.uniform_data_buf.is_empty() {
+            let dst = self
+                .uniform_buffer_state
+                .as_ref()
+                .filter(|state| state.uniform_buffer_len >= canvas_out_vars.uniform_data_buf.len());
+            if let Some(dst) = dst {
+                // buffer already exists and is big enough to hold data
+                trace!("re-using uniform buffer");
+                self.queue.write_buffer(&dst.uniform_buffer, 0, &canvas_out_vars.uniform_data_buf);
+            } else {
+                // buffer doesn't exist or isn't big enough
+                trace!("creating new uniform buffer");
+                let uniform_buffer = self.device
+                    .create_buffer_init(&BufferInitDescriptor {
+                        label: Some("uniform buffer"),
+                        contents: &canvas_out_vars.uniform_data_buf,
+                        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                    });
+                let solid_uniform_bind_group = self.device
+                    .create_bind_group(&BindGroupDescriptor {
+                        label: Some("solid uniform bind group"),
+                        layout: &self.solid_uniform_bind_group_layout,
+                        entries: &[
+                            BindGroupEntry {
+                                binding: 0,
+                                resource: BindingResource::Buffer(BufferBinding {
+                                    buffer: &uniform_buffer,
+                                    offset: 0,
+                                    size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
+                                }),
+                            },
+                        ],
+                    });
+                self.uniform_buffer_state = Some(UniformBufferState {
+                    uniform_buffer,
+                    uniform_buffer_len: canvas_out_vars.uniform_data_buf.len(),
+                    solid_uniform_bind_group
+                });
+            }
+        }
 
         // begin encoder and pass
         trace!("creating encoder and pass");
@@ -382,88 +742,72 @@ impl Renderer {
             pass.draw(0..1, 0..1);
             
 
-            // write uniform data to uniform buffer
-            trace!("writing uniform data");
-            if !uniform_data.is_empty() {
-                let dst = self
-                    .uniform_buffer_state
-                    .as_ref()
-                    .filter(|state| state.uniform_buffer_len >= uniform_data.len());
-                if let Some(dst) = dst {
-                    // buffer already exists and is big enough to hold data
-                    trace!("re-using uniform buffer");
-                    self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_data);
-                } else {
-                    // buffer doesn't exist or isn't big enough
-                    trace!("creating new uniform buffer");
-                    let uniform_buffer = self.device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: Some("uniform buffer"),
-                            contents: &uniform_data,
-                            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                        });
-                    let solid_uniform_bind_group = self.device
-                        .create_bind_group(&BindGroupDescriptor {
-                            label: Some("solid uniform bind group"),
-                            layout: &self.solid_uniform_bind_group_layout,
-                            entries: &[
-                                BindGroupEntry {
-                                    binding: 0,
-                                    resource: BindingResource::Buffer(BufferBinding {
-                                        buffer: &uniform_buffer,
-                                        offset: 0,
-                                        size: Some((DrawSolidUniformData::SIZE as u64).try_into().unwrap()),
-                                    }),
-                                },
-                            ],
-                        });
-                    self.uniform_buffer_state = Some(UniformBufferState {
-                        uniform_buffer,
-                        uniform_buffer_len: uniform_data.len(),
-                        solid_uniform_bind_group
-                    });
-                }
-            }
-
             // make draw calls
             trace!("making draw calls");
-            if !draw_calls.is_empty() {
-                let uniform_buffer_state = self
-                    .uniform_buffer_state
-                    .as_ref()
-                    .unwrap();
+            for draw_call in canvas_out_vars.draw_calls {
+                match draw_call {
+                    Canvas2dDrawCall::Solid { uniform_offset } => {
+                        let uniform_buffer_state = self
+                            .uniform_buffer_state
+                            .as_ref()
+                            .unwrap();
 
-                for draw_call in draw_calls {
-                    match draw_call {
-                        Canvas2dDrawCall::Solid { uniform_offset } => {
-                            pass.set_pipeline(&self.solid_pipeline);
-                            pass.set_bind_group(
-                                0,
-                                &uniform_buffer_state.solid_uniform_bind_group,
-                                &[uniform_offset as u32],
-                            );
-                            pass.draw(0..6, 0..1);
-                        },
-                        Canvas2dDrawCall::Image {
-                            uniform_offset,
-                            image_index,
-                        } => {
-                            let image = &images[image_index];
-                            pass.set_pipeline(&self.image_pipeline);
-                            pass.set_bind_group(
-                                0,
-                                &uniform_buffer_state.solid_uniform_bind_group,
-                                &[uniform_offset as u32],
-                            );
-                            pass.set_bind_group(
-                                1,
-                                &image.0.texture_bind_group,
-                                &[],
-                            );
-                            pass.draw(0..6, 0..1);
-                        },
-                    };
-                }
+                        pass.set_pipeline(&self.solid_pipeline);
+                        pass.set_bind_group(
+                            0,
+                            &uniform_buffer_state.solid_uniform_bind_group,
+                            &[uniform_offset as u32],
+                        );
+                        pass.draw(0..6, 0..1);
+                    },
+                    Canvas2dDrawCall::Image {
+                        uniform_offset,
+                        image_index,
+                    } => {
+                        let uniform_buffer_state = self
+                            .uniform_buffer_state
+                            .as_ref()
+                            .unwrap();
+
+                        let image = &canvas_out_vars.image_array[image_index];
+                        pass.set_pipeline(&self.image_pipeline);
+                        pass.set_bind_group(
+                            0,
+                            &uniform_buffer_state.solid_uniform_bind_group,
+                            &[uniform_offset as u32],
+                        );
+                        pass.set_bind_group(
+                            1,
+                            &image.0.texture_bind_group,
+                            &[],
+                        );
+                        pass.draw(0..6, 0..1);
+                    },
+                    Canvas2dDrawCall::Text {
+                        draw_text_call_index,
+                    } => {
+                        let text_vertex_buffer_state = self
+                            .text_vertex_buffer_state
+                            .as_ref()
+                            .unwrap();
+
+                        pass.set_pipeline(&self.text_pipeline);
+                        pass.set_vertex_buffer(
+                            0,
+                            text_vertex_buffer_state.text_vertex_buffer.slice(..),
+                        );
+                        pass.set_bind_group(
+                            0,
+                            &self.glyph_cache_bind_group,
+                            &[],
+                        );
+                        pass.draw(
+                            0..text_vertex_buffer_state.num_text_vertices as u32,
+                            0..1,
+                        ); // TODO
+                        // TODO
+                    },
+                };
             }
             
             // finish
@@ -542,20 +886,85 @@ impl Renderer {
             size: Extent2::new(image.width(), image.height()),
         })))
     }
+
+    /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
+    ///
+    /// Just reads the file with tokio then passes it to `self.load_font`.
+    pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
+        let file_data = fs::read(path).await?;
+        self.load_font(&file_data)
+    }
+
+    /// Load a font onto the renderer from OTF / TTF / etc file data.
+    ///
+    /// Be mindful that there is currently no way to un-load a font from the
+    /// renderer.
+    pub fn load_font(&mut self, file_data: &[u8]) -> Result<FontId> {
+        // load font
+        let font = FontArc::try_from_vec(file_data.into())?;
+
+        // load into glyph brush
+        let font_idx = self.glyph_brush.add_font(font.clone()).0;
+
+        // add to vec
+        self.fonts.push(font);
+        
+        // done
+        Ok(FontId(font_idx))
+    }
+
+    pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
+        // convert to glyph_brush types
+        let layout = text_block.to_layout();
+        let section_geometry = text_block.to_section_geometry();
+
+        // have glyph_brush lay it out
+        let section_glyphs = layout
+            .calculate_glyphs(
+                &self.fonts,
+                &section_geometry,
+                text_block.as_sections(),
+            );
+        let bounds = layout.bounds_rect(&section_geometry);
+
+        // re-associate the color data
+        let glyphs = section_glyphs
+            .into_iter()
+            .map(|section_glyph| LayedOutGlyph {
+                color: text_block
+                    .spans[section_glyph.section_index]
+                    .color,
+                section_glyph,
+            })
+            .collect();
+
+        // done
+        LayedOutTextBlock {
+            glyphs,
+            bounds,
+        }
+    }
 }
 
 
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
 pub struct Canvas2d<'a> {
-    uniform_data: &'a mut Vec<u8>,
-    images: &'a mut Vec<GpuImage>,
-    draw_calls: &'a mut Vec<Canvas2dDrawCall>,
-
+    renderer: &'a mut Renderer,
+    out_vars: &'a mut Canvas2dOutVars,
+    
     // alignment for all offsets into uniform_data
     uniform_offset_align: usize,
 
     transform: Canvas2dTransform,
+}
+
+#[derive(Default)]
+struct Canvas2dOutVars {
+    uniform_data_buf: Vec<u8>,
+    image_array: Vec<GpuImage>,
+    draw_calls: Vec<Canvas2dDrawCall>,
+    next_draw_text_call_index: u32,
 }
 
 enum Canvas2dDrawCall {
@@ -563,7 +972,10 @@ enum Canvas2dDrawCall {
     Image {
         uniform_offset: usize,
         image_index: usize,
-    }
+    },
+    Text {
+        draw_text_call_index: u32,
+    },
 }
 
 /// Accumulated transforms on a `Canvas2d`.
@@ -690,9 +1102,8 @@ impl<'a> Canvas2d<'a> {
     /// translation.
     pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_translate(t.into()),
             ..*self
         }
@@ -707,9 +1118,8 @@ impl<'a> Canvas2d<'a> {
         assert!(s.x >= 0.0, "negative scaling");
         assert!(s.y >= 0.0, "negative scaling");
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_scale(s),
             ..*self
         }
@@ -719,9 +1129,8 @@ impl<'a> Canvas2d<'a> {
     /// certain x value before drawing to self.
     pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_clip_min_x(min_x),
             ..*self
         }
@@ -731,9 +1140,8 @@ impl<'a> Canvas2d<'a> {
     /// certain x value before drawing to self.
     pub fn with_clip_max_x<'b>(&'b mut self, max_x: f32) -> Canvas2d<'b> {
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_clip_max_x(max_x),
             ..*self
         }
@@ -743,9 +1151,8 @@ impl<'a> Canvas2d<'a> {
     /// certain y value before drawing to self.
     pub fn with_clip_min_y<'b>(&'b mut self, min_y: f32) -> Canvas2d<'b> {
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_clip_min_y(min_y),
             ..*self
         }
@@ -755,9 +1162,8 @@ impl<'a> Canvas2d<'a> {
     /// certain y value before drawing to self.
     pub fn with_clip_max_y<'b>(&'b mut self, max_y: f32) -> Canvas2d<'b> {
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_clip_max_y(max_y),
             ..*self
         }
@@ -768,9 +1174,8 @@ impl<'a> Canvas2d<'a> {
     pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
         let c = c.into().map(|b| b as f32 / 0xFF as f32);
         Canvas2d {
-            uniform_data: &mut *self.uniform_data,
-            draw_calls: &mut *self.draw_calls,
-            images: &mut *self.images,
+            renderer: &mut *self.renderer,
+            out_vars: &mut *self.out_vars,
             transform: self.transform.with_color(c),
             ..*self
         }
@@ -787,11 +1192,12 @@ impl<'a> Canvas2d<'a> {
             clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
             clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
         };
-        pad(self.uniform_data, self.uniform_offset_align);
-        let uniform_offset = uniform_data.pad_write(self.uniform_data);
+        pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
+        // TODO make padding logic less jankily connected
+        let uniform_offset = uniform_data.pad_write(&mut self.out_vars.uniform_data_buf);
 
         // push draw call
-        self.draw_calls.push(Canvas2dDrawCall::Solid { uniform_offset });
+        self.out_vars.draw_calls.push(Canvas2dDrawCall::Solid { uniform_offset });
     }
 
     /// Draw the given image from <0, 0> to <1, 1>.
@@ -806,17 +1212,197 @@ impl<'a> Canvas2d<'a> {
             clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
             clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
         };
-        pad(self.uniform_data, self.uniform_offset_align);
-        let uniform_offset = uniform_data.pad_write(self.uniform_data);
+        pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
+        let uniform_offset = uniform_data.pad_write(&mut self.out_vars.uniform_data_buf);
 
         // push image
-        let image_index = self.images.len();
-        self.images.push(image.clone());
+        let image_index = self.out_vars.image_array.len();
+        self.out_vars.image_array.push(image.clone());
 
         // push draw call
-        self.draw_calls.push(Canvas2dDrawCall::Image {
+        self.out_vars.draw_calls.push(Canvas2dDrawCall::Image {
             uniform_offset,
             image_index,
         });
+    }
+
+    /// Draw the given text block with <0, 0> as the top-left corner.
+    pub fn draw_text(&mut self, text_block: &LayedOutTextBlock) {
+        let draw_text_call_index = self.out_vars.next_draw_text_call_index;
+        self.out_vars.next_draw_text_call_index += 1;
+
+        let section_glyphs = text_block
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.section_glyph.clone())
+            .collect();
+        let extra = text_block
+            .glyphs
+            .iter()
+            .map(|glyph| GlyphExtra {
+                draw_text_call_index,
+                color: glyph.color,
+            })
+            .collect();
+
+        self.renderer.glyph_brush
+            .queue_pre_positioned(
+                section_glyphs,
+                extra,
+                text_block.bounds,
+            );
+
+        self.out_vars.draw_calls.push(Canvas2dDrawCall::Text {
+            draw_text_call_index,
+        });
+    }
+}
+
+
+/// Block of text with specification of how to display it.
+#[derive(Debug, Copy, Clone)]
+pub struct TextBlock<'a> {
+    /// The spans of text to flow together.
+    pub spans: &'a [TextSpan<'a>],
+    /// Specification of horizontal align/wrap behavior.
+    pub horizontal_align: HorizontalAlign,
+    /// Specification of vertical align/wrap behavior.
+    pub vertical_align: VerticalAlign,
+}
+
+/// Specification of text horizontal align/wrap behavior.
+#[derive(Debug, Copy, Clone)]
+pub enum HorizontalAlign {
+    /// Left-justify the text.
+    Left {
+        /// The block width to wrap text at. If `None`, text will just continue
+        /// rightwards forever.
+        width: Option<f32>,
+    },
+    /// Center-justify the text.
+    Center {
+        /// The width of the block. Text will be centered between 0 and `width`
+        /// and wrap within that range.
+        width: f32,
+    },
+    /// Right-justify the text.
+    Right {
+        /// The width of the block. Text will be pressed up against `width`
+        /// and wrap between 0 and `width`.
+        width: f32,
+    },
+}
+
+/// Specification of text vertical align/wrap behavior.
+#[derive(Debug, Copy, Clone)]
+pub enum VerticalAlign {
+    /// Press the text up against the top of the block (0).
+    Top,
+    /// Vertically center the text between 0 and `height`.
+    Center { height: f32 },
+    /// Press the text down against the bottom of the block (`height`).
+    Bottom { height: f32 },
+}
+
+/// Index for a font loaded into a `Renderer`.
+#[derive(Debug, Copy, Clone)]
+pub struct FontId(pub usize);
+
+/// Span of text with specification of how to display it.
+#[derive(Debug, Copy, Clone)]
+pub struct TextSpan<'a> {
+    /// The actual text.
+    pub text: &'a str,
+    /// Which font to use.
+    pub font_id: FontId,
+    /// Font height units.
+    pub font_size: f32,
+    /// Font color. Default white.
+    pub color: Rgba<u8>,
+}
+
+
+impl<'a> TextBlock<'a> {
+    fn to_layout(&self) -> gb::Layout<gb::BuiltInLineBreaker> {
+        let gb_h_align = match self.horizontal_align {
+            HorizontalAlign::Left { .. } => gb::HorizontalAlign::Left,
+            HorizontalAlign::Center { .. } => gb::HorizontalAlign::Center,
+            HorizontalAlign::Right { .. } => gb::HorizontalAlign::Right,
+        };
+        let gb_v_align = match self.vertical_align {
+            VerticalAlign::Top => gb::VerticalAlign::Top,
+            VerticalAlign::Center { .. } => gb::VerticalAlign::Center,
+            VerticalAlign::Bottom { .. } => gb::VerticalAlign::Bottom,
+        };
+        let single_line = matches!(
+            self.horizontal_align,
+            HorizontalAlign::Left { width: None },
+        );
+        if single_line {
+            gb::Layout::SingleLine {
+                line_breaker: gb::BuiltInLineBreaker::UnicodeLineBreaker,
+                h_align: gb_h_align,
+                v_align: gb_v_align,
+            }
+        } else {
+            gb::Layout::Wrap {
+                line_breaker: gb::BuiltInLineBreaker::UnicodeLineBreaker,
+                h_align: gb_h_align,
+                v_align: gb_v_align,
+            }
+        }
+    }
+
+    fn to_section_geometry(&self) -> gb::SectionGeometry {
+        let width = match self.horizontal_align {
+            HorizontalAlign::Left { width } => width,
+            HorizontalAlign::Center { width } => Some(width),
+            HorizontalAlign::Right { width } => Some(width),
+        };
+        let height = match self.vertical_align {
+            VerticalAlign::Top => None,
+            VerticalAlign::Center { height } => Some(height),
+            VerticalAlign::Bottom { height } => Some(height),
+        };
+        gb::SectionGeometry {
+            screen_position: (0.0, 0.0),
+            bounds: (
+                width.unwrap_or(f32::INFINITY),
+                height.unwrap_or(f32::INFINITY),
+            ),
+        }
+    }
+
+    fn as_sections(&self) -> &[impl gb::ToSectionText + 'a] {
+        &self.spans
+    }
+}
+
+impl<'a> gb::ToSectionText for TextSpan<'a> {
+    fn to_section_text(&self) -> gb::SectionText {
+        gb::SectionText {
+            text: self.text,
+            scale: gb::ab_glyph::PxScale {
+                x: self.font_size,
+                y: self.font_size,
+            },
+            font_id: gb::FontId(self.font_id.0),
+        }
+    }
+}
+
+pub struct LayedOutTextBlock {
+    glyphs: Vec<LayedOutGlyph>,
+    bounds: gb::ab_glyph::Rect,
+}
+
+struct LayedOutGlyph {
+    section_glyph: gb::SectionGlyph,
+    color: Rgba<u8>,
+}
+
+impl LayedOutTextBlock {
+    pub fn size(&self) -> Extent2<f32> {
+        Extent2::new(self.bounds.width(), self.bounds.height())
     }
 }

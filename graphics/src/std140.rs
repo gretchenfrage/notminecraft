@@ -43,11 +43,11 @@ pub fn pad(dst: &mut Vec<u8>, align: usize) {
 
 
 /// Marker trait for `Std140` types which are considered "scalars".
-pub trait Std140Scalar {}
+pub trait Std140Scalar: Std140 + Std140ScalarOrVector {}
 
 /// Marker trait for `Std140` types which are considered either "scalars" or
 /// "vectors".
-pub trait Std140ScalarOrVector {}
+pub trait Std140ScalarOrVector: Std140 {}
 
 
 // scalars
@@ -135,7 +135,7 @@ impl Std140Scalar for f64 {}
 
 macro_rules! std140_vec_2 {
     ($type:ident, $x:ident, $y:ident)=>{
-        impl<T: Std140 + Std140Scalar> Std140 for $type<T> {
+        impl<T: Std140Scalar> Std140 for $type<T> {
             // "both the size and aligment are twice the size of the underlying scalar
             // type."
             const ALIGN: usize = T::SIZE * 2;
@@ -147,7 +147,7 @@ macro_rules! std140_vec_2 {
             }
         }
 
-        impl<T: Std140 + Std140Scalar> Std140ScalarOrVector for $type<T> {}
+        impl<T: Std140Scalar> Std140ScalarOrVector for $type<T> {}
     };
 }
 
@@ -163,7 +163,7 @@ std140_vec_2!(Extent2, w, h);
 
 macro_rules! std140_vec_3 {
     ($type:ident, $x:ident, $y:ident, $z:ident)=>{
-        impl<T: Std140 + Std140Scalar> Std140 for $type<T> {
+        impl<T: Std140Scalar> Std140 for $type<T> {
             const ALIGN: usize = T::SIZE * 4;
             const SIZE: usize = T::SIZE * 4;
 
@@ -177,7 +177,7 @@ macro_rules! std140_vec_3 {
             }
         }
 
-        impl<T: Std140 + Std140Scalar> Std140ScalarOrVector for $type<T> {}
+        impl<T: Std140Scalar> Std140ScalarOrVector for $type<T> {}
     };
 }
 
@@ -200,7 +200,7 @@ macro_rules! std140_vec_4 {
             }
         }
 
-        impl<T: Std140 + Std140Scalar> Std140ScalarOrVector for $type<T> {}    
+        impl<T: Std140Scalar> Std140ScalarOrVector for $type<T> {}    
     };
 }
 
@@ -220,7 +220,7 @@ const fn arr_elem_size(elem_type_size: usize) -> usize {
     }
 }
 
-impl<T: Std140 + Std140ScalarOrVector, const LEN: usize> Std140 for [T; LEN] {
+impl<T: Std140ScalarOrVector, const LEN: usize> Std140 for [T; LEN] {
     // "this is also the array's alignment."
     const ALIGN: usize = arr_elem_size(T::SIZE);
 
@@ -247,7 +247,7 @@ impl<T: Std140 + Std140ScalarOrVector, const LEN: usize> Std140 for [T; LEN] {
 // phrasing is because it's trying to describe the possibility of arrays of
 // matrices, which we won't actually handle]"
 
-impl<T: Std140 + Std140Scalar> Std140 for Mat3<T> {
+impl<T: Std140Scalar> Std140 for Mat3<T> {
     const ALIGN: usize = <[Vec3<T>; 3]>::ALIGN;
     const SIZE: usize = <[Vec3<T>; 3]>::SIZE;
 
@@ -257,7 +257,7 @@ impl<T: Std140 + Std140Scalar> Std140 for Mat3<T> {
     }
 }
 
-impl<T: Std140 + Std140Scalar> Std140 for Mat4<T> {
+impl<T: Std140Scalar> Std140 for Mat4<T> {
     const ALIGN: usize = <[Vec4<T>; 4]>::ALIGN;
     const SIZE: usize = <[Vec4<T>; 4]>::SIZE;
 

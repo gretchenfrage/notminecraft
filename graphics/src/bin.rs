@@ -6,6 +6,12 @@ use graphics::{
     Renderer,
     Canvas2d,
     GpuImage,
+    FontId,
+    TextBlock,
+    TextSpan,
+    HorizontalAlign,
+    VerticalAlign,
+    LayedOutTextBlock,
 };
 use std::{
     panic,
@@ -32,30 +38,37 @@ use tracing_subscriber::{
     EnvFilter,
 };
 use backtrace::Backtrace;
+use vek::*;
 
 
 struct Graphics {
     #[allow(dead_code)]
     start_time: SystemTime,
     #[allow(dead_code)]
-    dog_image: GpuImage
+    dog_image: GpuImage,
+    #[allow(dead_code)]
+    font: FontId,
+    #[allow(dead_code)]
+    layed_out_hello_world: LayedOutTextBlock,
 }
 
 impl Graphics {
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
-        canvas
+        /*canvas
             .with_scale([0.75, 0.75])
             .with_clip_min_x(0.25)
-            //.with_color([0xFF, 0xFF, 0x00, 0xFF])
             .draw_image(&self.dog_image);
-            //.draw_solid();
         canvas
             .with_translate([0.25, 0.25])
             .with_scale([0.75, 0.75])
             .with_color([0xFF, 0xFF, 0xFF, 0xFF / 2])
             .with_scale([0.6, 0.6])
-            .draw_image(&self.dog_image);
-            //.draw_solid();
+            .draw_image(&self.dog_image);*/
+        
+        canvas.draw_text(&self.layed_out_hello_world);
+
+        //canvas
+        //    .draw_text();
         /*
         let elapsed = self.start_time.elapsed().unwrap().as_millis() as f32 / 1000.0;
         let scale = elapsed.sin() * 0.4 + 0.6;
@@ -78,10 +91,26 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
     let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
+    let font = renderer.load_font_file("src/assets/DejaVuSans.ttf").await?;
+    let layed_out_hello_world = renderer.lay_out_text(&TextBlock {
+            spans: &[
+                TextSpan {
+                    text: "hello world",
+                    //text: "h",
+                    font_id: font,
+                    font_size: 12.0,
+                    color: Rgba::black(),
+                },
+            ],
+            horizontal_align: HorizontalAlign::Left { width: None },
+            vertical_align: VerticalAlign::Top,
+        });
 
     let mut graphics = Graphics {
         start_time: SystemTime::now(),
+        font,
         dog_image,
+        layed_out_hello_world,
     };
 
     let frames_per_second = 60;
