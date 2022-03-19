@@ -1,4 +1,8 @@
 //! Serialization of data into vertex buffers and declaration their structure.
+//!
+//! We don't worry about alignment, because alignment is always 4, and valid
+//! attribute types sizes are always a multiple of 4, so you'd have to do
+//! something really weird to make the vertices unaligned.
 
 use std::mem::size_of;
 use vek::*;
@@ -8,10 +12,12 @@ use wgpu::{
 };
 
 
+/// Marker types that represent different GLSL vertex attribute data types.
 pub mod glsl_types {
     macro_rules! glsl_types {
         ($($name:ident),*$(,)?)=>{
             $(
+            /// Marker type for the GLSL vertex attribute data type.
             #[allow(non_camel_case_types)]
             pub enum $name {}
             )*
@@ -42,10 +48,23 @@ pub mod glsl_types {
     }
 }
 
+/// A type that can be serialized into data of a format backing the given GLSL
+/// vertex attribute data type (see the `glsl_types` module for marker types
+/// corresponding to GLSL vertex attribute data types).
+///
+/// So, for example:
+/// - `Vec2<u8>` implements `AttributeData<uvec2>`, via the format `Uint8x2`
+/// - But `Vec2<u8>` also implements `AttributeData<vec2>`, via the format `Unorm8x2`
+/// - But also, `Vec2<f32>` implements `AttributeData<vec2>`, via the format `Float32x2`
 pub trait AttributeData<GlslType> {
+    /// Texture format by which this rust type backs the given GLSL vertex
+    /// attribute data type.
     const FORMAT: VertexFormat;
+
+    /// Size of this type after serialization into a vertex buffer.
     const SIZE: usize;
 
+    /// Serialize this data by push exactly `Self::SIZE` bytes to `dst`.
     fn write(&self, dst: &mut Vec<u8>);
 }
 
@@ -138,10 +157,18 @@ attr_vec!(vec4, (Vec4, Rgba), f32, Float32x4, 4);
 attr_vec!(dvec4, (Vec4, Rgba), f64, Float64x4, 4);
 
 
+/// A struct which contains all the attributes of a vertex, and can be
+/// serialized to a vertex buffer. Designed to be auto-implemented with the
+/// `vertex_struct` macro.
 pub trait VertexStruct {
+    /// Size of the vertex data in the buffer after serialization. This will
+    /// be the stride.
     const SIZE: usize;
+
+    /// WGPU declaration of vertex attributes.
     const ATTRIBUTES: &'static [VertexAttribute];
 
+    /// Serialize this struct by pushing exactly `Self::SIZE` bytes to `dst`.
     fn write(&self, dst: &mut Vec<u8>);
 }
 
