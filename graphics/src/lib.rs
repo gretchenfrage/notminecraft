@@ -61,7 +61,7 @@ pub struct Renderer {
     image_sampler: Sampler,
 
     text_pipeline: RenderPipeline,    
-    glyph_brush: GlyphBrush<MyGlyphVertex, GlyphExtra>,
+    glyph_brush: GlyphBrush<TextQuad, GlyphExtra>,
     fonts: Vec<FontArc>,
     glyph_cache_texture: Texture,
     glyph_cache_sampler: Sampler,
@@ -77,7 +77,7 @@ struct GlyphExtra {
 
 
 #[derive(Debug, Clone)]
-struct MyGlyphVertex {
+struct TextQuad {
     src: (Vec2<f32>, Extent2<f32>),
     dst: (Vec2<f32>, Extent2<f32>), // TODO are either of these extraneous?
     color: Rgba<u8>,
@@ -88,12 +88,14 @@ struct MyGlyphVertex {
 struct TextVertex {
     pos: Vec2<f32>,
     tex: Vec2<f32>,
+    color: Rgba<u8>,
 }
 
 vertex_struct! {
     TextVertex {
-        (pos: Vec2<f32>) (layout(location=0) in vec2),
-        (tex: Vec2<f32>) (layout(location=1) in vec2),
+        (pos:   Vec2<f32>) (layout(location=0) in vec2),
+        (tex:   Vec2<f32>) (layout(location=1) in vec2),
+        (color: Rgba<u8> ) (layout(location=2) in vec4),
     }
 }
 
@@ -327,6 +329,10 @@ impl Renderer {
 
         // create the text pipeline
         trace!("creating text pipeline");
+        let text_vs_module = device
+            .create_shader_module(&load_shader("text.vert").await?);
+        let text_fs_module = device
+            .create_shader_module(&load_shader("text.frag").await?);
         let glyph_brush = GlyphBrushBuilder::using_fonts::<FontArc>(Vec::new())
             .build();
         let glyph_cache_texture = device
@@ -353,10 +359,6 @@ impl Renderer {
                 label: Some("glyph cache sampler"),
                 ..Default::default()
             });
-        let text_vs_module = device
-            .create_shader_module(&load_shader("text.vert").await?);
-        let text_fs_module = device
-            .create_shader_module(&load_shader("text.frag").await?);
         let glyph_cache_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("text texture bind group layout"),
@@ -400,6 +402,7 @@ impl Renderer {
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("text pipeline layout"),
                 bind_group_layouts: &[
+                    &solid_uniform_bind_group_layout, // TODO rename this
                     &glyph_cache_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -475,6 +478,11 @@ impl Renderer {
         })
     }
 
+    /// Get the current surface size.
+    pub fn size(&self) -> Extent2<u32> {
+        Extent2::new(self.config.width, self.config.height)
+    }
+
     /// Resize the surface, in reponse to a change in window size.
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         self.config.width = size.width;
@@ -526,6 +534,12 @@ impl Renderer {
         });
 
 
+
+        // process the queued glyph brush data
+        // update the glyph cache texture as necessary
+        // update the text vertex buffer as necessary
+
+        /// Convert an `gb_glyph::Rect` to a (start, extent) tuple.
         fn rect_to_src_extent(rect: gb::ab_glyph::Rect) -> (Vec2<f32>, Extent2<f32>) {
             (
                 Vec2::new(rect.min.x, rect.min.y),
@@ -533,16 +547,15 @@ impl Renderer {
             )
         }
 
-        // TODO this whole thing is generally a mess
-        // TODO
-        let mut padded_data = Vec::new();
+        // loop until glyph cache texture is large enough
         for attempt in 0.. {
-            assert!(attempt <= 1, "TODO TODO TODO");
-
-            debug_assert!(padded_data.is_empty());
+            assert!(attempt < 100, "glyph cache update loop not breaking");
             let result = self.glyph_brush
                 .process_queued(
                     |rect, unpadded_data| {
+                        // callback for updating the glyph cache texture
+
+                        // pad data
                         let unpadded_bytes_per_row = rect.width();
                         let padded_bytes_per_row =
                             if unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT == 0 {
@@ -553,7 +566,7 @@ impl Renderer {
 
                         let num_rows = rect.height();
 
-                        debug_assert!(padded_data.is_empty());
+                        let mut padded_data = Vec::new();
                         for row in 0..num_rows {
                             let start = row * unpadded_bytes_per_row;
                             let end = row * unpadded_bytes_per_row + unpadded_bytes_per_row;
@@ -563,8 +576,7 @@ impl Renderer {
                             }
                         }
 
-                        debug!("writing a {}x{} section to the glyph cache texture", rect.width(), rect.height());
-
+                        // write the data to the texture
                         self.queue
                             .write_texture(
                                 self.glyph_cache_texture.as_image_copy(),
@@ -583,30 +595,26 @@ impl Renderer {
 
                         padded_data.clear();
                     },
-                    |glyph_vertex| MyGlyphVertex {
+                    // callback to convert glyph_brush vertex to text quad
+                    |glyph_vertex| TextQuad {
                         src: rect_to_src_extent(glyph_vertex.tex_coords),
-                        dst: {
-                            let (mut s, mut e) = rect_to_src_extent(glyph_vertex.pixel_coords);
-                            let w = self.config.width as f32;
-                            let h = self.config.height as f32;
-                            s.x /= w;
-                            s.y /= h;
-                            e.w /= w;
-                            e.h /= h;
-                            (s, e) // TODO
-                        },
+                        dst: rect_to_src_extent(glyph_vertex.pixel_coords),
                         color: glyph_vertex.extra.color,
                         draw_text_call_index: glyph_vertex.extra.draw_text_call_index,
                     },
                 );
             match result {
-                Ok(gb::BrushAction::Draw(mut brush_action)) => {
-                    brush_action.sort_by_key(|vert| vert.draw_text_call_index);
-                    //debug!(len=%self.brush_action.len(), "new brush action vec formed:");
-                    //debug!("{:#?}", self.brush_action);
-                    let vertex_iter = brush_action
+                Ok(gb::BrushAction::Draw(mut quads)) => {
+                    // successfully produced a list of text quads to draw
+                    // so update the text vertex buffer accordingly
+
+                    // sort the quads by draw_text_call_index
+                    quads.sort_by_key(|vert| vert.draw_text_call_index);
+
+                    // convert each quad into 6 vertices
+                    let vertex_vec = quads
                         .iter()
-                        .flat_map(|vert| (0..6)
+                        .flat_map(|quad| (0..6)
                             .map(|i| {
                                 let corner = [0, 2, 1, 0, 3, 2][i];
                                 let (a, b) = [
@@ -616,59 +624,65 @@ impl Renderer {
                                     (0, 1),
                                 ][corner];
                                 TextVertex {
-                                    pos: (vert.dst.0 + Vec2::new(
-                                        [0.0, vert.dst.1.w][a],
-                                        [0.0, vert.dst.1.h][b],
-                                    )), // TODO
-                                    tex: vert.src.0 + Vec2::new(
-                                        [0.0, vert.src.1.w][a],
-                                        [0.0, vert.src.1.h][b],
+                                    pos: (quad.dst.0 + Vec2::new(
+                                        [0.0, quad.dst.1.w][a],
+                                        [0.0, quad.dst.1.h][b],
+                                    )),
+                                    tex: quad.src.0 + Vec2::new(
+                                        [0.0, quad.src.1.w][a],
+                                        [0.0, quad.src.1.h][b],
                                     ),
+                                    color: quad.color,
                                 }
-                            }));
-                    let mut vertex_data_buf = Vec::new();
-                    for mut vertex in vertex_iter {
-                        //vertex.pos.x /= self.config.width as f32;
-                        //vertex.pos.y /= self.config.height as f32; // TODO
-                        debug!(?vertex);
-                        vertex.write(&mut vertex_data_buf);
+                            }))
+                        .collect::<Vec<_>>();
+
+                    // convert the vertices into bytes
+                    let mut vertex_bytes = Vec::new();
+                    for vertex in &vertex_vec {
+                        vertex.write(&mut vertex_bytes);
                     }
 
-
-                    if !vertex_data_buf.is_empty() {
+                    // write to the vertex buffer, allocating/reallocating if necessary
+                    if !vertex_bytes.is_empty() {
                         let dst = self
                             .text_vertex_buffer_state
                             .as_mut()
-                            .filter(|state| state.text_vertex_buffer_len >= vertex_data_buf.len());
+                            .filter(|state| state.text_vertex_buffer_len >= vertex_bytes.len());
                         if let Some(dst) = dst {
-                            self.queue.write_buffer(&dst.text_vertex_buffer, 0, &vertex_data_buf);
-                            dst.text_vertex_buffer_len = vertex_data_buf.len();
-                            dst.num_text_vertices = brush_action.len() * 6;
+                            // vertex buffer exists and is big enough
+                            // update data
+                            self.queue.write_buffer(&dst.text_vertex_buffer, 0, &vertex_bytes);
+                            dst.text_vertex_buffer_len = vertex_bytes.len();
+                            dst.num_text_vertices = vertex_vec.len();
                         } else {
+                            // cannot reuse existing vertex buffer
+                            // create new one
                             let text_vertex_buffer = self.device
                                 .create_buffer_init(&BufferInitDescriptor {
                                     label: Some("text vertex buffer"),
-                                    contents: &vertex_data_buf,
+                                    contents: &vertex_bytes,
                                     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                                 });
                             self.text_vertex_buffer_state = Some(TextVertexBufferState {
                                 text_vertex_buffer,
-                                text_vertex_buffer_len: vertex_data_buf.len(),
-                                num_text_vertices: brush_action.len() * 6,
+                                text_vertex_buffer_len: vertex_bytes.len(),
+                                num_text_vertices: vertex_vec.len(),
                             });
                         }
                     }
+
+                    // break the loop
                     break;
                 },
-                Ok(gb::BrushAction::ReDraw) => break,
+                Ok(gb::BrushAction::ReDraw) => break, // reuse existing vertex buffer
                 Err(gb::BrushError::TextureTooSmall { suggested }) => {
+
                     // TODO increase texture size
                     unimplemented!()
                 },
             };
         }
-
-        // TODO ok then uh do other stuff I guess
 
         // write uniform data to uniform buffer
         trace!("writing uniform data");
@@ -784,10 +798,15 @@ impl Renderer {
                         pass.draw(0..6, 0..1);
                     },
                     Canvas2dDrawCall::Text {
+                        uniform_offset,
                         draw_text_call_index,
                     } => {
                         let text_vertex_buffer_state = self
                             .text_vertex_buffer_state
+                            .as_ref()
+                            .unwrap();
+                        let uniform_buffer_state = self
+                            .uniform_buffer_state
                             .as_ref()
                             .unwrap();
 
@@ -798,14 +817,18 @@ impl Renderer {
                         );
                         pass.set_bind_group(
                             0,
+                            &uniform_buffer_state.solid_uniform_bind_group,
+                            &[uniform_offset as u32],
+                        );
+                        pass.set_bind_group(
+                            1,
                             &self.glyph_cache_bind_group,
                             &[],
                         );
                         pass.draw(
                             0..text_vertex_buffer_state.num_text_vertices as u32,
                             0..1,
-                        ); // TODO
-                        // TODO
+                        ); // TODO dont draw them all
                     },
                 };
             }
@@ -913,6 +936,7 @@ impl Renderer {
         Ok(FontId(font_idx))
     }
 
+    /// Pre-compute the layout for a text block.
     pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
         // convert to glyph_brush types
         let layout = text_block.to_layout();
@@ -968,12 +992,15 @@ struct Canvas2dOutVars {
 }
 
 enum Canvas2dDrawCall {
-    Solid { uniform_offset: usize },
+    Solid {
+        uniform_offset: usize,
+    },
     Image {
         uniform_offset: usize,
         image_index: usize,
     },
     Text {
+        uniform_offset: usize,
         draw_text_call_index: u32,
     },
 }
@@ -1181,9 +1208,7 @@ impl<'a> Canvas2d<'a> {
         }
     }
 
-    /// Draw a solid white square from <0,0> to <1,1>.
-    pub fn draw_solid(&mut self) {
-        // push uniform data
+    fn push_uniform_data(&mut self) -> usize {
         let uniform_data = DrawSolidUniformData {
             transform: self.transform.affine,
             color: self.transform.color,
@@ -1194,7 +1219,13 @@ impl<'a> Canvas2d<'a> {
         };
         pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
         // TODO make padding logic less jankily connected
-        let uniform_offset = uniform_data.pad_write(&mut self.out_vars.uniform_data_buf);
+        uniform_data.pad_write(&mut self.out_vars.uniform_data_buf)
+    }
+
+    /// Draw a solid white square from <0,0> to <1,1>.
+    pub fn draw_solid(&mut self) {
+        // push uniform data
+        let uniform_offset = self.push_uniform_data();
 
         // push draw call
         self.out_vars.draw_calls.push(Canvas2dDrawCall::Solid { uniform_offset });
@@ -1203,17 +1234,7 @@ impl<'a> Canvas2d<'a> {
     /// Draw the given image from <0, 0> to <1, 1>.
     pub fn draw_image(&mut self, image: &GpuImage) {
         // push uniform data
-        // TODO: dedup
-        let uniform_data = DrawSolidUniformData {
-            transform: self.transform.affine,
-            color: self.transform.color,
-            clip_min_x: self.transform.clip_min_x.unwrap_or(f32::NEG_INFINITY),
-            clip_max_x: self.transform.clip_max_x.unwrap_or(f32::INFINITY),
-            clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
-            clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
-        };
-        pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
-        let uniform_offset = uniform_data.pad_write(&mut self.out_vars.uniform_data_buf);
+        let uniform_offset = self.push_uniform_data();
 
         // push image
         let image_index = self.out_vars.image_array.len();
@@ -1228,14 +1249,21 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw the given text block with <0, 0> as the top-left corner.
     pub fn draw_text(&mut self, text_block: &LayedOutTextBlock) {
+        // push uniform data
+        let uniform_offset = self.push_uniform_data();
+
+        // get and increment the draw text call index to identify this batch of
+        // glyphs
         let draw_text_call_index = self.out_vars.next_draw_text_call_index;
         self.out_vars.next_draw_text_call_index += 1;
 
+        // extract the section glyphs from the text block
         let section_glyphs = text_block
             .glyphs
             .iter()
             .map(|glyph| glyph.section_glyph.clone())
             .collect();
+        // produce the matching extra data for the text block
         let extra = text_block
             .glyphs
             .iter()
@@ -1245,6 +1273,7 @@ impl<'a> Canvas2d<'a> {
             })
             .collect();
 
+        // queue to the glyph brush
         self.renderer.glyph_brush
             .queue_pre_positioned(
                 section_glyphs,
@@ -1252,7 +1281,9 @@ impl<'a> Canvas2d<'a> {
                 text_block.bounds,
             );
 
+        // push draw call
         self.out_vars.draw_calls.push(Canvas2dDrawCall::Text {
+            uniform_offset,
             draw_text_call_index,
         });
     }
@@ -1323,6 +1354,7 @@ pub struct TextSpan<'a> {
 
 
 impl<'a> TextBlock<'a> {
+    /// Produce a corresponding glyph_brush `Layout`.
     fn to_layout(&self) -> gb::Layout<gb::BuiltInLineBreaker> {
         let gb_h_align = match self.horizontal_align {
             HorizontalAlign::Left { .. } => gb::HorizontalAlign::Left,
@@ -1353,6 +1385,7 @@ impl<'a> TextBlock<'a> {
         }
     }
 
+    /// Produce a corresponding glyph_brush `SectionGeometry`.
     fn to_section_geometry(&self) -> gb::SectionGeometry {
         let width = match self.horizontal_align {
             HorizontalAlign::Left { width } => width,
@@ -1373,6 +1406,7 @@ impl<'a> TextBlock<'a> {
         }
     }
 
+    /// View as a slice of glyph_brush `ToSectionText` impls.
     fn as_sections(&self) -> &[impl gb::ToSectionText + 'a] {
         &self.spans
     }
@@ -1391,6 +1425,7 @@ impl<'a> gb::ToSectionText for TextSpan<'a> {
     }
 }
 
+/// Block of text with a pre-computed plan for how to lay it out.
 pub struct LayedOutTextBlock {
     glyphs: Vec<LayedOutGlyph>,
     bounds: gb::ab_glyph::Rect,
@@ -1402,6 +1437,7 @@ struct LayedOutGlyph {
 }
 
 impl LayedOutTextBlock {
+    /// Size taken by this text block in pixels.
     pub fn size(&self) -> Extent2<f32> {
         Extent2::new(self.bounds.width(), self.bounds.height())
     }

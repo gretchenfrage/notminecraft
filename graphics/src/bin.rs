@@ -65,7 +65,9 @@ impl Graphics {
             .with_scale([0.6, 0.6])
             .draw_image(&self.dog_image);*/
         
-        canvas.draw_text(&self.layed_out_hello_world);
+        canvas
+            .with_scale([0.01, 0.01])
+            .draw_text(&self.layed_out_hello_world);
 
         //canvas
         //    .draw_text();
