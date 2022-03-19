@@ -1,5 +1,8 @@
 
 use crate::{
+    pipelines::{
+        clear::ClearPipeline,
+    },
     std140::{
         Std140,
         std140_struct,
@@ -38,7 +41,7 @@ use glyph_brush::{
     GlyphPositioner,
 };
 
-
+mod pipelines;
 mod std140;
 mod shader;
 mod vertex;
@@ -51,8 +54,7 @@ pub struct Renderer {
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
     canvas2d_uniform_bind_group_layout: BindGroupLayout,
-
-    clear_pipeline: RenderPipeline,
+    clear_pipeline: ClearPipeline,
     
     solid_pipeline: RenderPipeline,
 
@@ -99,6 +101,8 @@ vertex_struct! {
         (color: Rgba<u8> ) (layout(location=2) in vec4),
     }
 }
+
+const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
 
 struct UniformBufferState {
     uniform_buffer: Buffer,
@@ -215,8 +219,6 @@ impl Renderer {
             )
             .await?;
 
-        let swapchain_format = TextureFormat::Bgra8Unorm;
-
         // create the layout for the standard bind group all canvas2d shaders
         // use for canvas2d transformations
         let canvas2d_uniform_bind_group_layout = device
@@ -238,35 +240,7 @@ impl Renderer {
 
         // create the clear pipeline
         trace!("creating clear pipeline");
-        let clear_vs_module = device
-            .create_shader_module(&load_shader("clear.vert").await?);
-        let clear_fs_module = device
-            .create_shader_module(&load_shader("clear.frag").await?);
-        let clear_pipeline_layout = device
-            .create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: Some("clear pipeline layout"),
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-        let clear_pipeline = device
-            .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("clear pipeline"),
-                layout: Some(&clear_pipeline_layout),
-                vertex: VertexState {
-                    module: &clear_vs_module,
-                    entry_point: "main",
-                    buffers: &[],
-                },
-                fragment: Some(FragmentState {
-                    module: &clear_fs_module,
-                    entry_point: "main",
-                    targets: &[swapchain_format.into()],
-                }),
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                multiview: None,
-            });
+        let clear_pipeline = ClearPipeline::new(&device).await?;
 
         // create the solid pipeline
         trace!("creating solid pipeline");
@@ -297,7 +271,7 @@ impl Renderer {
                     entry_point: "main",
                     targets: &[
                         ColorTargetState {
-                            format: swapchain_format,
+                            format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
                         },
@@ -362,7 +336,7 @@ impl Renderer {
                     entry_point: "main",
                     targets: &[
                         ColorTargetState {
-                            format: swapchain_format,
+                            format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
                         },
@@ -451,7 +425,7 @@ impl Renderer {
                     entry_point: "main",
                     targets: &[
                         ColorTargetState {
-                            format: swapchain_format,
+                            format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
                         },
@@ -467,7 +441,7 @@ impl Renderer {
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
-            format: swapchain_format,
+            format: SWAPCHAIN_FORMAT,
             width: size.width,
             height: size.height,
             present_mode: PresentMode::Mailbox,
@@ -483,7 +457,6 @@ impl Renderer {
             config,
             uniform_buffer_state: None,
             canvas2d_uniform_bind_group_layout,
-
             clear_pipeline,
 
             solid_pipeline,
@@ -815,9 +788,7 @@ impl Renderer {
 
             // clear the screen
             trace!("clearing screen");
-            pass.set_pipeline(&self.clear_pipeline);
-            pass.draw(0..1, 0..1);
-            
+            self.clear_pipeline.clear_screen(&mut pass);
 
             // make draw calls
             trace!("making draw calls");
