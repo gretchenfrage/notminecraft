@@ -241,40 +241,34 @@ impl Renderer {
 
         // accumulate draw data from the callback
         trace!("accumulating draw data");
-        let mut canvas_out_vars = Canvas2dOutVars::default();
-        let uniform_offset_align = self.device
-            .limits()
-            .min_uniform_buffer_offset_alignment as usize;
+        let mut canvas_target = Canvas2dTarget::new(&self.device);
         f(Canvas2d {
             renderer: self,
-            out_vars: &mut canvas_out_vars,
-
-            uniform_offset_align,
-
+            target: &mut canvas_target,
             transform: Canvas2dTransform::identity(),
         });
 
         // text pre-render
-        self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_out_vars);
+        self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_target);
 
         // write uniform data to uniform buffer
         trace!("writing uniform data");
-        if !canvas_out_vars.uniform_data_buf.is_empty() {
+        if !canvas_target.uniform_data_buf.is_empty() {
             let dst = self
                 .uniform_buffer_state
                 .as_ref()
-                .filter(|state| state.uniform_buffer_len >= canvas_out_vars.uniform_data_buf.len());
+                .filter(|state| state.uniform_buffer_len >= canvas_target.uniform_data_buf.len());
             if let Some(dst) = dst {
                 // buffer already exists and is big enough to hold data
                 trace!("re-using uniform buffer");
-                self.queue.write_buffer(&dst.uniform_buffer, 0, &canvas_out_vars.uniform_data_buf);
+                self.queue.write_buffer(&dst.uniform_buffer, 0, &canvas_target.uniform_data_buf);
             } else {
                 // buffer doesn't exist or isn't big enough
                 trace!("creating new uniform buffer");
                 let uniform_buffer = self.device
                     .create_buffer_init(&BufferInitDescriptor {
                         label: Some("uniform buffer"),
-                        contents: &canvas_out_vars.uniform_data_buf,
+                        contents: &canvas_target.uniform_data_buf,
                         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                     });
                 let canvas2d_uniform_bind_group = self.device
@@ -294,7 +288,7 @@ impl Renderer {
                     });
                 self.uniform_buffer_state = Some(UniformBufferState {
                     uniform_buffer,
-                    uniform_buffer_len: canvas_out_vars.uniform_data_buf.len(),
+                    uniform_buffer_len: canvas_target.uniform_data_buf.len(),
                     canvas2d_uniform_bind_group
                 });
             }
@@ -329,7 +323,7 @@ impl Renderer {
 
             // make draw calls
             trace!("making draw calls");
-            for draw_call in take(&mut canvas_out_vars.draw_calls) {
+            for draw_call in take(&mut canvas_target.draw_calls) {
                 match draw_call {
                     Canvas2dDrawCall::Solid(call) => self
                         .solid_pipeline
@@ -344,7 +338,7 @@ impl Renderer {
                             call,
                             &mut pass,
                             &self.uniform_buffer_state,
-                            &canvas_out_vars,
+                            &canvas_target,
                         ),
                     Canvas2dDrawCall::Text(call) => self
                         .text_pipeline
@@ -406,16 +400,13 @@ impl Renderer {
 /// blended over the previously drawn data.
 pub struct Canvas2d<'a> {
     renderer: &'a mut Renderer,
-    out_vars: &'a mut Canvas2dOutVars,
-    
-    // alignment for all offsets into uniform_data
-    uniform_offset_align: usize,
-
+    target: &'a mut Canvas2dTarget,
     transform: Canvas2dTransform,
 }
 
-#[derive(Default)]
-struct Canvas2dOutVars {
+struct Canvas2dTarget {
+    /// Required alignment for all offsets into uniform_data.
+    uniform_offset_align: usize,
     uniform_data_buf: Vec<u8>,
     image_array: Vec<GpuImage>,
     draw_calls: Vec<Canvas2dDrawCall>,
@@ -434,7 +425,7 @@ impl<'a> Canvas2d<'a> {
     pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_translate(t.into()),
             ..*self
         }
@@ -450,7 +441,7 @@ impl<'a> Canvas2d<'a> {
         assert!(s.y >= 0.0, "negative scaling");
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_scale(s),
             ..*self
         }
@@ -461,7 +452,7 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_clip_min_x(min_x),
             ..*self
         }
@@ -472,7 +463,7 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_max_x<'b>(&'b mut self, max_x: f32) -> Canvas2d<'b> {
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_clip_max_x(max_x),
             ..*self
         }
@@ -483,7 +474,7 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_min_y<'b>(&'b mut self, min_y: f32) -> Canvas2d<'b> {
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_clip_min_y(min_y),
             ..*self
         }
@@ -494,7 +485,7 @@ impl<'a> Canvas2d<'a> {
     pub fn with_clip_max_y<'b>(&'b mut self, max_y: f32) -> Canvas2d<'b> {
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_clip_max_y(max_y),
             ..*self
         }
@@ -506,19 +497,10 @@ impl<'a> Canvas2d<'a> {
         let c = c.into().map(|b| b as f32 / 0xFF as f32);
         Canvas2d {
             renderer: &mut *self.renderer,
-            out_vars: &mut *self.out_vars,
+            target: &mut *self.target,
             transform: self.transform.with_color(c),
             ..*self
         }
-    }
-
-    /// Push canvas2d uniform data onto `self.uniform_data_buf` based on
-    /// current transform, and return the offset.
-    fn push_uniform_data(&mut self) -> usize {
-        let uniform_data = self.transform.to_uniform_data();
-        pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
-        // TODO make padding logic less jankily connected
-        uniform_data.pad_write(&mut self.out_vars.uniform_data_buf)
     }
 
     /// Draw a solid white square from <0,0> to <1,1>.
@@ -533,7 +515,37 @@ impl<'a> Canvas2d<'a> {
 
     /// Draw the given text block with <0, 0> as the top-left corner.
     pub fn draw_text(&mut self, text_block: &LayedOutTextBlock) {
-        unsafe { &mut *(&mut self.renderer.text_pipeline as *mut TextPipeline) } // TODO THIS IS SO GOD DAMN MESSED UP BUT I don't wanna do the necessary refactor atm
-            .prep_draw_text_call(self, text_block);
+        self.renderer.text_pipeline
+            .prep_draw_text_call(
+                &mut self.target,
+                &self.transform,
+                text_block,
+            );
+    }
+}
+
+impl Canvas2dTarget {
+    /// Construct a new canvas2d target.
+    fn new(device: &Device) -> Self {
+        let uniform_offset_align = device
+            .limits()
+            .min_uniform_buffer_offset_alignment as usize;
+
+        Canvas2dTarget {
+            uniform_offset_align,
+            uniform_data_buf: Vec::new(),
+            image_array: Vec::new(),
+            draw_calls: Vec::new(),
+            next_draw_text_call_index: 0,
+        }
+    }
+
+    /// Given a canvas2d transform, produce its uniform data and push it to the
+    /// uniform data buf, padding as necessary, and return its offset.
+    fn push_uniform_data(&mut self, transform: &Canvas2dTransform) -> usize {
+        let uniform_data = transform.to_uniform_data();
+        pad(&mut self.uniform_data_buf, self.uniform_offset_align);
+        // TODO make padding logic less jankily connected
+        uniform_data.pad_write(&mut self.uniform_data_buf)
     }
 }

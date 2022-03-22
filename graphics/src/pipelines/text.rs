@@ -2,15 +2,15 @@
 
 use crate::{
     SWAPCHAIN_FORMAT,
-    Canvas2d,
+    Canvas2dTarget,
     Canvas2dDrawCall,
-    Canvas2dOutVars,
     UniformBufferState,
     shader::load_shader,
     vertex::{
         VertexStruct,
         vertex_struct,
     },
+    transform2d::Canvas2dTransform,
 };
 use wgpu::{
     *,
@@ -230,14 +230,19 @@ impl TextPipeline {
         })
     }
 
-    pub(crate) fn prep_draw_text_call(&mut self, canvas: &mut Canvas2d, text_block: &LayedOutTextBlock) {
+    pub(crate) fn prep_draw_text_call(
+        &mut self,
+        canvas_target: &mut Canvas2dTarget,
+        canvas_transform: &Canvas2dTransform,
+        text_block: &LayedOutTextBlock,
+    ) {
         // push uniform data
-        let uniform_offset = canvas.push_uniform_data();
+        let uniform_offset = canvas_target.push_uniform_data(&canvas_transform);
 
         // get and increment the draw text call index to identify this batch of
         // glyphs
-        let draw_text_call_index = canvas.out_vars.next_draw_text_call_index;
-        canvas.out_vars.next_draw_text_call_index += 1;
+        let draw_text_call_index = canvas_target.next_draw_text_call_index;
+        canvas_target.next_draw_text_call_index += 1;
 
         // extract the section glyphs from the text block
         let section_glyphs = text_block
@@ -269,14 +274,14 @@ impl TextPipeline {
             uniform_offset,
             draw_text_call_index,
         };
-        canvas.out_vars.draw_calls.push(Canvas2dDrawCall::Text(call));
+        canvas_target.draw_calls.push(Canvas2dDrawCall::Text(call));
     }
 
     pub(crate) fn pre_render(
         &mut self,
         device: &Device,
         queue: &Queue,
-        canvas_out_vars: &Canvas2dOutVars,
+        canvas_target: &Canvas2dTarget,
     ) {
         // process the queued glyph brush data
         // update the glyph cache texture as necessary
@@ -384,7 +389,7 @@ impl TextPipeline {
                     // range of vertices
                     let mut ranges = Vec::new();
                     let mut quad_idx = 0;
-                    for draw_idx in 0..canvas_out_vars.next_draw_text_call_index {
+                    for draw_idx in 0..canvas_target.next_draw_text_call_index {
                         // simply multiply start and end by 6 to convert from
                         // quad index to vertex index
                         let start = quad_idx * 6;

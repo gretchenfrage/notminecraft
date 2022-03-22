@@ -3,8 +3,8 @@
 use crate::{
     SWAPCHAIN_FORMAT,
     Canvas2d,
+    Canvas2dTarget,
     Canvas2dDrawCall,
-    Canvas2dOutVars,
     UniformBufferState,
     shader::load_shader,
 };
@@ -30,18 +30,18 @@ pub struct DrawCallImage {
 
 pub fn prep_draw_image_call(canvas: &mut Canvas2d, image: &GpuImage) {
     // push uniform data
-    let uniform_offset = canvas.push_uniform_data();
+    let uniform_offset = canvas.target.push_uniform_data(&canvas.transform);
 
     // push image
-    let image_index = canvas.out_vars.image_array.len();
-    canvas.out_vars.image_array.push(image.clone());
+    let image_index = canvas.target.image_array.len();
+    canvas.target.image_array.push(image.clone());
 
     // push draw call
     let call = DrawCallImage {
         uniform_offset,
         image_index,
     };
-    canvas.out_vars.draw_calls.push(Canvas2dDrawCall::Image(call));
+    canvas.target.draw_calls.push(Canvas2dDrawCall::Image(call));
 }
 
 impl ImagePipeline {
@@ -129,13 +129,13 @@ impl ImagePipeline {
         call: DrawCallImage,
         pass: &mut RenderPass<'a>,
         uniform_buffer_state: &'a Option<UniformBufferState>,
-        canvas_out_vars: &'a Canvas2dOutVars,
+        canvas_target: &'a Canvas2dTarget,
     ) {
         let uniform_buffer_state = uniform_buffer_state
             .as_ref()
             .unwrap();
 
-        let image = &canvas_out_vars.image_array[call.image_index];
+        let image = &canvas_target.image_array[call.image_index];
         pass.set_pipeline(&self.image_pipeline);
         pass.set_bind_group(
             0,

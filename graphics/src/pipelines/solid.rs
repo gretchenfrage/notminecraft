@@ -20,11 +20,11 @@ pub struct DrawCallSolid {
 
 pub fn prep_draw_solid_call(canvas: &mut Canvas2d) {
     // push uniform data
-    let uniform_offset = canvas.push_uniform_data();
+    let uniform_offset = canvas.target.push_uniform_data(&canvas.transform);
 
     // push draw call
     let call = DrawCallSolid { uniform_offset };
-    canvas.out_vars.draw_calls.push(Canvas2dDrawCall::Solid(call));
+    canvas.target.draw_calls.push(Canvas2dDrawCall::Solid(call));
 }
 
 impl SolidPipeline {
