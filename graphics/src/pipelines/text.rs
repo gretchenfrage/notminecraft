@@ -478,13 +478,14 @@ impl TextPipeline {
             .text_vertex_state
             .as_ref()
             .unwrap();
-        let uniform_buffer_state = uniform_buffer_state
-            .as_ref()
-            .unwrap();
 
         let vertex_range = text_vertex_state
             .draw_text_call_ranges[call.draw_text_call_index];
         if let Some((start, end)) = vertex_range {
+            let uniform_buffer_state = uniform_buffer_state
+                .as_ref()
+                .unwrap();
+
             pass.set_pipeline(&self.text_pipeline);
             pass.set_vertex_buffer(
                 0,
@@ -619,7 +620,8 @@ pub struct TextSpan<'a> {
 
 /// Convert from font points (1/72 in) to logical pixels (1/92 in).
 pub fn pt_to_px(pt: f32) -> f32 {
-    pt * 4.0 / 3.0
+    //pt * 4.0 / 3.0
+    pt * 20.0 / 12.0
 }
 
 impl<'a> TextBlock<'a> {

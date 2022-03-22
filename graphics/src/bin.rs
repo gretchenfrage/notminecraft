@@ -54,7 +54,7 @@ struct Graphics {
 impl Graphics {
     async fn new(renderer: &mut Renderer) -> Result<Self> {
         let dog_image = renderer.load_image_file("src/assets/dog.jpeg").await?;
-        let font = renderer.load_font_file("src/assets/DejaVuSans.ttf").await?;
+        let font = renderer.load_font_file("src/assets/LiberationSerif-Regular.ttf").await?;
         let hello_world = TextBlock {
             spans: &[
                 TextSpan {
@@ -85,12 +85,13 @@ impl Graphics {
             .with_scale([0.75, 0.75])
             .with_clip_min_x(0.25)
             .draw_image(&self.dog_image);*/
+            /*
         canvas
             .with_translate([0.25, 0.25])
             .with_scale([0.75, 0.75])
             .with_color([0xFF, 0xFF, 0xFF, 0xFF / 2])
             .with_scale([0.6, 0.6])
-            .draw_image(&self.dog_image);
+            .draw_image(&self.dog_image);*/
         
         /*let size = LogicalSize::<f64>::from_physical(
             self.window.inner_size(),
@@ -106,14 +107,14 @@ impl Graphics {
             ])
             .with_color(Rgba::black())
             .draw_text(&self.layed_out_hello_world);
-        canvas
+        /*canvas
             .with_scale([
                 1.0 / self.size.w as f32,
                 1.0 / self.size.h as f32,
             ])
             .with_scale([10.0, 10.0])
             .with_color(Rgba::red())
-            .draw_text(&self.layed_out_hello_world);
+            .draw_text(&self.layed_out_hello_world);*/
 
         //canvas
         //    .draw_text();
@@ -157,6 +158,7 @@ impl Graphics {
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
+    dbg!(window.scale_factor());
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
     let mut graphics = Graphics::new(&mut renderer).await?;

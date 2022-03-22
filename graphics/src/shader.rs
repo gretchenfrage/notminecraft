@@ -20,7 +20,7 @@ pub async fn load_shader(name: &'static str) -> Result<ShaderModuleDescriptor<'s
     let kind =
         if name.ends_with(".vert") { ShaderKind::Vertex }
         else if name.ends_with(".frag") { ShaderKind::Fragment }
-        else { return Err(anyhow::Error::msg("unknown chader kind")) };
+        else { return Err(anyhow::Error::msg("unknown shader kind")) };
 
     let mut compiler = Compiler::new()
         .ok_or_else(|| anyhow::Error::msg("no shaderc compiler"))?;

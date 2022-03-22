@@ -19,8 +19,11 @@ use crate::{
     },
     std140::{
         Std140,
-        std140_struct,
         pad,
+    },
+    transform2d::{
+        Canvas2dTransform,
+        Canvas2dUniformData,
     },
 };
 use std::{
@@ -49,6 +52,11 @@ mod pipelines;
 mod std140;
 mod shader;
 mod vertex;
+mod transform2d;
+
+
+const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
+
 
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
@@ -64,8 +72,6 @@ pub struct Renderer {
     text_pipeline: TextPipeline,
 }
 
-const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
-
 struct UniformBufferState {
     uniform_buffer: Buffer,
     uniform_buffer_len: usize,
@@ -73,8 +79,18 @@ struct UniformBufferState {
     canvas2d_uniform_bind_group: BindGroup,
 }
 
+
 pub use crate::pipelines::image::GpuImage;
 
+pub use crate::pipelines::text::{
+    TextBlock,
+    HorizontalAlign,
+    VerticalAlign,
+    FontId,
+    TextSpan,
+    LayedOutTextBlock,
+    pt_to_px,
+};
 
 
 impl Renderer {
@@ -116,7 +132,7 @@ impl Renderer {
         // use for canvas2d transformations
         let canvas2d_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("solid uniform bind group layout"),
+                label: Some("canvas2d uniform bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
@@ -412,125 +428,6 @@ enum Canvas2dDrawCall {
     Text(DrawCallText),
 }
 
-/// Accumulated transforms on a `Canvas2d`.
-#[derive(Debug, Copy, Clone)]
-struct Canvas2dTransform {
-    affine: Mat3<f32>,
-    color: Rgba<f32>,
-
-    clip_min_x: Option<f32>,
-    clip_max_x: Option<f32>,
-    clip_min_y: Option<f32>,
-    clip_max_y: Option<f32>,
-}
-
-impl Canvas2dTransform {
-    /// Identity transform.
-    fn identity() -> Self {
-        Canvas2dTransform {
-            affine: Mat3::identity(),
-            color: Rgba::white(),
-            clip_min_x: None,
-            clip_max_x: None,
-            clip_min_y: None,
-            clip_max_y: None,
-        }
-    }
-
-    /// Apply translation.
-    fn with_translate(self, t: Vec2<f32>) -> Self {
-        Canvas2dTransform {
-            affine: self.affine * Mat3::<f32>::translation_2d(t),
-            ..self
-        }
-    }
-
-    /// Apply scaling.
-    ///
-    /// Assumes no negative scaling, that would break the clipping logic.
-    ///
-    /// TODO: Figure out a more mathematically robust clipping logic.
-    fn with_scale(self, s: Vec2<f32>) -> Self {
-        Canvas2dTransform {
-            affine: self.affine * Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]),
-            ..self
-        }
-    }
-
-    /// Apply color multiplication.
-    fn with_color(self, c: Rgba<f32>) -> Self {
-        Canvas2dTransform {
-            color: self.color * c,
-            ..self
-        }
-    }
-
-    /// Apply min-x clipping.
-    fn with_clip_min_x(self, min_x: f32) -> Self {
-        let min_x = (self.affine * Vec3::new(min_x, 0.0, 1.0)).x;
-        Canvas2dTransform {
-            clip_min_x: Some(self.clip_min_x
-                .map(|x| f32::max(x, min_x))
-                .unwrap_or(min_x)),
-            ..self
-        }
-    }
-
-    /// Apply max-x clipping.
-    fn with_clip_max_x(self, max_x: f32) -> Self {
-        let max_x = (self.affine * Vec3::new(max_x, 0.0, 1.0)).x;
-        Canvas2dTransform {
-            clip_max_x: Some(self.clip_max_x
-                .map(|x| f32::min(x, max_x))
-                .unwrap_or(max_x)),
-            ..self
-        }
-    }
-
-    /// Apply min-y clipping.
-    fn with_clip_min_y(self, min_y: f32) -> Self {
-        let min_y = (self.affine * Vec3::new(0.0, min_y, 1.0)).y;
-        Canvas2dTransform {
-            clip_min_y: Some(self.clip_min_y
-                .map(|x| f32::max(x, min_y))
-                .unwrap_or(min_y)),
-            ..self
-        }
-    }
-
-    /// Apply max-y clipping.
-    fn with_clip_max_y(self, max_y: f32) -> Self {
-        let max_y = (self.affine * Vec3::new(0.0, max_y, 1.0)).y;
-        Canvas2dTransform {
-            clip_max_y: Some(self.clip_max_y
-                .map(|x| f32::min(x, max_y))
-                .unwrap_or(max_y)),
-            ..self
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Canvas2dUniformData {
-    transform: Mat3<f32>,
-    color: Rgba<f32>,
-    clip_min_x: f32,
-    clip_max_x: f32,
-    clip_min_y: f32,
-    clip_max_y: f32,
-}
-
-std140_struct! {
-    Canvas2dUniformData {
-        transform: Mat3<f32>,
-        color: Rgba<f32>,
-        clip_min_x: f32,
-        clip_max_x: f32,
-        clip_min_y: f32,
-        clip_max_y: f32,
-    }
-}
-
 impl<'a> Canvas2d<'a> {
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// translation.
@@ -618,14 +515,7 @@ impl<'a> Canvas2d<'a> {
     /// Push canvas2d uniform data onto `self.uniform_data_buf` based on
     /// current transform, and return the offset.
     fn push_uniform_data(&mut self) -> usize {
-        let uniform_data = Canvas2dUniformData {
-            transform: self.transform.affine,
-            color: self.transform.color,
-            clip_min_x: self.transform.clip_min_x.unwrap_or(f32::NEG_INFINITY),
-            clip_max_x: self.transform.clip_max_x.unwrap_or(f32::INFINITY),
-            clip_min_y: self.transform.clip_min_y.unwrap_or(f32::NEG_INFINITY),
-            clip_max_y: self.transform.clip_max_y.unwrap_or(f32::INFINITY),
-        };
+        let uniform_data = self.transform.to_uniform_data();
         pad(&mut self.out_vars.uniform_data_buf, self.uniform_offset_align);
         // TODO make padding logic less jankily connected
         uniform_data.pad_write(&mut self.out_vars.uniform_data_buf)
@@ -647,14 +537,3 @@ impl<'a> Canvas2d<'a> {
             .prep_draw_text_call(self, text_block);
     }
 }
-
-
-pub use crate::pipelines::text::{
-    TextBlock,
-    HorizontalAlign,
-    VerticalAlign,
-    FontId,
-    TextSpan,
-    LayedOutTextBlock,
-    pt_to_px,
-};

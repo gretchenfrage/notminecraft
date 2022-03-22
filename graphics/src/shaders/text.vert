@@ -18,6 +18,8 @@ layout(location=1) out vec2 o_tex;
 layout(location=2) out vec4 o_color;
 
 void main() {
+    o_pos = (u_transform * vec3(i_pos, 1)).xy;
+    
     // the fix matrix
     // to convert from our coordinate system, in which:
     // - <0, 0> = top left
@@ -25,7 +27,6 @@ void main() {
     // to vulkan's coordinate system, in which:
     // - <-1, -1> = bottom left
     // - <1, 1> = top right
-    o_pos = (u_transform * vec3(i_pos, 1)).xy;
     mat3 fix = mat3(
         2, 0, 0,
         0, -2, 0,
