@@ -103,6 +103,7 @@ impl Renderer {
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         trace!("creating surface");
+        // TODO: do we need to store a pointer to window to make this safe?
         let surface = unsafe { instance.create_surface(&*window) };
 
         trace!("creating adapter");
