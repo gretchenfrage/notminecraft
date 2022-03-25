@@ -2,7 +2,7 @@
 //!
 //! We don't worry about alignment, because alignment is always 4, and valid
 //! attribute types sizes are always a multiple of 4, so you'd have to do
-//! something really weird to make the vertices unaligned.
+//! something weird to make the vertices unaligned.
 
 use std::mem::size_of;
 use vek::*;
@@ -64,7 +64,7 @@ pub trait AttributeData<GlslType> {
     /// Size of this type after serialization into a vertex buffer.
     const SIZE: usize;
 
-    /// Serialize this data by push exactly `Self::SIZE` bytes to `dst`.
+    /// Serialize this data by pushing exactly `Self::SIZE` bytes to `dst`.
     fn write(&self, dst: &mut Vec<u8>);
 }
 

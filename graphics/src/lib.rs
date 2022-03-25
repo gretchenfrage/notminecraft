@@ -405,6 +405,7 @@ pub struct Canvas2d<'a> {
     transform: Canvas2dTransform,
 }
 
+/// State that exists per canvas2d usage, which the canvas2d writes to.
 struct Canvas2dTarget {
     /// Required alignment for all offsets into uniform_data.
     uniform_offset_align: usize,
