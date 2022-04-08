@@ -173,9 +173,13 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => break,
                 WindowEvent::Resized(size) => {
-                    trace!("resizing window");
-                    renderer.resize(size);
-                    graphics.resize(&mut renderer);
+                    if size.width == 0 || size.height == 0 {
+                        trace!("not resizing window because of 0 size");
+                    } else {
+                        trace!("resizing window");
+                        renderer.resize(size);
+                        graphics.resize(&mut renderer);
+                    }
                 },
                 _ => (),
             },
