@@ -327,7 +327,16 @@ impl TextPipeline {
                         // write the data to the texture
                         queue
                             .write_texture(
-                                self.glyph_cache_texture.as_image_copy(),
+                                ImageCopyTexture {
+                                    texture: &self.glyph_cache_texture,
+                                    mip_level: 0,
+                                    origin: Origin3d {
+                                        x: rect.min[0],
+                                        y: rect.min[1],
+                                        z: 0,
+                                    },
+                                    aspect: TextureAspect::All
+                                },
                                 &padded_data,
                                 ImageDataLayout {
                                     offset: 0,
