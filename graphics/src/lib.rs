@@ -524,9 +524,13 @@ impl<'a> Canvas2d<'a> {
     }
 
     /// Draw the given image from <0, 0> to <1, 1> with the given texture
-    /// coordinate range.
+    /// start and extent.
     ///
-    /// TODO hehehe
+    /// Texture coordinates <0, 0> refers to the top-left of the image, and 
+    /// texture coordinates <1, 1> refers to the bottom-right of the image.
+    ///
+    /// If texture coordinates go beyond the [0, 1] range, the image will
+    /// repeat.
     pub fn draw_image(
         &mut self,
         image: &GpuImage,
