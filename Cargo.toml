@@ -2,5 +2,6 @@
 members = [
     "graphics",
     "winit-main",
+    "minecraft",
 ]
 resolver = "2"

@@ -1,0 +1,23 @@
+[package]
+name = "minecraft"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tracing = "0.1"
+vek = "0.15"
+backtrace = "0.3"
+
+[dependencies.graphics]
+path = "../graphics"
+
+[dependencies.winit-main]
+path = "../winit-main"
+
+[dependencies.anyhow]
+version = "1"
+features = ["backtrace"]
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter"]
