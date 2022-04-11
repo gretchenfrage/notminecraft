@@ -70,6 +70,9 @@ pub struct Renderer {
     solid_pipeline: SolidPipeline,
     image_pipeline: ImagePipeline,    
     text_pipeline: TextPipeline,
+
+    // safety: surface must be dropped before window
+    _window: Arc<Window>,
 }
 
 struct UniformBufferState {
@@ -103,7 +106,7 @@ impl Renderer {
         let size = window.inner_size();
         let instance = Instance::new(Backends::PRIMARY);
         trace!("creating surface");
-        // TODO: do we need to store a pointer to window to make this safe?
+        // safety: surface must be dropped before window
         let surface = unsafe { instance.create_surface(&*window) };
 
         trace!("creating adapter");
@@ -197,7 +200,13 @@ impl Renderer {
             solid_pipeline,
             image_pipeline,
             text_pipeline,
+            _window: window,
         })
+    }
+
+    /// Get the underlying winit window.
+    pub fn window(&self) -> &Arc<Window> {
+        &self._window
     }
 
     /// Get the current surface physical size.
