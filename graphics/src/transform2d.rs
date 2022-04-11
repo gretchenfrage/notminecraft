@@ -6,13 +6,11 @@ use vek::*;
 
 
 /// Accumulated transforms on a `Canvas2d`.
-///
-/// TODO this is not correct
 #[derive(Debug, Copy, Clone)]
 pub struct Canvas2dTransform {
-    affine: Mat3<f32>,
+    scale: Vec2<f32>,
+    translate: Vec2<f32>,
     color: Rgba<f32>,
-
     clip_min_x: Option<f32>,
     clip_max_x: Option<f32>,
     clip_min_y: Option<f32>,
@@ -23,7 +21,8 @@ impl Canvas2dTransform {
     /// Identity transform.
     pub fn identity() -> Self {
         Canvas2dTransform {
-            affine: Mat3::identity(),
+            scale: Vec2::new(1.0, 1.0),
+            translate: Vec2::new(0.0, 0.0),
             color: Rgba::white(),
             clip_min_x: None,
             clip_max_x: None,
@@ -32,20 +31,20 @@ impl Canvas2dTransform {
         }
     }
 
-    /// Apply translation.
-    pub fn with_translate(self, t: Vec2<f32>) -> Self {
-        Canvas2dTransform {
-            affine: self.affine * Mat3::<f32>::translation_2d(t),
-            ..self
-        }
-    }
-
     /// Apply scaling.
     ///
     /// Assumes no negative scaling, that would break the clipping logic.
     pub fn with_scale(self, s: Vec2<f32>) -> Self {
         Canvas2dTransform {
-            affine: self.affine * Mat3::<f32>::scaling_3d([s.x, s.y, 1.0]),
+            scale: self.scale * s,
+            ..self
+        }
+    }
+
+    /// Apply translation.
+    pub fn with_translate(self, t: Vec2<f32>) -> Self {
+        Canvas2dTransform {
+            translate: self.translate + t * self.scale,
             ..self
         }
     }
@@ -60,52 +59,55 @@ impl Canvas2dTransform {
 
     /// Apply min-x clipping.
     pub fn with_clip_min_x(self, min_x: f32) -> Self {
-        let min_x = (self.affine * Vec3::new(min_x, 0.0, 1.0)).x;
+        let b = min_x * self.scale.x + self.translate.x;
         Canvas2dTransform {
             clip_min_x: Some(self.clip_min_x
-                .map(|x| f32::max(x, min_x))
-                .unwrap_or(min_x)),
+                .map(|a| f32::max(a, b))
+                .unwrap_or(b)),
             ..self
         }
     }
 
     /// Apply max-x clipping.
     pub fn with_clip_max_x(self, max_x: f32) -> Self {
-        let max_x = (self.affine * Vec3::new(max_x, 0.0, 1.0)).x;
+        let b = max_x * self.scale.x + self.translate.x;
         Canvas2dTransform {
             clip_max_x: Some(self.clip_max_x
-                .map(|x| f32::min(x, max_x))
-                .unwrap_or(max_x)),
+                .map(|a| f32::min(a, b))
+                .unwrap_or(b)),
             ..self
         }
     }
 
     /// Apply min-y clipping.
     pub fn with_clip_min_y(self, min_y: f32) -> Self {
-        let min_y = (self.affine * Vec3::new(0.0, min_y, 1.0)).y;
+        let b = min_y * self.scale.y + self.translate.y;
         Canvas2dTransform {
             clip_min_y: Some(self.clip_min_y
-                .map(|x| f32::max(x, min_y))
-                .unwrap_or(min_y)),
+                .map(|a| f32::max(a, b))
+                .unwrap_or(b)),
             ..self
         }
     }
 
     /// Apply max-y clipping.
     pub fn with_clip_max_y(self, max_y: f32) -> Self {
-        let max_y = (self.affine * Vec3::new(0.0, max_y, 1.0)).y;
+        let b = max_y * self.scale.y + self.translate.y;
         Canvas2dTransform {
             clip_max_y: Some(self.clip_max_y
-                .map(|x| f32::min(x, max_y))
-                .unwrap_or(max_y)),
+                .map(|a| f32::min(a, b))
+                .unwrap_or(b)),
             ..self
         }
     }
 
     /// Convert to uniform data.
     pub fn to_uniform_data(&self) -> Canvas2dUniformData {
+        let transform =
+            Mat3::<f32>::translation_2d(self.translate)
+            * Mat3::<f32>::scaling_3d([self.scale.x, self.scale.y, 1.0]);
         Canvas2dUniformData {
-            transform: self.affine,
+            transform,
             color: self.color,
             clip_min_x: self.clip_min_x.unwrap_or(f32::NEG_INFINITY),
             clip_max_x: self.clip_max_x.unwrap_or(f32::INFINITY),
