@@ -79,9 +79,9 @@ impl ImagePipeline {
         canvas2d_uniform_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self> {
         let image_vs_module = device
-            .create_shader_module(&load_shader("image.vert").await?);
+            .create_shader_module(&load_shader!("image.vert").await?);
         let image_fs_module = device
-            .create_shader_module(&load_shader("image.frag").await?);
+            .create_shader_module(&load_shader!("image.frag").await?);
         let image_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("image uniform bind group layout"),

@@ -137,9 +137,9 @@ impl TextPipeline {
         canvas2d_uniform_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self> {
         let text_vs_module = device
-            .create_shader_module(&load_shader("text.vert").await?);
+            .create_shader_module(&load_shader!("text.vert").await?);
         let text_fs_module = device
-            .create_shader_module(&load_shader("text.frag").await?);
+            .create_shader_module(&load_shader!("text.frag").await?);
         let glyph_brush = GlyphBrushBuilder::using_fonts::<FontArc>(Vec::new())
             .build();
         let glyph_cache_sampler = device
