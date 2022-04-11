@@ -118,7 +118,7 @@ impl Canvas2dTransform {
 }
 
 
-/// Data for the canvas2d uniform buffer, which holds its transform
+/// Data for the canvas2d uniform struct, which holds its transform
 /// information.
 #[derive(Debug, Copy, Clone)]
 pub struct Canvas2dUniformData {

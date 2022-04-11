@@ -32,6 +32,9 @@ use winit_main::{
     reexports::event::{
         Event,
         WindowEvent,
+        KeyboardInput,
+        VirtualKeyCode,
+        ElementState,
     },
 };
 use tracing_subscriber::{
@@ -49,6 +52,7 @@ struct Graphics {
     dog_image: GpuImage,
     font: FontId,
     layed_out_hello_world: LayedOutTextBlock,
+    dog_scale: f32,
 }
 
 impl Graphics {
@@ -77,14 +81,15 @@ impl Graphics {
             font,
             dog_image,
             layed_out_hello_world,
+            dog_scale: 1.0,
         })
     }
 
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
-        /*canvas
+        canvas
             .with_scale([0.75, 0.75])
-            .with_clip_min_x(0.25)
-            .draw_image(&self.dog_image);*/
+            //.with_clip_min_x(0.25)
+            .draw_image(&self.dog_image, [0.0, 0.0], [self.dog_scale, self.dog_scale]);
             /*
         canvas
             .with_translate([0.25, 0.25])
@@ -180,6 +185,54 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         renderer.resize(size);
                         graphics.resize(&mut renderer);
                     }
+                },
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input: KeyboardInput {
+                        scancode: _,
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Up),
+                        ..
+                    },
+                    is_synthetic: _,
+                } => {
+                    graphics.dog_scale += 0.05;
+                },
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input: KeyboardInput {
+                        scancode: _,
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Down),
+                        ..
+                    },
+                    is_synthetic: _,
+                } => {
+                    graphics.dog_scale -= 0.05;
+                },
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input: KeyboardInput {
+                        scancode: _,
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::R),
+                        ..
+                    },
+                    is_synthetic: _,
+                } => {
+                    graphics.dog_scale = 1.0;
+                },
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input: KeyboardInput {
+                        scancode: _,
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Q),
+                        ..
+                    },
+                    is_synthetic: _,
+                } => {
+                    break;
                 },
                 _ => (),
             },

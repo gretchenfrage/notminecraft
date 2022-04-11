@@ -79,6 +79,7 @@ struct UniformBufferState {
     uniform_buffer_len: usize,
 
     canvas2d_uniform_bind_group: BindGroup,
+    image_uniform_bind_group: BindGroup,
 }
 
 
@@ -295,10 +296,16 @@ impl Renderer {
                             },
                         ],
                     });
+                let image_uniform_bind_group = self.image_pipeline
+                    .create_bind_group(
+                        &self.device,
+                        &uniform_buffer,
+                    );
                 self.uniform_buffer_state = Some(UniformBufferState {
                     uniform_buffer,
                     uniform_buffer_len: canvas_target.uniform_data_buf.len(),
-                    canvas2d_uniform_bind_group
+                    canvas2d_uniform_bind_group,
+                    image_uniform_bind_group,
                 });
             }
         }
@@ -516,9 +523,17 @@ impl<'a> Canvas2d<'a> {
         prep_draw_solid_call(self);
     }
 
-    /// Draw the given image from <0, 0> to <1, 1>.
-    pub fn draw_image(&mut self, image: &GpuImage) {
-        prep_draw_image_call(self, image);
+    /// Draw the given image from <0, 0> to <1, 1> with the given texture
+    /// coordinate range.
+    ///
+    /// TODO hehehe
+    pub fn draw_image(
+        &mut self,
+        image: &GpuImage,
+        tex_start: impl Into<Vec2<f32>>,
+        tex_extent: impl Into<Extent2<f32>>,
+    ) {
+        prep_draw_image_call(self, image, tex_start.into(), tex_extent.into());
     }
 
     /// Draw the given text block with <0, 0> as the top-left corner.
@@ -549,10 +564,9 @@ impl Canvas2dTarget {
 
     /// Given a canvas2d transform, produce its uniform data and push it to the
     /// uniform data buf, padding as necessary, and return its offset.
-    fn push_uniform_data(&mut self, transform: &Canvas2dTransform) -> usize {
-        let uniform_data = transform.to_uniform_data();
+    fn push_uniform_data<T: Std140>(&mut self, data: &T) -> usize {
         pad(&mut self.uniform_data_buf, self.uniform_offset_align);
         // TODO make padding logic less jankily connected
-        uniform_data.pad_write(&mut self.uniform_data_buf)
+        data.pad_write(&mut self.uniform_data_buf)
     }
 }

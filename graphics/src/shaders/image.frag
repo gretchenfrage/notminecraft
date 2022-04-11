@@ -9,8 +9,8 @@ layout(set=0, binding=0) uniform u {
     float u_clip_max_y;
 };
 
-layout(set=1, binding=0) uniform texture2D u_texture;
-layout(set=1, binding=1) uniform sampler u_sampler;
+layout(set=2, binding=0) uniform texture2D u_texture;
+layout(set=2, binding=1) uniform sampler u_sampler;
 
 layout(location=0) in vec2 i_pos;
 layout(location=1) in vec2 i_tex;

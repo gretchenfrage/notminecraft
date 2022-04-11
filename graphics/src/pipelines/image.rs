@@ -6,6 +6,10 @@ use crate::{
     Canvas2dDrawCall,
     UniformBufferState,
     shader::load_shader,
+    std140::{
+        Std140,
+        std140_struct
+    },
 };
 use std::sync::Arc;
 use wgpu::{
@@ -18,22 +22,52 @@ use anyhow::Result;
 
 pub struct ImagePipeline {
     image_pipeline: RenderPipeline,
+    image_uniform_bind_group_layout: BindGroupLayout,
     image_texture_bind_group_layout: BindGroupLayout,
     image_sampler: Sampler,
 }
 
 pub struct DrawCallImage {
-    uniform_offset: usize,
+    canvas2d_uniform_offset: usize,
+    image_uniform_offset: usize,
     image: GpuImage,
 }
 
-pub fn prep_draw_image_call(canvas: &mut Canvas2d, image: &GpuImage) {
-    // push uniform data
-    let uniform_offset = canvas.target.push_uniform_data(&canvas.transform);
+/// Data for the image uniform struct, which holds texture coordinates.
+#[derive(Debug, Copy, Clone)]
+struct ImageUniformData {
+    tex_start: Vec2<f32>,
+    tex_extent: Extent2<f32>,
+}
+
+std140_struct! {
+    ImageUniformData {
+        tex_start: Vec2<f32>,
+        tex_extent: Extent2<f32>,
+    }
+}
+
+pub fn prep_draw_image_call(
+    canvas: &mut Canvas2d,
+    image: &GpuImage,
+    tex_start: Vec2<f32>,
+    tex_extent: Extent2<f32>,
+) {
+    // push canvas2d uniform data
+    let canvas2d_uniform_offset = canvas.target
+        .push_uniform_data(&canvas.transform.to_uniform_data());
+
+    // push image uniform data
+    let image_uniform_offset = canvas.target
+        .push_uniform_data(&ImageUniformData {
+            tex_start,
+            tex_extent,
+        });
 
     // push draw call
     let call = DrawCallImage {
-        uniform_offset,
+        canvas2d_uniform_offset,
+        image_uniform_offset,
         image: image.clone(),
     };
     canvas.target.draw_calls.push(Canvas2dDrawCall::Image(call));
@@ -48,6 +82,22 @@ impl ImagePipeline {
             .create_shader_module(&load_shader("image.vert").await?);
         let image_fs_module = device
             .create_shader_module(&load_shader("image.frag").await?);
+        let image_uniform_bind_group_layout = device
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("image uniform bind group layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some((ImageUniformData::SIZE as u64).try_into().unwrap()),
+                        },
+                        count: None,
+                    },
+                ],
+            });
         let image_texture_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("image texture bind group layout"),
@@ -77,6 +127,7 @@ impl ImagePipeline {
                 label: Some("image pipeline layout"),
                 bind_group_layouts: &[
                     &canvas2d_uniform_bind_group_layout,
+                    &image_uniform_bind_group_layout,
                     &image_texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -109,6 +160,8 @@ impl ImagePipeline {
         let image_sampler = device
             .create_sampler(&SamplerDescriptor {
                 label: Some("image sampler"),
+                address_mode_u: AddressMode::Repeat,
+                address_mode_v: AddressMode::Repeat,
                 ..Default::default()
             });
 
@@ -116,7 +169,31 @@ impl ImagePipeline {
             image_pipeline,
             image_texture_bind_group_layout,
             image_sampler,
+            image_uniform_bind_group_layout,
         })
+    }
+
+    pub(crate) fn create_bind_group(
+        &self,
+        device: &Device,
+        uniform_buffer: &Buffer,
+    ) -> BindGroup
+    {
+        device
+            .create_bind_group(&BindGroupDescriptor {
+                label: Some("image uniform bind group"),
+                layout: &self.image_uniform_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::Buffer(BufferBinding {
+                            buffer: uniform_buffer,
+                            offset: 0,
+                            size: Some((ImageUniformData::SIZE as u64).try_into().unwrap())
+                        }),
+                    },
+                ],
+            })
     }
 
     pub(crate) fn render_call<'a>(
@@ -133,10 +210,15 @@ impl ImagePipeline {
         pass.set_bind_group(
             0,
             &uniform_buffer_state.canvas2d_uniform_bind_group,
-            &[call.uniform_offset as u32],
+            &[call.canvas2d_uniform_offset as u32],
         );
         pass.set_bind_group(
             1,
+            &uniform_buffer_state.image_uniform_bind_group,
+            &[call.image_uniform_offset as u32],
+        );
+        pass.set_bind_group(
+            2,
             &call.image.0.texture_bind_group,
             &[],
         );

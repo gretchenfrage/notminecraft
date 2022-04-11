@@ -20,7 +20,8 @@ pub struct DrawCallSolid {
 
 pub fn prep_draw_solid_call(canvas: &mut Canvas2d) {
     // push uniform data
-    let uniform_offset = canvas.target.push_uniform_data(&canvas.transform);
+    let uniform_offset = canvas.target
+        .push_uniform_data(&canvas.transform.to_uniform_data());
 
     // push draw call
     let call = DrawCallSolid { uniform_offset };

@@ -237,7 +237,8 @@ impl TextPipeline {
         text_block: &LayedOutTextBlock,
     ) {
         // push uniform data
-        let uniform_offset = canvas_target.push_uniform_data(&canvas_transform);
+        let uniform_offset = canvas_target
+            .push_uniform_data(&canvas_transform.to_uniform_data());
 
         // get and increment the draw text call index to identify this batch of
         // glyphs
