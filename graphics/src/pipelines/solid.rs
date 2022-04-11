@@ -75,7 +75,7 @@ impl SolidPipeline {
 
     pub(crate) fn render_call<'a>(
         &'a self,
-        call: DrawCallSolid,
+        call: &'a DrawCallSolid,
         pass: &mut RenderPass<'a>,
         uniform_buffer_state: &'a Option<UniformBufferState>,
     ) {

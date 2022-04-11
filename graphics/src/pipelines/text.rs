@@ -484,7 +484,7 @@ impl TextPipeline {
 
     pub(crate) fn render_call<'a>(
         &'a self,
-        call: DrawCallText,
+        call: &'a DrawCallText,
         pass: &mut RenderPass<'a>,
         uniform_buffer_state: &'a Option<UniformBufferState>,
     ) {

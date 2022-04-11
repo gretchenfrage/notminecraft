@@ -29,7 +29,6 @@ use crate::{
 use std::{
     path::Path,
     sync::Arc,
-    mem::take,
 };
 use anyhow::Result;
 use tracing::*;
@@ -333,24 +332,23 @@ impl Renderer {
 
             // make draw calls
             trace!("making draw calls");
-            for draw_call in take(&mut canvas_target.draw_calls) {
+            for draw_call in &canvas_target.draw_calls {
                 match draw_call {
-                    Canvas2dDrawCall::Solid(call) => self
+                    &Canvas2dDrawCall::Solid(ref call) => self
                         .solid_pipeline
                         .render_call(
                             call,
                             &mut pass,
                             &self.uniform_buffer_state,
                         ),
-                    Canvas2dDrawCall::Image(call) => self
+                    &Canvas2dDrawCall::Image(ref call) => self
                         .image_pipeline
                         .render_call(
                             call,
                             &mut pass,
                             &self.uniform_buffer_state,
-                            &canvas_target,
                         ),
-                    Canvas2dDrawCall::Text(call) => self
+                    &Canvas2dDrawCall::Text(ref call) => self
                         .text_pipeline
                         .render_call(
                             call,
@@ -419,7 +417,6 @@ struct Canvas2dTarget {
     /// Required alignment for all offsets into uniform_data.
     uniform_offset_align: usize,
     uniform_data_buf: Vec<u8>,
-    image_array: Vec<GpuImage>,
     draw_calls: Vec<Canvas2dDrawCall>,
     next_draw_text_call_index: usize,
 }
@@ -545,7 +542,6 @@ impl Canvas2dTarget {
         Canvas2dTarget {
             uniform_offset_align,
             uniform_data_buf: Vec::new(),
-            image_array: Vec::new(),
             draw_calls: Vec::new(),
             next_draw_text_call_index: 0,
         }
