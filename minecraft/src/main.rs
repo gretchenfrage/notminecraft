@@ -26,7 +26,10 @@ use winit_main::{
             Event,
             WindowEvent,
         },
-        window::WindowAttributes,
+        window::{
+            WindowAttributes,
+            Icon,
+        },
         dpi::{
             Size,
             LogicalSize,
@@ -46,6 +49,16 @@ mod jar_assets;
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
+    
+    let jar_reader = JarReader::new().await?;
+    let icon = jar_reader
+        .read_image_part(
+            "terrain.png",
+            Vec2::new(0, 3) * 16,
+            [16, 16],
+        ).await?;
+    let icon_width = icon.width();
+    let icon_height = icon.height();
 
     let window = event_loop.create_window(WindowAttributes {
         inner_size: Some(Size::Logical(LogicalSize {
@@ -53,11 +66,15 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
             height: 480.0,
         })),
         title: "Minecraft".into(),
+        window_icon: Some(Icon::from_rgba(
+            icon.into_rgba8().into_raw(),
+            icon_width,
+            icon_height,
+        )?),
         ..Default::default()
     }).await?;
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
-    let jar_reader = JarReader::new().await?;
     let menu_bg = renderer.load_image(jar_reader.read("gui/background.png").await?)?;
 
     loop {

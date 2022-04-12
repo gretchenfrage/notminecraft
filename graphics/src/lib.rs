@@ -29,6 +29,7 @@ use crate::{
 use std::{
     path::Path,
     sync::Arc,
+    borrow::Borrow,
 };
 use anyhow::Result;
 use tracing::*;
@@ -45,6 +46,7 @@ use wgpu::{
 };
 use vek::*;
 use tokio::fs;
+use image::DynamicImage;
 
 
 mod pipelines;
@@ -385,7 +387,25 @@ impl Renderer {
 
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
-        self.image_pipeline.load_image(file_data.as_ref(), &self.device, &self.queue)
+        let image = image::load_from_memory(file_data.as_ref())?;
+        Ok(self.load_image_raw(image))
+    }
+
+    /// Load an already preprocessed image onto the GPU.
+    pub fn load_image_raw(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
+        let image = image.borrow();
+        image
+            .as_rgba8()
+            .map(|image| self.image_pipeline.load_image(
+                &self.device,
+                &self.queue,
+                image,
+            ))
+            .unwrap_or_else(|| self.image_pipeline.load_image(
+                &self.device,
+                &self.queue,
+                &image.to_rgba8(),
+            ))
     }
 
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.

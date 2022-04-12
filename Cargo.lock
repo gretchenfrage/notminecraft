@@ -1069,6 +1069,7 @@ dependencies = [
  "async_zip",
  "backtrace",
  "graphics",
+ "image",
  "tokio",
  "tracing",
  "tracing-subscriber",

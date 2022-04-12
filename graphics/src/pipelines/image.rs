@@ -18,6 +18,7 @@ use wgpu::{
 };
 use vek::*;
 use anyhow::Result;
+use image::RgbaImage;
 
 
 pub struct ImagePipeline {
@@ -227,15 +228,12 @@ impl ImagePipeline {
 
     pub(crate) fn load_image(
         &self,
-        file_data: &[u8],
         device: &Device,
         queue: &Queue,
-    ) -> Result<GpuImage> {
+        image: &RgbaImage,
+    ) -> GpuImage
+    {
         let texture_format = TextureFormat::Rgba8Unorm;
-
-        // load image
-        let image = image::load_from_memory(file_data)?
-            .into_rgba8();
 
         // create texture
         let texture = device
@@ -282,10 +280,10 @@ impl ImagePipeline {
             });
 
         // done
-        Ok(GpuImage(Arc::new(GpuImageInner {
+        GpuImage(Arc::new(GpuImageInner {
             texture_bind_group,
             size: Extent2::new(image.width(), image.height()),
-        })))
+        }))
     }
 }
 
