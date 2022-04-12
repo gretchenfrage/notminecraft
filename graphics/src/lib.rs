@@ -384,8 +384,8 @@ impl Renderer {
     }
 
     /// Load an image onto the GPU from PNG / JPG / etc file data.
-    pub fn load_image(&self, file_data: &[u8]) -> Result<GpuImage> {
-        self.image_pipeline.load_image(file_data, &self.device, &self.queue)
+    pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
+        self.image_pipeline.load_image(file_data.as_ref(), &self.device, &self.queue)
     }
 
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.

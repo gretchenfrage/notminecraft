@@ -2,6 +2,9 @@
 #[macro_use]
 extern crate tracing;
 
+use crate::{
+    jar_assets::JarReader,
+};
 use anyhow::*;
 use graphics::*;
 use vek::*;
@@ -18,9 +21,16 @@ use std::{
 use winit_main::{
     EventLoopHandle,
     EventReceiver,
-    reexports::event::{
-        Event,
-        WindowEvent,
+    reexports::{
+        event::{
+            Event,
+            WindowEvent,
+        },
+        window::WindowAttributes,
+        dpi::{
+            Size,
+            LogicalSize,
+        },
     },
 };
 use tracing_subscriber::{
@@ -30,15 +40,25 @@ use tracing_subscriber::{
 use backtrace::Backtrace;
 
 
+mod jar_assets;
+
+
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
 
-    let window = event_loop.create_window(Default::default()).await?;
+    let window = event_loop.create_window(WindowAttributes {
+        inner_size: Some(Size::Logical(LogicalSize {
+            width: 850.0,
+            height: 480.0,
+        })),
+        title: "Minecraft".into(),
+        ..Default::default()
+    }).await?;
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
-
-    // TODO create graphics here
+    let jar_reader = JarReader::new().await?;
+    let menu_bg = renderer.load_image(jar_reader.read("gui/background.png").await?)?;
 
     loop {
         let event = events.recv().await;
@@ -62,8 +82,17 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
                 // draw frame
                 trace!("drawing frame");
-                let result = renderer.draw_frame(|canvas| {
-                    // TODO draw graphics here
+                let canvas_size = renderer.size().map(|n| n as f32);
+                debug!(scale_factor=%window.scale_factor());
+                debug!(%canvas_size);
+                let result = renderer.draw_frame(|mut canvas| {
+                    canvas
+                        .with_color([64, 64, 64, 0xFF])
+                        .draw_image(
+                            &menu_bg,
+                            [0.0, 0.0],
+                            canvas_size / (64.0 * window.scale_factor() as f32),
+                        );
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");

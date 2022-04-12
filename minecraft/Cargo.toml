@@ -7,6 +7,7 @@ edition = "2021"
 tracing = "0.1"
 vek = "0.15"
 backtrace = "0.3"
+async_zip = "0.0.6"
 
 [dependencies.graphics]
 path = "../graphics"
@@ -21,3 +22,6 @@ features = ["backtrace"]
 [dependencies.tracing-subscriber]
 version = "0.3"
 features = ["env-filter"]
+
+[dependencies.tokio]
+version = "1"
