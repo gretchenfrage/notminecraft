@@ -47,6 +47,7 @@ use wgpu::{
 use vek::*;
 use tokio::fs;
 use image::DynamicImage;
+use glyph_brush::ab_glyph::FontArc;
 
 
 mod pipelines;
@@ -388,24 +389,13 @@ impl Renderer {
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
         let image = image::load_from_memory(file_data.as_ref())?;
-        Ok(self.load_image_raw(image))
+        Ok(self.load_image_preloaded(image))
     }
 
-    /// Load an already preprocessed image onto the GPU.
-    pub fn load_image_raw(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
-        let image = image.borrow();
-        image
-            .as_rgba8()
-            .map(|image| self.image_pipeline.load_image(
-                &self.device,
-                &self.queue,
-                image,
-            ))
-            .unwrap_or_else(|| self.image_pipeline.load_image(
-                &self.device,
-                &self.queue,
-                &image.to_rgba8(),
-            ))
+    /// Load an already parsed image onto the GPU.
+    pub fn load_image_preloaded(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
+        self.image_pipeline
+            .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
 
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
@@ -421,7 +411,13 @@ impl Renderer {
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
     pub fn load_font(&mut self, file_data: &[u8]) -> Result<FontId> {
-        self.text_pipeline.load_font(file_data)
+        let font = FontArc::try_from_vec(file_data.into())?;
+        Ok(self.load_font_preloaded(font))
+    }
+
+    /// Load an already parsed font.
+    pub fn load_font_preloaded(&mut self, font: FontArc) -> FontId {
+        self.text_pipeline.load_font(font)
     }
 
     /// Pre-compute the layout for a text block.

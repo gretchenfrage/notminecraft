@@ -1065,11 +1065,13 @@ dependencies = [
 name = "minecraft"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "anyhow",
  "async_zip",
  "backtrace",
  "graphics",
  "image",
+ "oem_cp",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1337,6 +1339,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67ac1d3f9a1d3616fd9a60c8d74296f22406a238b6a72f5cc1e6f314df4ffbf9"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "oem_cp"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56428601ad4b928c5b705e89eb2db6ae070de7bad96f0e1c2ae07288fdfff082"
+dependencies = [
+ "ahash",
+ "lazy_static",
 ]
 
 [[package]]

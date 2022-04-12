@@ -523,10 +523,7 @@ impl TextPipeline {
         }
     }
 
-    pub(crate) fn load_font(&mut self, file_data: &[u8]) -> Result<FontId> {
-        // load font
-        let font = FontArc::try_from_vec(file_data.into())?;
-
+    pub(crate) fn load_font(&mut self, font: FontArc) -> FontId {
         // load into glyph brush
         let font_idx = self.glyph_brush.add_font(font.clone()).0;
 
@@ -534,7 +531,7 @@ impl TextPipeline {
         self.fonts.push(font);
         
         // done
-        Ok(FontId(font_idx))
+        FontId(font_idx)
     }
 
     pub(crate) fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {

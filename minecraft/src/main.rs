@@ -44,6 +44,7 @@ use backtrace::Backtrace;
 
 
 mod jar_assets;
+mod font_437;
 
 
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
@@ -54,7 +55,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let icon = jar_reader
         .read_image_part(
             "terrain.png",
-            Vec2::new(0, 3) * 16,
+            Vec2::new(3, 0) * 16,
             [16, 16],
         ).await?;
     let icon_width = icon.width();
@@ -67,7 +68,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
         })),
         title: "Minecraft".into(),
         window_icon: Some(Icon::from_rgba(
-            icon.into_rgba8().into_raw(),
+            icon.to_rgba8().into_raw(),
             icon_width,
             icon_height,
         )?),
@@ -76,6 +77,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
     let menu_bg = renderer.load_image(jar_reader.read("gui/background.png").await?)?;
+
+    let font = renderer.load_font_preloaded(jar_reader.read_font_437("font/default.png").await?);
 
     loop {
         let event = events.recv().await;
