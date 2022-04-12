@@ -369,6 +369,8 @@ impl TextPipeline {
                     // sort the quads by draw_text_call_index
                     quads.sort_by_key(|vert| vert.draw_text_call_index);
 
+                    dbg!(&quads);
+
                     // convert each quad into 6 vertices
                     let vertex_vec = quads
                         .iter()
@@ -717,11 +719,4 @@ pub struct LayedOutTextBlock {
 struct LayedOutGlyph {
     section_glyph: gb::SectionGlyph,
     color: Rgba<u8>,
-}
-
-impl LayedOutTextBlock {
-    /// Size taken by this text block in pixels.
-    pub fn size(&self) -> Extent2<f32> {
-        Extent2::new(self.bounds.width(), self.bounds.height())
-    }
 }

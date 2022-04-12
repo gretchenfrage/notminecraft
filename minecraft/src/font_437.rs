@@ -165,28 +165,32 @@ impl Font for Font437 {
     }
 
     fn ascent_unscaled(&self) -> f32 {
-        7.0
+        7.5
     }
 
     fn descent_unscaled(&self) -> f32 {
-        -1.0
+        -1.5
     }
 
     fn line_gap_unscaled(&self) -> f32 {
-        1.0
+        0.0
     }
 
     fn glyph_id(&self, c: char) -> GlyphId {
-        const NO_GLYPH: char = '♦';
-        let cp = ENCODE_TABLE.get(&c).copied().unwrap_or(ENCODE_TABLE[&NO_GLYPH]);
-        GlyphId(cp as u16)
+        if (c as u32) < 128 {
+            GlyphId(c as u16)
+        } else if let Some(&cp) = ENCODE_TABLE.get(&c) {
+            GlyphId(cp as u16)
+        } else {
+            GlyphId(ENCODE_TABLE[&'♦'] as u16)
+        }
     }
 
     fn h_advance_unscaled(&self, id: GlyphId) -> f32 {
         let cp = id.0 as usize;
         let nonzero_width = self.nonzero_width[cp];
         if nonzero_width == 0 {
-            8.0
+            4.0
         } else {
             nonzero_width as f32 + self.left_zero[cp] as f32 * 2.0 + 1.0
         }
@@ -217,6 +221,7 @@ impl Font for Font437 {
     }
 
     fn kern_unscaled(&self, first: GlyphId, second: GlyphId) -> f32 {
+        return 0.0;
         let g1 = &self.glyphs[first.0 as usize];
         let g2 = &self.glyphs[second.0 as usize];
         (0..8)
@@ -245,11 +250,11 @@ impl Font for Font437 {
             let bounds = Rect {
                 min: Point {
                     x: min_x,
-                    y: -7.0 + self.top_zero[cp] as f32,
+                    y: 7.0 - self.top_zero[cp] as f32,
                 },
                 max: Point {
                     x: min_x + self.nonzero_width[cp] as f32,
-                    y: 1.0 - self.bottom_zero[cp] as f32,
+                    y: -1.0 + self.bottom_zero[cp] as f32,
                 },
             };
 
@@ -259,7 +264,7 @@ impl Font for Font437 {
                 .filter(|&(x, y)| glyph[x][y])
                 .flat_map(|(x, y)| {
                     let x = x as f32 + 0.5;
-                    let y = y as f32 - 7.0;
+                    let y = 6.0 - y as f32;
 
                     let p1 = Point { x, y };
                     let p2 = Point { x: x + 1.0, y };

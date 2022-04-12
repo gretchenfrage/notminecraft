@@ -47,6 +47,11 @@ mod jar_assets;
 mod font_437;
 
 
+pub fn font_437_size(pixels_per_pixel: u32, scale_factor: f32) -> f32 {
+    9.0 * pixels_per_pixel as f32 * scale_factor
+}
+
+
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -78,7 +83,40 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
     let menu_bg = renderer.load_image(jar_reader.read("gui/background.png").await?)?;
 
-    let font = renderer.load_font_preloaded(jar_reader.read_font_437("font/default.png").await?);
+    let arcfont = jar_reader.read_font_437("font/default.png").await?;
+    let font = renderer.load_font_preloaded(arcfont.clone());
+
+    use ab_glyph::Font;
+    let gid = arcfont.glyph_id('h');
+    dbg!(arcfont.units_per_em());
+    dbg!(arcfont.ascent_unscaled());
+    dbg!(arcfont.descent_unscaled());
+    dbg!(arcfont.line_gap_unscaled());
+    dbg!(arcfont.h_advance_unscaled(gid));
+    dbg!(arcfont.h_side_bearing_unscaled(gid));
+    dbg!(arcfont.v_advance_unscaled(gid));
+    dbg!(arcfont.v_side_bearing_unscaled(gid));
+    dbg!(arcfont.kern_unscaled(gid, gid));
+
+    let font2 = renderer.load_font(include_bytes!("../../graphics/src/assets/DejaVuSans.ttf"))?;
+
+
+    let text = renderer
+        .lay_out_text(&TextBlock {
+            spans: &[
+                TextSpan {
+                    text: "Copyright Mojang AB. Do not distribute.",
+                    font_id: font,
+                    font_size: 18.0 * window.scale_factor() as f32,
+                    color: Rgba::white(),
+                },
+            ],
+            horizontal_align: HorizontalAlign::Right { width: renderer.size().w as f32 },
+            //horizontal_align: HorizontalAlign::Left { width: None },
+            vertical_align: VerticalAlign::Bottom { height: renderer.size().h as f32 },
+            //vertical_align: VerticalAlign::Top,
+        });
+
 
     loop {
         let event = events.recv().await;
@@ -103,8 +141,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 // draw frame
                 trace!("drawing frame");
                 let canvas_size = renderer.size().map(|n| n as f32);
-                debug!(scale_factor=%window.scale_factor());
-                debug!(%canvas_size);
+                //debug!(scale_factor=%window.scale_factor());
+                //debug!(%canvas_size);
                 let result = renderer.draw_frame(|mut canvas| {
                     canvas
                         .with_color([64, 64, 64, 0xFF])
@@ -113,6 +151,18 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                             [0.0, 0.0],
                             canvas_size / (64.0 * window.scale_factor() as f32),
                         );
+                    canvas
+                        .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                        .with_translate(canvas_size)
+                        .with_translate([-3.0, -1.0])
+                        .with_color([64, 64, 64, 0xFF])
+                        .draw_text(&text);
+                    canvas
+                        .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                        .with_translate(canvas_size)
+                        .with_translate([-3.0, -1.0])
+                        .with_translate([-2.0, -2.0])
+                        .draw_text(&text);
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
@@ -137,6 +187,14 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 }
 
 fn main() {
+    /*
+    use ab_glyph::{Font, FontRef};
+    let font = FontRef::try_from_slice(include_bytes!("../../graphics/src/assets/DejaVuSans.ttf")).unwrap();
+    dbg!(font.units_per_em());
+    dbg!(font.outline(font.glyph_id('a')));
+    return;
+    */
+
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .finish();

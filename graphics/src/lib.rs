@@ -451,6 +451,15 @@ enum Canvas2dDrawCall {
 }
 
 impl<'a> Canvas2d<'a> {
+    /// View a `&mut Canvas` as a `Canvas` with no transformations.
+    pub fn reborrow<'b>(&'b mut self) -> Canvas2d<'b> {
+        Canvas2d {
+            renderer: &mut *self.renderer,
+            target: &mut *self.target,
+            ..*self,
+        }
+    }
+
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// translation.
     pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
