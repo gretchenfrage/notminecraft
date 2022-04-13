@@ -47,11 +47,14 @@ mod jar_assets;
 mod font_437;
 
 
+
+/*
 pub fn font_437_size(pixels_per_pixel: u32, scale_factor: f32) -> f32 {
     9.0 * pixels_per_pixel as f32 * scale_factor
 }
 
-
+pub fn draw_font_437(canvas: Canvas2d, font_id: FontId, pixels_per_pixel:)
+*/
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -100,14 +103,26 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
     let font2 = renderer.load_font(include_bytes!("../../graphics/src/assets/DejaVuSans.ttf"))?;
 
-
-    let text = renderer
+    let version_text = renderer
         .lay_out_text(&TextBlock {
             spans: &[
                 TextSpan {
-                    text: "Copyright Mojang AB. Do not distribute.",
+                    text: "Not Minecraft Beta 1.0.2",
                     font_id: font,
-                    font_size: 18.0 * window.scale_factor() as f32,
+                    font_size: 16.0 * window.scale_factor() as f32,
+                    color: Rgba::new(0x50, 0x50, 0x50, 0xFF),
+                },
+            ],
+            horizontal_align: HorizontalAlign::Left { width: Some(renderer.size().w as f32) },
+            vertical_align: VerticalAlign::Top,
+        });
+    let copyright_text = renderer
+        .lay_out_text(&TextBlock {
+            spans: &[
+                TextSpan {
+                    text: "Everything in the universe is in the public domain.",
+                    font_id: font,
+                    font_size: 16.0 * window.scale_factor() as f32,
                     color: Rgba::white(),
                 },
             ],
@@ -116,6 +131,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
             vertical_align: VerticalAlign::Bottom { height: renderer.size().h as f32 },
             //vertical_align: VerticalAlign::Top,
         });
+
+    const LOGO_SIZE: f32 = 470.0;
+    const LOGO_TOP_GAP: f32 = 66.0;
+    let logo_size = LOGO_SIZE * window.scale_factor() as f32;
+    let logo_top_gap = LOGO_TOP_GAP * window.scale_factor() as f32;
+    let logo = renderer.load_image(jar_reader.read("gui/logo.png").await?)?;
 
 
     loop {
@@ -144,25 +165,49 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 //debug!(scale_factor=%window.scale_factor());
                 //debug!(%canvas_size);
                 let result = renderer.draw_frame(|mut canvas| {
-                    canvas
+                    canvas.reborrow()
                         .with_color([64, 64, 64, 0xFF])
-                        .draw_image(
+                        .draw_image_uv(
                             &menu_bg,
                             [0.0, 0.0],
                             canvas_size / (64.0 * window.scale_factor() as f32),
                         );
+                    /*
                     canvas
                         .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
                         .with_translate(canvas_size)
                         .with_translate([-3.0, -1.0])
                         .with_color([64, 64, 64, 0xFF])
                         .draw_text(&text);
-                    canvas
+                    */
+                    let mut c = canvas.reborrow()
                         .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
                         .with_translate(canvas_size)
-                        .with_translate([-3.0, -1.0])
+                        .with_translate([0.0, 2.0]);
+                    c.reborrow()
+                        .with_color([64, 64, 64, 0xFF])
+                        .draw_text(&copyright_text);
+                    c.reborrow()
                         .with_translate([-2.0, -2.0])
-                        .draw_text(&text);
+                        .draw_text(&copyright_text);
+
+                    let mut c = canvas.reborrow()
+                        .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                        .with_translate([4.0, 4.0]);
+                    c.reborrow()
+                        .with_translate([2.0, 2.0])
+                        .with_color([64, 64, 64, 0xFF])
+                        .draw_text(&version_text);
+                    c.reborrow()
+                        .draw_text(&version_text);
+
+                    canvas.reborrow()
+                        .with_translate([0.5, 0.0])
+                        .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                        .with_translate([0.0, logo_top_gap])
+                        .with_scale(logo_size)
+                        .with_translate([-0.5, 0.0])
+                        .draw_image(&logo)
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");

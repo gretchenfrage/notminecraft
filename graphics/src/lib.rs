@@ -456,18 +456,16 @@ impl<'a> Canvas2d<'a> {
         Canvas2d {
             renderer: &mut *self.renderer,
             target: &mut *self.target,
-            ..*self,
+            ..*self
         }
     }
 
     /// Borrow as a canvas which, when drawn to, draws to self with the given
     /// translation.
-    pub fn with_translate<'b>(&'b mut self, t: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
+    pub fn with_translate(self, t: impl Into<Vec2<f32>>) -> Self {
         Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
             transform: self.transform.with_translate(t.into()),
-            ..*self
+            ..self
         }
     }
     
@@ -475,77 +473,71 @@ impl<'a> Canvas2d<'a> {
     /// scaling.
     ///
     /// Panics if either axis is negative.
-    pub fn with_scale<'b>(&'b mut self, s: impl Into<Vec2<f32>>) -> Canvas2d<'b> {
+    pub fn with_scale(self, s: impl Into<Vec2<f32>>) -> Self {
         let s = s.into();
         assert!(s.x >= 0.0, "negative scaling");
         assert!(s.y >= 0.0, "negative scaling");
         Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
             transform: self.transform.with_scale(s),
-            ..*self
+            ..self
         }
     }
 
-    /// Borrow as a canvas which, when drawn to, clips out everything below a
-    /// certain x value before drawing to self.
-    pub fn with_clip_min_x<'b>(&'b mut self, min_x: f32) -> Canvas2d<'b> {
-        Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
-            transform: self.transform.with_clip_min_x(min_x),
-            ..*self
-        }
-    }
-
-    /// Borrow as a canvas which, when drawn to, clips out everything above a
-    /// certain x value before drawing to self.
-    pub fn with_clip_max_x<'b>(&'b mut self, max_x: f32) -> Canvas2d<'b> {
-        Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
-            transform: self.transform.with_clip_max_x(max_x),
-            ..*self
-        }
-    }
-    
-    /// Borrow as a canvas which, when drawn to, clips out everything below a
-    /// certain y value before drawing to self.
-    pub fn with_clip_min_y<'b>(&'b mut self, min_y: f32) -> Canvas2d<'b> {
-        Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
-            transform: self.transform.with_clip_min_y(min_y),
-            ..*self
-        }
-    }
-    
-    /// Borrow as a canvas which, when drawn to, clips out everything above a
-    /// certain y value before drawing to self.
-    pub fn with_clip_max_y<'b>(&'b mut self, max_y: f32) -> Canvas2d<'b> {
-        Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
-            transform: self.transform.with_clip_max_y(max_y),
-            ..*self
-        }
-    }
 
     /// Borrow as a canvas which, when drawn to, multiplies all colors by the
     /// given color value before drawing to self.
-    pub fn with_color<'b>(&'b mut self, c: impl Into<Rgba<u8>>) -> Canvas2d<'b> {
+    pub fn with_color(self, c: impl Into<Rgba<u8>>) -> Self {
         let c = c.into().map(|b| b as f32 / 0xFF as f32);
         Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
             transform: self.transform.with_color(c),
-            ..*self
+            ..self
+        }
+    }
+
+    /// Borrow as a canvas which, when drawn to, clips out everything below a
+    /// certain x value before drawing to self.
+    pub fn with_clip_min_x(self, min_x: f32) -> Self {
+        Canvas2d {
+            transform: self.transform.with_clip_min_x(min_x),
+            ..self
+        }
+    }
+
+    /// Borrow as a canvas which, when drawn to, clips out everything above a
+    /// certain x value before drawing to self.
+    pub fn with_clip_max_x(self, max_x: f32) -> Self {
+        Canvas2d {
+            transform: self.transform.with_clip_max_x(max_x),
+            ..self
+        }
+    }
+    
+    /// Borrow as a canvas which, when drawn to, clips out everything below a
+    /// certain y value before drawing to self.
+    pub fn with_clip_min_y(self, min_y: f32) -> Self {
+        Canvas2d {
+            transform: self.transform.with_clip_min_y(min_y),
+            ..self
+        }
+    }
+    
+    /// Borrow as a canvas which, when drawn to, clips out everything above a
+    /// certain y value before drawing to self.
+    pub fn with_clip_max_y(self, max_y: f32) -> Self {
+        Canvas2d {
+            transform: self.transform.with_clip_max_y(max_y),
+            ..self
         }
     }
 
     /// Draw a solid white square from <0,0> to <1,1>.
     pub fn draw_solid(&mut self) {
         prep_draw_solid_call(self);
+    }
+
+    /// Draw the given image from <0, 0> to <1, 1>.
+    pub fn draw_image(&mut self, image: &GpuImage) {
+        self.draw_image_uv(image, [0.0, 0.0], [1.0, 1.0]);
     }
 
     /// Draw the given image from <0, 0> to <1, 1> with the given texture
@@ -556,7 +548,7 @@ impl<'a> Canvas2d<'a> {
     ///
     /// If texture coordinates go beyond the [0, 1] range, the image will
     /// repeat.
-    pub fn draw_image(
+    pub fn draw_image_uv(
         &mut self,
         image: &GpuImage,
         tex_start: impl Into<Vec2<f32>>,
