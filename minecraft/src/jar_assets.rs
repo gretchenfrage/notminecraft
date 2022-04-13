@@ -1,7 +1,10 @@
 //! Extracting assets from minecraft.jar.
 
 use crate::font_437::Font437;
-use std::env;
+use std::{
+    env,
+    collections::HashMap,
+};
 use anyhow::*;
 use async_zip::read::fs::ZipFileReader;
 use tokio::io::AsyncReadExt;
@@ -53,5 +56,19 @@ impl JarReader {
         let data = self.read(path).await?;
         let font = Font437::new(data)?;
         Ok(FontArc::new(font))
+    }
+
+    pub async fn read_properties(&self, path: impl AsRef<str>) -> Result<HashMap<String, String>> {
+        let data = self.read(path).await?;
+        let string = String::from_utf8(data).map_err(|_| anyhow!("non UTF-8 data"))?;
+        Ok(string
+            .lines()
+            .filter_map(|line| line
+                .find('=')
+                .map(|i| (
+                    line[0..i].to_owned(),
+                    line[i + 1..].to_owned(),
+                )))
+            .collect())
     }
 }

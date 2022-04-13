@@ -86,10 +86,10 @@ impl Graphics {
     }
 
     fn draw_frame(&mut self, mut canvas: Canvas2d) {
-        canvas
+        canvas.reborrow()
             .with_scale([0.75, 0.75])
             //.with_clip_min_x(0.25)
-            .draw_image(&self.dog_image, [0.0, 0.0], [self.dog_scale, self.dog_scale]);
+            .draw_image_uv(&self.dog_image, [0.0, 0.0], [self.dog_scale, self.dog_scale]);
             /*
         canvas
             .with_translate([0.25, 0.25])
@@ -105,7 +105,7 @@ impl Graphics {
         //let size = self.window.inner_size();
         // TODO figure out DPI awareness
 
-        canvas
+        canvas.reborrow()
             .with_scale([
                 1.0 / self.size.w as f32,
                 1.0 / self.size.h as f32,

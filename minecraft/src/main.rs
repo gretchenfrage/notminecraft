@@ -41,6 +41,7 @@ use tracing_subscriber::{
     EnvFilter,
 };
 use backtrace::Backtrace;
+use image::DynamicImage;
 
 
 mod jar_assets;
@@ -55,6 +56,149 @@ pub fn font_437_size(pixels_per_pixel: u32, scale_factor: f32) -> f32 {
 
 pub fn draw_font_437(canvas: Canvas2d, font_id: FontId, pixels_per_pixel:)
 */
+
+struct Slice9 {
+    corner_tl: GpuImage,
+    corner_tr: GpuImage,
+    corner_bl: GpuImage,
+    corner_br: GpuImage,
+    edge_t: GpuImage,
+    edge_b: GpuImage,
+    edge_l: GpuImage,
+    edge_r: GpuImage,
+    center: GpuImage,
+}
+
+impl Slice9 {
+    pub fn new(
+        renderer: &Renderer,
+        image: DynamicImage,
+        edge_t: u32,
+        edge_b: u32,
+        edge_l: u32,
+        edge_r: u32,
+    ) -> Self {
+        Slice9 {
+            corner_tl: renderer.load_image_preloaded(image.crop_imm(
+                0, 0,
+                edge_l, edge_t,
+            )),
+            corner_tr: renderer.load_image_preloaded(image.crop_imm(
+                image.width() - edge_r, 0,
+                edge_r, edge_t,
+            )),
+            corner_bl: renderer.load_image_preloaded(image.crop_imm(
+                0, image.height() - edge_b,
+                edge_b, edge_l,
+            )),
+            corner_br: renderer.load_image_preloaded(image.crop_imm(
+                image.width() - edge_r, image.height() - edge_b,
+                edge_b, edge_r,
+            )),
+            edge_t: renderer.load_image_preloaded(image.crop_imm(
+                edge_l, 0,
+                image.width() - edge_l - edge_r, edge_t,
+            )),
+            edge_b: renderer.load_image_preloaded(image.crop_imm(
+                edge_l, image.height() - edge_b,
+                image.width() - edge_l - edge_r, edge_b,
+            )),
+            edge_l: renderer.load_image_preloaded(image.crop_imm(
+                0, edge_t,
+                edge_l, image.height() - edge_t - edge_b,
+            )),
+            edge_r: renderer.load_image_preloaded(image.crop_imm(
+                image.width() - edge_r, edge_t,
+                edge_r, image.height() - edge_t - edge_b,
+            )),
+            center: renderer.load_image_preloaded(image.crop_imm(
+                edge_l, edge_t,
+                image.width() - edge_l - edge_r, image.height() - edge_t - edge_b,
+            )),
+        }
+    }
+
+    pub fn draw(
+        &self,
+        mut canvas: Canvas2d,
+        size: Extent2<f32>,
+    ) {
+        let corner_tl_size = self.corner_tl.size().map(|n| n as f32);
+        let corner_tr_size = self.corner_tr.size().map(|n| n as f32);
+        let corner_bl_size = self.corner_bl.size().map(|n| n as f32);
+        let corner_br_size = self.corner_br.size().map(|n| n as f32);
+        let edge_t_size = self.edge_t.size().map(|n| n as f32);
+        let edge_b_size = self.edge_b.size().map(|n| n as f32);
+        let edge_l_size = self.edge_l.size().map(|n| n as f32);
+        let edge_r_size = self.edge_r.size().map(|n| n as f32);
+        let center_size = self.center.size().map(|n| n as f32);
+
+        let csize = size - corner_tl_size - corner_br_size;
+        let r_start = size.w - edge_r_size.w;
+        let b_start = size.h - edge_b_size.h;
+
+        canvas.reborrow()
+            .with_scale(corner_tl_size)
+            .draw_image(&self.corner_tl);
+        canvas.reborrow()
+            .with_translate([r_start, 0.0])
+            .with_scale(corner_tr_size)
+            .draw_image(&self.corner_tr);
+        canvas.reborrow()
+            .with_translate([0.0, b_start])
+            .with_scale(corner_bl_size)
+            .draw_image(&self.corner_bl);
+        canvas.reborrow()
+            .with_translate([r_start, b_start])
+            .with_scale(corner_br_size)
+            .draw_image(&self.corner_br);
+        let tsize = Extent2::new(csize.w, edge_t_size.h);
+        let bsize = Extent2::new(csize.w, edge_b_size.h);
+        let lsize = Extent2::new(edge_l_size.w, csize.h);
+        let rsize = Extent2::new(edge_r_size.w, csize.h);
+        canvas.reborrow()
+            .with_translate([corner_tl_size.w, 0.0])
+            .with_scale(tsize)
+            .draw_image_uv(
+                &self.edge_t,
+                [0.0, 0.0],
+                tsize / edge_t_size,
+            );
+        canvas.reborrow()
+            .with_translate([corner_tl_size.w, b_start])
+            .with_scale(bsize)
+            .draw_image_uv(
+                &self.edge_b,
+                [0.0, 0.0],
+                bsize / edge_b_size,
+            );
+        canvas.reborrow()
+            .with_translate([0.0, corner_tl_size.h])
+            .with_scale(lsize)
+            .draw_image_uv(
+                &self.edge_l,
+                [0.0, 0.0],
+                lsize / edge_l_size,
+            );
+        canvas.reborrow()
+            .with_translate([r_start, corner_tl_size.h])
+            .with_scale(rsize)
+            .draw_image_uv(
+                &self.edge_r,
+                [0.0, 0.0],
+                rsize / edge_r_size,
+            );
+        canvas.reborrow()
+            .with_translate(corner_tl_size)
+            .with_scale(csize)
+            .draw_image_uv(
+                &self.center,
+                [0.0, 0.0],
+                csize / center_size,
+            );
+    }
+}
+
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -88,6 +232,13 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
     let arcfont = jar_reader.read_font_437("font/default.png").await?;
     let font = renderer.load_font_preloaded(arcfont.clone());
+
+
+    let button = Slice9::new(
+        &renderer,
+        jar_reader.read_image_part("gui/gui.png", [0, 66], [200, 20]).await?,
+        3, 3, 3, 3,
+    );
 
     use ab_glyph::Font;
     let gid = arcfont.glyph_id('h');
@@ -137,6 +288,35 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let logo_size = LOGO_SIZE * window.scale_factor() as f32;
     let logo_top_gap = LOGO_TOP_GAP * window.scale_factor() as f32;
     let logo = renderer.load_image(jar_reader.read("gui/logo.png").await?)?;
+
+    const BUTTON_SIZE: Extent2<f32> = Extent2 { w: 400.0, h: 40.0 };
+    let button_size = BUTTON_SIZE * window.scale_factor() as f32;
+
+    fn lay_out_button_text(renderer: &Renderer, font_id: FontId, scale_factor: f32, text: &str) -> LayedOutTextBlock {
+        let button_size = BUTTON_SIZE * scale_factor;
+        renderer
+            .lay_out_text(&TextBlock {
+                spans: &[
+                    TextSpan {
+                        text,
+                        font_id,
+                        font_size: 16.0 * scale_factor,
+                        color: Rgba::new(0xE0, 0xE0, 0xE0, 0xFF),
+                    },
+                ],
+                horizontal_align: HorizontalAlign::Center { width: button_size.w },
+                vertical_align: VerticalAlign::Center { height: button_size.h },
+            })
+    }
+
+    let lang = jar_reader.read_properties("lang/en_US.lang").await?;
+
+    let buttons = vec![
+        lay_out_button_text(&renderer, font, window.scale_factor() as f32, &lang["menu.singleplayer"]),
+        lay_out_button_text(&renderer, font, window.scale_factor() as f32, &lang["menu.multiplayer"]),
+        lay_out_button_text(&renderer, font, window.scale_factor() as f32, &lang["menu.mods"]),
+        lay_out_button_text(&renderer, font, window.scale_factor() as f32, &lang["menu.options"]),
+    ];
 
 
     loop {
@@ -207,7 +387,32 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         .with_translate([0.0, logo_top_gap])
                         .with_scale(logo_size)
                         .with_translate([-0.5, 0.0])
-                        .draw_image(&logo)
+                        .draw_image(&logo);
+
+                    let pixels_per_pixel = 2.0 * window.scale_factor() as f32;
+                    
+                    //let button_size = Extent2::new(100.0, 100.0);
+                    let mut button_top_gap = 216.0 * window.scale_factor() as f32;
+                    let intra_button_gap = 8.0 * window.scale_factor() as f32;
+                    for btext in &buttons {
+                        let c = canvas.reborrow()
+                            .with_translate([0.5, 0.0])
+                            .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                            .with_translate([-button_size.w / 2.0, button_top_gap])
+                            .with_scale([pixels_per_pixel, pixels_per_pixel]);
+                        button.draw(c, button_size / pixels_per_pixel);
+                        let mut c = canvas.reborrow()
+                            .with_translate([0.5, 0.0])
+                            .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                            .with_translate([0.0, button_top_gap + button_size.h / 2.0]);
+                        c.reborrow()
+                            .with_translate([2.0, 2.0])
+                            .with_color([64, 64, 64, 0xFF])
+                            .draw_text(&btext);
+                        c.draw_text(&btext);
+                        button_top_gap += button_size.h + intra_button_gap;
+                    }
+                    
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
