@@ -33,6 +33,11 @@ impl JarReader {
         Ok(buf)
     }
 
+    pub async fn read_string(&self, path: impl AsRef<str>) -> Result<String> {
+        String::from_utf8(self.read(path).await?)
+            .map_err(|_| anyhow!("non UTF-8 data"))
+    }
+
     pub async fn read_image_part(
         &self,
         path: impl AsRef<str>,
@@ -59,9 +64,8 @@ impl JarReader {
     }
 
     pub async fn read_properties(&self, path: impl AsRef<str>) -> Result<HashMap<String, String>> {
-        let data = self.read(path).await?;
-        let string = String::from_utf8(data).map_err(|_| anyhow!("non UTF-8 data"))?;
-        Ok(string
+        Ok(self
+            .read_string(path).await?
             .lines()
             .filter_map(|line| line
                 .find('=')

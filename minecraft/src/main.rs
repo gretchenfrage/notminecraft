@@ -202,6 +202,8 @@ impl Slice9 {
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
+
+    let start_instant = Instant::now();
     
     let jar_reader = JarReader::new().await?;
     let icon = jar_reader
@@ -237,6 +239,11 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let button = Slice9::new(
         &renderer,
         jar_reader.read_image_part("gui/gui.png", [0, 66], [200, 20]).await?,
+        3, 3, 3, 3,
+    );
+    let button_highlight = Slice9::new(
+        &renderer,
+        jar_reader.read_image_part("gui/gui.png", [0, 86], [200, 20]).await?,
         3, 3, 3, 3,
     );
 
@@ -318,6 +325,27 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
         lay_out_button_text(&renderer, font, window.scale_factor() as f32, &lang["menu.options"]),
     ];
 
+    let splashes = jar_reader
+        .read_string("title/splashes.txt").await?
+        .lines()
+        .filter(|line| !line.is_empty())
+        .filter(|line| !line.to_ascii_lowercase().contains("notch"))
+        .map(|line| renderer
+            .lay_out_text(&TextBlock {
+                spans: &[
+                    TextSpan {
+                        text: line,
+                        font_id: font,
+                        font_size: 32.0 * window.scale_factor() as f32,
+                        color: Rgba::new(0xFF, 0xFF, 0x00, 0xFF),
+                    },
+                ],
+                horizontal_align: HorizontalAlign::Center { width: f32::INFINITY },
+                vertical_align: VerticalAlign::Center { height: f32::INFINITY },
+            }))
+        .collect::<Vec<_>>();
+
+    let mut cursor_pos = Vec2::new(0.0, 0.0);
 
     loop {
         let event = events.recv().await;
@@ -333,6 +361,13 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         renderer.resize(size);
                         // TODO resize graphics here
                     }
+                },
+                WindowEvent::CursorMoved {
+                    device_id: _, // TODO: ... we could support multiple simultaneous cursors?
+                    position,
+                    ..
+                } => {
+                    cursor_pos = Vec2::new(position.x as f32, position.y as f32);
                 },
                 _ => (),
             },
@@ -395,12 +430,29 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                     let mut button_top_gap = 216.0 * window.scale_factor() as f32;
                     let intra_button_gap = 8.0 * window.scale_factor() as f32;
                     for btext in &buttons {
+                        let min_pos = Vec2::new(
+                            (canvas_size.w - button_size.w) / 2.0,
+                            button_top_gap,
+                        );
+                        let max_pos = Vec2::new(
+                            (canvas_size.w + button_size.w) / 2.0,
+                            button_top_gap + button_size.h,
+                        );
+                        let cursor_over =
+                            cursor_pos.x >= min_pos.x
+                            && cursor_pos.x <= max_pos.x
+                            && cursor_pos.y >= min_pos.y
+                            && cursor_pos.y <= max_pos.y;
+
                         let c = canvas.reborrow()
                             .with_translate([0.5, 0.0])
                             .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
                             .with_translate([-button_size.w / 2.0, button_top_gap])
                             .with_scale([pixels_per_pixel, pixels_per_pixel]);
-                        button.draw(c, button_size / pixels_per_pixel);
+                        let which_button =
+                            if cursor_over { &button_highlight }
+                            else { &button };
+                        which_button.draw(c, button_size / pixels_per_pixel);
                         let mut c = canvas.reborrow()
                             .with_translate([0.5, 0.0])
                             .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
@@ -413,6 +465,22 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         button_top_gap += button_size.h + intra_button_gap;
                     }
                     
+                    use std::f32::consts::PI;
+                    let t = Instant::now().duration_since(start_instant).as_micros();
+                    let micro_period = 1000000 / 2;
+                    let scale = (((t % micro_period) as f32 / micro_period as f32 * PI * 2.0).cos() / 2.0 + 0.5) * 0.05 + 0.95;
+                    let mut c = canvas.reborrow()
+                        .with_translate([0.5, 0.0])
+                        .with_scale(Vec2::new(1.0, 1.0) / canvas_size)
+                        .with_translate([-logo_size / 2.0, logo_top_gap])
+                        .with_translate(logo_size * Vec2::new(0.8, 0.2))
+                        .with_scale([scale, scale]);
+                    let splash = &splashes[(t / micro_period) as usize % splashes.len()];
+                    c.reborrow()
+                        .with_translate([4.0, 4.0])
+                        .with_color([64, 64, 64, 0xFF])
+                        .draw_text(splash);
+                    c.draw_text(splash)
                 });
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");

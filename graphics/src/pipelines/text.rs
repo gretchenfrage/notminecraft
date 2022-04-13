@@ -369,8 +369,6 @@ impl TextPipeline {
                     // sort the quads by draw_text_call_index
                     quads.sort_by_key(|vert| vert.draw_text_call_index);
 
-                    dbg!(&quads);
-
                     // convert each quad into 6 vertices
                     let vertex_vec = quads
                         .iter()
