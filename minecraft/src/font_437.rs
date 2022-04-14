@@ -227,17 +227,8 @@ impl Font for Font437 {
         }
     }
 
-    fn kern_unscaled(&self, first: GlyphId, second: GlyphId) -> f32 {
-        return -MARGIN_H;
-        let g1 = &self.glyphs[first.0 as usize];
-        let g2 = &self.glyphs[second.0 as usize];
-        (0..8)
-            .map(|y|
-                (0..8).rev().take_while(|&x| !g1[x][y]).count()
-                +
-                (0..8).take_while(|&x| !g2[x][y]).count()
-            )
-            .min().unwrap() as f32 * -1.0
+    fn kern_unscaled(&self, _first: GlyphId, _second: GlyphId) -> f32 {
+        -MARGIN_H
     }
 
     fn outline(&self, id: GlyphId) -> Option<Outline> {
