@@ -6,6 +6,12 @@ pub struct CodepointIdIter<'a> {
     pub(crate) inner: Box<dyn Iterator<Item = (GlyphId, char)> + 'a>,
 }
 
+impl<'a> CodepointIdIter<'a> {
+    pub fn new(inner: Box<dyn Iterator<Item = (GlyphId, char)> + 'a>) -> Self {
+        CodepointIdIter { inner }
+    }
+}
+
 impl<'a> Iterator for CodepointIdIter<'a> {
     type Item = (GlyphId, char);
 

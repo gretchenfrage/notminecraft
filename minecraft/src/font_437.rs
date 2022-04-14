@@ -295,22 +295,12 @@ impl Font for Font437 {
     }
 
     fn codepoint_ids(&self) -> CodepointIdIter {
-        // TODO: lol. lol.
-        #[allow(dead_code)]
-        struct CodepointIdIter2<'a> {
-            inner: Box<dyn Iterator<Item=(GlyphId, char)> + 'a>,
-        }
         let iter = DECODE_TABLE
             .iter()
             .copied()
             .enumerate()
             .map(|(cp, c)| (GlyphId(cp as u16), c));
-        let iter = CodepointIdIter2 { inner: Box::new(iter) };
-        unsafe {
-            // safety:
-            // this is just outright undefined behavior that I'm relying on.
-            std::mem::transmute(iter)
-        }
+        CodepointIdIter::new(Box::new(iter))
     }
 
     fn glyph_raster_image(&self, _id: GlyphId, _pixel_size: u16) -> Option<GlyphImage> {

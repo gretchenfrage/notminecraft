@@ -5,3 +5,6 @@ members = [
     "minecraft",
 ]
 resolver = "2"
+
+[patch.crates-io]
+ab_glyph = { path = "ab_glyph" }
