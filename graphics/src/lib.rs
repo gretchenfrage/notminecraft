@@ -48,6 +48,7 @@ use vek::*;
 use tokio::fs;
 use image::DynamicImage;
 use glyph_brush::ab_glyph::FontArc;
+use opentype437::Font437;
 
 
 mod pipelines;
@@ -389,11 +390,11 @@ impl Renderer {
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
         let image = image::load_from_memory(file_data.as_ref())?;
-        Ok(self.load_image_preloaded(image))
+        Ok(self.load_image_raw(image))
     }
 
-    /// Load an already parsed image onto the GPU.
-    pub fn load_image_preloaded(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
+    /// Load an image onto the GPU which has already been decompressed.
+    pub fn load_image_raw(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
         self.image_pipeline
             .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
@@ -410,14 +411,39 @@ impl Renderer {
     ///
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
-    pub fn load_font(&mut self, file_data: &[u8]) -> Result<FontId> {
-        let font = FontArc::try_from_vec(file_data.into())?;
-        Ok(self.load_font_preloaded(font))
+    pub fn load_font(&mut self, file_data: impl AsRef<[u8]>) -> Result<FontId> {
+        let font = FontArc::try_from_vec(file_data.as_ref().into())?;
+        Ok(self.text_pipeline.load_font(font))
     }
 
-    /// Load an already parsed font.
-    pub fn load_font_preloaded(&mut self, font: FontArc) -> FontId {
-        self.text_pipeline.load_font(font)
+    /// Read a PNG / JPG / etc code point 437 glyph atlas from a file and load
+    /// it as a font onto the renderer.
+    ///
+    /// Be mindful that there is currently no way to un-load a font from the
+    /// renderer.
+    pub async fn load_font_437_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
+        let file_data = fs::read(path).await?;
+        self.load_font_437(file_data)
+    }
+
+    /// Load a font onto the renderer from a code point 437 glyph atlas PNG /
+    /// JPG / etc file data.
+    ///
+    /// Be mindful that there is currently no way to un-load a font from the
+    /// renderer.
+    pub fn load_font_437(&mut self, file_data: impl AsRef<[u8]>) -> Result<FontId> {
+        let image = image::load_from_memory(file_data.as_ref())?;
+        self.load_font_437_raw(image)
+    }
+
+    /// Load a font onto the renderer from a code point 437 glyph atlas which
+    /// has already been decompressed.
+    ///
+    /// Be mindful that there is currently no way to un-load a font from the
+    /// renderer.
+    pub fn load_font_437_raw(&mut self, image: impl Borrow<DynamicImage>) -> Result<FontId> {
+        let font = FontArc::new(Font437::new(image)?);
+        Ok(self.text_pipeline.load_font(font))
     }
 
     /// Pre-compute the layout for a text block.

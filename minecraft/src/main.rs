@@ -45,17 +45,6 @@ use image::DynamicImage;
 
 
 mod jar_assets;
-mod font_437;
-
-
-
-/*
-pub fn font_437_size(pixels_per_pixel: u32, scale_factor: f32) -> f32 {
-    9.0 * pixels_per_pixel as f32 * scale_factor
-}
-
-pub fn draw_font_437(canvas: Canvas2d, font_id: FontId, pixels_per_pixel:)
-*/
 
 struct Slice9 {
     corner_tl: GpuImage,
@@ -79,39 +68,39 @@ impl Slice9 {
         edge_r: u32,
     ) -> Self {
         Slice9 {
-            corner_tl: renderer.load_image_preloaded(image.crop_imm(
+            corner_tl: renderer.load_image_raw(image.crop_imm(
                 0, 0,
                 edge_l, edge_t,
             )),
-            corner_tr: renderer.load_image_preloaded(image.crop_imm(
+            corner_tr: renderer.load_image_raw(image.crop_imm(
                 image.width() - edge_r, 0,
                 edge_r, edge_t,
             )),
-            corner_bl: renderer.load_image_preloaded(image.crop_imm(
+            corner_bl: renderer.load_image_raw(image.crop_imm(
                 0, image.height() - edge_b,
                 edge_b, edge_l,
             )),
-            corner_br: renderer.load_image_preloaded(image.crop_imm(
+            corner_br: renderer.load_image_raw(image.crop_imm(
                 image.width() - edge_r, image.height() - edge_b,
                 edge_b, edge_r,
             )),
-            edge_t: renderer.load_image_preloaded(image.crop_imm(
+            edge_t: renderer.load_image_raw(image.crop_imm(
                 edge_l, 0,
                 image.width() - edge_l - edge_r, edge_t,
             )),
-            edge_b: renderer.load_image_preloaded(image.crop_imm(
+            edge_b: renderer.load_image_raw(image.crop_imm(
                 edge_l, image.height() - edge_b,
                 image.width() - edge_l - edge_r, edge_b,
             )),
-            edge_l: renderer.load_image_preloaded(image.crop_imm(
+            edge_l: renderer.load_image_raw(image.crop_imm(
                 0, edge_t,
                 edge_l, image.height() - edge_t - edge_b,
             )),
-            edge_r: renderer.load_image_preloaded(image.crop_imm(
+            edge_r: renderer.load_image_raw(image.crop_imm(
                 image.width() - edge_r, edge_t,
                 edge_r, image.height() - edge_t - edge_b,
             )),
-            center: renderer.load_image_preloaded(image.crop_imm(
+            center: renderer.load_image_raw(image.crop_imm(
                 edge_l, edge_t,
                 image.width() - edge_l - edge_r, image.height() - edge_t - edge_b,
             )),
@@ -232,9 +221,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
     let menu_bg = renderer.load_image(jar_reader.read("gui/background.png").await?)?;
 
-    let arcfont = jar_reader.read_font_437("font/default.png").await?;
-    let font = renderer.load_font_preloaded(arcfont.clone());
-
+    let font = renderer.load_font_437(jar_reader.read("font/default.png").await?)?;
 
     let button = Slice9::new(
         &renderer,
@@ -247,19 +234,6 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
         3, 3, 3, 3,
     );
 
-    use ab_glyph::Font;
-    let gid = arcfont.glyph_id('h');
-    dbg!(arcfont.units_per_em());
-    dbg!(arcfont.ascent_unscaled());
-    dbg!(arcfont.descent_unscaled());
-    dbg!(arcfont.line_gap_unscaled());
-    dbg!(arcfont.h_advance_unscaled(gid));
-    dbg!(arcfont.h_side_bearing_unscaled(gid));
-    dbg!(arcfont.v_advance_unscaled(gid));
-    dbg!(arcfont.v_side_bearing_unscaled(gid));
-    dbg!(arcfont.kern_unscaled(gid, gid));
-
-    let font2 = renderer.load_font(include_bytes!("../../graphics/src/assets/DejaVuSans.ttf"))?;
 
     let version_text = renderer
         .lay_out_text(&TextBlock {

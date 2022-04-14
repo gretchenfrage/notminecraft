@@ -3,6 +3,7 @@ members = [
     "graphics",
     "winit-main",
     "minecraft",
+    "opentype437",
 ]
 resolver = "2"
 

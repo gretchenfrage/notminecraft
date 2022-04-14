@@ -78,12 +78,8 @@ pub struct Font437 {
 }
 
 impl Font437 {
-    pub fn new(file_data: impl AsRef<[u8]>) -> Result<Self> {
-        let image = image::load_from_memory(file_data.as_ref())?;
-        Self::new_raw(image)
-    }
-
-    pub fn new_raw(image: impl Borrow<DynamicImage>) -> Result<Self> {
+    /// Load from a glyph atlas. Fails if the image is not 128x128.
+    pub fn new(image: impl Borrow<DynamicImage>) -> Result<Self> {
         let image = image.borrow();
 
         // verify dimensions

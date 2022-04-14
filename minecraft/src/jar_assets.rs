@@ -1,6 +1,5 @@
 //! Extracting assets from minecraft.jar.
 
-use crate::font_437::Font437;
 use std::{
     env,
     collections::HashMap,
@@ -10,7 +9,6 @@ use async_zip::read::fs::ZipFileReader;
 use tokio::io::AsyncReadExt;
 use vek::*;
 use image::DynamicImage;
-use ab_glyph::FontArc;
 
 
 /// Reader for extracting assets from minecraft.jar.
@@ -55,12 +53,6 @@ impl JarReader {
             extent.w,
             extent.h,
         ))
-    }
-
-    pub async fn read_font_437(&self, path: impl AsRef<str>) -> Result<FontArc> {
-        let data = self.read(path).await?;
-        let font = Font437::new(data)?;
-        Ok(FontArc::new(font))
     }
 
     pub async fn read_properties(&self, path: impl AsRef<str>) -> Result<HashMap<String, String>> {

@@ -40,3 +40,6 @@ features = ["fs"]
 [dependencies.shaderc]
 version = "0.7"
 optional = true
+
+[dependencies.opentype437]
+path = "../opentype437"
