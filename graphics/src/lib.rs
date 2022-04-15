@@ -400,8 +400,6 @@ impl Renderer {
     }
 
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
-    ///
-    /// Just reads the file with tokio then passes it to `self.load_font`.
     pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
         let file_data = fs::read(path).await?;
         self.load_font(&file_data)
