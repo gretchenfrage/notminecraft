@@ -6,12 +6,13 @@ use winit_main::reexports::{
 };
 
 fn main() {
-    winit_main::run(|event_loop, events| {
+    winit_main::run(|event_loop, mut events| async move {
         let window = event_loop
-            .create_window(WindowAttributes::default())
+            .create_window(WindowAttributes::default()).await
             .unwrap();
 
-        for event in events.iter() {
+        loop {
+            let event = events.recv().await;
             if matches!(
                 event,
                 Event::WindowEvent {
