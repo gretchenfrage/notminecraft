@@ -2,6 +2,7 @@
 use crate::{
     pipelines::{
         clear::ClearPipeline,
+        /*
         solid::{
             SolidPipeline,
             DrawCallSolid,
@@ -15,16 +16,18 @@ use crate::{
         text::{
             TextPipeline,
             DrawCallText,
-        },
+        },*/
     },
     std140::{
         Std140,
         pad,
     },
+    /*
     transform2d::{
         Canvas2dTransform,
         Canvas2dUniformData,
     },
+    */
 };
 use std::{
     path::Path,
@@ -55,7 +58,7 @@ mod pipelines;
 mod std140;
 mod shader;
 mod vertex;
-mod transform2d;
+//mod transform2d;
 
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
@@ -68,11 +71,11 @@ pub struct Renderer {
     queue: Queue,
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
-    canvas2d_uniform_bind_group_layout: BindGroupLayout,
+    //canvas2d_uniform_bind_group_layout: BindGroupLayout,
     clear_pipeline: ClearPipeline,
-    solid_pipeline: SolidPipeline,
-    image_pipeline: ImagePipeline,    
-    text_pipeline: TextPipeline,
+    //solid_pipeline: SolidPipeline,
+    //image_pipeline: ImagePipeline,    
+    //text_pipeline: TextPipeline,
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
@@ -82,11 +85,11 @@ struct UniformBufferState {
     uniform_buffer: Buffer,
     uniform_buffer_len: usize,
 
-    canvas2d_uniform_bind_group: BindGroup,
+    //canvas2d_uniform_bind_group: BindGroup,
     image_uniform_bind_group: BindGroup,
 }
 
-
+/*
 pub use crate::pipelines::image::GpuImage;
 
 pub use crate::pipelines::text::{
@@ -98,7 +101,7 @@ pub use crate::pipelines::text::{
     LayedOutTextBlock,
     pt_to_px,
 };
-
+*/
 
 impl Renderer {
     /// Create a new renderer on a given window.
@@ -135,7 +138,7 @@ impl Renderer {
                 None,
             )
             .await?;
-
+        /*
         // create the layout for the standard bind group all canvas2d shaders
         // use for canvas2d transformations
         let canvas2d_uniform_bind_group_layout = device
@@ -154,11 +157,11 @@ impl Renderer {
                     },
                 ],
             });
-
+        */
         // create the clear pipeline
         trace!("creating clear pipeline");
         let clear_pipeline = ClearPipeline::new(&device).await?;
-
+        /*
         // create the solid pipeline
         trace!("creating solid pipeline");
         let solid_pipeline = SolidPipeline::new(
@@ -179,7 +182,7 @@ impl Renderer {
             &device,
             &canvas2d_uniform_bind_group_layout,
         ).await?;
-
+        */
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -199,11 +202,11 @@ impl Renderer {
             queue,
             config,
             uniform_buffer_state: None,
-            canvas2d_uniform_bind_group_layout,
+            //canvas2d_uniform_bind_group_layout,
             clear_pipeline,
-            solid_pipeline,
-            image_pipeline,
-            text_pipeline,
+            //solid_pipeline,
+            //image_pipeline,
+            //text_pipeline,
             _window: window,
         })
     }
@@ -224,7 +227,7 @@ impl Renderer {
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
     }
-
+    /*
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
     /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
     /// right corner).
@@ -448,9 +451,10 @@ impl Renderer {
     pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
         self.text_pipeline.lay_out_text(text_block)
     }
+    */
 }
 
-
+/*
 /// Target for drawing 2 dimensionally onto. Each successive draw call is
 /// blended over the previously drawn data.
 pub struct Canvas2d<'a> {
@@ -615,3 +619,4 @@ impl Canvas2dTarget {
         data.pad_write(&mut self.uniform_data_buf)
     }
 }
+*/
