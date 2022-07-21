@@ -61,7 +61,8 @@ mod vertex;
 //mod transform2d;
 
 
-const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
+const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
+const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
 
 /// Top-level resource for drawing frames onto a window.
@@ -69,6 +70,7 @@ pub struct Renderer {
     surface: Surface,
     device: Device,
     queue: Queue,
+    depth_texture: Texture,
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
     //canvas2d_uniform_bind_group_layout: BindGroupLayout,
@@ -102,6 +104,23 @@ pub use crate::pipelines::text::{
     pt_to_px,
 };
 */
+
+fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
+    device
+            .create_texture(&TextureDescriptor {
+                label: Some("depth texture"),
+                size: Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            })
+}
 
 impl Renderer {
     /// Create a new renderer on a given window.
@@ -158,6 +177,10 @@ impl Renderer {
                 ],
             });
         */
+
+        // create the depth texture
+        let depth_texture = create_depth_texture(&device, size);
+
         // create the clear pipeline
         trace!("creating clear pipeline");
         let clear_pipeline = ClearPipeline::new(&device).await?;
@@ -200,6 +223,7 @@ impl Renderer {
             surface,
             device,
             queue,
+            depth_texture,
             config,
             uniform_buffer_state: None,
             //canvas2d_uniform_bind_group_layout,
@@ -226,6 +250,7 @@ impl Renderer {
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
+        self.depth_texture = create_depth_texture(&self.device, size);
     }
     /*
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
@@ -453,170 +478,3 @@ impl Renderer {
     }
     */
 }
-
-/*
-/// Target for drawing 2 dimensionally onto. Each successive draw call is
-/// blended over the previously drawn data.
-pub struct Canvas2d<'a> {
-    renderer: &'a mut Renderer,
-    target: &'a mut Canvas2dTarget,
-    transform: Canvas2dTransform,
-}
-
-/// State that exists per canvas2d usage, which the canvas2d writes to.
-struct Canvas2dTarget {
-    /// Required alignment for all offsets into uniform_data.
-    uniform_offset_align: usize,
-    uniform_data_buf: Vec<u8>,
-    draw_calls: Vec<Canvas2dDrawCall>,
-    next_draw_text_call_index: usize,
-}
-
-enum Canvas2dDrawCall {
-    Solid(DrawCallSolid),
-    Image(DrawCallImage),
-    Text(DrawCallText),
-}
-
-impl<'a> Canvas2d<'a> {
-    /// View a `&mut Canvas` as a `Canvas` with no transformations.
-    pub fn reborrow<'b>(&'b mut self) -> Canvas2d<'b> {
-        Canvas2d {
-            renderer: &mut *self.renderer,
-            target: &mut *self.target,
-            ..*self
-        }
-    }
-
-    /// Borrow as a canvas which, when drawn to, draws to self with the given
-    /// translation.
-    pub fn with_translate(self, t: impl Into<Vec2<f32>>) -> Self {
-        Canvas2d {
-            transform: self.transform.with_translate(t.into()),
-            ..self
-        }
-    }
-    
-    /// Borrow as a canvas which, when drawn to, draws to self with the given
-    /// scaling.
-    ///
-    /// Panics if either axis is negative.
-    pub fn with_scale(self, s: impl Into<Vec2<f32>>) -> Self {
-        let s = s.into();
-        assert!(s.x >= 0.0, "negative scaling");
-        assert!(s.y >= 0.0, "negative scaling");
-        Canvas2d {
-            transform: self.transform.with_scale(s),
-            ..self
-        }
-    }
-
-
-    /// Borrow as a canvas which, when drawn to, multiplies all colors by the
-    /// given color value before drawing to self.
-    pub fn with_color(self, c: impl Into<Rgba<u8>>) -> Self {
-        let c = c.into().map(|b| b as f32 / 0xFF as f32);
-        Canvas2d {
-            transform: self.transform.with_color(c),
-            ..self
-        }
-    }
-
-    /// Borrow as a canvas which, when drawn to, clips out everything below a
-    /// certain x value before drawing to self.
-    pub fn with_clip_min_x(self, min_x: f32) -> Self {
-        Canvas2d {
-            transform: self.transform.with_clip_min_x(min_x),
-            ..self
-        }
-    }
-
-    /// Borrow as a canvas which, when drawn to, clips out everything above a
-    /// certain x value before drawing to self.
-    pub fn with_clip_max_x(self, max_x: f32) -> Self {
-        Canvas2d {
-            transform: self.transform.with_clip_max_x(max_x),
-            ..self
-        }
-    }
-    
-    /// Borrow as a canvas which, when drawn to, clips out everything below a
-    /// certain y value before drawing to self.
-    pub fn with_clip_min_y(self, min_y: f32) -> Self {
-        Canvas2d {
-            transform: self.transform.with_clip_min_y(min_y),
-            ..self
-        }
-    }
-    
-    /// Borrow as a canvas which, when drawn to, clips out everything above a
-    /// certain y value before drawing to self.
-    pub fn with_clip_max_y(self, max_y: f32) -> Self {
-        Canvas2d {
-            transform: self.transform.with_clip_max_y(max_y),
-            ..self
-        }
-    }
-
-    /// Draw a solid white square from <0,0> to <1,1>.
-    pub fn draw_solid(&mut self) {
-        prep_draw_solid_call(self);
-    }
-
-    /// Draw the given image from <0, 0> to <1, 1>.
-    pub fn draw_image(&mut self, image: &GpuImage) {
-        self.draw_image_uv(image, [0.0, 0.0], [1.0, 1.0]);
-    }
-
-    /// Draw the given image from <0, 0> to <1, 1> with the given texture
-    /// start and extent.
-    ///
-    /// Texture coordinates <0, 0> refers to the top-left of the image, and 
-    /// texture coordinates <1, 1> refers to the bottom-right of the image.
-    ///
-    /// If texture coordinates go beyond the [0, 1] range, the image will
-    /// repeat.
-    pub fn draw_image_uv(
-        &mut self,
-        image: &GpuImage,
-        tex_start: impl Into<Vec2<f32>>,
-        tex_extent: impl Into<Extent2<f32>>,
-    ) {
-        prep_draw_image_call(self, image, tex_start.into(), tex_extent.into());
-    }
-
-    /// Draw the given text block with <0, 0> as the top-left corner.
-    pub fn draw_text(&mut self, text_block: &LayedOutTextBlock) {
-        self.renderer.text_pipeline
-            .prep_draw_text_call(
-                &mut self.target,
-                &self.transform,
-                text_block,
-            );
-    }
-}
-
-impl Canvas2dTarget {
-    /// Construct a new canvas2d target.
-    fn new(device: &Device) -> Self {
-        let uniform_offset_align = device
-            .limits()
-            .min_uniform_buffer_offset_alignment as usize;
-
-        Canvas2dTarget {
-            uniform_offset_align,
-            uniform_data_buf: Vec::new(),
-            draw_calls: Vec::new(),
-            next_draw_text_call_index: 0,
-        }
-    }
-
-    /// Given a canvas2d transform, produce its uniform data and push it to the
-    /// uniform data buf, padding as necessary, and return its offset.
-    fn push_uniform_data<T: Std140>(&mut self, data: &T) -> usize {
-        pad(&mut self.uniform_data_buf, self.uniform_offset_align);
-        // TODO make padding logic less jankily connected
-        data.pad_write(&mut self.uniform_data_buf)
-    }
-}
-*/
