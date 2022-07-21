@@ -58,11 +58,11 @@ mod pipelines;
 mod std140;
 mod shader;
 mod vertex;
-//mod transform2d;
 
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
+const CLIP_FORMAT: TextureFormat = TextureFormat::R32Float;
 
 
 /// Top-level resource for drawing frames onto a window.
@@ -71,6 +71,8 @@ pub struct Renderer {
     device: Device,
     queue: Queue,
     depth_texture: Texture,
+    clip_min_texture: Texture,
+    clip_max_texture: Texture,
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
     //canvas2d_uniform_bind_group_layout: BindGroupLayout,
@@ -105,10 +107,15 @@ pub use crate::pipelines::text::{
 };
 */
 
-fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
+fn create_depth_texture_like(
+    device: &Device,
+    size: PhysicalSize<u32>,
+    label: &'static str,
+    format: TextureFormat,
+) -> Texture {
     device
             .create_texture(&TextureDescriptor {
-                label: Some("depth texture"),
+                label: Some(label),
                 size: Extent3d {
                     width: size.width,
                     height: size.height,
@@ -117,9 +124,21 @@ fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: DEPTH_FORMAT,
+                format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
             })
+}
+
+fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
+    create_depth_texture_like(device, size, "depth texture", DEPTH_FORMAT)
+}
+
+fn create_clip_min_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
+    create_depth_texture_like(device, size, "clip min texture", CLIP_FORMAT)
+}
+
+fn create_clip_max_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
+    create_depth_texture_like(device, size, "clip min texture", CLIP_FORMAT)
 }
 
 impl Renderer {
@@ -181,6 +200,10 @@ impl Renderer {
         // create the depth texture
         let depth_texture = create_depth_texture(&device, size);
 
+        // create the clip min/max textures
+        let clip_min_texture = create_clip_min_texture(&device, size);
+        let clip_max_texture = create_clip_max_texture(&device, size);
+
         // create the clear pipeline
         trace!("creating clear pipeline");
         let clear_pipeline = ClearPipeline::new(&device).await?;
@@ -224,6 +247,8 @@ impl Renderer {
             device,
             queue,
             depth_texture,
+            clip_min_texture,
+            clip_max_texture,
             config,
             uniform_buffer_state: None,
             //canvas2d_uniform_bind_group_layout,
@@ -251,6 +276,8 @@ impl Renderer {
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
         self.depth_texture = create_depth_texture(&self.device, size);
+        self.clip_min_texture = create_clip_min_texture(&self.device, size);
+        self.clip_max_texture = create_clip_max_texture(&self.device, size);
     }
     /*
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
