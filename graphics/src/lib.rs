@@ -60,7 +60,7 @@ mod shader;
 mod vertex;
 pub mod modifier;
 pub mod view_proj;
-mod draw_program;
+mod frame_content;
 
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
@@ -96,8 +96,8 @@ struct UniformBufferState {
     //image_uniform_bind_group: BindGroup,
 }
 
-pub use crate::draw_program::{
-    DrawProgram,
+pub use crate::frame_content::{
+    FrameContent,
     Canvas2,
     Canvas3,
     DrawObj2,

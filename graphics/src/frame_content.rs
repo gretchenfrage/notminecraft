@@ -15,7 +15,7 @@ use vek::*;
 
 
 #[derive(Default)]
-pub struct DrawProgram {
+pub struct FrameContent {
     instrs: Vec<(usize, DrawInstr)>,
 }
 
@@ -41,16 +41,16 @@ pub enum DrawObj3 {
 }
 
 pub struct Canvas2<'a> { // TODO we could ignore the stack index thing and switch to a Drop based model?
-    target: &'a mut DrawProgram,
+    target: &'a mut FrameContent,
     stack_len: usize,
 }
 
 pub struct Canvas3<'a> {
-    target: &'a mut DrawProgram,
+    target: &'a mut FrameContent,
     stack_len: usize,
 }
 
-impl DrawProgram {
+impl FrameContent {
     pub fn new() -> Self {
         Default::default() 
     }
