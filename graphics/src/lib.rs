@@ -22,6 +22,12 @@ use crate::{
         Std140,
         pad,
     },
+    frame_content::FrameContent,
+    render_instrs::{
+        frame_render_compiler,
+        RenderInstr,
+        DrawObjNorm,
+    },
     /*
     transform2d::{
         Canvas2dTransform,
@@ -60,7 +66,8 @@ mod shader;
 mod vertex;
 pub mod modifier;
 pub mod view_proj;
-mod frame_content;
+pub mod frame_content;
+mod render_instrs;
 
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
@@ -95,14 +102,6 @@ struct UniformBufferState {
     //canvas2d_uniform_bind_group: BindGroup,
     //image_uniform_bind_group: BindGroup,
 }
-
-pub use crate::frame_content::{
-    FrameContent,
-    Canvas2,
-    Canvas3,
-    DrawObj2,
-    DrawObj3,
-};
 
 /*
 pub use crate::pipelines::image::GpuImage;
@@ -290,11 +289,11 @@ impl Renderer {
         self.clip_min_texture = create_clip_min_texture(&self.device, size);
         self.clip_max_texture = create_clip_max_texture(&self.device, size);
     }
-    /*
+    
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
     /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
     /// right corner).
-    pub fn draw_frame(&mut self, f: impl FnOnce(Canvas2d)) -> Result<()> {
+    pub fn draw_frame(&mut self, content: &FrameContent) -> Result<()> {
         // acquire frame to draw onto
         trace!("acquiring frame");
         let mut attempts = 0;
@@ -315,10 +314,46 @@ impl Renderer {
         if attempts > 0 {
             trace!("successfully recreated swap chain surface");
         }
-        let view = frame
+        let color_texture = frame
             .texture
             .create_view(&TextureViewDescriptor::default());
 
+        // compile and pre-render
+        trace!("compiling render instructions and pre-rendering");
+        enum PreppedRenderInstr {
+
+        }
+
+        let instrs = frame_render_compiler(&content)
+            .map(|instr| match instr {
+                RenderInstr::Draw {
+                    obj,
+                    transform,
+                    color,
+                    depth,
+                } => unimplemented!(),
+                RenderInstr::ClearClip => unimplemented!(),
+                RenderInstr::MaxClipMin(clip) => unimplemented!(),
+                RenderInstr::MinClipMax(clip) => unimplemented!(),
+                RenderInstr::ClearDepth => unimplemented!(),
+            })
+            .collect::<Vec<PreppedRenderInstr>>();
+
+
+        /*
+        enum DrawObjPrepped {}
+
+        let instrs = content.instrs
+            .iter()
+            .map(|&(stack_len, ref instr)| (stack_len, instr));
+        let instrs = Draw3dNormalizer::new(instrs);
+        let instrs = instrs
+            .map(|(stack_len, instr)| (
+                stack_len,
+                instr.map_obj(|obj| match obj {})
+            ))
+            .collect::<Vec<(usize, DrawInstr3dNorm<DrawObjPrepped>)>>();*/
+        /*
         // accumulate draw data from the callback
         trace!("accumulating draw data");
         let mut canvas_target = Canvas2dTarget::new(&self.device);
@@ -380,6 +415,7 @@ impl Renderer {
             }
         }
 
+        */
         // begin encoder and pass
         trace!("creating encoder and pass");
         let mut encoder = self.device
@@ -392,7 +428,7 @@ impl Renderer {
                     label: None,
                     color_attachments: &[
                         RenderPassColorAttachment {
-                            view: &view,
+                            view: &color_texture,
                             resolve_target: None,
                             ops: Operations {
                                 load: LoadOp::Clear(Color::WHITE),
@@ -406,7 +442,9 @@ impl Renderer {
             // clear the screen
             trace!("clearing screen");
             self.clear_pipeline.clear_screen(&mut pass);
+            
 
+            /*
             // make draw calls
             trace!("making draw calls");
             for draw_call in &canvas_target.draw_calls {
@@ -434,17 +472,19 @@ impl Renderer {
                         )
                 };
             }
-            
+            */
             // finish
             trace!("finishing frame");
 
             // end scope to drop
         }
-        self.queue.submit(Some(encoder.finish()));        
+        // submit, present, return
+        self.queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())
     }
-
+    
+    /*
     /// Read a PNG / JPG / etc image from a file and load it onto the GPU.
     ///
     /// Just reads the file with tokio then passes it to `self.load_image`.

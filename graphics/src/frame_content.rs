@@ -14,12 +14,11 @@ use std::collections::VecDeque;
 use vek::*;
 
 
-#[derive(Default)]
-pub struct FrameContent {
-    instrs: Vec<(usize, DrawInstr)>,
-}
+#[derive(Debug, Clone, Default)]
+pub struct FrameContent(pub Vec<(usize, FrameItem)>);
 
-enum DrawInstr {
+#[derive(Debug, Clone)]
+pub enum FrameItem {
     PushModifier2(Modifier2),
     Draw2(DrawObj2),
     Begin3d(ViewProj),
@@ -27,12 +26,14 @@ enum DrawInstr {
     Draw3(DrawObj3),
 }
 
+#[derive(Debug, Clone)]
 pub enum DrawObj2 { // TODO expose
     // TODO rectangle
     // TODO image
     // TODO text
 }
 
+#[derive(Debug, Clone)]
 pub enum DrawObj3 {
     // TODO rectangle
     // TODO image
@@ -40,11 +41,13 @@ pub enum DrawObj3 {
     // TODO mesh
 }
 
-pub struct Canvas2<'a> { // TODO we could ignore the stack index thing and switch to a Drop based model?
+#[derive(Debug)]
+pub struct Canvas2<'a> {
     target: &'a mut FrameContent,
     stack_len: usize,
 }
 
+#[derive(Debug)]
 pub struct Canvas3<'a> {
     target: &'a mut FrameContent,
     stack_len: usize,
@@ -71,12 +74,12 @@ impl<'a> Canvas2<'a> {
         }
     }
 
-    fn push(&mut self, instr: DrawInstr) {
-        self.target.instrs.push((self.stack_len, instr));
+    fn push(&mut self, item: FrameItem) {
+        self.target.0.push((self.stack_len, item));
     }
 
     pub fn modify<I: Into<Modifier2>>(mut self, modifier: I) -> Self {
-        self.push(DrawInstr::PushModifier2(modifier.into()));
+        self.push(FrameItem::PushModifier2(modifier.into()));
         self.stack_len += 1;
         self
     }
@@ -115,14 +118,14 @@ impl<'a> Canvas2<'a> {
 
     // TODO draw helpers
     pub fn draw<I: Into<DrawObj2>>(mut self, obj: I) -> Self {
-        self.push(DrawInstr::Draw2(obj.into()));
+        self.push(FrameItem::Draw2(obj.into()));
         self
     }
 
 
     // TODO 3d helpers
     pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a> {
-        self.push(DrawInstr::Begin3d(view_proj.into()));
+        self.push(FrameItem::Begin3d(view_proj.into()));
         Canvas3 {
             target: self.target,
             stack_len: self.stack_len + 1,
@@ -138,12 +141,12 @@ impl<'a> Canvas3<'a> {
         }
     }
 
-    fn push(&mut self, instr: DrawInstr) {
-        self.target.instrs.push((self.stack_len, instr));
+    fn push(&mut self, item: FrameItem) {
+        self.target.0.push((self.stack_len, item));
     }
 
     pub fn modify<I: Into<Modifier3>>(mut self, modifier: I) -> Self {
-        self.push(DrawInstr::PushModifier3(modifier.into()));
+        self.push(FrameItem::PushModifier3(modifier.into()));
         self.stack_len += 1;
         self
     }
@@ -190,12 +193,12 @@ impl<'a> Canvas3<'a> {
 
     // TODO draw helpers
     pub fn draw<I: Into<DrawObj3>>(mut self, obj: I) -> Self {
-        self.push(DrawInstr::Draw3(obj.into()));
+        self.push(FrameItem::Draw3(obj.into()));
         self
     }
 }
 
-
+/*
 // ==== draw 3d normalization
 
 
@@ -257,7 +260,7 @@ impl<I> Draw3dNormalizer<I> {
 
 impl<'a, I> Iterator for Draw3dNormalizer<I>
 where
-    I: Iterator<Item=(usize, &'a DrawInstr)>,
+    I: Iterator<Item=(usize, &'a FrameItem)>,
 {
     type Item = (usize, DrawInstr3dNorm<DrawObj3dNorm>);
 
@@ -265,23 +268,23 @@ where
         self.inner
             .next()
             .map(|(stack_len, instr)| (stack_len, match instr {
-                &DrawInstr::PushModifier2(m) => DrawInstr3dNorm::PushModifier {
+                &FrameItem::PushModifier2(m) => DrawInstr3dNorm::PushModifier {
                     modifier: m.to_3d(),
                     is_begin_3d: false,
                 },
-                &DrawInstr::Draw2(ref o) => DrawInstr3dNorm::Draw(o.into()),
-                &DrawInstr::Begin3d(vp) => {
+                &FrameItem::Draw2(ref o) => DrawInstr3dNorm::Draw(o.into()),
+                &FrameItem::Begin3d(vp) => {
                     // TODO additional coordinate system conversion matrices?
                     DrawInstr3dNorm::PushModifier {
                         modifier: Transform3(vp.0).into(),
                         is_begin_3d: true,
                     }
                 },
-                &DrawInstr::PushModifier3(m) => DrawInstr3dNorm::PushModifier {
+                &FrameItem::PushModifier3(m) => DrawInstr3dNorm::PushModifier {
                     modifier: m,
                     is_begin_3d: false,
                 },
-                &DrawInstr::Draw3(ref o) => DrawInstr3dNorm::Draw(o.into()),
+                &FrameItem::Draw3(ref o) => DrawInstr3dNorm::Draw(o.into()),
             }))
     }
 }
@@ -289,180 +292,4 @@ where
 // ==== draw impl compilation 
 
 
-pub enum DrawImplInstr<O> {
-    /// Draw a draw object. Always test against clip buffers.
-    Draw {
-        /// The draw object to draw.
-        obj: O,
-        /// Matrix with which to affine-transform the object.
-        transform: Mat4<f32>,
-        /// Color by which to multiply the object.
-        color: Rgba<u8>,
-        /// Whether to test against and write to the depth buffer.
-        depth: bool,
-    },
-    /// Clear the clip min and clip max buffers.
-    ClearClip,
-    /// Set each element in the clip min buffer to the max of itself and
-    /// -(ax+by+d)/c, wherein the contained vector is considered <a,b,c,d>
-    /// and the coordinates of the buffer element are considered <x,y>.
-    ///
-    /// c may equal 0, in which case, produce positive/negative infinity as
-    /// appropriate.
-    MaxClipMin(Vec4<f32>),
-    /// Like `MaxClipMin`, except set each element in the clip _max_ buffer to
-    /// the _min_ of itself and the computed value.
-    MinClipMax(Vec4<f32>),
-    /// Clear the depth buffer to 1.
-    ClearDepth,
-}
-
-pub struct DrawImplCompiler<I, O> {
-    inner: I,
-    trying_to_draw: Option<O>,
-    stack: Vec<StackEntry>,
-    cumul_transform_stack: Vec<Transform3>,
-    cumul_color_stack: Vec<Rgba<f32>>,
-    clip_stack: Vec<Clip3>,
-    currently_3d: bool,
-    clip_valid_up_to: Option<usize>,
-    depth_valid: bool,
-}
-
-struct StackEntry {
-    kind: ModifierKind,
-    is_begin_3d: bool,
-}
-
-enum ModifierKind {
-    Transform,
-    Color,
-    Clip,
-}
-
-impl<I, O> DrawImplCompiler<I, O> {
-    pub fn new(inner: I) -> Self {
-        // TODO coordinate system conversion?
-        let base_transform = Transform3::identity();
-        let base_color = Rgba::white();
-
-        DrawImplCompiler {
-            inner,
-            trying_to_draw: None,
-            stack: Vec::new(),
-            cumul_transform_stack: vec![base_transform],
-            cumul_color_stack: vec![base_color],
-            clip_stack: Vec::new(),
-            currently_3d: false,
-            clip_valid_up_to: None,
-            depth_valid: false,
-        }
-    }
-
-    pub fn transform(&self) -> Transform3 {
-        *self.cumul_transform_stack.last().unwrap()
-    }
-
-    pub fn color(&self) -> Rgba<f32> {
-        *self.cumul_color_stack.last().unwrap()
-    }
-}
-
-impl<I, O> Iterator for DrawImplCompiler<I, O>
-where
-    I: Iterator<Item=(usize, DrawInstr3dNorm<O>)>,
-{
-    type Item = DrawImplInstr<O>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(loop {
-            if self.trying_to_draw.is_some() {
-                break if self.clip_valid_up_to.is_none() {
-                    self.clip_valid_up_to = Some(0);
-                    DrawImplInstr::ClearClip
-                } else if self.clip_valid_up_to.unwrap() < self.clip_stack.len() {
-                    let clip = self.clip_stack[self.clip_valid_up_to.unwrap()];
-                    *self.clip_valid_up_to.as_mut().unwrap() += 1;
-                    if clip.0.z > 0.0 {
-                        DrawImplInstr::MaxClipMin(clip.0)
-                    } else {
-                        DrawImplInstr::MinClipMax(clip.0)
-                    }
-                } else if self.currently_3d && !self.depth_valid {
-                    self.depth_valid = true;
-                    DrawImplInstr::ClearDepth
-                } else {
-                    let obj = self.trying_to_draw.take().unwrap();
-                    let color = self.color()
-                        .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
-                    DrawImplInstr::Draw {
-                        obj,
-                        transform: self.transform().0,
-                        color,
-                        depth: self.currently_3d,
-                    }
-                }
-            } else {
-                let (stack_len, instr) = self.inner.next()?;
-
-                while self.stack.len() > stack_len {
-                    let entry = self.stack.pop().unwrap();
-                    match entry.kind {
-                        ModifierKind::Transform => {
-                            self.cumul_transform_stack.pop().unwrap();
-                        }
-                        ModifierKind::Color => {
-                            self.cumul_color_stack.pop().unwrap();
-                        }
-                        ModifierKind::Clip => {
-                            self.clip_stack.pop().unwrap();
-                            if let Some(i) = self.clip_valid_up_to {
-                                if i > self.clip_stack.len() {
-                                    self.clip_valid_up_to = None;
-                                }
-                            }
-                        }
-                    }
-                    if entry.is_begin_3d {
-                        debug_assert!(self.currently_3d);
-                        self.currently_3d = false;
-                        self.depth_valid = false;
-                    }
-                }
-
-                match instr {
-                    DrawInstr3dNorm::PushModifier {
-                        modifier,
-                        is_begin_3d,
-                    } => {
-                        let kind = match modifier {
-                            Modifier3::Transform(t) => {
-                                self.cumul_transform_stack.push(t.then(&self.transform()));
-                                ModifierKind::Transform
-                            }
-                            Modifier3::Color(c) => {
-                                self.cumul_color_stack.push(c * self.color());
-                                ModifierKind::Color
-                            }
-                            Modifier3::Clip(c) => {
-                                self.clip_stack.push(c);
-                                ModifierKind::Clip
-                            }
-                        };
-                        self.stack.push(StackEntry {
-                            kind,
-                            is_begin_3d,
-                        });
-                        if is_begin_3d {
-                            debug_assert!(!self.currently_3d);
-                            self.currently_3d = true;
-                        }
-                    }
-                    DrawInstr3dNorm::Draw(obj) => {
-                        self.trying_to_draw = Some(obj);
-                    }
-                }
-            }
-        })
-    }
-}
+*/
