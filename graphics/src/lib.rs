@@ -58,6 +58,9 @@ mod pipelines;
 mod std140;
 mod shader;
 mod vertex;
+pub mod modifier;
+pub mod view_proj;
+mod draw_program;
 
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
@@ -90,8 +93,16 @@ struct UniformBufferState {
     uniform_buffer_len: usize,
 
     //canvas2d_uniform_bind_group: BindGroup,
-    image_uniform_bind_group: BindGroup,
+    //image_uniform_bind_group: BindGroup,
 }
+
+pub use crate::draw_program::{
+    DrawProgram,
+    Canvas2,
+    Canvas3,
+    DrawObj2,
+    DrawObj3,
+};
 
 /*
 pub use crate::pipelines::image::GpuImage;
@@ -114,19 +125,19 @@ fn create_depth_texture_like(
     format: TextureFormat,
 ) -> Texture {
     device
-            .create_texture(&TextureDescriptor {
-                label: Some(label),
-                size: Extent3d {
-                    width: size.width,
-                    height: size.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-            })
+        .create_texture(&TextureDescriptor {
+            label: Some(label),
+            size: Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+        })
 }
 
 fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {

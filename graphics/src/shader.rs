@@ -1,4 +1,10 @@
 //! Loading shaders.
+//!
+//! Shaders are stored in `src/shaders`. With the `shaderc` feature enabled,
+//! this will link to shaderc, and load and compile the glsl files from the
+//! source tree at run time. Without the `shaderc` feature enabled, this
+//! expected `.spv` files to be pre-compiled, and will bake them into the
+//! compiled binary.
 
 pub use mod_impl::*;
 
