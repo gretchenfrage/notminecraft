@@ -2,6 +2,10 @@
 use crate::{
     pipelines::{
         clear::ClearPipeline,
+        clip::{
+            ClipPipeline,
+            PreppedClipEdit,
+        },
         /*
         solid::{
             SolidPipeline,
@@ -21,6 +25,7 @@ use crate::{
     std140::{
         Std140,
         pad,
+        std140_struct,
     },
     frame_content::FrameContent,
     render_instrs::{
@@ -28,12 +33,6 @@ use crate::{
         RenderInstr,
         DrawObjNorm,
     },
-    /*
-    transform2d::{
-        Canvas2dTransform,
-        Canvas2dUniformData,
-    },
-    */
 };
 use std::{
     path::Path,
@@ -72,7 +71,6 @@ mod render_instrs;
 
 const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
-const CLIP_FORMAT: TextureFormat = TextureFormat::R32Float;
 
 
 /// Top-level resource for drawing frames onto a window.
@@ -81,12 +79,11 @@ pub struct Renderer {
     device: Device,
     queue: Queue,
     depth_texture: Texture,
-    clip_min_texture: Texture,
-    clip_max_texture: Texture,
     config: SurfaceConfiguration,
     uniform_buffer_state: Option<UniformBufferState>,
-    //canvas2d_uniform_bind_group_layout: BindGroupLayout,
+    modifier_uniform_bind_group_layout: BindGroupLayout,
     clear_pipeline: ClearPipeline,
+    clip_pipeline: ClipPipeline,
     //solid_pipeline: SolidPipeline,
     //image_pipeline: ImagePipeline,    
     //text_pipeline: TextPipeline,
@@ -95,11 +92,23 @@ pub struct Renderer {
     _window: Arc<Window>,
 }
 
+#[derive(Debug, Copy, Clone)]
+struct ModifierUniformData {
+    transform: Mat4<f32>,
+    color: Rgba<f32>,
+}
+
+std140_struct!(ModifierUniformData {
+    transform: Mat4<f32>,
+    color: Rgba<f32>,
+});
+
 struct UniformBufferState {
     uniform_buffer: Buffer,
     uniform_buffer_len: usize,
 
-    //canvas2d_uniform_bind_group: BindGroup,
+    modifier_uniform_bind_group: BindGroup,
+    clip_edit_uniform_bind_group: BindGroup,
     //image_uniform_bind_group: BindGroup,
 }
 
@@ -139,18 +148,6 @@ fn create_depth_texture_like(
         })
 }
 
-fn create_depth_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
-    create_depth_texture_like(device, size, "depth texture", DEPTH_FORMAT)
-}
-
-fn create_clip_min_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
-    create_depth_texture_like(device, size, "clip min texture", CLIP_FORMAT)
-}
-
-fn create_clip_max_texture(device: &Device, size: PhysicalSize<u32>) -> Texture {
-    create_depth_texture_like(device, size, "clip min texture", CLIP_FORMAT)
-}
-
 impl Renderer {
     /// Create a new renderer on a given window.
     pub async fn new(window: Arc<Window>) -> Result<Self> {
@@ -186,12 +183,12 @@ impl Renderer {
                 None,
             )
             .await?;
-        /*
-        // create the layout for the standard bind group all canvas2d shaders
-        // use for canvas2d transformations
-        let canvas2d_uniform_bind_group_layout = device
+        
+        // create the layout for the standard uniform bind group all object
+        // drawing pipelines use for (some) modifiers
+        let modifier_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("canvas2d uniform bind group layout"),
+                label: Some("modifier uniform bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
@@ -199,24 +196,32 @@ impl Renderer {
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: true,
-                            min_binding_size: Some((Canvas2dUniformData::SIZE as u64).try_into().unwrap()),
+                            min_binding_size: Some(
+                                // TODO factor out
+                                (ModifierUniformData::SIZE as u64).try_into().unwrap()
+                            ),
                         },
                         count: None,
                     },
                 ],
             });
-        */
 
         // create the depth texture
-        let depth_texture = create_depth_texture(&device, size);
-
-        // create the clip min/max textures
-        let clip_min_texture = create_clip_min_texture(&device, size);
-        let clip_max_texture = create_clip_max_texture(&device, size);
+        let depth_texture = create_depth_texture_like(
+            &device,
+            size,
+            "depth texture",
+            DEPTH_FORMAT,
+        );
 
         // create the clear pipeline
         trace!("creating clear pipeline");
         let clear_pipeline = ClearPipeline::new(&device).await?;
+
+        // create the clip pipeline
+        trace!("creating clip pipeline");
+        let clip_pipeline = ClipPipeline::new(&device, size).await?;
+
         /*
         // create the solid pipeline
         trace!("creating solid pipeline");
@@ -257,12 +262,11 @@ impl Renderer {
             device,
             queue,
             depth_texture,
-            clip_min_texture,
-            clip_max_texture,
             config,
             uniform_buffer_state: None,
-            //canvas2d_uniform_bind_group_layout,
+            modifier_uniform_bind_group_layout,
             clear_pipeline,
+            clip_pipeline,
             //solid_pipeline,
             //image_pipeline,
             //text_pipeline,
@@ -282,12 +286,24 @@ impl Renderer {
 
     /// Resize the surface, in reponse to a change in window size.
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        // resize surface
+        trace!("resizing surface");
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
-        self.depth_texture = create_depth_texture(&self.device, size);
-        self.clip_min_texture = create_clip_min_texture(&self.device, size);
-        self.clip_max_texture = create_clip_max_texture(&self.device, size);
+
+        // resize depth texture
+        trace!("resizing depth texture");
+        self.depth_texture = create_depth_texture_like(
+            &self.device,
+            size,
+            "depth texture",
+            DEPTH_FORMAT,
+        );// TODO factor out
+
+        // resize clip pipeline
+        trace!("resizing clip pipeline");
+        self.clip_pipeline.resize(&self.device, size);
     }
     
     /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
@@ -320,9 +336,23 @@ impl Renderer {
 
         // compile and pre-render
         trace!("compiling render instructions and pre-rendering");
+        #[derive(Debug)]
         enum PreppedRenderInstr {
+            Draw {
+                obj: PreppedRenderObj,
+                mud_idx: usize,
+                depth: bool,
+            },
+            ClearClip,
+            EditClip(PreppedClipEdit),
+        }
+
+        #[derive(Debug)]
+        enum PreppedRenderObj {
 
         }
+
+        let mut uniform_vec = Vec::new();
 
         let instrs = frame_render_compiler(&content)
             .map(|instr| match instr {
@@ -331,28 +361,41 @@ impl Renderer {
                     transform,
                     color,
                     depth,
-                } => unimplemented!(),
-                RenderInstr::ClearClip => unimplemented!(),
-                RenderInstr::MaxClipMin(clip) => unimplemented!(),
-                RenderInstr::MinClipMax(clip) => unimplemented!(),
+                } => {
+                    let mud = ModifierUniformData {
+                        transform,
+                        color: color.map(|n| n as f32 * 255.0),
+                    };
+                    let mud_idx = mud.pad_write(&mut uniform_vec);
+                    let obj = match obj {};
+                    PreppedRenderInstr::Draw {
+                        obj,
+                        mud_idx,
+                        depth,
+                    }
+                },
+                RenderInstr::ClearClip => PreppedRenderInstr::ClearClip,
+                RenderInstr::EditClip(clip_edit) => {
+                    let prepped_clip_edit = self.clip_pipeline
+                        .pre_render(clip_edit, &mut uniform_vec);
+                    PreppedRenderInstr::EditClip(prepped_clip_edit)
+                }
+                /*
+                RenderInstr::MaxClipMin(clip) => {
+                    PreppedRenderInstr::MaxClipMin(ClipUniformData {
+                        clip,
+                    }.pad_write(&mut uniform_vec))
+                }
+                // TODO: collapse this case and above together via bool?
+                RenderInstr::MinClipMax(clip) => {
+                    PreppedRenderInstr::MinClipMax(ClipUniformData {
+                        clip,
+                    }.pad_write(&mut uniform_vec))
+                },*/
                 RenderInstr::ClearDepth => unimplemented!(),
             })
             .collect::<Vec<PreppedRenderInstr>>();
 
-
-        /*
-        enum DrawObjPrepped {}
-
-        let instrs = content.instrs
-            .iter()
-            .map(|&(stack_len, ref instr)| (stack_len, instr));
-        let instrs = Draw3dNormalizer::new(instrs);
-        let instrs = instrs
-            .map(|(stack_len, instr)| (
-                stack_len,
-                instr.map_obj(|obj| match obj {})
-            ))
-            .collect::<Vec<(usize, DrawInstr3dNorm<DrawObjPrepped>)>>();*/
         /*
         // accumulate draw data from the callback
         trace!("accumulating draw data");
@@ -366,62 +409,202 @@ impl Renderer {
         // text pre-render
         self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_target);
 
+        */
+        // TODO separate into function or something
         // write uniform data to uniform buffer
         trace!("writing uniform data");
-        if !canvas_target.uniform_data_buf.is_empty() {
+        if !uniform_vec.is_empty() {
             let dst = self
                 .uniform_buffer_state
                 .as_ref()
-                .filter(|state| state.uniform_buffer_len >= canvas_target.uniform_data_buf.len());
+                .filter(|state| state.uniform_buffer_len >= uniform_vec.len());
             if let Some(dst) = dst {
                 // buffer already exists and is big enough to hold data
                 trace!("re-using uniform buffer");
-                self.queue.write_buffer(&dst.uniform_buffer, 0, &canvas_target.uniform_data_buf);
+                self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_vec);
             } else {
                 // buffer doesn't exist or isn't big enough
                 trace!("creating new uniform buffer");
                 let uniform_buffer = self.device
                     .create_buffer_init(&BufferInitDescriptor {
                         label: Some("uniform buffer"),
-                        contents: &canvas_target.uniform_data_buf,
+                        contents: &uniform_vec,
                         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
                     });
-                let canvas2d_uniform_bind_group = self.device
+                let modifier_uniform_bind_group = self.device
                     .create_bind_group(&BindGroupDescriptor {
-                        label: Some("solid uniform bind group"),
-                        layout: &self.canvas2d_uniform_bind_group_layout,
+                        // TODO factor out
+                        label: Some("modifier uniform bind group"),
+                        layout: &self.modifier_uniform_bind_group_layout,
                         entries: &[
                             BindGroupEntry {
                                 binding: 0,
                                 resource: BindingResource::Buffer(BufferBinding {
                                     buffer: &uniform_buffer,
                                     offset: 0,
-                                    size: Some((Canvas2dUniformData::SIZE as u64).try_into().unwrap()),
+                                    size: Some(
+                                        (ModifierUniformData::SIZE as u64).try_into().unwrap()
+                                    ),
                                 }),
                             },
                         ],
                     });
+                /*
+                let clip_edit_uniform_bind_group = self.device
+                    .create_bind_group(&BindGroupDescriptor {
+                        label: Some("clip uniform bind group"),
+                        layout: &self.clip_edit_uniform_bind_group_layout,
+                        entries: &[
+                            BindGroupEntry {
+                                binding: 0,
+                                resource: BindingResource::Buffer(BufferBinding {
+                                    buffer: &uniform_buffer,
+                                    offset: 0,
+                                    size: Some(
+                                        (ModifierUniformData::SIZE as u64).try_into().unwrap(),
+                                    ),
+                                }),
+                            },
+                        ],
+                    });*/
+                let clip_edit_uniform_bind_group = self.clip_pipeline
+                    .create_clip_edit_uniform_bind_group(
+                        &self.device,
+                        &uniform_buffer,
+                    );
+                /*
                 let image_uniform_bind_group = self.image_pipeline
                     .create_bind_group(
                         &self.device,
                         &uniform_buffer,
                     );
+                */
                 self.uniform_buffer_state = Some(UniformBufferState {
                     uniform_buffer,
-                    uniform_buffer_len: canvas_target.uniform_data_buf.len(),
-                    canvas2d_uniform_bind_group,
-                    image_uniform_bind_group,
+                    uniform_buffer_len: uniform_vec.len(),
+                    modifier_uniform_bind_group,
+                    clip_edit_uniform_bind_group,
+                    //image_uniform_bind_group,
                 });
             }
         }
 
-        */
-        // begin encoder and pass
-        trace!("creating encoder and pass");
+        // begin encoder
+        trace!("creating encoder");
         let mut encoder = self.device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: None,
             });
+
+        // create views
+        // TODO: just cache these or?
+        /*
+        let clip_min_texture = self
+            .clip_min_texture
+            .create_view(&TextureViewDescriptor::default());
+        let clip_max_texture = self
+            .clip_max_texture
+            .create_view(&TextureViewDescriptor::default());
+        */
+        let depth_texture = self
+            .depth_texture
+            .create_view(&TextureViewDescriptor::default());
+
+        fn clear_texture( // TODO: move into clear pipeline?
+            encoder: &mut CommandEncoder,
+            clear_pipeline: &ClearPipeline,
+            view: &TextureView,
+            color: Color,
+        ) {
+            let mut pass = encoder // TODO factor this out independently?
+                .begin_render_pass(&RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[
+                        RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: Operations {
+                                load: LoadOp::Clear(color),
+                                store: true,
+                            }
+                        }
+                    ],
+                    depth_stencil_attachment: None,
+                });
+            clear_pipeline.clear_screen(&mut pass);
+            drop(pass);
+        }
+
+        // clear the color buffer
+        trace!("clearing color buffer");
+        clear_texture(
+            &mut encoder,
+            &self.clear_pipeline,
+            &color_texture,
+            Color::WHITE,
+        );
+
+        // execute pre-rendered render instructions
+        for instr in instrs {
+            match instr {
+                PreppedRenderInstr::Draw {
+                    obj,
+                    mud_idx,
+                    depth,
+                } => {
+                    match obj {}
+                }
+                PreppedRenderInstr::ClearClip => {
+                    clear_texture(
+                        &mut encoder,
+                        &self.clear_pipeline,
+                        &self.clip_pipeline.clip_min_texture.view,
+                        Color {
+                            r: f64::NEG_INFINITY,
+                            g: f64::NAN,
+                            b: f64::NAN,
+                            a: f64::NAN,
+                        },
+                    );
+                    clear_texture(
+                        &mut encoder,
+                        &self.clear_pipeline,
+                        &self.clip_pipeline.clip_max_texture.view,
+                        Color {
+                            r: f64::INFINITY,
+                            g: f64::NAN,
+                            b: f64::NAN,
+                            a: f64::NAN,
+                        },
+                    );
+                }
+                PreppedRenderInstr::EditClip(clip_edit) => {
+                    self.clip_pipeline.render(
+                        clip_edit,
+                        &mut encoder,
+                        &self.uniform_buffer_state.as_ref().unwrap().clip_edit_uniform_bind_group
+                    );
+                }
+                /*
+                PreppedRenderInstr::MinClipMax => {
+                    let mut pass = encoder
+                        .begin_render_pass(&RenderPassDescriptor {
+                            label: None,
+                            color_attachments: &[],
+                            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                                view: clip_max,
+                                depth_ops: Some(Operations {
+                                    load: LoadOps::Load,
+                                    store: true,
+                                }),
+                                stencil_ops: None,
+                            }),
+                        });
+                    
+                }*/
+            }
+        }
+        /*
         {
             let mut pass = encoder
                 .begin_render_pass(&RenderPassDescriptor {
@@ -478,7 +661,9 @@ impl Renderer {
 
             // end scope to drop
         }
+        */
         // submit, present, return
+        trace!("finishing frame");
         self.queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())

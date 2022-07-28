@@ -114,6 +114,7 @@ pub enum RenderInstr {
     },
     /// Clear the clip min and clip max buffers.
     ClearClip,
+    /*
     /// Set each element in the clip min buffer to the max of itself and
     /// -(ax+by+d)/c, wherein the contained vector is considered <a,b,c,d>
     /// and the coordinates of the buffer element are considered <x,y>.
@@ -124,8 +125,36 @@ pub enum RenderInstr {
     /// Like `MaxClipMin`, except set each element in the clip _max_ buffer to
     /// the _min_ of itself and the computed value.
     MinClipMax(Vec4<f32>),
+    */
+    /*
+    EditClip {
+
+        affine: Vec3<f32>,
+        max_clip_min: bool,
+    }*/
+    EditClip(ClipEdit),
     /// Clear the depth buffer to 1.
     ClearDepth,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ClipEdit {
+    pub max_clip_min: bool,
+    pub affine: Vec3<f32>,
+}
+
+impl From<Clip3> for ClipEdit {
+    fn from(clip: Clip3) -> Self {
+        let [a, b, c, d] = clip.0.into_array();
+        let max_clip_min = c > 0.0;
+        let affine = Vec3 {
+            x: -a / c,
+            y: -b / c,
+            z: -d / c,
+        };
+        // TODO: double check later that infinities work correctly
+        ClipEdit { max_clip_min, affine }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -197,11 +226,7 @@ where
                 } else if self.clip_valid_up_to.unwrap() < self.clip_stack.len() {
                     let clip = self.clip_stack[self.clip_valid_up_to.unwrap()];
                     *self.clip_valid_up_to.as_mut().unwrap() += 1;
-                    if clip.0.z > 0.0 {
-                        RenderInstr::MaxClipMin(clip.0)
-                    } else {
-                        RenderInstr::MinClipMax(clip.0)
-                    }
+                    RenderInstr::EditClip(ClipEdit::from(clip))
                 } else if self.currently_3d && !self.depth_valid {
                     self.depth_valid = true;
                     RenderInstr::ClearDepth
