@@ -297,7 +297,7 @@ impl Clip2 {
 
     // TODO do we want to expose this API?
     pub fn to_3d(&self) -> Clip3 {
-        Clip3([self.0.x, self.0.y, /* TODO extremely temporary pseudofix 0.0*/ 1.0, self.0.z].into())
+        Clip3([self.0.x, self.0.y, /* TODO extremely temporary pseudofix 0.0*/ 0.00, self.0.z].into())
     }
 }
 

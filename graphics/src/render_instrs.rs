@@ -148,7 +148,7 @@ pub struct ClipEdit {
 impl From<Clip3> for ClipEdit {
     fn from(clip: Clip3) -> Self {
         ClipEdit {
-            max_clip_min: clip.0.z > 0.0,
+            max_clip_min: clip.0.z >= 0.0,
             clip: clip.0,
         }
         /*

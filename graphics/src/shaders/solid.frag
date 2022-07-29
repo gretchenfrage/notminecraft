@@ -29,11 +29,11 @@ void main() {
 
     float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_uv).r;
     float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_uv).r;
-    o_color = vec4(min_z, min_z, min_z, 1); // TODO TEMPORARY DEBUG VISUALIZATION
+    //o_color = vec4(min_z, min_z, min_z, 1); // TODO TEMPORARY DEBUG VISUALIZATION
     if (i_pos.z < min_z) {
-        //discard;
+        discard;
     }
     if (i_pos.z > max_z) {
-        //discard;
+        discard;
     }
 }
