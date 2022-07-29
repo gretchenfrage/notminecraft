@@ -20,18 +20,10 @@ void main() {
 
     vec2 pos;
     switch (corner) {
-    case 0:
-        pos = vec2(0, 0);
-        break;
-    case 1:
-        pos = vec2(1, 0);
-        break;
-    case 2:
-        pos = vec2(1, 1);
-        break;
-    case 3:
-        pos = vec2(0, 1);
-        break;
+    case 0: pos = vec2(0, 0); break;
+    case 1: pos = vec2(1, 0); break;
+    case 2: pos = vec2(1, 1); break;
+    case 3: pos = vec2(0, 1); break;
     }
     o_pos = (u_transform * vec4(pos, 0, 1));
 
@@ -48,11 +40,11 @@ void main() {
     //    0, -2, 0,
     //    -1, 1, 1
     //);
-    mat3 fix = mat3(
-        2, 0, -1,
-        -2, 0, 1,
-        0, 0, 1
-    );
+    //mat3 fix = mat3(
+    //    2, 0, -1,
+    //    -2, 0, 1,
+    //    0, 0, 1
+    //);
     //gl_Position = vec4((fix * vec3(o_pos.xy, 1)).xy, o_pos.z, 1);
     gl_Position = o_pos;
 }

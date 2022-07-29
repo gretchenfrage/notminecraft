@@ -68,9 +68,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 let mut frame = FrameContent::new();
                 let mut canvas = frame.canvas();
                 canvas
-                    .min_x(0.1275)
-                    .translate([0.25, 0.25])
-                    .scale([0.5, 0.5])
+                    .min_x(0.0)
+                    //.translate([0.25, 0.25])
+                    //.scale([0.5, 0.5])
+                    //.scale([-1.0, 1.0])
+                    //.translate([-0.5, -0.5])
+                    //.scale([2.0, -2.0])
                     .color([1.0, 0.0, 0.0, 1.0])
                     .draw_solid();
 

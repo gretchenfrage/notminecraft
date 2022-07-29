@@ -86,7 +86,14 @@ impl Transform2 {
 
     /// Translate by `v`.
     pub fn translate<V: Into<Vec2<f32>>>(v: V) -> Self {
-        Transform2(Mat3::translation_2d(v))
+        Transform2(dbg!(Mat3::translation_2d(dbg!(v.into()))))
+        /*// Mat3::translation_2d seems to be simply wrong
+        let v = v.into();
+        Transform2(Mat3::new(
+            1.0, 0.0, v.x,
+            0.0, 1.0, v.y,
+            0.0, 0.0, 1.0,
+        ))*/
     }
 
     /// Component-wise scale by `v`.
@@ -146,7 +153,21 @@ impl Transform2 {
 
     // TODO do we want to expose this API?
     pub fn to_3d(&self) -> Transform3 {
-        Transform3(Mat4::from(self.0))
+        let [
+            m00, m01, m02,
+            m10, m11, m12,
+            m20, m21, m22,
+        ] = self.0.into_row_array();
+        debug_assert_eq!(m20, 0.0);
+        debug_assert_eq!(m21, 0.0);
+        debug_assert_eq!(m22, 1.0);
+        Transform3(Mat4::new(
+            m00, m01, 0.0, m02,
+            m10, m11, 0.0, m12,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ))
+        //Transform3(dbg!(Mat4::from(dbg!(self.0))))
     }
 }
 
@@ -215,7 +236,9 @@ impl Transform3 {
     /// As such, this allows one to convert a "clip, then transform" sequence
     /// into a "transform, then clip" sequence such that it remains logically the same.
     pub fn apply_clip(&self, clip: &Clip3) -> Clip3 {
-        Clip3(self.0.transposed() * clip.0)
+        // TODO quite temporary really
+        *clip
+        //Clip3(dbg!(dbg!(dbg!(self.0).transposed()) * dbg!(clip.0)))
     }
 }
 
@@ -274,7 +297,7 @@ impl Clip2 {
 
     // TODO do we want to expose this API?
     pub fn to_3d(&self) -> Clip3 {
-        Clip3([self.0.x, self.0.y, 0.0, self.0.z].into())
+        Clip3([self.0.x, self.0.y, /* TODO extremely temporary pseudofix 0.0*/ 1.0, self.0.z].into())
     }
 }
 

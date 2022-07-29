@@ -4,6 +4,7 @@ use crate::{
         Modifier3,
         Transform3,
         Clip3,
+        Transform2,
     },
     frame_content::{
         FrameContent,
@@ -141,20 +142,29 @@ pub enum RenderInstr {
 #[derive(Debug, Copy, Clone)]
 pub struct ClipEdit {
     pub max_clip_min: bool,
-    pub affine: Vec3<f32>,
+    pub clip: Vec4<f32>,
 }
 
 impl From<Clip3> for ClipEdit {
     fn from(clip: Clip3) -> Self {
-        let [a, b, c, d] = clip.0.into_array();
+        ClipEdit {
+            max_clip_min: clip.0.z > 0.0,
+            clip: clip.0,
+        }
+        /*
+        // -(ax+by+d)/c == <i,j,k> dot <x,y,1>
+        // if c == 0 should be some infinity
+        // c == 0 -> <i,j,k> == <0,0,
+
+        let [a, b, c, d] = dbg!(clip.0.into_array());
         let max_clip_min = c > 0.0;
-        let affine = Vec3 {
+        let affine = dbg!(Vec3 {
             x: -a / c,
             y: -b / c,
             z: -d / c,
-        };
+        });
         // TODO: double check later that infinities work correctly
-        ClipEdit { max_clip_min, affine }
+        ClipEdit { max_clip_min, affine }*/
     }
 }
 
@@ -187,7 +197,12 @@ enum ModifierKind {
 impl<I> RenderCompiler<I> {
     pub fn new(inner: I) -> Self {
         // TODO coordinate system conversion?
-        let base_transform = Transform3::identity();
+        //let base_transform = Transform3::identity();
+        let base_transform = Transform2(Mat3::new(
+            2.0, 0.0, -1.0,
+            0.0, -2.0, 1.0,
+            0.0, 0.0, 1.0, 
+        )).to_3d();
         let base_color = Rgba::white();
 
         RenderCompiler {
@@ -285,6 +300,7 @@ where
                                 ModifierKind::Color
                             }
                             Modifier3::Clip(c) => {
+                                let c = self.transform().apply_clip(&c);
                                 self.clip_stack.push(c);
                                 ModifierKind::Clip
                             }

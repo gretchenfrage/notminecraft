@@ -22,12 +22,18 @@ void main() {
     //o_color = vec4(0.0, 1.0, 0.0, 1.0);
     // TODO order weirdness?
 
-    float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), i_pos.xy).r;
-    float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), i_pos.xy).r;
+    vec2 clip_uv = vec2(
+        i_pos.x / 2 + 0.5,
+        i_pos.y / -2 + 0.5
+    );
+
+    float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_uv).r;
+    float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_uv).r;
+    o_color = vec4(min_z, min_z, min_z, 1); // TODO TEMPORARY DEBUG VISUALIZATION
     if (i_pos.z < min_z) {
-        discard;
+        //discard;
     }
     if (i_pos.z > max_z) {
-        discard;
+        //discard;
     }
 }

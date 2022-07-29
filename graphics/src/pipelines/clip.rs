@@ -39,12 +39,12 @@ pub struct ClipTexture {
 #[derive(Debug, Copy, Clone)]
 struct ClipEditUniformData {
     sign: f32,
-    affine: Vec3<f32>,
+    clip: Vec4<f32>,
 }
 
 std140_struct!(ClipEditUniformData {
     sign: f32,
-    affine: Vec3<f32>,
+    clip: Vec4<f32>,
 });
 
 #[derive(Debug, Copy, Clone)]
@@ -159,7 +159,7 @@ impl ClipPipeline {
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: ShaderStages::VERTEX,
+                        visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: true,
@@ -181,7 +181,7 @@ impl ClipPipeline {
                 label: Some("clip edit pipeline layout"),
                 bind_group_layouts: &[
                     &clip_edit_uniform_bind_group_layout,
-                    &clip_texture_bind_group_layout,
+                    //&clip_texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -274,11 +274,17 @@ impl ClipPipeline {
             affine: edit.affine,
         };*/
         //let uniform_offset = uniform_data.pad_write(uniform_vec) as u32;
+        /*
         let uniform_offset = uniform_packer
             .pack(&ClipEditUniformData {
                 sign: if edit.max_clip_min { 1.0 } else { -1.0 },
                 affine: edit.affine,
-            });
+            });*/
+        let uniform_offset = uniform_packer
+            .pack(&dbg!(ClipEditUniformData {
+                sign: if edit.max_clip_min { 1.0 } else { -1.0 },
+                clip: edit.clip,
+            }));
         PreppedClipEdit {
             max_clip_min: edit.max_clip_min,
             uniform_offset,
@@ -312,7 +318,7 @@ impl ClipPipeline {
             });
         pass.set_pipeline(&self.clip_edit_pipeline);
         pass.set_bind_group(0, &clip_edit_uniform_bind_group, &[edit.uniform_offset]);
-        pass.set_bind_group(1, &texture.bind_group, &[]);
+        //pass.set_bind_group(1, &texture.bind_group, &[]);
         pass.draw(0..6, 0..1);
     }
 }

@@ -564,7 +564,8 @@ impl Renderer {
                             &mut encoder,
                             &self.clip_pipeline.clip_min_texture.view,
                             Color {
-                                r: f64::NEG_INFINITY,
+                                //r: f64::NEG_INFINITY, TODO super stopgap
+                                r: 0.0,
                                 g: 0.0,
                                 b: 0.0,
                                 a: 1.0,
@@ -575,7 +576,8 @@ impl Renderer {
                             &mut encoder,
                             &self.clip_pipeline.clip_max_texture.view,
                             Color {
-                                r: f64::INFINITY,
+                                //r: f64::INFINITY, TODO super stopgap
+                                r: 1.0,
                                 g: 0.0,
                                 b: 0.0,
                                 a: 1.0,
