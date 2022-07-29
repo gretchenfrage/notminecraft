@@ -285,10 +285,10 @@ impl ClipPipeline {
                 affine: edit.affine,
             });*/
         let uniform_offset = uniform_packer
-            .pack(&dbg!(ClipEditUniformData {
+            .pack(&ClipEditUniformData {
                 sign: if edit.max_clip_min { 1.0 } else { -1.0 },
                 clip: edit.clip,
-            }));
+            });
         PreppedClipEdit {
             max_clip_min: edit.max_clip_min,
             uniform_offset,

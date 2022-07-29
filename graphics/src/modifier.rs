@@ -86,7 +86,7 @@ impl Transform2 {
 
     /// Translate by `v`.
     pub fn translate<V: Into<Vec2<f32>>>(v: V) -> Self {
-        Transform2(dbg!(Mat3::translation_2d(dbg!(v.into()))))
+        Transform2(Mat3::translation_2d(v))
         /*// Mat3::translation_2d seems to be simply wrong
         let v = v.into();
         Transform2(Mat3::new(
@@ -171,7 +171,6 @@ impl Transform2 {
     }
 }
 
-
 /// A 3D affine transform modifier. Is a newtype around a matrix.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Transform3(pub Mat4<f32>);
@@ -226,7 +225,7 @@ impl Transform3 {
 
     /// Compose with another such that
     /// `b.apply(a.apply(v)) == a.compose(b).apply(v)`.
-    pub fn then(&self, other: &Self) -> Self {
+    pub fn then(&self, other: &Self) -> Self { // TODO none of these should be pass by ref
         Transform3(other.0 * self.0)
     }
 
@@ -237,9 +236,36 @@ impl Transform3 {
     /// into a "transform, then clip" sequence such that it remains logically the same.
     pub fn apply_clip(&self, clip: &Clip3) -> Clip3 {
         // TODO quite temporary really
-        *clip
+        //*clip
         //Clip3(dbg!(dbg!(dbg!(self.0).transposed()) * dbg!(clip.0)))
+
+        // c dot v    = c' dot (M * v)
+        // c^T * v    = c'^T * M * v
+        // c^T        = c'^T * M
+        // c^T * M^-1 = c'^T * M * M^-1
+        // c^T * M^-1 = c'^T
+        // (c^T * M^-1)^T = c'
+
+        // TODO expensiveness?
+        if self.0.determinant() != 0.0 {
+            Clip3(clip.0 * self.0.inverted())
+        } else {
+            // unimplemented!() // TODO implement better handling for this edge case
+            Clip3(Vec4::new(1.0, 1.0, 1.0, 1.0))
+        }
     }
+}
+
+#[test]
+fn test_foo() { // TODO
+    let a = Transform3::translate([1.0, 0.0, 0.0])
+        .then(&Transform3::scale([1.0, 0.5, 1.0]));
+    let c = Clip3::min_x(0.5);
+    let v = Vec3::new(1.0, 2.0, 0.0);
+    assert_eq!(
+        c.dot(v),
+        a.apply_clip(&c).dot(a.apply(v)),
+    );
 }
 
 
@@ -348,5 +374,10 @@ impl Clip3 {
     /// being clipped out).
     pub fn test(&self, v: Vec3<f32>) -> bool {
         self.0.dot(Vec4::from_point(v)) >= 0.0
+    }
+
+    // TODO temporary or something
+    fn dot(&self, v: Vec3<f32>) -> f32 {
+        self.0.dot(Vec4::from_point(v))
     }
 }
