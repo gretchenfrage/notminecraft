@@ -10,6 +10,7 @@ use crate::{
         std140_struct,
     },
     render_instrs::ClipEdit,
+    uniform_buffer::UniformDataPacker,
 };
 use wgpu::*;
 use vek::*;
@@ -265,13 +266,19 @@ impl ClipPipeline {
     pub(crate) fn pre_render(
         &self,
         edit: ClipEdit,
-        uniform_vec: &mut Vec<u8>,
+        uniform_packer: &mut UniformDataPacker,
+        //uniform_vec: &mut Vec<u8>,
     ) -> PreppedClipEdit {
-        let uniform_data = ClipEditUniformData {
+        /*let uniform_data = ClipEditUniformData {
             sign: if edit.max_clip_min { 1.0 } else { -1.0 },
             affine: edit.affine,
-        };
-        let uniform_offset = uniform_data.pad_write(uniform_vec) as u32;
+        };*/
+        //let uniform_offset = uniform_data.pad_write(uniform_vec) as u32;
+        let uniform_offset = uniform_packer
+            .pack(&ClipEditUniformData {
+                sign: if edit.max_clip_min { 1.0 } else { -1.0 },
+                affine: edit.affine,
+            });
         PreppedClipEdit {
             max_clip_min: edit.max_clip_min,
             uniform_offset,

@@ -1,7 +1,7 @@
 #version 450
 
 layout(set=0, binding=0) uniform u {
-    mat3 u_transform;
+    mat4 u_transform;
     vec4 u_color;
 };
 
@@ -19,6 +19,7 @@ layout(location=0) out vec4 o_color;
 
 void main() {
     o_color = u_color;
+    //o_color = vec4(0.0, 1.0, 0.0, 1.0);
     // TODO order weirdness?
 
     float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), i_pos.xy).r;

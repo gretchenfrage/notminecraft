@@ -51,6 +51,7 @@ void main() {
         -1, 1, 1
     ); // TODO move into instr compiler?
     gl_Position = vec4(fix * vec3(pos, 1), 1);
+    //gl_Position = vec4(fix * vec3(o_pos.xy, 1), o_pos.z, 1);
 
     //o_z = dot(pos, u_affine);
     o_z = dot(vec3(pos, 1), u_affine);

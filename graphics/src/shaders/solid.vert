@@ -43,10 +43,16 @@ void main() {
     // - <-1, -1> = bottom left
     // - <1, 1> = top right
     // TODO factor out
+    //mat3 fix = mat3(
+    //    2, 0, 0,
+    //    0, -2, 0,
+    //    -1, 1, 1
+    //);
     mat3 fix = mat3(
-        2, 0, 0,
-        0, -2, 0,
-        -1, 1, 1
+        2, 0, -1,
+        -2, 0, 1,
+        0, 0, 1
     );
-    gl_Position = vec4(fix * o_pos.xyz, 1);
+    //gl_Position = vec4((fix * vec3(o_pos.xy, 1)).xy, o_pos.z, 1);
+    gl_Position = o_pos;
 }

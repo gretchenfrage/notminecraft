@@ -33,6 +33,7 @@ use crate::{
         RenderInstr,
         DrawObjNorm,
     },
+    uniform_buffer::UniformBuffer,
 };
 use std::{
     path::Path,
@@ -67,6 +68,7 @@ pub mod modifier;
 pub mod view_proj;
 pub mod frame_content;
 mod render_instrs;
+mod uniform_buffer;
 
 
 //const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm; TODO why can't it be this?
@@ -81,7 +83,8 @@ pub struct Renderer {
     queue: Queue,
     depth_texture: Texture,
     config: SurfaceConfiguration,
-    uniform_buffer_state: Option<UniformBufferState>,
+    //uniform_buffer_state: Option<UniformBufferState>,
+    uniform_buffer: UniformBuffer,
     modifier_uniform_bind_group_layout: BindGroupLayout,
     //clear_pipeline: ClearPipeline,
     clear_color_pipeline: ClearPipeline,
@@ -105,7 +108,7 @@ std140_struct!(ModifierUniformData {
     transform: Mat4<f32>,
     color: Rgba<f32>,
 });
-
+/*
 struct UniformBufferState {
     uniform_buffer: Buffer,
     uniform_buffer_len: usize,
@@ -113,7 +116,7 @@ struct UniformBufferState {
     modifier_uniform_bind_group: BindGroup,
     clip_edit_uniform_bind_group: BindGroup,
     //image_uniform_bind_group: BindGroup,
-}
+}*/
 
 /*
 pub use crate::pipelines::image::GpuImage;
@@ -186,6 +189,10 @@ impl Renderer {
                 None,
             )
             .await?;
+
+        // create the uniform buffer
+        // TODO rename to uniform manager or something?
+        let uniform_buffer = UniformBuffer::new(&device);
         
         // create the layout for the standard uniform bind group all object
         // drawing pipelines use for (some) modifiers
@@ -272,7 +279,8 @@ impl Renderer {
             queue,
             depth_texture,
             config,
-            uniform_buffer_state: None,
+            //uniform_buffer_state: None,
+            uniform_buffer,
             modifier_uniform_bind_group_layout,
             //clear_pipeline,
             clear_color_pipeline,
@@ -351,7 +359,7 @@ impl Renderer {
         enum PreppedRenderInstr {
             Draw {
                 obj: PreppedRenderObj,
-                muo: usize,
+                muo: u32,
                 depth: bool,
             },
             ClearClip,
@@ -363,7 +371,8 @@ impl Renderer {
             Solid,
         }
 
-        let mut uniform_vec = Vec::new();
+        //let mut uniform_vec = Vec::new();
+        let mut uniform_packer = self.uniform_buffer.create_packer();
 
         let instrs = frame_render_compiler(&content)
             .map(|instr| match instr {
@@ -373,11 +382,16 @@ impl Renderer {
                     color,
                     depth,
                 } => {
-                    let mud = ModifierUniformData {
+                    /*let mud = ModifierUniformData {
                         transform,
                         color: color.map(|n| n as f32 * 255.0),
-                    };
-                    let muo = mud.pad_write(&mut uniform_vec);
+                    };*/
+                    let muo = uniform_packer
+                        .pack(&ModifierUniformData {
+                            transform,
+                            color: color.map(|n| n as f32 / 255.0),
+                        });
+                    //let muo = mud.pad_write(&mut uniform_vec);
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,
                     };
@@ -390,7 +404,7 @@ impl Renderer {
                 RenderInstr::ClearClip => PreppedRenderInstr::ClearClip,
                 RenderInstr::EditClip(clip_edit) => {
                     let prepped_clip_edit = self.clip_pipeline
-                        .pre_render(clip_edit, &mut uniform_vec);
+                        .pre_render(clip_edit, &mut uniform_packer);
                     PreppedRenderInstr::EditClip(prepped_clip_edit)
                 }
                 RenderInstr::ClearDepth => unimplemented!(),
@@ -414,64 +428,14 @@ impl Renderer {
         // TODO separate into function or something
         // write uniform data to uniform buffer
         trace!("writing uniform data");
-        if !uniform_vec.is_empty() {
-            let dst = self
-                .uniform_buffer_state
-                .as_ref()
-                .filter(|state| state.uniform_buffer_len >= uniform_vec.len());
-            if let Some(dst) = dst {
-                // buffer already exists and is big enough to hold data
-                trace!("re-using uniform buffer");
-                self.queue.write_buffer(&dst.uniform_buffer, 0, &uniform_vec);
-            } else {
-                // buffer doesn't exist or isn't big enough
-                trace!("creating new uniform buffer");
-                let uniform_buffer = self.device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: Some("uniform buffer"),
-                        contents: &uniform_vec,
-                        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                    });
-                let modifier_uniform_bind_group = self.device
-                    .create_bind_group(&BindGroupDescriptor {
-                        // TODO factor out
-                        label: Some("modifier uniform bind group"),
-                        layout: &self.modifier_uniform_bind_group_layout,
-                        entries: &[
-                            BindGroupEntry {
-                                binding: 0,
-                                resource: BindingResource::Buffer(BufferBinding {
-                                    buffer: &uniform_buffer,
-                                    offset: 0,
-                                    size: Some(
-                                        (ModifierUniformData::SIZE as u64).try_into().unwrap()
-                                    ),
-                                }),
-                            },
-                        ],
-                    });
-
-                let clip_edit_uniform_bind_group = self.clip_pipeline
-                    .create_clip_edit_uniform_bind_group(
-                        &self.device,
-                        &uniform_buffer,
-                    );
-                /*
-                let image_uniform_bind_group = self.image_pipeline
-                    .create_bind_group(
-                        &self.device,
-                        &uniform_buffer,
-                    );
-                */
-                self.uniform_buffer_state = Some(UniformBufferState {
-                    uniform_buffer,
-                    uniform_buffer_len: uniform_vec.len(),
-                    modifier_uniform_bind_group,
-                    clip_edit_uniform_bind_group,
-                    //image_uniform_bind_group,
-                });
-            }
-        }
+        self.uniform_buffer
+            .upload(
+                &uniform_packer,
+                &self.device,
+                &self.queue,
+                &self.modifier_uniform_bind_group_layout,
+                &self.clip_pipeline,
+            );
 
         // begin encoder
         trace!("creating encoder");
@@ -575,7 +539,8 @@ impl Renderer {
                     pass
                         .set_bind_group(
                             0,
-                            &self.uniform_buffer_state.as_ref().unwrap().modifier_uniform_bind_group,
+                            self.uniform_buffer.unwrap_modifier_uniform_bind_group(),
+                            //&self.uniform_buffer_state.as_ref().unwrap().modifier_uniform_bind_group,
                             &[muo as u32], // TODO
                         );
                     pass
@@ -644,7 +609,8 @@ impl Renderer {
                     self.clip_pipeline.render(
                         clip_edit,
                         &mut encoder,
-                        &self.uniform_buffer_state.as_ref().unwrap().clip_edit_uniform_bind_group
+                        self.uniform_buffer.unwrap_clip_edit_uniform_bind_group(),
+                        //&self.uniform_buffer_state.as_ref().unwrap().clip_edit_uniform_bind_group
                     );
                 }
                 /*

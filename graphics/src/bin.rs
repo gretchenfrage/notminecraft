@@ -67,7 +67,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 trace!("drawing frame");
                 let mut frame = FrameContent::new();
                 let mut canvas = frame.canvas();
-                canvas.draw_solid();
+                canvas
+                    .min_x(0.1275)
+                    .translate([0.25, 0.25])
+                    .scale([0.5, 0.5])
+                    .color([1.0, 0.0, 0.0, 1.0])
+                    .draw_solid();
 
                 // TODO draw frame here
                 let result = renderer.draw_frame(&frame);

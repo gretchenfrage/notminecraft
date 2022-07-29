@@ -2,7 +2,7 @@
 
 use crate::{
     SWAPCHAIN_FORMAT,
-    UniformBufferState,
+    UniformBuffer,
     shader::load_shader,
 };
 use wgpu::*;
