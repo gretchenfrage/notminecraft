@@ -28,13 +28,14 @@ enum FrameItemNorm {
 
 #[derive(Debug, Clone)]
 pub enum DrawObjNorm {
+    Solid,
     // TODO
 }
 
 impl From<&DrawObj2> for DrawObjNorm {
     fn from(obj: &DrawObj2) -> Self {
         match obj {
-            _ => todo!(),
+            &DrawObj2::Solid => DrawObjNorm::Solid,
         }
     }
 }
@@ -42,7 +43,7 @@ impl From<&DrawObj2> for DrawObjNorm {
 impl From<&DrawObj3> for DrawObjNorm {
     fn from(obj: &DrawObj3) -> Self {
         match obj {
-            _ => todo!(),
+            &DrawObj3::Solid => DrawObjNorm::Solid,
         }
     }
 }

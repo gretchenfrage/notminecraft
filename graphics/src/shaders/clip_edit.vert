@@ -2,14 +2,15 @@
 
 layout(set=0, binding=0) uniform u {
     float u_sign;
-    vec3 u_affine;
+    vec3 u_affine; // TODO: pad name
 };
 
 layout(location=0) out float o_sign;
 layout(location=1) out float o_z;
+layout(location=2) out vec2 o_pos;
 
 void main() {
-    o_sign = u_sign;
+    o_sign = u_sign; // TODO: why?
 
     int corner;
     switch (gl_VertexIndex) {
@@ -51,8 +52,12 @@ void main() {
     ); // TODO move into instr compiler?
     gl_Position = vec4(fix * vec3(pos, 1), 1);
 
-    o_z = dot(pos, u_affine);
+    //o_z = dot(pos, u_affine);
+    o_z = dot(vec3(pos, 1), u_affine);
+
     //// TODO use instr compiler to simplify into dot oroduct?
     ////-(ax+by+d)/c
     //o_z = -(u_clip.x * pos.x + u_clip.y * pos.y + u_clip.w) / u_clip.z;
+
+    o_pos = pos; // TODO bleh
 }

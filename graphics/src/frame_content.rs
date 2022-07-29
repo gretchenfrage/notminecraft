@@ -28,6 +28,7 @@ pub enum FrameItem {
 
 #[derive(Debug, Clone)]
 pub enum DrawObj2 { // TODO expose
+    Solid, // TODO bake in size and color? or just on canvas level...
     // TODO rectangle
     // TODO image
     // TODO text
@@ -35,6 +36,7 @@ pub enum DrawObj2 { // TODO expose
 
 #[derive(Debug, Clone)]
 pub enum DrawObj3 {
+    Solid,
     // TODO rectangle
     // TODO image
     // TODO text
@@ -122,6 +124,9 @@ impl<'a> Canvas2<'a> {
         self
     }
 
+    pub fn draw_solid(mut self) -> Self {
+        self.draw(DrawObj2::Solid)
+    }
 
     // TODO 3d helpers
     pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a> {
@@ -196,100 +201,8 @@ impl<'a> Canvas3<'a> {
         self.push(FrameItem::Draw3(obj.into()));
         self
     }
-}
 
-/*
-// ==== draw 3d normalization
-
-
-pub enum DrawInstr3dNorm<O> {
-    PushModifier {
-        modifier: Modifier3,
-        is_begin_3d: bool,
-    },
-    Draw(O),
-}
-
-impl<O> DrawInstr3dNorm<O> {
-    pub fn map_obj<F, O2>(self, f: F) -> DrawInstr3dNorm<O2>
-    where
-        F: FnOnce(O) -> O2,
-    {
-        match self {
-            DrawInstr3dNorm::PushModifier {
-                modifier,
-                is_begin_3d,
-            } => DrawInstr3dNorm::PushModifier {
-                modifier,
-                is_begin_3d,
-            },
-            DrawInstr3dNorm::Draw(o) => DrawInstr3dNorm::Draw(f(o)),
-        }
+    pub fn draw_solid(mut self) -> Self {
+        self.draw(DrawObj3::Solid)
     }
 }
-
-pub enum DrawObj3dNorm {
-    // TODO
-}
-
-impl From<&DrawObj2> for DrawObj3dNorm {
-    fn from(obj: &DrawObj2) -> Self {
-        match obj {
-            _ => todo!(),
-        }
-    }
-}
-
-impl From<&DrawObj3> for DrawObj3dNorm {
-    fn from(obj: &DrawObj3) -> Self {
-        match obj {
-            _ => todo!(),
-        }
-    }
-}
-
-pub struct Draw3dNormalizer<I> {
-    inner: I,
-}
-
-impl<I> Draw3dNormalizer<I> {
-    pub fn new(inner: I) -> Self {
-        Draw3dNormalizer { inner }
-    }
-}
-
-impl<'a, I> Iterator for Draw3dNormalizer<I>
-where
-    I: Iterator<Item=(usize, &'a FrameItem)>,
-{
-    type Item = (usize, DrawInstr3dNorm<DrawObj3dNorm>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(stack_len, instr)| (stack_len, match instr {
-                &FrameItem::PushModifier2(m) => DrawInstr3dNorm::PushModifier {
-                    modifier: m.to_3d(),
-                    is_begin_3d: false,
-                },
-                &FrameItem::Draw2(ref o) => DrawInstr3dNorm::Draw(o.into()),
-                &FrameItem::Begin3d(vp) => {
-                    // TODO additional coordinate system conversion matrices?
-                    DrawInstr3dNorm::PushModifier {
-                        modifier: Transform3(vp.0).into(),
-                        is_begin_3d: true,
-                    }
-                },
-                &FrameItem::PushModifier3(m) => DrawInstr3dNorm::PushModifier {
-                    modifier: m,
-                    is_begin_3d: false,
-                },
-                &FrameItem::Draw3(ref o) => DrawInstr3dNorm::Draw(o.into()),
-            }))
-    }
-}
-
-// ==== draw impl compilation 
-
-
-*/

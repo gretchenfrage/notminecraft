@@ -1,4 +1,5 @@
 //! Pipeline for applying clips.
+// TODO name consistency?
 
 use crate::{
     SWAPCHAIN_FORMAT,
@@ -16,12 +17,12 @@ use anyhow::Result;
 use winit_main::reexports::dpi::PhysicalSize;
 
 
-const CLIP_FORMAT: TextureFormat = TextureFormat::R32Float;
+pub const CLIP_FORMAT: TextureFormat = TextureFormat::R32Float;
 
 #[derive(Debug)]
 pub struct ClipPipeline {
     clip_sampler: Sampler,
-    clip_texture_bind_group_layout: BindGroupLayout,
+    pub clip_texture_bind_group_layout: BindGroupLayout,
     pub clip_min_texture: ClipTexture,
     pub clip_max_texture: ClipTexture,
     clip_edit_uniform_bind_group_layout: BindGroupLayout,

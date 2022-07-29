@@ -7,6 +7,10 @@ edition = "2021"
 name = "graphics"
 path  = "src/lib.rs"
 
+[[bin]]
+name = "graphics"
+path = "src/bin.rs"
+
 [dependencies]
 tracing = "0.1"
 vek = "0.15"
