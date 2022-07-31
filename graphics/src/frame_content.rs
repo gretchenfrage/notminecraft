@@ -14,6 +14,12 @@ use std::collections::VecDeque;
 use vek::*;
 
 
+pub use crate::pipelines::image::{
+    GpuImage,
+    DrawImage,
+};
+
+
 #[derive(Debug, Clone, Default)]
 pub struct FrameContent(pub Vec<(usize, FrameItem)>);
 
@@ -29,7 +35,7 @@ pub enum FrameItem {
 #[derive(Debug, Clone)]
 pub enum DrawObj2 { // TODO expose
     Solid, // TODO bake in size and color? or just on canvas level...
-    // TODO rectangle
+    Image(DrawImage),
     // TODO image
     // TODO text
 }
@@ -37,8 +43,7 @@ pub enum DrawObj2 { // TODO expose
 #[derive(Debug, Clone)]
 pub enum DrawObj3 {
     Solid,
-    // TODO rectangle
-    // TODO image
+    Image(DrawImage),
     // TODO text
     // TODO mesh
 }
@@ -128,6 +133,20 @@ impl<'a> Canvas2<'a> {
         self.draw(DrawObj2::Solid)
     }
 
+    pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(
+        mut self,
+        image: &GpuImage,
+        tex_start: V1,
+        tex_extent: V2,
+    ) -> Self
+    {
+        self.draw(DrawObj2::Image(DrawImage {
+            image: image.clone(),
+            tex_start: tex_start.into(),
+            tex_extent: tex_extent.into(),
+        }))
+    }
+
     // TODO 3d helpers
     pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a> {
         self.push(FrameItem::Begin3d(view_proj.into()));
@@ -204,5 +223,19 @@ impl<'a> Canvas3<'a> {
 
     pub fn draw_solid(mut self) -> Self {
         self.draw(DrawObj3::Solid)
+    }
+
+    pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(
+        mut self,
+        image: &GpuImage,
+        tex_start: V1,
+        tex_extent: V2,
+    ) -> Self
+    {
+        self.draw(DrawObj3::Image(DrawImage {
+            image: image.clone(),
+            tex_start: tex_start.into(),
+            tex_extent: tex_extent.into(),
+        }))
     }
 }

@@ -41,6 +41,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let window = Arc::new(window);
     let mut renderer = Renderer::new(Arc::clone(&window)).await?;
 
+    let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
+
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
 
@@ -68,15 +70,16 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 let mut frame = FrameContent::new();
                 let mut canvas = frame.canvas();
                 canvas
-                    .min_x(0.5)
-                    .max_y(0.5)
-                    .translate([0.25, 0.25])
-                    .scale([0.5, 0.5])
+                    //.min_x(0.5)
+                    //.max_y(0.5)
+                    //.translate([0.25, 0.25])
+                    //.scale([0.5, 0.5])
                     //.scale([-1.0, 1.0])
                     //.translate([-0.5, -0.5])
                     //.scale([2.0, -2.0])
-                    .color([1.0, 0.0, 0.0, 1.0])
-                    .draw_solid();
+                    //.color([1.0, 0.0, 0.0, 1.0])
+                    //.draw_solid()
+                    .draw_image(&image, [0.0, 0.0], [1.0, 1.0]);
 
                 // TODO draw frame here
                 let result = renderer.draw_frame(&frame);

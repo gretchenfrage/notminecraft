@@ -4,7 +4,10 @@ use crate::{
         Std140,
         pad,
     },
-    pipelines::clip::ClipPipeline,
+    pipelines::{
+        clip::ClipPipeline,
+        image::ImagePipeline,
+    },
     ModifierUniformData,
 };
 use wgpu::{
@@ -30,6 +33,7 @@ struct UniformBufferState {
 
     modifier_uniform_bind_group: BindGroup,
     clip_edit_uniform_bind_group: BindGroup,
+    image_uniform_bind_group: BindGroup,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +68,7 @@ impl UniformBuffer {
         queue: &Queue,
         modifier_uniform_bind_group_layout: &BindGroupLayout, // TODO move in?;
         clip_pipeline: &ClipPipeline,
+        image_pipeline: &ImagePipeline,
     ) {
         if data.data.is_empty() {
             return;
@@ -114,19 +119,19 @@ impl UniformBuffer {
                     device,
                     &uniform_buffer,
                 );
-            /*
-            let image_uniform_bind_group = self.image_pipeline
-                .create_bind_group(
-                    &self.device,
+            
+            let image_uniform_bind_group = image_pipeline
+                .create_image_uniform_bind_group(
+                    device,
                     &uniform_buffer,
                 );
-            */
+            
             self.state = Some(UniformBufferState {
                 uniform_buffer,
                 uniform_buffer_len: data.data.len(),
                 modifier_uniform_bind_group,
                 clip_edit_uniform_bind_group,
-                //image_uniform_bind_group,
+                image_uniform_bind_group,
             });
         }
     }
@@ -137,6 +142,10 @@ impl UniformBuffer {
 
     pub fn unwrap_clip_edit_uniform_bind_group(&self) -> &BindGroup {
         &self.state.as_ref().unwrap().clip_edit_uniform_bind_group
+    }
+
+    pub fn unwrap_image_uniform_bind_group(&self) -> &BindGroup {
+        &self.state.as_ref().unwrap().image_uniform_bind_group
     }
 }
 

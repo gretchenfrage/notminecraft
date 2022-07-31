@@ -11,12 +11,12 @@ use crate::{
             CLIP_FORMAT,
         },
         solid::SolidPipeline,
-        /*
+        
         image::{
             ImagePipeline,
-            DrawCallImage,
-            prep_draw_image_call,
+            PreppedDrawImage,
         },
+        /*
         text::{
             TextPipeline,
             DrawCallText,
@@ -34,6 +34,7 @@ use crate::{
         DrawObjNorm,
     },
     uniform_buffer::UniformBuffer,
+    frame_content::GpuImage,
 };
 use std::{
     path::Path,
@@ -89,7 +90,7 @@ pub struct Renderer {
     clear_clip_pipeline: ClearPipeline,
     clip_pipeline: ClipPipeline,
     solid_pipeline: SolidPipeline,
-    //image_pipeline: ImagePipeline,    
+    image_pipeline: ImagePipeline,    
     //text_pipeline: TextPipeline,
 
     // safety: surface must be dropped before window
@@ -108,7 +109,6 @@ std140_struct!(ModifierUniformData {
 });
 
 /*
-pub use crate::pipelines::image::GpuImage;
 
 pub use crate::pipelines::text::{
     TextBlock,
@@ -173,7 +173,10 @@ impl Renderer {
                 &DeviceDescriptor {
                     label: None,
                     features: Features::empty(),
-                    limits: Limits::default(),
+                    limits: Limits {
+                        max_bind_groups: 5, // TODO don't do that
+                        ..Default::default()
+                    },
                 },
                 None,
             )
@@ -233,14 +236,15 @@ impl Renderer {
             &clip_pipeline.clip_texture_bind_group_layout,
         ).await?;
 
-        /*
+        
         // create the image pipeline
         trace!("creating image pipeline");
         let image_pipeline = ImagePipeline::new(
             &device,
-            &canvas2d_uniform_bind_group_layout,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
         ).await?;
-
+        /*
         // create the text pipeline
         trace!("creating text pipeline");
         let text_pipeline = TextPipeline::new(
@@ -273,7 +277,7 @@ impl Renderer {
             clear_clip_pipeline,
             clip_pipeline,
             solid_pipeline,
-            //image_pipeline,
+            image_pipeline,
             //text_pipeline,
             _window: window,
         })
@@ -342,9 +346,9 @@ impl Renderer {
         // compile and pre-render
         trace!("compiling render instructions and pre-rendering");
         #[derive(Debug)]
-        enum PreppedRenderInstr {
+        enum PreppedRenderInstr<'a> {
             Draw {
-                obj: PreppedRenderObj,
+                obj: PreppedRenderObj<'a>,
                 muo: u32,
                 depth: bool,
             },
@@ -353,8 +357,9 @@ impl Renderer {
         }
 
         #[derive(Debug)]
-        enum PreppedRenderObj {
+        enum PreppedRenderObj<'a> {
             Solid,
+            Image(PreppedDrawImage<'a>)
         }
 
         let mut uniform_packer = self.uniform_buffer.create_packer();
@@ -374,6 +379,12 @@ impl Renderer {
                         });
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,
+                        DrawObjNorm::Image(image) => PreppedRenderObj::Image(
+                            ImagePipeline::pre_render(
+                                image,
+                                &mut uniform_packer,
+                            )
+                        ),
                     };
                     PreppedRenderInstr::Draw {
                         obj,
@@ -396,7 +407,6 @@ impl Renderer {
         self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_target);
         */
 
-        // TODO separate into function or something
         // write uniform data to uniform buffer
         trace!("writing uniform data");
         self.uniform_buffer
@@ -406,6 +416,7 @@ impl Renderer {
                 &self.queue,
                 &self.modifier_uniform_bind_group_layout,
                 &self.clip_pipeline,
+                &self.image_pipeline,
             );
 
         // begin encoder
@@ -485,7 +496,16 @@ impl Renderer {
                             &[], // TODO min/max order consistency/
                         );
                     match obj {
-                        PreppedRenderObj::Solid => self.solid_pipeline.render(&mut pass),
+                        PreppedRenderObj::Solid => {
+                            self.solid_pipeline.render(&mut pass);
+                        }
+                        PreppedRenderObj::Image(image) => {
+                            self.image_pipeline.render(
+                                image,
+                                &mut pass,
+                                self.uniform_buffer.unwrap_image_uniform_bind_group(),
+                            );
+                        }
                     }
                 }
                 PreppedRenderInstr::ClearClip => {
@@ -494,7 +514,6 @@ impl Renderer {
                             &mut encoder,
                             &self.clip_pipeline.clip_min_texture.view,
                             Color {
-                                //r: f64::NEG_INFINITY, TODO super stopgap
                                 r: 0.0,
                                 g: 0.0,
                                 b: 0.0,
@@ -506,7 +525,6 @@ impl Renderer {
                             &mut encoder,
                             &self.clip_pipeline.clip_max_texture.view,
                             Color {
-                                //r: f64::INFINITY, TODO super stopgap
                                 r: 1.0,
                                 g: 0.0,
                                 b: 0.0,
@@ -519,86 +537,11 @@ impl Renderer {
                         clip_edit,
                         &mut encoder,
                         self.uniform_buffer.unwrap_clip_edit_uniform_bind_group(),
-                        //&self.uniform_buffer_state.as_ref().unwrap().clip_edit_uniform_bind_group
                     );
                 }
-                /*
-                PreppedRenderInstr::MinClipMax => {
-                    let mut pass = encoder
-                        .begin_render_pass(&RenderPassDescriptor {
-                            label: None,
-                            color_attachments: &[],
-                            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                                view: clip_max,
-                                depth_ops: Some(Operations {
-                                    load: LoadOps::Load,
-                                    store: true,
-                                }),
-                                stencil_ops: None,
-                            }),
-                        });
-                    
-                }*/
             }
         }
-        /*
-        {
-            let mut pass = encoder
-                .begin_render_pass(&RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[
-                        RenderPassColorAttachment {
-                            view: &color_texture,
-                            resolve_target: None,
-                            ops: Operations {
-                                load: LoadOp::Clear(Color::WHITE),
-                                store: true,
-                            }
-                        }
-                    ],
-                    depth_stencil_attachment: None,
-                });
 
-            // clear the screen
-            trace!("clearing screen");
-            self.clear_pipeline.clear_screen(&mut pass);
-            
-
-            /*
-            // make draw calls
-            trace!("making draw calls");
-            for draw_call in &canvas_target.draw_calls {
-                match draw_call {
-                    &Canvas2dDrawCall::Solid(ref call) => self
-                        .solid_pipeline
-                        .render_call(
-                            call,
-                            &mut pass,
-                            &self.uniform_buffer_state,
-                        ),
-                    &Canvas2dDrawCall::Image(ref call) => self
-                        .image_pipeline
-                        .render_call(
-                            call,
-                            &mut pass,
-                            &self.uniform_buffer_state,
-                        ),
-                    &Canvas2dDrawCall::Text(ref call) => self
-                        .text_pipeline
-                        .render_call(
-                            call,
-                            &mut pass,
-                            &self.uniform_buffer_state,
-                        )
-                };
-            }
-            */
-            // finish
-            trace!("finishing frame");
-
-            // end scope to drop
-        }
-        */
         // submit, present, return
         trace!("finishing frame");
         self.queue.submit(Some(encoder.finish()));
@@ -606,7 +549,6 @@ impl Renderer {
         Ok(())
     }
     
-    /*
     /// Read a PNG / JPG / etc image from a file and load it onto the GPU.
     ///
     /// Just reads the file with tokio then passes it to `self.load_image`.
@@ -626,7 +568,7 @@ impl Renderer {
         self.image_pipeline
             .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
-
+    /*
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
     pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
         let file_data = fs::read(path).await?;

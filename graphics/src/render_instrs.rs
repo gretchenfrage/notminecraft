@@ -11,6 +11,7 @@ use crate::{
         FrameItem,
         DrawObj2,
         DrawObj3,
+        DrawImage,
     },
 };
 use vek::*;
@@ -19,32 +20,34 @@ use vek::*;
 // ==== frame item normalization ====
 
 #[derive(Debug, Clone)]
-enum FrameItemNorm {
+enum FrameItemNorm<'a> {
     PushModifier {
         modifier: Modifier3,
         is_begin_3d: bool,
     },
-    Draw(DrawObjNorm),
+    Draw(DrawObjNorm<'a>),
 }
 
 #[derive(Debug, Clone)]
-pub enum DrawObjNorm {
+pub enum DrawObjNorm<'a> {
     Solid,
-    // TODO
+    Image(&'a DrawImage),
 }
 
-impl From<&DrawObj2> for DrawObjNorm {
-    fn from(obj: &DrawObj2) -> Self {
+impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
+    fn from(obj: &'a DrawObj2) -> Self {
         match obj {
             &DrawObj2::Solid => DrawObjNorm::Solid,
+            &DrawObj2::Image(ref obj) => DrawObjNorm::Image(obj),
         }
     }
 }
 
-impl From<&DrawObj3> for DrawObjNorm {
-    fn from(obj: &DrawObj3) -> Self {
+impl<'a> From<&'a DrawObj3> for DrawObjNorm<'a> {
+    fn from(obj: &'a DrawObj3) -> Self {
         match obj {
             &DrawObj3::Solid => DrawObjNorm::Solid,
+            &DrawObj3::Image(ref obj) => DrawObjNorm::Image(obj),
         }
     }
 }
@@ -56,7 +59,7 @@ impl<'a, I> Iterator for Normalize<I>
 where
     I: Iterator<Item=(usize, &'a FrameItem)>,
 {
-    type Item = (usize, FrameItemNorm);
+    type Item = (usize, FrameItemNorm<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0
@@ -102,11 +105,11 @@ pub fn frame_render_compiler<'a>(
 
 
 #[derive(Debug, Clone)]
-pub enum RenderInstr {
+pub enum RenderInstr<'a> {
     /// Draw a draw object. Always test against clip buffers.
     Draw {
         /// The draw object to draw.
-        obj: DrawObjNorm,
+        obj: DrawObjNorm<'a>,
         /// Matrix with which to affine-transform the object.
         transform: Mat4<f32>,
         /// Color by which to multiply the object.
@@ -116,24 +119,6 @@ pub enum RenderInstr {
     },
     /// Clear the clip min and clip max buffers.
     ClearClip,
-    /*
-    /// Set each element in the clip min buffer to the max of itself and
-    /// -(ax+by+d)/c, wherein the contained vector is considered <a,b,c,d>
-    /// and the coordinates of the buffer element are considered <x,y>.
-    ///
-    /// c may equal 0, in which case, produce positive/negative infinity as
-    /// appropriate.
-    MaxClipMin(Vec4<f32>),
-    /// Like `MaxClipMin`, except set each element in the clip _max_ buffer to
-    /// the _min_ of itself and the computed value.
-    MinClipMax(Vec4<f32>),
-    */
-    /*
-    EditClip {
-
-        affine: Vec3<f32>,
-        max_clip_min: bool,
-    }*/
     EditClip(ClipEdit),
     /// Clear the depth buffer to 1.
     ClearDepth,
@@ -151,27 +136,13 @@ impl From<Clip3> for ClipEdit {
             max_clip_min: clip.0.z >= 0.0,
             clip: clip.0,
         }
-        /*
-        // -(ax+by+d)/c == <i,j,k> dot <x,y,1>
-        // if c == 0 should be some infinity
-        // c == 0 -> <i,j,k> == <0,0,
-
-        let [a, b, c, d] = dbg!(clip.0.into_array());
-        let max_clip_min = c > 0.0;
-        let affine = dbg!(Vec3 {
-            x: -a / c,
-            y: -b / c,
-            z: -d / c,
-        });
-        // TODO: double check later that infinities work correctly
-        ClipEdit { max_clip_min, affine }*/
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct RenderCompiler<I> {
+pub struct RenderCompiler<'a, I> {
     inner: Normalize<I>,
-    trying_to_draw: Option<DrawObjNorm>,
+    trying_to_draw: Option<DrawObjNorm<'a>>,
     stack: Vec<StackEntry>,
     cumul_transform_stack: Vec<Transform3>,
     cumul_color_stack: Vec<Rgba<f32>>,
@@ -194,7 +165,7 @@ enum ModifierKind {
     Clip,
 }
 
-impl<I> RenderCompiler<I> {
+impl<'a, I> RenderCompiler<'a, I> {
     pub fn new(inner: I) -> Self {
         // TODO coordinate system conversion?
         //let base_transform = Transform3::identity();
@@ -227,11 +198,11 @@ impl<I> RenderCompiler<I> {
     }
 }
 
-impl<'a, I> Iterator for RenderCompiler<I>
+impl<'a, I> Iterator for RenderCompiler<'a, I>
 where
     I: Iterator<Item=(usize, &'a FrameItem)>,
 {
-    type Item = RenderInstr;
+    type Item = RenderInstr<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(loop {

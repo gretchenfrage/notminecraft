@@ -271,19 +271,7 @@ impl ClipPipeline {
         &self,
         edit: ClipEdit,
         uniform_packer: &mut UniformDataPacker,
-        //uniform_vec: &mut Vec<u8>,
     ) -> PreppedClipEdit {
-        /*let uniform_data = ClipEditUniformData {
-            sign: if edit.max_clip_min { 1.0 } else { -1.0 },
-            affine: edit.affine,
-        };*/
-        //let uniform_offset = uniform_data.pad_write(uniform_vec) as u32;
-        /*
-        let uniform_offset = uniform_packer
-            .pack(&ClipEditUniformData {
-                sign: if edit.max_clip_min { 1.0 } else { -1.0 },
-                affine: edit.affine,
-            });*/
         let uniform_offset = uniform_packer
             .pack(&ClipEditUniformData {
                 sign: if edit.max_clip_min { 1.0 } else { -1.0 },

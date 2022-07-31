@@ -1,4 +1,3 @@
-//! 2D Pipeline for drawing a solid rectangle.
 
 use crate::{
     SWAPCHAIN_FORMAT,
@@ -17,7 +16,8 @@ impl SolidPipeline {
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
-    ) -> Result<Self> {
+    ) -> Result<Self> 
+    {
         let solid_vs_module = device
             .create_shader_module(&load_shader!("solid.vert").await?);
         let solid_fs_module = device
@@ -63,27 +63,10 @@ impl SolidPipeline {
 
     pub(crate) fn render<'a>(
         &'a self,
-        //modifier_uniform_offset: u32,
         pass: &mut RenderPass<'a>,
-        //uniform_buffer_state: &'a UniformBufferState,
-        //clip_min_bind_group: &BindGroup,
-        //clip_min_bind_group: &BindGroup,
     ) {
         pass.set_pipeline(&self.solid_pipeline);
         pass.draw(0..6, 0..1);
-        /*
-        let uniform_buffer_state = uniform_buffer_state
-            .as_ref()
-            .unwrap();
-
-        pass.set_pipeline(&self.solid_pipeline);
-        pass.set_bind_group(
-            0,
-            &uniform_buffer_state.canvas2d_uniform_bind_group,
-            &[call.uniform_offset as u32],
-        );
-        pass.draw(0..6, 0..1);
-        */
     }
 }
 

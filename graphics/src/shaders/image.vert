@@ -1,11 +1,16 @@
 #version 450
 
-layout(set=0, binding=0) uniform u {
+layout(set=0, binding=0) uniform u1 {
     mat4 u_transform;
     vec4 u_color;
 };
+layout(set=3, binding=0) uniform u2 {
+    vec2 u_tex_start;
+    vec2 u_tex_extent;
+};
 
 layout(location=0) out vec4 o_pos;
+layout(location=1) out vec2 o_tex;
 
 void main() {
     int corner;
@@ -27,5 +32,6 @@ void main() {
     }
 
     o_pos = (u_transform * vec4(pos, 0, 1));
+    o_tex = u_tex_start + u_tex_extent * pos;
     gl_Position = o_pos;
 }
