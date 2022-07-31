@@ -35,13 +35,65 @@ use vek::*;
 
 
 
+mod game_behavior {
+    use graphics::{
+        Renderer,
+        frame_content::{
+            FrameContent,
+            Canvas2,
+            GpuImage,
+        },
+    };
+    use winit_main::reexports::dpi::PhysicalSize;
+    use anyhow::*;
+
+    pub struct GameBehavior {
+        renderer: Renderer,
+        image: GpuImage,
+    }
+
+    impl GameBehavior {
+        pub async fn new(renderer: Renderer) -> Result<Self> {
+            let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
+            Ok(GameBehavior {
+                renderer,
+                image,
+            })
+        }
+
+        pub async fn draw<'a>(&mut self) -> Result<()> {
+            let mut frame = FrameContent::new();
+            frame.canvas()
+                //.min_x(0.5)
+                //.max_y(0.5)
+                //.translate([0.25, 0.25])
+                //.scale([0.5, 0.5])
+                //.scale([-1.0, 1.0])
+                //.translate([-0.5, -0.5])
+                //.scale([2.0, -2.0])
+                //.color([1.0, 0.0, 0.0, 1.0])
+                //.draw_solid()
+                .draw_image(&self.image, [0.0, 0.0], [1.0, 1.0]);
+            self.renderer.draw_frame(&frame)
+        }
+
+        pub async fn resize(&mut self, size: PhysicalSize<u32>) -> Result<()> {
+            self.renderer.resize(size);
+            Ok(())
+        }
+    }
+}
+
+
 
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
     let window = event_loop.create_window(Default::default()).await?;
     let window = Arc::new(window);
-    let mut renderer = Renderer::new(Arc::clone(&window)).await?;
+    let renderer = Renderer::new(Arc::clone(&window)).await?;
 
-    let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
+    let mut game = game_behavior::GameBehavior::new(renderer).await?;
+
+    //let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -57,7 +109,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         trace!("not resizing window because of 0 size"); // TODO factor in
                     } else {
                         trace!("resizing window");
-                        renderer.resize(size);
+                        game.resize(size).await?;
                     }
                 },
                 _ => (),
@@ -67,22 +119,10 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
                 // draw frame
                 trace!("drawing frame");
-                let mut frame = FrameContent::new();
-                let mut canvas = frame.canvas();
-                canvas
-                    //.min_x(0.5)
-                    //.max_y(0.5)
-                    //.translate([0.25, 0.25])
-                    //.scale([0.5, 0.5])
-                    //.scale([-1.0, 1.0])
-                    //.translate([-0.5, -0.5])
-                    //.scale([2.0, -2.0])
-                    //.color([1.0, 0.0, 0.0, 1.0])
-                    //.draw_solid()
-                    .draw_image(&image, [0.0, 0.0], [1.0, 1.0]);
-
-                // TODO draw frame here
-                let result = renderer.draw_frame(&frame);
+                //let mut frame = FrameContent::new();
+                let result = game.draw().await;
+                
+                //let result = renderer.draw_frame(&frame);
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
                 }
