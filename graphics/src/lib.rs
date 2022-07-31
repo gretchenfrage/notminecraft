@@ -83,10 +83,8 @@ pub struct Renderer {
     queue: Queue,
     depth_texture: Texture,
     config: SurfaceConfiguration,
-    //uniform_buffer_state: Option<UniformBufferState>,
     uniform_buffer: UniformBuffer,
     modifier_uniform_bind_group_layout: BindGroupLayout,
-    //clear_pipeline: ClearPipeline,
     clear_color_pipeline: ClearPipeline,
     clear_clip_pipeline: ClearPipeline,
     clip_pipeline: ClipPipeline,
@@ -108,15 +106,6 @@ std140_struct!(ModifierUniformData {
     transform: Mat4<f32>,
     color: Rgba<f32>,
 });
-/*
-struct UniformBufferState {
-    uniform_buffer: Buffer,
-    uniform_buffer_len: usize,
-
-    modifier_uniform_bind_group: BindGroup,
-    clip_edit_uniform_bind_group: BindGroup,
-    //image_uniform_bind_group: BindGroup,
-}*/
 
 /*
 pub use crate::pipelines::image::GpuImage;
@@ -226,7 +215,6 @@ impl Renderer {
 
         // create the clear pipeline
         trace!("creating clear pipeline");
-        //let clear_pipeline = ClearPipeline::new(&device).await?;
         let clear_pipeline_creator = ClearPipelineCreator::new(&device).await?;
         let clear_color_pipeline = clear_pipeline_creator
             .create(&device, SWAPCHAIN_FORMAT);
@@ -279,10 +267,8 @@ impl Renderer {
             queue,
             depth_texture,
             config,
-            //uniform_buffer_state: None,
             uniform_buffer,
             modifier_uniform_bind_group_layout,
-            //clear_pipeline,
             clear_color_pipeline,
             clear_clip_pipeline,
             clip_pipeline,
@@ -371,7 +357,6 @@ impl Renderer {
             Solid,
         }
 
-        //let mut uniform_vec = Vec::new();
         let mut uniform_packer = self.uniform_buffer.create_packer();
 
         let instrs = frame_render_compiler(&content)
@@ -382,16 +367,11 @@ impl Renderer {
                     color,
                     depth,
                 } => {
-                    /*let mud = ModifierUniformData {
-                        transform,
-                        color: color.map(|n| n as f32 * 255.0),
-                    };*/
                     let muo = uniform_packer
                         .pack(&ModifierUniformData {
                             transform,
                             color: color.map(|n| n as f32 / 255.0),
                         });
-                    //let muo = mud.pad_write(&mut uniform_vec);
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,
                     };
@@ -412,19 +392,10 @@ impl Renderer {
             .collect::<Vec<PreppedRenderInstr>>();
 
         /*
-        // accumulate draw data from the callback
-        trace!("accumulating draw data");
-        let mut canvas_target = Canvas2dTarget::new(&self.device);
-        f(Canvas2d {
-            renderer: self,
-            target: &mut canvas_target,
-            transform: Canvas2dTransform::identity(),
-        });
-
         // text pre-render
         self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_target);
-
         */
+
         // TODO separate into function or something
         // write uniform data to uniform buffer
         trace!("writing uniform data");
@@ -446,43 +417,9 @@ impl Renderer {
 
         // create views
         // TODO: just cache these or?
-        /*
-        let clip_min_texture = self
-            .clip_min_texture
-            .create_view(&TextureViewDescriptor::default());
-        let clip_max_texture = self
-            .clip_max_texture
-            .create_view(&TextureViewDescriptor::default());
-        */
         let depth_texture = self
             .depth_texture
             .create_view(&TextureViewDescriptor::default());
-
-            /*
-        fn clear_texture( // TODO: move into clear pipeline?
-            encoder: &mut CommandEncoder,
-            clear_pipeline: &ClearPipeline,
-            view: &TextureView,
-            color: Color,
-        ) {
-            let mut pass = encoder // TODO factor this out independently?
-                .begin_render_pass(&RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[
-                        RenderPassColorAttachment {
-                            view,
-                            resolve_target: None,
-                            ops: Operations {
-                                load: LoadOp::Clear(color),
-                                store: true,
-                            }
-                        }
-                    ],
-                    depth_stencil_attachment: None,
-                });
-            clear_pipeline.clear_screen(&mut pass);
-            drop(pass);
-        }*/
 
         // clear the color buffer
         trace!("clearing color buffer");
@@ -492,13 +429,6 @@ impl Renderer {
                 &color_texture,
                 Color::WHITE,
             );
-        /*
-        clear_texture(
-            &mut encoder,
-            &self.clear_pipeline,
-            &color_texture,
-            Color::WHITE,
-        );*/
 
         // execute pre-rendered render instructions
         for instr in instrs {
@@ -583,29 +513,6 @@ impl Renderer {
                                 a: 1.0,
                             },
                         );
-                    /*
-                    clear_texture(
-                        &mut encoder,
-                        &self.clear_pipeline,
-                        &self.clip_pipeline.clip_min_texture.view,
-                        Color {
-                            r: f64::NEG_INFINITY,
-                            g: f64::NAN,
-                            b: f64::NAN,
-                            a: f64::NAN,
-                        },
-                    );
-                    clear_texture(
-                        &mut encoder,
-                        &self.clear_pipeline,
-                        &self.clip_pipeline.clip_max_texture.view,
-                        Color {
-                            r: f64::INFINITY,
-                            g: f64::NAN,
-                            b: f64::NAN,
-                            a: f64::NAN,
-                        },
-                    );*/
                 }
                 PreppedRenderInstr::EditClip(clip_edit) => {
                     self.clip_pipeline.render(
