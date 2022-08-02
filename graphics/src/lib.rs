@@ -11,30 +11,33 @@ use crate::{
             CLIP_FORMAT,
         },
         solid::SolidPipeline,
-        
         image::{
             ImagePipeline,
             PreppedDrawImage,
         },
-        /*
         text::{
             TextPipeline,
-            DrawCallText,
-        },*/
+            PreppedDrawText,
+        },
     },
     std140::{
         Std140,
         pad,
         std140_struct,
     },
-    frame_content::FrameContent,
+    frame_content::{
+        FrameContent,
+        GpuImage,
+        TextBlock,
+        LayedOutTextBlock,
+        FontId,
+    },
     render_instrs::{
         frame_render_compiler,
         RenderInstr,
         DrawObjNorm,
     },
     uniform_buffer::UniformBuffer,
-    frame_content::GpuImage,
 };
 use std::{
     path::Path,
@@ -91,7 +94,7 @@ pub struct Renderer {
     clip_pipeline: ClipPipeline,
     solid_pipeline: SolidPipeline,
     image_pipeline: ImagePipeline,    
-    //text_pipeline: TextPipeline,
+    text_pipeline: TextPipeline,
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
@@ -244,14 +247,15 @@ impl Renderer {
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
         ).await?;
-        /*
+        
         // create the text pipeline
         trace!("creating text pipeline");
         let text_pipeline = TextPipeline::new(
             &device,
-            &canvas2d_uniform_bind_group_layout,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
         ).await?;
-        */
+        
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -278,7 +282,7 @@ impl Renderer {
             clip_pipeline,
             solid_pipeline,
             image_pipeline,
-            //text_pipeline,
+            text_pipeline,
             _window: window,
         })
     }
@@ -319,6 +323,8 @@ impl Renderer {
     /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
     /// right corner).
     pub fn draw_frame(&mut self, content: &FrameContent) -> Result<()> {
+        let surface_size = self.size();
+
         // acquire frame to draw onto
         trace!("acquiring frame");
         let mut attempts = 0;
@@ -344,7 +350,12 @@ impl Renderer {
             .create_view(&TextureViewDescriptor::default());
 
         // compile and pre-render
-        trace!("compiling render instructions and pre-rendering");
+        trace!("beginning pre-render");
+        let mut uniform_packer = self.uniform_buffer.create_packer();
+        let mut text_pre_renderer = self.text_pipeline.begin_pre_render();
+
+        trace!("compiling and pre-rendering");
+
         #[derive(Debug)]
         enum PreppedRenderInstr<'a> {
             Draw {
@@ -359,12 +370,11 @@ impl Renderer {
         #[derive(Debug)]
         enum PreppedRenderObj<'a> {
             Solid,
-            Image(PreppedDrawImage<'a>)
+            Image(PreppedDrawImage<'a>),
+            Text(PreppedDrawText),
         }
 
-        let mut uniform_packer = self.uniform_buffer.create_packer();
-
-        let instrs = frame_render_compiler(&content)
+        let instrs = frame_render_compiler(&content, surface_size)
             .map(|instr| match instr {
                 RenderInstr::Draw {
                     obj,
@@ -385,6 +395,9 @@ impl Renderer {
                                 &mut uniform_packer,
                             )
                         ),
+                        DrawObjNorm::Text(text) => PreppedRenderObj::Text(
+                            text_pre_renderer.pre_render(text)
+                        ),
                     };
                     PreppedRenderInstr::Draw {
                         obj,
@@ -402,10 +415,8 @@ impl Renderer {
             })
             .collect::<Vec<PreppedRenderInstr>>();
 
-        /*
-        // text pre-render
-        self.text_pipeline.pre_render(&self.device, &self.queue, &canvas_target);
-        */
+        trace!("finalizing pre-render");
+        text_pre_renderer.finalize_pre_render(&self.device, &self.queue);
 
         // write uniform data to uniform buffer
         trace!("writing uniform data");
@@ -506,6 +517,12 @@ impl Renderer {
                                 self.uniform_buffer.unwrap_image_uniform_bind_group(),
                             );
                         }
+                        PreppedRenderObj::Text(text) => {
+                            self.text_pipeline.render(
+                                text,
+                                &mut pass,
+                            );
+                        }
                     }
                 }
                 PreppedRenderInstr::ClearClip => {
@@ -568,7 +585,7 @@ impl Renderer {
         self.image_pipeline
             .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
-    /*
+    
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
     pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
         let file_data = fs::read(path).await?;
@@ -618,5 +635,4 @@ impl Renderer {
     pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
         self.text_pipeline.lay_out_text(text_block)
     }
-    */
 }

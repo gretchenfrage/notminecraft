@@ -12,6 +12,7 @@ use crate::{
         DrawObj2,
         DrawObj3,
         DrawImage,
+        LayedOutTextBlock,
     },
 };
 use vek::*;
@@ -32,6 +33,7 @@ enum FrameItemNorm<'a> {
 pub enum DrawObjNorm<'a> {
     Solid,
     Image(&'a DrawImage),
+    Text(&'a LayedOutTextBlock),
 }
 
 impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
@@ -39,6 +41,7 @@ impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
         match obj {
             &DrawObj2::Solid => DrawObjNorm::Solid,
             &DrawObj2::Image(ref obj) => DrawObjNorm::Image(obj),
+            &DrawObj2::Text(ref obj) => DrawObjNorm::Text(obj),
         }
     }
 }
@@ -48,6 +51,7 @@ impl<'a> From<&'a DrawObj3> for DrawObjNorm<'a> {
         match obj {
             &DrawObj3::Solid => DrawObjNorm::Solid,
             &DrawObj3::Image(ref obj) => DrawObjNorm::Image(obj),
+            &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
         }
     }
 }
@@ -94,13 +98,14 @@ where
 // ==== instruction compiler ====
 
 pub fn frame_render_compiler<'a>(
-    content: &'a FrameContent
+    content: &'a FrameContent,
+    surface_size: Extent2<u32>,
 ) -> RenderCompiler<impl Iterator<Item=(usize, &'a FrameItem)> + 'a>
 {
     let items = content.0
         .iter()
         .map(|&(stack_len, ref item)| (stack_len, item));
-    RenderCompiler::new(items)
+    RenderCompiler::new(items, surface_size)
 }
 
 
@@ -165,15 +170,19 @@ enum ModifierKind {
     Clip,
 }
 
+fn base_transform(surface_size: Extent2<u32>) -> Transform3 {
+    let convert = Transform2(Mat3::new(
+        2.0, 0.0, -1.0,
+        0.0, -2.0, 1.0,
+        0.0, 0.0, 1.0, 
+    ));
+    let scale = Transform2::scale(surface_size.map(|n| 1.0 / n as f32));
+    scale.then(&convert).to_3d()
+}
+
 impl<'a, I> RenderCompiler<'a, I> {
-    pub fn new(inner: I) -> Self {
-        // TODO coordinate system conversion?
-        //let base_transform = Transform3::identity();
-        let base_transform = Transform2(Mat3::new(
-            2.0, 0.0, -1.0,
-            0.0, -2.0, 1.0,
-            0.0, 0.0, 1.0, 
-        )).to_3d();
+    pub fn new(inner: I, surface_size: Extent2<u32>) -> Self {
+        let base_transform = base_transform(surface_size);
         let base_color = Rgba::white();
 
         RenderCompiler {

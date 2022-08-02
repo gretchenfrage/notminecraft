@@ -42,38 +42,64 @@ mod game_behavior {
             FrameContent,
             Canvas2,
             GpuImage,
+            TextBlock,
+            TextSpan,
+            HorizontalAlign,
+            VerticalAlign,
+            LayedOutTextBlock,
+            FontId,
         },
     };
     use winit_main::reexports::dpi::PhysicalSize;
+    use vek::*;
     use anyhow::*;
 
     pub struct GameBehavior {
         renderer: Renderer,
         image: GpuImage,
+        font: FontId,
+        text: LayedOutTextBlock,
     }
 
     impl GameBehavior {
-        pub async fn new(renderer: Renderer) -> Result<Self> {
+        pub async fn new(mut renderer: Renderer) -> Result<Self> {
             let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
+            let font = renderer.load_font_file("src/assets/LiberationSerif-Regular.ttf").await?;
+            let text = renderer
+                .lay_out_text(&TextBlock {
+                    spans: &[
+                        TextSpan {
+                            text: "he",
+                            font_id: font,
+                            font_size: 24.0,
+                            color: Rgba::black(),
+                        },
+                        TextSpan {
+                            text: "w",
+                            font_id: font,
+                            font_size: 24.0,
+                            color: dbg!(Rgba::red()),
+                        }
+                    ],
+                    horizontal_align: HorizontalAlign::Left {
+                        width: None,
+                    },
+                    vertical_align: VerticalAlign::Top,
+                });
             Ok(GameBehavior {
                 renderer,
                 image,
+                font,
+                text,
             })
         }
 
         pub async fn draw<'a>(&mut self) -> Result<()> {
             let mut frame = FrameContent::new();
             frame.canvas()
-                //.min_x(0.5)
-                //.max_y(0.5)
-                //.translate([0.25, 0.25])
-                //.scale([0.5, 0.5])
-                //.scale([-1.0, 1.0])
-                //.translate([-0.5, -0.5])
-                //.scale([2.0, -2.0])
-                //.color([1.0, 0.0, 0.0, 1.0])
-                //.draw_solid()
-                .draw_image(&self.image, [0.0, 0.0], [1.0, 1.0]);
+                .draw_image(&self.image, [300.0, 300.0])
+                .draw_text(&self.text)
+                ;
             self.renderer.draw_frame(&frame)
         }
 

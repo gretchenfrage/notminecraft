@@ -14,9 +14,19 @@ use std::collections::VecDeque;
 use vek::*;
 
 
-pub use crate::pipelines::image::{
-    GpuImage,
-    DrawImage,
+pub use crate::pipelines::{
+    image::{
+        GpuImage,
+        DrawImage,
+    },
+    text::{
+        TextBlock,
+        TextSpan,
+        HorizontalAlign,
+        VerticalAlign,
+        LayedOutTextBlock,
+        FontId,
+    },
 };
 
 
@@ -36,15 +46,14 @@ pub enum FrameItem {
 pub enum DrawObj2 { // TODO expose
     Solid, // TODO bake in size and color? or just on canvas level...
     Image(DrawImage),
-    // TODO image
-    // TODO text
+    Text(LayedOutTextBlock),
 }
 
 #[derive(Debug, Clone)]
 pub enum DrawObj3 {
     Solid,
     Image(DrawImage),
-    // TODO text
+    Text(LayedOutTextBlock),
     // TODO mesh
 }
 
@@ -129,22 +138,55 @@ impl<'a> Canvas2<'a> {
         self
     }
 
-    pub fn draw_solid(mut self) -> Self {
-        self.draw(DrawObj2::Solid)
+    pub fn draw_solid<V: Into<Extent2<f32>>>(mut self, size: V) -> Self {
+        self
+            .reborrow()
+            .scale(size.into())
+            .draw(DrawObj2::Solid);
+        self
     }
 
-    pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(
+    pub fn draw_image<V: Into<Extent2<f32>>>(
         mut self,
         image: &GpuImage,
-        tex_start: V1,
-        tex_extent: V2,
+        size: V,
     ) -> Self
     {
-        self.draw(DrawObj2::Image(DrawImage {
-            image: image.clone(),
-            tex_start: tex_start.into(),
-            tex_extent: tex_extent.into(),
-        }))
+        self
+            .draw_image_uv(
+                image,
+                size,
+                [0.0, 0.0],
+                [1.0, 1.0],
+            )
+    }
+
+    pub fn draw_image_uv<V1, V2, V3>(
+        mut self,
+        image: &GpuImage,
+        size: V1,
+        tex_start: V2,
+        tex_extent: V3,
+    ) -> Self
+    where
+        V1: Into<Extent2<f32>>,
+        V2: Into<Vec2<f32>>,
+        V3: Into<Extent2<f32>>,
+    {
+        self
+            .reborrow()
+            .scale(size.into())
+            .draw(DrawObj2::Image(DrawImage {
+                image: image.clone(),
+                tex_start: tex_start.into(),
+                tex_extent: tex_extent.into(),
+            }));
+        self
+    }
+
+    pub fn draw_text(self, text: &LayedOutTextBlock) -> Self
+    {
+        self.draw(DrawObj2::Text(text.clone()))
     }
 
     // TODO 3d helpers
@@ -237,5 +279,10 @@ impl<'a> Canvas3<'a> {
             tex_start: tex_start.into(),
             tex_extent: tex_extent.into(),
         }))
+    }
+
+    pub fn draw_text(self, text: &LayedOutTextBlock) -> Self
+    {
+        self.draw(DrawObj3::Text(text.clone()))
     }
 }
