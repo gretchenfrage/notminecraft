@@ -1,7 +1,6 @@
 
 use crate::{
     SWAPCHAIN_FORMAT,
-    UniformBuffer,
     shader::load_shader,
 };
 use wgpu::*;

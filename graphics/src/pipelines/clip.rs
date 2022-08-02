@@ -2,7 +2,6 @@
 // TODO name consistency?
 
 use crate::{
-    SWAPCHAIN_FORMAT,
     shader::load_shader,
     create_depth_texture_like,
     std140::{
@@ -247,19 +246,19 @@ impl ClipPipeline {
     }
 
     pub(crate) fn resize(&mut self, device: &Device, size: PhysicalSize<u32>) {
-        let clip_min_texture = create_clip_texture(
+        self.clip_min_texture = create_clip_texture(
             device,
             &self.clip_sampler,
             &self.clip_texture_bind_group_layout,
             size,
         );
-        let clip_max_texture = create_clip_texture(
+        self.clip_max_texture = create_clip_texture(
             device,
             &self.clip_sampler,
             &self.clip_texture_bind_group_layout,
             size,
         );
-        let extra_clip_texture = create_clip_texture(
+        self.extra_clip_texture = create_clip_texture(
             device,
             &self.clip_sampler,
             &self.clip_texture_bind_group_layout,

@@ -16,6 +16,7 @@ impl ViewProj {
     /// Perspective camera at position `pos`, pointing in direction `dir`
     /// (rotated from "forward and pointing +z"), with the given field-of-view
     /// and aspect ratio.
+    #[allow(unused_variables)]
     pub fn perspective(
         pos: Vec3<f32>,
         dir: Quaternion<f32>,

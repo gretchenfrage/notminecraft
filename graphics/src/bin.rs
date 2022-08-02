@@ -2,12 +2,11 @@
 #[macro_use]
 extern crate tracing;
 
-use graphics::{*, frame_content::*};
+use graphics::Renderer;
 use std::{
     panic,
     sync::Arc,
     time::{
-        SystemTime,
         Instant,
         Duration,
     },
@@ -21,9 +20,6 @@ use winit_main::{
     reexports::event::{
         Event,
         WindowEvent,
-        KeyboardInput,
-        VirtualKeyCode,
-        ElementState,
     },
 };
 use tracing_subscriber::{
@@ -31,7 +27,6 @@ use tracing_subscriber::{
     EnvFilter,
 };
 use backtrace::Backtrace;
-use vek::*;
 
 
 
@@ -40,7 +35,6 @@ mod game_behavior {
         Renderer,
         frame_content::{
             FrameContent,
-            Canvas2,
             GpuImage,
             TextBlock,
             TextSpan,
@@ -54,6 +48,7 @@ mod game_behavior {
     use vek::*;
     use anyhow::*;
 
+    #[allow(dead_code)]
     pub struct GameBehavior {
         renderer: Renderer,
         image: GpuImage,

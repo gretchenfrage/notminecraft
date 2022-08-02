@@ -1,10 +1,6 @@
 //! Pipeline for clearing the screen.
 
-use crate::{
-    SWAPCHAIN_FORMAT,
-    pipelines::clip::CLIP_FORMAT,
-    shader::load_shader,
-};
+use crate::shader::load_shader;
 use wgpu::*;
 use anyhow::Result;
 

@@ -22,7 +22,6 @@ use crate::{
     },
     std140::{
         Std140,
-        pad,
         std140_struct,
     },
     frame_content::{
@@ -50,13 +49,7 @@ use winit_main::reexports::{
     window::Window,
     dpi::PhysicalSize,
 };
-use wgpu::{
-    *,
-    util::{
-        DeviceExt,
-        BufferInitDescriptor,
-    },
-};
+use wgpu::*;
 use vek::*;
 use tokio::fs;
 use image::DynamicImage;

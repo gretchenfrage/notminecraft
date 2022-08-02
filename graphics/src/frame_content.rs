@@ -10,7 +10,6 @@ use crate::{
     },
     view_proj::ViewProj,
 };
-use std::collections::VecDeque;
 use vek::*;
 
 
@@ -147,7 +146,7 @@ impl<'a> Canvas2<'a> {
     }
 
     pub fn draw_image<V: Into<Extent2<f32>>>(
-        mut self,
+        self,
         image: &GpuImage,
         size: V,
     ) -> Self
@@ -263,12 +262,12 @@ impl<'a> Canvas3<'a> {
         self
     }
 
-    pub fn draw_solid(mut self) -> Self {
+    pub fn draw_solid(self) -> Self {
         self.draw(DrawObj3::Solid)
     }
 
     pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(
-        mut self,
+        self,
         image: &GpuImage,
         tex_start: V1,
         tex_extent: V2,

@@ -375,9 +375,4 @@ impl Clip3 {
     pub fn test(&self, v: Vec3<f32>) -> bool {
         self.0.dot(Vec4::from_point(v)) >= 0.0
     }
-
-    // TODO temporary or something
-    fn dot(&self, v: Vec3<f32>) -> f32 {
-        self.0.dot(Vec4::from_point(v))
-    }
 }
