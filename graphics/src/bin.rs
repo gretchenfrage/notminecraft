@@ -64,7 +64,7 @@ mod game_behavior {
                 .lay_out_text(&TextBlock {
                     spans: &[
                         TextSpan {
-                            text: "he",
+                            text: "hee",
                             font_id: font,
                             font_size: 24.0,
                             color: Rgba::black(),
@@ -72,8 +72,20 @@ mod game_behavior {
                         TextSpan {
                             text: "w",
                             font_id: font,
-                            font_size: 24.0,
+                            font_size: 280.0,
                             color: dbg!(Rgba::red()),
+                        },
+                        TextSpan {
+                            text: "w",
+                            font_id: font,
+                            font_size: 280.0,
+                            color: dbg!(Rgba::green()),
+                        },
+                        TextSpan {
+                            text: "w",
+                            font_id: font,
+                            font_size: 280.0,
+                            color: dbg!(Rgba::blue()),
                         }
                     ],
                     horizontal_align: HorizontalAlign::Left {
