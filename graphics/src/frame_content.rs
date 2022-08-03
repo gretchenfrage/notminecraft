@@ -26,34 +26,43 @@ pub use crate::pipelines::{
         LayedOutTextBlock,
         FontId,
     },
+    mesh::{
+        GpuVec,
+        GpuVecElem,
+        GpuImageArray,
+        Mesh,
+        Vertex,
+        Triangle,
+        DrawMesh,
+    },
 };
 
 
 #[derive(Debug, Clone, Default)]
-pub struct FrameContent(pub Vec<(usize, FrameItem)>);
+pub struct FrameContent<'a>(pub Vec<(usize, FrameItem<'a>)>);
 
 #[derive(Debug, Clone)]
-pub enum FrameItem {
+pub enum FrameItem<'a> {
     PushModifier2(Modifier2),
     Draw2(DrawObj2),
     Begin3d(ViewProj),
     PushModifier3(Modifier3),
-    Draw3(DrawObj3),
+    Draw3(DrawObj3<'a>),
 }
 
 #[derive(Debug, Clone)]
-pub enum DrawObj2 { // TODO expose
-    Solid, // TODO bake in size and color? or just on canvas level...
-    Image(DrawImage),
-    Text(LayedOutTextBlock),
-}
-
-#[derive(Debug, Clone)]
-pub enum DrawObj3 {
+pub enum DrawObj2 {
     Solid,
     Image(DrawImage),
     Text(LayedOutTextBlock),
-    // TODO mesh
+}
+
+#[derive(Debug, Clone)]
+pub enum DrawObj3<'a> {
+    Solid,
+    Image(DrawImage),
+    Text(LayedOutTextBlock),
+    Mesh(DrawMesh<'a>),
 }
 
 #[derive(Debug)]

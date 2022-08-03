@@ -225,13 +225,11 @@ struct TextVertex {
     color: Rgba<u8>,
 }
 
-vertex_struct! {
-    TextVertex {
-        (pos:   Vec2<f32>) (layout(location=0) in vec2),
-        (tex:   Vec2<f32>) (layout(location=1) in vec2),
-        (color: Rgba<u8> ) (layout(location=2) in vec4),
-    }
-}
+vertex_struct!(TextVertex {
+    (pos:   Vec2<f32>) (layout(location=0) in vec2),
+    (tex:   Vec2<f32>) (layout(location=1) in vec2),
+    (color: Rgba<u8> ) (layout(location=2) in vec4),
+});
 
 pub struct PreRenderer<'a> {
     pipeline: &'a mut TextPipeline,

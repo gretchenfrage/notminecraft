@@ -35,7 +35,7 @@ pub struct GpuImage(Arc<GpuImageInner>);
 #[derive(Debug)]
 struct GpuImageInner {
     size: Extent2<u32>,
-    texture_bind_group: BindGroup,
+    texture_bind_group: BindGroup, // TODO proper error for 0-size images
 }
 
 impl GpuImage {

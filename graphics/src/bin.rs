@@ -64,7 +64,19 @@ mod game_behavior {
                 .lay_out_text(&TextBlock {
                     spans: &[
                         TextSpan {
-                            text: "hee",
+                            text: "h",
+                            font_id: font,
+                            font_size: 24.0,
+                            color: Rgba::black(),
+                        },
+                        TextSpan {
+                            text: "e",
+                            font_id: font,
+                            font_size: 24.0,
+                            color: Rgba::black(),
+                        },
+                        TextSpan {
+                            text: "e",
                             font_id: font,
                             font_size: 24.0,
                             color: Rgba::black(),
@@ -105,8 +117,12 @@ mod game_behavior {
             let mut frame = FrameContent::new();
             frame.canvas()
                 .draw_image(&self.image, [300.0, 300.0])
+                .min_x(150.0)
+                .translate([0.0, 200.0])
+                .rotate(0.5)
                 .draw_text(&self.text)
                 ;
+            debug!("{:#?}", frame);
             self.renderer.draw_frame(&frame)
         }
 
@@ -125,8 +141,6 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let renderer = Renderer::new(Arc::clone(&window)).await?;
 
     let mut game = game_behavior::GameBehavior::new(renderer).await?;
-
-    //let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
 
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
@@ -152,7 +166,6 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
                 // draw frame
                 trace!("drawing frame");
-                //let mut frame = FrameContent::new();
                 let result = game.draw().await;
                 
                 //let result = renderer.draw_frame(&frame);
