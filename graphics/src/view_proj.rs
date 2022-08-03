@@ -23,8 +23,15 @@ impl ViewProj {
         fov: f32,
         aspect: f32,
     ) -> Self {
-        unimplemented!() // TODO
+        let view = Mat4::<f32>::perspective_lh_zo(
+            fov,
+            aspect,
+            0.1,
+            100.0, // TODO
+        );
+        let adjust = Mat4::<f32>::scaling_3d([1.0, -1.0, 1.0]);
+        ViewProj(adjust * view)
     }
 
-    // TODO orthogonal
+    // TODO orthographics
 }

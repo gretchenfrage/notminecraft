@@ -13,6 +13,7 @@ use crate::{
         DrawObj3,
         DrawImage,
         LayedOutTextBlock,
+        DrawMesh,
     },
 };
 use vek::*;
@@ -34,6 +35,7 @@ pub enum DrawObjNorm<'a> {
     Solid,
     Image(&'a DrawImage),
     Text(&'a LayedOutTextBlock),
+    Mesh(&'a DrawMesh<'a>),
 }
 
 impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
@@ -46,12 +48,13 @@ impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
     }
 }
 
-impl<'a> From<&'a DrawObj3> for DrawObjNorm<'a> {
+impl<'a> From<&'a DrawObj3<'a>> for DrawObjNorm<'a> {
     fn from(obj: &'a DrawObj3) -> Self {
         match obj {
             &DrawObj3::Solid => DrawObjNorm::Solid,
             &DrawObj3::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
+            &DrawObj3::Mesh(ref obj) => DrawObjNorm::Mesh(obj),
         }
     }
 }
@@ -61,7 +64,7 @@ struct Normalize<I>(I);
 
 impl<'a, I> Iterator for Normalize<I>
 where
-    I: Iterator<Item=(usize, &'a FrameItem)>,
+    I: Iterator<Item=(usize, &'a FrameItem<'a>)>,
 {
     type Item = (usize, FrameItemNorm<'a>);
 
@@ -98,9 +101,9 @@ where
 // ==== instruction compiler ====
 
 pub fn frame_render_compiler<'a>(
-    content: &'a FrameContent,
+    content: &'a FrameContent<'a>,
     surface_size: Extent2<u32>,
-) -> RenderCompiler<impl Iterator<Item=(usize, &'a FrameItem)> + 'a>
+) -> RenderCompiler<impl Iterator<Item=(usize, &'a FrameItem<'a>)> + 'a>
 {
     let items = content.0
         .iter()
@@ -209,7 +212,7 @@ impl<'a, I> RenderCompiler<'a, I> {
 
 impl<'a, I> Iterator for RenderCompiler<'a, I>
 where
-    I: Iterator<Item=(usize, &'a FrameItem)>,
+    I: Iterator<Item=(usize, &'a FrameItem<'a>)>,
 {
     type Item = RenderInstr<'a>;
 

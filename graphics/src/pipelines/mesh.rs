@@ -30,6 +30,7 @@ use image::{
 };
 use vek::*;
 use anyhow::*;
+use tracing::*;
 
 
 const INDEX_FORMAT: IndexFormat = IndexFormat::Uint32;
@@ -38,6 +39,8 @@ const INDICES_PER_TRIANGLE: usize = 3;
 
 // ==== gpu vec ====
 
+/// Vector-like resizable and updatable array of elements on the GPU,
+/// comprising a GPU memory allocation, a length, and a capacity.
 #[derive(Debug)]
 pub struct GpuVec<T> {
     buffer: Option<Buffer>,
@@ -47,11 +50,14 @@ pub struct GpuVec<T> {
 }
 
 impl<T> GpuVec<T> {
+    /// The current length, in elements.
     pub fn len(&self) -> usize {
         self.len
     }
 }
 
+/// Types which can be stored in a `GpuVec`. Not intended to be implemented
+/// externally.
 pub trait GpuVecElem {
     const USAGES: BufferUsages;
     const SIZE: usize;
@@ -78,6 +84,8 @@ struct GpuImageArrayInner {
 
 impl GpuImageArray {
     /// Get image size in pixels.
+    ///
+    /// Guaranteed to not have 0 components.
     pub fn size(&self) -> Extent2<u32> {
         self.0.size
     }
@@ -91,22 +99,37 @@ impl GpuImageArray {
 
 // ==== mesh ====
 
+/// Vertex and index data for a mesh, stored on the GPU.
 #[derive(Debug)]
 pub struct Mesh {
+    /// Vertices within the mesh. Are grouped together into triangles by the
+    /// `triangles` field.
     pub vertices: GpuVec<Vertex>,
+    /// Groups of 3 vertices which form triangles. Each `Triangle` is an array
+    /// of 3 indices of the `vertices` array.
+    ///
+    /// TODO: do they need to be clockwise or counter-clockwise?
     pub triangles: GpuVec<Triangle>,
 }
 
+/// Vertex within a `Mesh`.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Vertex {
+    /// Vertex position in 3D space.
     pub pos: Vec3<f32>,
+    /// Vertex texture coordinates, wherein <0,0> is the top-left of the
+    /// texture, and <1,1> is the bottom-right of the texture.
     pub tex: Vec2<f32>,
+    /// Vertex color. Typical complications for 3D semitransparency apply.
     pub color: Rgba<f32>,
-    pub tex_index: u32,
+    /// Texture index within the texture array. For the mesh to be valid,
+    /// `tex_index` must be the same between all vertices within each triangle.
+    pub tex_index: usize,
 }
 
+/// Triangle within a `Mesh`.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Triangle(pub [u32; 3]);
+pub struct Triangle(pub [usize; 3]);
 
 
 // ==== pipeline ====
@@ -116,13 +139,7 @@ pub struct DrawMesh<'a> {
     pub mesh: &'a Mesh,
     pub textures: GpuImageArray,
 }
-/*
-#[derive(Debug, Copy, Clone)]
-pub struct PreppedDrawMesh<'a> {
-    mesh: &'a Mesh,
-    textures: &'a GpuImageArray,
-}
-*/
+
 pub struct MeshPipeline {
     mesh_pipeline: RenderPipeline,
     mesh_texture_bind_group_layout: BindGroupLayout,
@@ -163,7 +180,7 @@ impl MeshPipeline {
                             sample_type: TextureSampleType::Float {
                                 filterable: false,
                             },
-                            view_dimension: TextureViewDimension::D3,
+                            view_dimension: TextureViewDimension::D2Array,
                             multisampled: false,
                         },
                         count: None,
@@ -338,6 +355,7 @@ impl crate::Renderer {
         let texture_view = texture
             .create_view(&TextureViewDescriptor {
                 label: Some("image array texture view"),
+                dimension: Some(TextureViewDimension::D2Array),
                 ..Default::default()
             });
 
@@ -399,8 +417,14 @@ impl crate::Renderer {
     {
         if new_len > gpu_vec.capacity  {
             while new_len > gpu_vec.capacity {
-                gpu_vec.capacity *= 2;
+                if gpu_vec.capacity == 0 {
+                    const GPU_VEC_STARTING_CAPACITY: usize = 512;
+                    gpu_vec.capacity = GPU_VEC_STARTING_CAPACITY;
+                } else {
+                    gpu_vec.capacity *= 2;
+                }
             }
+            trace!("increasing gpu vec capacity");
             let new_buffer = device
                 .create_buffer(&BufferDescriptor {
                     label: Some("mesh buffer"),
@@ -410,19 +434,21 @@ impl crate::Renderer {
                         | T::USAGES,
                     mapped_at_creation: false,
                 });
-            let mut encoder = device
-                .create_command_encoder(&CommandEncoderDescriptor {
-                    label: Some("upsize GpuVec command encoder"),
-                });
-            encoder
-                .copy_buffer_to_buffer(
-                    gpu_vec.buffer.as_ref().unwrap(),
-                    0,
-                    &new_buffer,
-                    0,
-                    gpu_vec.len as u64,
-                );
-            queue.submit(once(encoder.finish()));
+            if gpu_vec.len != 0 {
+                let mut encoder = device
+                    .create_command_encoder(&CommandEncoderDescriptor {
+                        label: Some("upsize GpuVec command encoder"),
+                    });
+                encoder
+                    .copy_buffer_to_buffer(
+                        gpu_vec.buffer.as_ref().unwrap(),
+                        0,
+                        &new_buffer,
+                        0,
+                        gpu_vec.len as u64,
+                    );
+                queue.submit(once(encoder.finish()));
+            }
             gpu_vec.buffer = Some(new_buffer);
         }
         gpu_vec.len = new_len;
@@ -455,6 +481,14 @@ impl crate::Renderer {
             }
         }
 
+        for copy_range in &copy_ranges {
+            assert!(
+                copy_range.dst_byte_offset + copy_range.num_bytes
+                <= (gpu_vec.len * T::SIZE) as u64,
+                "GpuVec patch exceeds length",
+            );
+        }
+
         if copy_ranges.is_empty() {
             return;
         }
@@ -470,6 +504,9 @@ impl crate::Renderer {
                 label: Some("patch GpuVec command encoder"),
             });
         for copy_range in copy_ranges {
+            if copy_range.num_bytes == 0 {
+                continue;
+            }
             encoder
                 .copy_buffer_to_buffer(
                     &src_buffer,
@@ -506,7 +543,7 @@ impl GpuVecElem for Triangle {
 
     fn write(&self, dst: &mut Vec<u8>) {
         for index in self.0 {
-            dst.extend(index.to_le_bytes());
+            dst.extend(u32::to_le_bytes(index as u32));
         }
     }
 }

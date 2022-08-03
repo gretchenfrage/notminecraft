@@ -66,23 +66,23 @@ pub enum DrawObj3<'a> {
 }
 
 #[derive(Debug)]
-pub struct Canvas2<'a> {
-    target: &'a mut FrameContent,
+pub struct Canvas2<'a, 'b> {
+    target: &'b mut FrameContent<'a>,
     stack_len: usize,
 }
 
 #[derive(Debug)]
-pub struct Canvas3<'a> {
-    target: &'a mut FrameContent,
+pub struct Canvas3<'a, 'b> {
+    target: &'b mut FrameContent<'a>,
     stack_len: usize,
 }
 
-impl FrameContent {
+impl<'a> FrameContent<'a> {
     pub fn new() -> Self {
         Default::default() 
     }
 
-    pub fn canvas(&mut self) -> Canvas2 {
+    pub fn canvas<'b>(&'b mut self) -> Canvas2<'a, 'b> {
         Canvas2 {
             target: self,
             stack_len: 0,
@@ -90,15 +90,15 @@ impl FrameContent {
     }
 }
 
-impl<'a> Canvas2<'a> {
-    pub fn reborrow(&mut self) -> Canvas2 {
+impl<'a, 'b> Canvas2<'a, 'b> {
+    pub fn reborrow<'b2>(&'b2 mut self) -> Canvas2<'a, 'b2> {
         Canvas2 {
             target: self.target,
             stack_len: self.stack_len,
         }
     }
 
-    fn push(&mut self, item: FrameItem) {
+    fn push(&mut self, item: FrameItem<'a>) {
         self.target.0.push((self.stack_len, item));
     }
 
@@ -198,7 +198,7 @@ impl<'a> Canvas2<'a> {
     }
 
     // TODO 3d helpers
-    pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a> {
+    pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a, 'b> {
         self.push(FrameItem::Begin3d(view_proj.into()));
         Canvas3 {
             target: self.target,
@@ -207,15 +207,15 @@ impl<'a> Canvas2<'a> {
     }
 }
 
-impl<'a> Canvas3<'a> {
-    pub fn reborrow(&mut self) -> Canvas3 {
+impl<'a, 'b> Canvas3<'a, 'b> {
+    pub fn reborrow<'b2>(&'b2 mut self) -> Canvas3<'a, 'b2> {
         Canvas3 {
             target: self.target,
             stack_len: self.stack_len,
         }
     }
 
-    fn push(&mut self, item: FrameItem) {
+    fn push(&mut self, item: FrameItem<'a>) {
         self.target.0.push((self.stack_len, item));
     }
 
@@ -266,7 +266,7 @@ impl<'a> Canvas3<'a> {
     }
 
     // TODO draw helpers
-    pub fn draw<I: Into<DrawObj3>>(mut self, obj: I) -> Self {
+    pub fn draw<I: Into<DrawObj3<'a>>>(mut self, obj: I) -> Self {
         self.push(FrameItem::Draw3(obj.into()));
         self
     }
@@ -292,5 +292,13 @@ impl<'a> Canvas3<'a> {
     pub fn draw_text(self, text: &LayedOutTextBlock) -> Self
     {
         self.draw(DrawObj3::Text(text.clone()))
+    }
+
+    pub fn draw_mesh(self, mesh: &'a Mesh, textures: &GpuImageArray) -> Self
+    {
+        self.draw(DrawObj3::Mesh(DrawMesh {
+            mesh,
+            textures: textures.clone(),
+        }))
     }
 }

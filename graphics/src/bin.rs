@@ -42,7 +42,12 @@ mod game_behavior {
             VerticalAlign,
             LayedOutTextBlock,
             FontId,
+            GpuImageArray,
+            Mesh,
+            Vertex,
+            Triangle,
         },
+        view_proj::ViewProj,
     };
     use winit_main::reexports::dpi::PhysicalSize;
     use vek::*;
@@ -54,10 +59,13 @@ mod game_behavior {
         image: GpuImage,
         font: FontId,
         text: LayedOutTextBlock,
+        image_array: GpuImageArray,
+        mesh: Mesh,
     }
 
     impl GameBehavior {
         pub async fn new(mut renderer: Renderer) -> Result<Self> {
+            debug!("loading");
             let image = renderer.load_image_file("src/assets/sheep.jpg").await?;
             let font = renderer.load_font_file("src/assets/LiberationSerif-Regular.ttf").await?;
             let text = renderer
@@ -85,19 +93,19 @@ mod game_behavior {
                             text: "w",
                             font_id: font,
                             font_size: 280.0,
-                            color: dbg!(Rgba::red()),
+                            color: Rgba::red(),
                         },
                         TextSpan {
                             text: "w",
                             font_id: font,
                             font_size: 280.0,
-                            color: dbg!(Rgba::green()),
+                            color: Rgba::green(),
                         },
                         TextSpan {
                             text: "w",
                             font_id: font,
                             font_size: 280.0,
-                            color: dbg!(Rgba::blue()),
+                            color: Rgba::blue(),
                         }
                     ],
                     horizontal_align: HorizontalAlign::Left {
@@ -105,15 +113,60 @@ mod game_behavior {
                     },
                     vertical_align: VerticalAlign::Top,
                 });
+            let image_array = renderer
+                .load_image_array_files(
+                    None,
+                    &[
+                        "src/assets/sheep.jpg",
+                    ]
+                ).await?;
+            let mesh = Mesh {
+                vertices: renderer
+                    .create_gpu_vec_init(&[
+                        Vertex {
+                            pos: [-0.25, 0.25, 1.0].into(),
+                            tex: [0.0, 0.0].into(),
+                            color: Rgba::white(),
+                            tex_index: 0,
+                        },
+                        Vertex {
+                            pos: [0.25, 0.25, 1.0].into(),
+                            tex: [1.0, 0.0].into(),
+                            color: Rgba::white(),
+                            tex_index: 0,
+                        },
+                        Vertex {
+                            pos: [0.25, -0.25, 1.0].into(),
+                            tex: [1.0, 1.0].into(),
+                            color: Rgba::white(),
+                            tex_index: 0,
+                        },
+                        Vertex {
+                            pos: [-0.25, -0.25, 1.0].into(),
+                            tex: [0.0, 1.0].into(),
+                            color: Rgba::white(),
+                            tex_index: 0,
+                        },
+                    ]),
+                triangles: renderer
+                    .create_gpu_vec_init(&[
+                        Triangle([0, 2, 1]),
+                        Triangle([0, 3, 2]),
+                    ]),
+            };
+            debug!("loaded");
             Ok(GameBehavior {
                 renderer,
                 image,
                 font,
                 text,
+                image_array,
+                mesh,
             })
         }
 
         pub async fn draw<'a>(&mut self) -> Result<()> {
+            debug!("drawing");
             let mut frame = FrameContent::new();
             frame.canvas()
                 .draw_image(&self.image, [300.0, 300.0])
@@ -121,6 +174,15 @@ mod game_behavior {
                 .translate([0.0, 200.0])
                 .rotate(0.5)
                 .draw_text(&self.text)
+                ;
+            frame.canvas()
+                .begin_3d(ViewProj::perspective(
+                    [0.0, 0.0, 0.0].into(),
+                    Quaternion::identity(),
+                    f32::to_radians(75.0),
+                    1.0,
+                ))
+                .draw_mesh(&self.mesh, &self.image_array)
                 ;
             debug!("{:#?}", frame);
             self.renderer.draw_frame(&frame)

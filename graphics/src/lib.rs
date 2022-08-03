@@ -19,6 +19,7 @@ use crate::{
             TextPipeline,
             PreppedDrawText,
         },
+        mesh::MeshPipeline,
     },
     std140::{
         Std140,
@@ -30,6 +31,10 @@ use crate::{
         TextBlock,
         LayedOutTextBlock,
         FontId,
+        DrawMesh,
+        GpuImageArray,
+        GpuVec,
+        GpuVecElem,
     },
     render_instrs::{
         frame_render_compiler,
@@ -88,6 +93,7 @@ pub struct Renderer {
     solid_pipeline: SolidPipeline,
     image_pipeline: ImagePipeline,    
     text_pipeline: TextPipeline,
+    mesh_pipeline: MeshPipeline,
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
@@ -103,19 +109,6 @@ std140_struct!(ModifierUniformData {
     transform: Mat4<f32>,
     color: Rgba<f32>,
 });
-
-/*
-
-pub use crate::pipelines::text::{
-    TextBlock,
-    HorizontalAlign,
-    VerticalAlign,
-    FontId,
-    TextSpan,
-    LayedOutTextBlock,
-    pt_to_px,
-};
-*/
 
 fn create_depth_texture_like(
     device: &Device,
@@ -249,6 +242,14 @@ impl Renderer {
             &clip_pipeline.clip_texture_bind_group_layout,
         ).await?;
         
+        // create the mesh pipeline
+        trace!("creating mesh pipeline");
+        let mesh_pipeline = MeshPipeline::new(
+            &device,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
+        ).await?;
+
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -276,6 +277,7 @@ impl Renderer {
             solid_pipeline,
             image_pipeline,
             text_pipeline,
+            mesh_pipeline,
             _window: window,
         })
     }
@@ -311,10 +313,11 @@ impl Renderer {
         trace!("resizing clip pipeline");
         self.clip_pipeline.resize(&self.device, size);
     }
-    
-    /// Draw a frame. The callback can draw onto the Canvas2d. Then it will be
-    /// displayed on the window from <0,0> (top left corner) to <1,1> (bottom
-    /// right corner).
+
+    /// Draw a frame with the given frame content.
+    ///
+    /// It will be displayed on the window from <0,0> (top left corner) to
+    /// <1,1> (bottom right corner). 
     pub fn draw_frame(&mut self, content: &FrameContent) -> Result<()> {
         let surface_size = self.size();
 
@@ -358,6 +361,7 @@ impl Renderer {
             },
             ClearClip,
             EditClip(PreppedClipEdit),
+            ClearDepth, // TODO collapse cleaing into load ops
         }
 
         #[derive(Debug)]
@@ -365,6 +369,7 @@ impl Renderer {
             Solid,
             Image(PreppedDrawImage<'a>),
             Text(PreppedDrawText),
+            Mesh(&'a DrawMesh<'a>),
         }
 
         let instrs = frame_render_compiler(&content, surface_size)
@@ -390,6 +395,9 @@ impl Renderer {
                         ),
                         DrawObjNorm::Text(text) => PreppedRenderObj::Text(
                             text_pre_renderer.pre_render(text)
+                        ),
+                        DrawObjNorm::Mesh(mesh) => PreppedRenderObj::Mesh(
+                            mesh
                         ),
                     };
                     PreppedRenderInstr::Draw {
@@ -501,20 +509,30 @@ impl Renderer {
                         );
                     match obj {
                         PreppedRenderObj::Solid => {
-                            self.solid_pipeline.render(&mut pass);
+                            self.solid_pipeline
+                                .render(&mut pass);
                         }
                         PreppedRenderObj::Image(image) => {
-                            self.image_pipeline.render(
-                                image,
-                                &mut pass,
-                                self.uniform_buffer.unwrap_image_uniform_bind_group(),
-                            );
+                            self.image_pipeline
+                                .render(
+                                    image,
+                                    &mut pass,
+                                    self.uniform_buffer.unwrap_image_uniform_bind_group(),
+                                );
                         }
                         PreppedRenderObj::Text(text) => {
-                            self.text_pipeline.render(
-                                text,
-                                &mut pass,
-                            );
+                            self.text_pipeline
+                                .render(
+                                    text,
+                                    &mut pass,
+                                );
+                        }
+                        PreppedRenderObj::Mesh(mesh) => {
+                            self.mesh_pipeline
+                                .render(
+                                    mesh,
+                                    &mut pass,
+                                );
                         }
                     }
                 }
@@ -563,24 +581,28 @@ impl Renderer {
     ///
     /// Just reads the file with tokio then passes it to `self.load_image`.
     pub async fn load_image_file(&self, path: impl AsRef<Path>) -> Result<GpuImage> {
+        trace!("reading image file");
         let file_data = fs::read(path).await?;
         self.load_image(&file_data)
     }
 
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
+        trace!("decompressing image file data");
         let image = image::load_from_memory(file_data.as_ref())?;
         Ok(self.load_image_raw(image))
     }
 
     /// Load an image onto the GPU which has already been decompressed.
     pub fn load_image_raw(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
+        trace!("loading image");
         self.image_pipeline
             .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
     
     /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
     pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
+        trace!("reading font file");
         let file_data = fs::read(path).await?;
         self.load_font(&file_data)
     }
@@ -590,6 +612,7 @@ impl Renderer {
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
     pub fn load_font(&mut self, file_data: impl AsRef<[u8]>) -> Result<FontId> {
+        trace!("loading font");
         let font = FontArc::try_from_vec(file_data.as_ref().into())?;
         Ok(self.text_pipeline.load_font(font))
     }
@@ -600,6 +623,7 @@ impl Renderer {
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
     pub async fn load_font_437_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
+        trace!("loading font 437 image file");
         let file_data = fs::read(path).await?;
         self.load_font_437(file_data)
     }
@@ -610,6 +634,7 @@ impl Renderer {
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
     pub fn load_font_437(&mut self, file_data: impl AsRef<[u8]>) -> Result<FontId> {
+        trace!("decompressing font 437 image file data");
         let image = image::load_from_memory(file_data.as_ref())?;
         self.load_font_437_raw(image)
     }
@@ -620,12 +645,173 @@ impl Renderer {
     /// Be mindful that there is currently no way to un-load a font from the
     /// renderer.
     pub fn load_font_437_raw(&mut self, image: impl Borrow<DynamicImage>) -> Result<FontId> {
+        trace!("loading font 437");
         let font = FontArc::new(Font437::new(image)?);
         Ok(self.text_pipeline.load_font(font))
     }
 
     /// Pre-compute the layout for a text block.
     pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
+        trace!("laying out text block"); // TODO spans?
         self.text_pipeline.lay_out_text(text_block)
+    }
+
+    /// Read an array of PNG / JPG / etc images from files and load them onto
+    /// the GPU.
+    ///
+    /// Just reads the files with tokio then passes them to
+    /// `self.load_image_array`.
+    ///
+    /// If `size` is None, automatically chooses dimensions as the maximum
+    /// between all images, or 1 if no images are given. If any images are a
+    /// different size than chosen, automatically resizes them with
+    /// nearest-neighbor filtering.
+    ///
+    /// Panics if `size` has 0 components.
+    pub async fn load_image_array_files<I>(
+        &self,
+        size: Option<Extent2<u32>>,
+        paths: I,
+    ) -> Result<GpuImageArray>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: AsRef<Path>,
+    {
+        trace!("reading image array files");
+        let mut images = Vec::new();
+        for path in paths {
+            images.push(fs::read(path).await?);
+        }
+        self
+            .load_image_array(
+                size,
+                images,
+            )
+    }
+
+    /// Load an array of images onto the GPU from PNG / JPG / etc file data.
+    ///
+    /// If `size` is None, automatically chooses dimensions as the maximum
+    /// between all images, or 1 if no images are given. If any images are a
+    /// different size than chosen, automatically resizes them with
+    /// nearest-neighbor filtering.
+    ///
+    /// Panics if `size` has 0 components.
+    pub fn load_image_array<I>(
+        &self,
+        size: Option<Extent2<u32>>,
+        images: I,
+    ) -> Result<GpuImageArray>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: AsRef<[u8]>,
+    {
+        trace!("decompressing image array file data");
+        let images = images
+            .into_iter()
+            .map(|file_data| image::load_from_memory(file_data.as_ref())
+                .map_err(anyhow::Error::from))
+            .collect::<Result<Vec<DynamicImage>>>()?;
+        let size = size
+            .unwrap_or_else(|| Extent2 {
+                w: images.iter().map(|image| image.width()).max().unwrap_or(1),
+                h: images.iter().map(|image| image.height()).max().unwrap_or(1),
+            });
+        Ok(self
+            .load_image_array_raw(
+                size,
+                images,
+            ))
+    }
+
+    /// Load an array of images onto the GPU which have already been
+    /// decompressed.
+    ///
+    /// If any images are a different size than `size`, automatically resizes
+    /// them with nearest-neighbor filtering.
+    ///
+    /// Panics if `size` has 0 components.
+    pub fn load_image_array_raw<I>(
+        &self,
+        size: Extent2<u32>,
+        images: I,
+    ) -> GpuImageArray
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Borrow<DynamicImage>,
+    {
+        trace!("loading image array");
+        self
+            .mesh_pipeline
+            .load_image_array(
+                &self.device,
+                &self.queue,
+                size,
+                images,
+            )
+    }
+
+    /// Create a `GpuVec` and initialize it with a slice of content.
+    pub fn create_gpu_vec_init<T: GpuVecElem>(
+        &self,
+        content: &[T],
+    ) -> GpuVec<T> {
+        trace!("creating gpu vec with data");
+        // TODO could be more optimized
+        let mut gpu_vec = self.create_gpu_vec();
+        self
+            .set_gpu_vec_len(
+                &mut gpu_vec,
+                content.len(),
+            );
+        self
+            .patch_gpu_vec(
+                &mut gpu_vec,
+                &[(0, content)],
+            );
+        gpu_vec
+    }
+
+    /// Create an empty `GpuVec`.
+    pub fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
+        trace!("creating gpu vec");
+        MeshPipeline::create_gpu_vec()
+    }
+
+    /// Set the size of a `GpuVec`, reallocating if necessary.
+    ///
+    /// If this increases the size, all slots after the previous size are
+    /// considered to be filled with garbage data.
+    pub fn set_gpu_vec_len<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        new_len: usize,
+    ) {
+        trace!("setting gpu vec len");
+        MeshPipeline::set_gpu_vec_len(
+            &self.device,
+            &self.queue,
+            gpu_vec,
+            new_len,
+        )
+    }
+
+    /// Patch some ranges of a `GpuVec`, overwriting existing data.
+    ///
+    /// Each patch comprises a destination `GpuVec` patch start index to copy
+    /// to, and a slice of elements to copy to the `GpuVec` starting at that
+    /// index.
+    pub fn patch_gpu_vec<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        patches: &[(usize, &[T])],
+    ) {
+        trace!("patching gpu vec");
+        MeshPipeline::patch_gpu_vec(
+            &self.device,
+            &self.queue,
+            gpu_vec,
+            patches,
+        )
     }
 }
