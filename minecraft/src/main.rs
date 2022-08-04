@@ -1,4 +1,141 @@
 
+#![feature(array_zip)]
+
+
+use crate::game::{
+    Game,
+    UiSize,
+};
+use graphics::Renderer;
+use std::{
+    panic,
+    sync::Arc,
+    time::{
+        Instant,
+        Duration,
+    },
+    thread::sleep,
+    env,
+};
+use winit_main::{
+    EventLoopHandle,
+    EventReceiver,
+    UserEvent,
+    reexports::event::{
+        Event,
+        WindowEvent,
+    },
+};
+use tracing_subscriber::{
+    FmtSubscriber,
+    EnvFilter,
+};
+use backtrace::Backtrace;
+use anyhow::*;
+use vek::*;
+
+
+#[macro_use]
+extern crate tracing;
+
+
+mod game;
+mod jar_assets;
+
+
+fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        //.with_ansi(false).with_writer(std::fs::File::create("log.txt").unwrap())
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+    info!("starting program");
+
+    panic::set_hook(Box::new(|info| {
+        error!("{}", info);
+        if env::var("RUST_BACKTRACE").map(|val| val == "1").unwrap_or(false) {
+            error!("{:?}", Backtrace::new());
+        }
+    }));
+    trace!("installed custom panic hook");
+
+    winit_main::run(|event_loop, events| async move {
+        trace!("successfully bootstrapped winit + tokio");
+        let result = window_main(event_loop, events).await;
+        if let Err(e) = result {
+            error!(error=%e, "exit with error");
+        }
+    });
+}
+
+async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
+    let window = event_loop.create_window(Default::default()).await?;
+    let window = Arc::new(window);
+    let size = window.inner_size();
+    let size = Extent2::new(size.width, size.height);
+    let renderer = Renderer::new(Arc::clone(&window)).await?;
+    let mut game = Game::new(
+        renderer,
+        UiSize {
+            size: size.map(|n| n as f32),
+            scale: window.scale_factor() as f32,
+        },
+    ).await?;
+
+    let frames_per_second = 60;
+    let frame_delay = Duration::from_secs(1) / frames_per_second;
+
+    loop {
+        let event = events.recv().await;
+        trace!(?event, "received event");
+        match event {
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => break,
+                WindowEvent::Resized(size) => {
+                    if size.width == 0 || size.height == 0 {
+                        trace!("not resizing window because of 0 size"); // TODO factor in
+                    } else {
+                        trace!("resizing window");
+                        game.set_size(Extent2::new(size.width, size.height)).await?;
+                    }
+                },
+                _ => (),
+            },
+            Event::UserEvent(UserEvent::ScaleFactorChanged { scale_factor, .. }) => {
+                game.set_scale(scale_factor as f32).await?;
+            }
+            Event::MainEventsCleared => {
+                let before_frame = Instant::now();
+
+                // draw frame
+                trace!("drawing frame");
+                let result = game.draw().await;                
+                if let Err(e) = result {
+                    error!(error=%e, "draw_frame error");
+                }
+
+                // wait
+                let after_frame = Instant::now();
+                let delay = (before_frame + frame_delay)
+                    .checked_duration_since(after_frame);
+                if let Some(delay) = delay {
+                    sleep(delay);
+                }
+
+                // request redraw
+                window.request_redraw();
+            },
+            _ => (),
+        };
+    }
+
+    Ok(())
+}
+
+
+
+
+/*
 #[macro_use]
 extern crate tracing;
 
@@ -509,3 +646,4 @@ fn main() {
         }
     });
 }
+*/
