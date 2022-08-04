@@ -361,7 +361,7 @@ impl Renderer {
             },
             ClearClip,
             EditClip(PreppedClipEdit),
-            ClearDepth, // TODO collapse cleaing into load ops
+            ClearDepth,
         }
 
         #[derive(Debug)]
@@ -412,7 +412,7 @@ impl Renderer {
                         .pre_render(clip_edit, &mut uniform_packer);
                     PreppedRenderInstr::EditClip(prepped_clip_edit)
                 }
-                RenderInstr::ClearDepth => unimplemented!(),
+                RenderInstr::ClearDepth => PreppedRenderInstr::ClearDepth,
             })
             .collect::<Vec<PreppedRenderInstr>>();
 
@@ -462,7 +462,7 @@ impl Renderer {
                     depth,
                 } => {
                     // TODO batch
-                    let depth_stencil_attachment = if depth {
+                    let depth_stencil_attachment = if depth && false /* TODO */ {
                         Some(RenderPassDepthStencilAttachment {
                             view: &depth_texture,
                             depth_ops: Some(Operations {
@@ -566,6 +566,9 @@ impl Renderer {
                         &mut encoder,
                         self.uniform_buffer.unwrap_clip_edit_uniform_bind_group(),
                     );
+                }
+                PreppedRenderInstr::ClearDepth => {
+                    // TODO
                 }
             }
         }

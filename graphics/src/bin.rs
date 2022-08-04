@@ -168,17 +168,18 @@ mod game_behavior {
         pub async fn draw<'a>(&mut self) -> Result<()> {
             debug!("drawing");
             let mut frame = FrameContent::new();
-            frame.canvas()
+            /*frame.canvas()
                 .draw_image(&self.image, [300.0, 300.0])
                 .min_x(150.0)
                 .translate([0.0, 200.0])
                 .rotate(0.5)
                 .draw_text(&self.text)
-                ;
+                ;*/
             frame.canvas()
+                .scale(self.renderer.size().map(|n| n as f32))
                 .begin_3d(ViewProj::perspective(
                     [0.0, 0.0, 0.0].into(),
-                    Quaternion::identity(),
+                    Quaternion::rotation_y(f32::to_radians(15.0)),
                     f32::to_radians(75.0),
                     1.0,
                 ))

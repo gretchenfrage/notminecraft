@@ -275,10 +275,16 @@ impl MeshPipeline {
                     INDEX_FORMAT,
                 );
             pass
+                .draw_indexed(
+                    0..(mesh.mesh.triangles.len * INDICES_PER_TRIANGLE) as u32,
+                    0,
+                    0..1,
+                )
+            /*pass
                 .draw(
                     0..mesh.mesh.vertices.len as u32,
                     0..(mesh.mesh.triangles.len * INDICES_PER_TRIANGLE) as u32,
-                );
+                );*/
         }
     }
 /*

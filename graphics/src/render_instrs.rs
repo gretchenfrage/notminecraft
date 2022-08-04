@@ -124,6 +124,7 @@ pub enum RenderInstr<'a> {
         color: Rgba<u8>,
         /// Whether to test against and write to the depth buffer.
         depth: bool,
+        //depth_op: DepthOp,
     },
     /// Clear the clip min and clip max buffers.
     ClearClip,
@@ -131,7 +132,14 @@ pub enum RenderInstr<'a> {
     /// Clear the depth buffer to 1.
     ClearDepth,
 }
-
+/*
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum DepthOp {
+    Ignore,
+    Clear,
+    Load,
+}
+*/
 #[derive(Debug, Copy, Clone)]
 pub struct ClipEdit {
     pub max_clip_min: bool,
@@ -233,6 +241,15 @@ where
                     let obj = self.trying_to_draw.take().unwrap();
                     let color = self.color()
                         .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
+                    /*let depth_op =
+                        if self.currently_3d {
+                            if !self.depth_valid {
+                                self.depth_valid = true;
+                                DepthOp::Clear
+                            } else {
+
+                            }
+                        }*/
                     RenderInstr::Draw {
                         obj,
                         transform: self.transform().0,

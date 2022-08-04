@@ -23,14 +23,17 @@ impl ViewProj {
         fov: f32,
         aspect: f32,
     ) -> Self {
-        let view = Mat4::<f32>::perspective_lh_zo(
+        let view1 = Mat4::<f32>::translation_3d(pos);
+        let view2 = Mat4::<f32>::from(-dir);
+        let proj = Mat4::<f32>::perspective_lh_zo(
             fov,
             aspect,
             0.1,
             100.0, // TODO
         );
-        let adjust = Mat4::<f32>::scaling_3d([1.0, -1.0, 1.0]);
-        ViewProj(adjust * view)
+        let adjust1 = Mat4::<f32>::scaling_3d([1.0, -1.0, 1.0]);
+        let adjust2 = Mat4::<f32>::translation_3d([0.5, 0.5, 0.0]);
+        ViewProj(adjust2 * adjust1 * proj * view2 * view1)
     }
 
     // TODO orthographics
