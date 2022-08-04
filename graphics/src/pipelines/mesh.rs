@@ -279,27 +279,10 @@ impl MeshPipeline {
                     0..(mesh.mesh.triangles.len * INDICES_PER_TRIANGLE) as u32,
                     0,
                     0..1,
-                )
-            /*pass
-                .draw(
-                    0..mesh.mesh.vertices.len as u32,
-                    0..(mesh.mesh.triangles.len * INDICES_PER_TRIANGLE) as u32,
-                );*/
+                );
         }
     }
-/*
-impl crate::Renderer {
-    pub fn load_image_array_raw<I>(
-        &self,
-        size: Extent2<u32>,
-        images: I,
-    ) -> GpuImageArray
-    where
-        I: IntoIterator,
-        <I as IntoIterator>::Item: Borrow<DynamicImage>,
-    {}
-}
-*/
+
     pub fn load_image_array<I>(
         &self,
         device: &Device,

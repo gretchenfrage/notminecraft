@@ -18,13 +18,13 @@ impl ViewProj {
     /// and aspect ratio.
     #[allow(unused_variables)]
     pub fn perspective(
-        pos: Vec3<f32>,
-        dir: Quaternion<f32>,
+        pos: impl Into<Vec3<f32>>,
+        dir: impl Into<Quaternion<f32>>,
         fov: f32,
         aspect: f32,
     ) -> Self {
         let view1 = Mat4::<f32>::translation_3d(pos);
-        let view2 = Mat4::<f32>::from(-dir);
+        let view2 = Mat4::<f32>::from(-dir.into());
         let proj = Mat4::<f32>::perspective_lh_zo(
             fov,
             aspect,

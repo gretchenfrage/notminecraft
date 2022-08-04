@@ -47,7 +47,6 @@ mod game_behavior {
             Vertex,
             Triangle,
         },
-        view_proj::ViewProj,
     };
     use winit_main::reexports::dpi::PhysicalSize;
     use vek::*;
@@ -124,25 +123,25 @@ mod game_behavior {
                 vertices: renderer
                     .create_gpu_vec_init(&[
                         Vertex {
-                            pos: [-0.25, 0.25, 1.0].into(),
+                            pos: [-0.25, 0.25, 0.0].into(),
                             tex: [0.0, 0.0].into(),
                             color: Rgba::white(),
                             tex_index: 0,
                         },
                         Vertex {
-                            pos: [0.25, 0.25, 1.0].into(),
+                            pos: [0.25, 0.25, 0.0].into(),
                             tex: [1.0, 0.0].into(),
                             color: Rgba::white(),
                             tex_index: 0,
                         },
                         Vertex {
-                            pos: [0.25, -0.25, 1.0].into(),
+                            pos: [0.25, -0.25, 0.0].into(),
                             tex: [1.0, 1.0].into(),
                             color: Rgba::white(),
                             tex_index: 0,
                         },
                         Vertex {
-                            pos: [-0.25, -0.25, 1.0].into(),
+                            pos: [-0.25, -0.25, 0.0].into(),
                             tex: [0.0, 1.0].into(),
                             color: Rgba::white(),
                             tex_index: 0,
@@ -176,13 +175,22 @@ mod game_behavior {
                 .draw_text(&self.text)
                 ;*/
             frame.canvas()
+                /*
                 .scale(self.renderer.size().map(|n| n as f32))
                 .begin_3d(ViewProj::perspective(
                     [0.0, 0.0, 0.0].into(),
                     Quaternion::rotation_y(f32::to_radians(15.0)),
                     f32::to_radians(75.0),
-                    1.0,
+                    self.renderer.aspect(),
                 ))
+                */
+                .begin_3d_perspective(
+                    self.renderer.size().map(|n| n as f32),
+                    [0.0, 0.0, 0.0],
+                    Quaternion::rotation_y(f32::to_radians(15.0)),
+                    f32::to_radians(75.0),
+                )
+                .translate([0.0, 0.0, 1.0])
                 .draw_mesh(&self.mesh, &self.image_array)
                 ;
             debug!("{:#?}", frame);

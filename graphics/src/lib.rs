@@ -292,6 +292,10 @@ impl Renderer {
         Extent2::new(self.config.width, self.config.height)
     }
 
+    pub fn aspect(&self) -> f32 {
+        self.config.width as f32 / self.config.height as f32
+    }
+
     /// Resize the surface, in reponse to a change in window size.
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         // resize surface

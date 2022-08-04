@@ -205,6 +205,24 @@ impl<'a, 'b> Canvas2<'a, 'b> {
             stack_len: self.stack_len + 1,
         }
     }
+
+    pub fn begin_3d_perspective(
+        self,
+        size: impl Into<Extent2<f32>>,
+        pos: impl Into<Vec3<f32>>,
+        dir: impl Into<Quaternion<f32>>,
+        fov: f32,
+    ) -> Canvas3<'a, 'b> {
+        let size = size.into();
+        self
+            .scale(size)
+            .begin_3d(ViewProj::perspective(
+                pos,
+                dir,
+                fov,
+                size.w / size.h,
+            ))
+    }
 }
 
 impl<'a, 'b> Canvas3<'a, 'b> {
