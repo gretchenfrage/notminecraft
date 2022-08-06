@@ -36,6 +36,7 @@ use winit_main::reexports::{
     event::{
         KeyboardInput,
         VirtualKeyCode,
+        MouseScrollDelta,
     },
     dpi::PhysicalSize,
 };
@@ -118,12 +119,13 @@ impl Game {
         Ok(WindowAttributes {
             title: "Not Minecraft".into(),
             inner_size: Some(PhysicalSize {
-                /*
+                
                 width: 1250 / 2 * 4 / 3,
                 height: 725 / 2 * 4 / 3,
-                */
+                
+                /*
                 width: 849,
-                height: 529,
+                height: 529,*/
             }.into()),
             ..Default::default()
         })
@@ -251,7 +253,7 @@ impl Game {
             &renderer,
             UiTextBlockConfig {
                 text_config: UiTextConfig {
-                    text: "Everything in the universe is in the public domain".into(),
+                    text: "Everything in the universe is in the public domain.".into(),
                     font,
                     font_size: 16.0,
                     color: Rgba::white(),
@@ -336,18 +338,7 @@ impl Game {
             );
         self.version_text.draw(canvas.reborrow());
         self.copyright_text.draw(canvas.reborrow());
-        {
-            let mut canvas = canvas.reborrow()
-                .translate(Vec2 {
-                    x: self.size.size.w / 4.0 * 3.0,
-                    y: self.size.size.h / 16.0 * 5.0,
-                })
-                .scale([
-                    self.splash_size.get().abs() / 16.0 + 1.0; 2
-                ])
-                .rotate(f32::to_radians(22.5));
-            self.splash_text.draw(canvas.reborrow());
-        }
+        
         let mut title_canvas = canvas.reborrow()
             .begin_3d_perspective(
                 self.size.size,
@@ -367,6 +358,18 @@ impl Game {
                 .translate(pos)
                 .draw_mesh(&self.title_pixel, &self.title_pixel_texture);
         }
+        {
+            let mut canvas = canvas.reborrow()
+                .translate(Vec2 {
+                    x: self.size.size.w / 4.0 * 3.0,
+                    y: self.size.size.h / 16.0 * 5.0,
+                })
+                .scale([
+                    self.splash_size.get().abs() / 16.0 + 1.0; 2
+                ])
+                .rotate(f32::to_radians(22.5));
+            self.splash_text.draw(canvas.reborrow());
+        }
         self.renderer.draw_frame(&frame)
     }
 
@@ -374,8 +377,8 @@ impl Game {
         info!(?size, "setting size");
 
         self.renderer.resize(size);
-
         self.size.size = size.map(|n| n as f32);
+
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
 
@@ -387,7 +390,7 @@ impl Game {
 
         self.size.scale = scale;
 
-        self.version_text.set_size(&self.renderer, self.size.size);
+        self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
 
@@ -395,6 +398,15 @@ impl Game {
     }
 
     pub async fn keyboard_input(&mut self, input: KeyboardInput) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn mouse_wheel(&mut self, delta: MouseScrollDelta) -> Result<()> {
+        let n = match delta {
+            MouseScrollDelta::LineDelta(_, y) => y,
+            MouseScrollDelta::PixelDelta(delta) => delta.y as f32 / (16.0 * self.size.scale),
+        };
+        self.set_scale(self.size.scale + n / 100.0).await?;
         Ok(())
     }
 }

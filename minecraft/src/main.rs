@@ -100,9 +100,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         trace!("resizing window");
                         game.set_size(Extent2::new(size.width, size.height)).await?;
                     }
-                },
+                }
                 WindowEvent::KeyboardInput { input, .. } => {
                     game.keyboard_input(input).await?;
+                }
+                WindowEvent::MouseWheel { delta, .. } => {
+                    game.mouse_wheel(delta).await?;
                 }
                 _ => (),
             },
