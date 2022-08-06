@@ -1,4 +1,4 @@
-
+/*
 #[macro_use]
 extern crate tracing;
 
@@ -286,3 +286,6 @@ fn main() {
         }
     });
 }
+*/
+
+fn main() {}

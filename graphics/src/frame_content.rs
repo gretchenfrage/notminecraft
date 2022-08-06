@@ -10,6 +10,7 @@ use crate::{
     },
     view_proj::ViewProj,
 };
+use std::borrow::Borrow;
 use vek::*;
 
 
@@ -88,6 +89,215 @@ impl<'a> FrameContent<'a> {
             stack_len: 0,
         }
     }
+
+    #[allow(unused_must_use)] // TODO LOL
+    pub fn to_pseudo_xml(&self) -> String {
+        use std::fmt::Write;
+
+        const INDENT: &'static str = "    ";
+
+        let mut buf = String::new();
+        let mut tag_stack: Vec<&'static str> = Vec::new();
+
+        fn fmt_mat3(buf: &mut String, mat: Mat3<f32>) {
+            let [
+                m00, m01, m02,
+                m10, m11, m12,
+                m20, m21, m22,
+            ] = mat.into_row_array();
+            write!(
+                buf,
+                "{:.2},{:.2},{:.2}; {:.2},{:.2},{:.2}; {:.2},{:.2},{:.2}",
+                m00, m01, m02,
+                m10, m11, m12,
+                m20, m21, m22,
+            );
+        }
+
+        fn fmt_mat4(buf: &mut String, mat: Mat4<f32>) {
+            let [
+                m00, m01, m02, m03,
+                m10, m11, m12, m13,
+                m20, m21, m22, m23,
+                m30, m31, m32, m33
+            ] = mat.into_row_array();
+            write!(
+                buf,
+                "{:.2},{:.2},{:.2},{:.2}; {:.2},{:.2},{:.2},{:.2}; {:.2},{:.2},{:.2},{:.2}; {:.2},{:.2},{:.2},{:.2}",
+                m00, m01, m02, m03,
+                m10, m11, m12, m13,
+                m20, m21, m22, m23,
+                m30, m31, m32, m33
+            );
+        }
+
+        for &(stack_len, ref item) in &self.0 {
+            while tag_stack.len() > stack_len {
+                let tag = tag_stack.pop().unwrap();
+                for _ in 0..tag_stack.len() {
+                    buf.push_str(INDENT);
+                }
+                writeln!(&mut buf, "</{}>", tag);
+            }
+            for _ in 0..tag_stack.len() {
+                buf.push_str(INDENT);
+            }
+            match item {
+                &FrameItem::PushModifier2(m) => match m {
+                    Modifier2::Transform(Transform2(mat)) => {
+                        write!(&mut buf, "<transform mat=\"");
+                        fmt_mat3(&mut buf, mat);
+                        writeln!(&mut buf, "\">");
+                        tag_stack.push("transform");
+                    }
+                    Modifier2::Color(Rgba { r, g, b, a }) => {
+                        writeln!(&mut buf, "<color rgba=\"{:.2},{:.2},{:.2},{:.2}\">", r, g, b, a);
+                        tag_stack.push("color");
+                    }
+                    Modifier2::Clip(Clip2(Vec3 { x, y, z })) => {
+                        writeln!(&mut buf, "<clip vec\"{:.2},{:.2},{:.2}\">", x, y, z);
+                        tag_stack.push("clip");
+                    }
+                }
+                &FrameItem::Draw2(ref o) => match o {
+                    DrawObj2::Solid => {
+                        buf.push_str("<solid/>\n");
+                    }
+                    DrawObj2::Image(i) => {
+                        writeln!(
+                            &mut buf,
+                            "<image texstart=\"{:.2},{:.2}\" texextent=\"{:.2},{:.2}\"/>",
+                            i.tex_start.x,
+                            i.tex_start.y,
+                            i.tex_extent.w,
+                            i.tex_extent.h,
+                        );
+                    }
+                    DrawObj2::Text(_t) => {
+                        buf.push_str("<text/>\n");
+                    }
+                }
+                &FrameItem::Begin3d(ViewProj(mat)) => {
+                    write!(&mut buf, "<begin3d mat=\"");
+                    fmt_mat4(&mut buf, mat);
+                    writeln!(&mut buf, "\">");
+                    tag_stack.push("begin3d");
+                }
+                &FrameItem::PushModifier3(m) => match m {
+                    Modifier3::Transform(Transform3(mat)) => {
+                        write!(&mut buf, "<transform mat=\"");
+                        fmt_mat4(&mut buf, mat);
+                        writeln!(&mut buf, "\">");
+                        tag_stack.push("transform");
+                    }
+                    Modifier3::Color(Rgba { r, g, b, a }) => {
+                        writeln!(&mut buf, "<color rgba=\"{:.2},{:.2},{:.2},{:.2}\">", r, g, b, a);
+                        tag_stack.push("color");
+                    }
+                    Modifier3::Clip(Clip3(Vec4 { x, y, z, w })) => {
+                        writeln!(&mut buf, "<clip vec\"{:.2},{:.2},{:.2},{:.2}\">", x, y, z, w);
+                        tag_stack.push("clip");
+                    }
+                }
+                &FrameItem::Draw3(ref o) => match o {
+                    DrawObj3::Solid => {
+                        buf.push_str("<solid/>\n");
+                    }
+                    DrawObj3::Image(i) => {
+                        writeln!(
+                            &mut buf,
+                            "<image texstart=\"{:.2},{:.2}\" texextent=\"{:.2},{:.2}\"/>",
+                            i.tex_start.x,
+                            i.tex_start.y,
+                            i.tex_extent.w,
+                            i.tex_extent.h,
+                        );
+                    }
+                    DrawObj3::Text(_t) => {
+                        buf.push_str("<text/>\n");
+                    }
+                    DrawObj3::Mesh(m) => {
+                        if cfg!(debug_assertions) {
+                            buf.push_str("<mesh>\n");
+                            tag_stack.push("mesh");
+
+                            let vertices = m.mesh.vertices.dbg_content().unwrap();
+                            for triangle in m.mesh.triangles.dbg_content().unwrap() {
+                                for _ in 0..tag_stack.len() {
+                                    buf.push_str(INDENT);
+                                }
+
+                                let triangle =
+                                    if let Some(triangle) = triangle { triangle }
+                                    else {
+                                        buf.push_str("<garbage>\n");
+                                        continue
+                                    };
+
+
+                                buf.push_str("<triangle>\n");
+                                tag_stack.push("triangle");
+
+                                for i in triangle.0 {
+                                    for _ in 0..tag_stack.len() {
+                                        buf.push_str(INDENT);
+                                    }
+
+                                    let vertex = vertices[i];
+                                    if let Some(v) = vertex {
+                                        buf.push_str("<vertex>\n");
+                                        tag_stack.push("vertex");
+
+                                        for _ in 0..tag_stack.len() {
+                                            buf.push_str(INDENT);
+                                        }
+                                        writeln!(&mut buf, "<pos>{:.2}, {:.2}, {:.2}</pos>", v.pos.x, v.pos.y, v.pos.z);
+
+                                        for _ in 0..tag_stack.len() {
+                                            buf.push_str(INDENT);
+                                        }
+                                        writeln!(&mut buf, "<tex>{:.2}, {:.2}</tex>", v.tex.x, v.pos.y);
+
+                                        for _ in 0..tag_stack.len() {
+                                            buf.push_str(INDENT);
+                                        }
+                                        writeln!(&mut buf, "<color>{:.2}, {:.2}, {:.2}, {:.2}</pos>", v.color.r, v.color.g, v.color.b, v.color.a);
+
+                                        for _ in 0..tag_stack.len() {
+                                            buf.push_str(INDENT);
+                                        }
+                                        writeln!(&mut buf, "<texindex>{:.2}</texindex>", v.tex_index);
+
+                                        let tag = tag_stack.pop().unwrap();
+                                        for _ in 0..tag_stack.len() {
+                                            buf.push_str(INDENT);
+                                        }
+                                        writeln!(&mut buf, "</{}>", tag);
+                                    } else {
+                                        buf.push_str("<garbage/>\n");
+                                    }
+                                }
+
+                                let tag = tag_stack.pop().unwrap();
+                                for _ in 0..tag_stack.len() {
+                                    buf.push_str(INDENT);
+                                }
+                                writeln!(&mut buf, "</{}>", tag);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        while tag_stack.len() > 0 {
+            let tag = tag_stack.pop().unwrap();
+            for _ in 0..tag_stack.len() {
+                buf.push_str(INDENT);
+            }
+            writeln!(&mut buf, "</{}>", tag);
+        }
+        buf
+    }
 }
 
 impl<'a, 'b> Canvas2<'a, 'b> {
@@ -138,6 +348,13 @@ impl<'a, 'b> Canvas2<'a, 'b> {
 
     pub fn max_y(self, f: f32) -> Self {
         self.modify(Clip2::max_y(f))
+    }
+
+    pub fn modifiers<I: Borrow<[Modifier2]>>(mut self, modifiers: I) -> Self {
+        for &modifier in modifiers.borrow() {
+            self = self.modify(modifier);
+        }
+        self
     }
 
     // TODO draw helpers

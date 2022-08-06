@@ -6,6 +6,7 @@ use crate::{
     },
     shader::load_shader,
     SWAPCHAIN_FORMAT,
+    DEPTH_FORMAT,
 };
 use std::sync::Arc;
 use glyph_brush::{
@@ -313,7 +314,13 @@ impl TextPipeline {
                     ],
                 }),
                 primitive: PrimitiveState::default(),
-                depth_stencil: None,
+                depth_stencil: Some(DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
                 multisample: MultisampleState::default(),
                 multiview: None,
             });

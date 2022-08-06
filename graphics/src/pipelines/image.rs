@@ -1,6 +1,7 @@
 
 use crate::{
     SWAPCHAIN_FORMAT,
+    DEPTH_FORMAT,
     std140::{
         Std140,
         std140_struct,
@@ -154,7 +155,13 @@ impl ImagePipeline {
                     ],
                 }),
                 primitive: PrimitiveState::default(),
-                depth_stencil: None,
+                depth_stencil: Some(DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
                 multisample: MultisampleState::default(),
                 multiview: None,
             });

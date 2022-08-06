@@ -15,7 +15,6 @@ use std::mem::swap;
 use wgpu::*;
 use vek::*;
 use anyhow::Result;
-use winit_main::reexports::dpi::PhysicalSize;
 
 
 pub const CLIP_FORMAT: TextureFormat = TextureFormat::R32Float;
@@ -58,7 +57,7 @@ fn create_clip_texture(
     device: &Device,
     clip_sampler: &Sampler,
     clip_texture_bind_group_layout: &BindGroupLayout,
-    size: PhysicalSize<u32>,
+    size: Extent2<u32>,
 ) -> ClipTexture
 {
     let texture = create_depth_texture_like(
@@ -99,7 +98,7 @@ fn create_clip_texture(
 impl ClipPipeline {
     pub(crate) async fn new(
         device: &Device,
-        size: PhysicalSize<u32>,
+        size: Extent2<u32>,
     ) -> Result<Self> {
         let clip_sampler = device
             .create_sampler(&SamplerDescriptor {
@@ -245,7 +244,7 @@ impl ClipPipeline {
             })
     }
 
-    pub(crate) fn resize(&mut self, device: &Device, size: PhysicalSize<u32>) {
+    pub(crate) fn resize(&mut self, device: &Device, size: Extent2<u32>) {
         self.clip_min_texture = create_clip_texture(
             device,
             &self.clip_sampler,

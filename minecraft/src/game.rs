@@ -68,11 +68,7 @@ pub fn hex_color(hex: u32) -> Rgba<f32> {
 }
 
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct UiSize {
-    pub size: Extent2<f32>,
-    pub scale: f32,
-}
+use crate::ui::UiSize;
 
 
 #[allow(dead_code)]

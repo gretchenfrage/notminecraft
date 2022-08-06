@@ -5,6 +5,7 @@ use crate::{
             ClearPipelineCreator,
             ClearPipeline,
         },
+        clear_depth::ClearDepthPipeline,
         clip::{
             ClipPipeline,
             PreppedClipEdit,
@@ -50,10 +51,7 @@ use std::{
 };
 use anyhow::Result;
 use tracing::*;
-use winit_main::reexports::{
-    window::Window,
-    dpi::PhysicalSize,
-};
+use winit_main::reexports::window::Window;
 use wgpu::*;
 use vek::*;
 use tokio::fs;
@@ -89,6 +87,7 @@ pub struct Renderer {
     modifier_uniform_bind_group_layout: BindGroupLayout,
     clear_color_pipeline: ClearPipeline,
     clear_clip_pipeline: ClearPipeline,
+    clear_depth_pipeline: ClearDepthPipeline,
     clip_pipeline: ClipPipeline,
     solid_pipeline: SolidPipeline,
     image_pipeline: ImagePipeline,    
@@ -112,7 +111,7 @@ std140_struct!(ModifierUniformData {
 
 fn create_depth_texture_like(
     device: &Device,
-    size: PhysicalSize<u32>,
+    size: Extent2<u32>,
     label: &'static str,
     format: TextureFormat,
 ) -> Texture {
@@ -120,8 +119,8 @@ fn create_depth_texture_like(
         .create_texture(&TextureDescriptor {
             label: Some(label),
             size: Extent3d {
-                width: size.width,
-                height: size.height,
+                width: size.w,
+                height: size.h,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -140,6 +139,7 @@ impl Renderer {
         // create the instance, surface, and adapter
         trace!("creating instance");
         let size = window.inner_size();
+        let size = Extent2::new(size.width, size.height);
         let instance = Instance::new(Backends::PRIMARY);
         trace!("creating surface");
         // safety: surface must be dropped before window
@@ -206,12 +206,16 @@ impl Renderer {
         );
 
         // create the clear pipeline
-        trace!("creating clear pipeline");
+        trace!("creating clear pipelines");
         let clear_pipeline_creator = ClearPipelineCreator::new(&device).await?;
         let clear_color_pipeline = clear_pipeline_creator
             .create(&device, SWAPCHAIN_FORMAT);
         let clear_clip_pipeline = clear_pipeline_creator
             .create(&device, CLIP_FORMAT);
+
+        // create the clear depth pipeline
+        trace!("creating clear depth pipeline");
+        let clear_depth_pipeline = ClearDepthPipeline::new(&device).await?;
 
         // create the clip pipeline
         trace!("creating clip pipeline");
@@ -255,8 +259,8 @@ impl Renderer {
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: SWAPCHAIN_FORMAT,
-            width: size.width,
-            height: size.height,
+            width: size.w,
+            height: size.h,
             present_mode: PresentMode::Mailbox,
         };
         surface.configure(&device, &config);
@@ -273,6 +277,7 @@ impl Renderer {
             modifier_uniform_bind_group_layout,
             clear_color_pipeline,
             clear_clip_pipeline,
+            clear_depth_pipeline,
             clip_pipeline,
             solid_pipeline,
             image_pipeline,
@@ -297,11 +302,11 @@ impl Renderer {
     }
 
     /// Resize the surface, in reponse to a change in window size.
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+    pub fn resize(&mut self, size: Extent2<u32>) {
         // resize surface
         trace!("resizing surface");
-        self.config.width = size.width;
-        self.config.height = size.height;
+        self.config.width = size.w;
+        self.config.height = size.h;
         self.surface.configure(&self.device, &self.config);
 
         // resize depth texture
@@ -362,6 +367,7 @@ impl Renderer {
                 obj: PreppedRenderObj<'a>,
                 muo: u32,
                 depth: bool,
+                dbg_transform: Mat4<f32>,
             },
             ClearClip,
             EditClip(PreppedClipEdit),
@@ -408,6 +414,7 @@ impl Renderer {
                         obj,
                         muo,
                         depth,
+                        dbg_transform: transform,
                     }
                 },
                 RenderInstr::ClearClip => PreppedRenderInstr::ClearClip,
@@ -464,20 +471,15 @@ impl Renderer {
                     obj,
                     muo, // TODO
                     depth,
+                    dbg_transform,
                 } => {
-                    // TODO batch
-                    let depth_stencil_attachment = if depth && false /* TODO */ {
-                        Some(RenderPassDepthStencilAttachment {
-                            view: &depth_texture,
-                            depth_ops: Some(Operations {
-                                load: LoadOp::Load,
-                                store: true,
-                            }),
-                            stencil_ops: None,
-                        })
-                    } else {
-                        None
-                    };
+                    let depth_load_op =
+                        if depth { LoadOp::Load }
+                        else { LoadOp::Clear(1.0) };
+                    // TODO: the possibility of pass not being used and
+                    //       questions about how that works and how that
+                    //       interacts with depth buffer is concerning and
+                    //       complicating
                     let mut pass = encoder
                         .begin_render_pass(&RenderPassDescriptor {
                             label: Some("draw render pass"),
@@ -491,7 +493,14 @@ impl Renderer {
                                     },
                                 },
                             ],
-                            depth_stencil_attachment,
+                            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                                view: &depth_texture,
+                                depth_ops: Some(Operations {
+                                    load: depth_load_op,
+                                    store: true,
+                                }),
+                                stencil_ops: None,
+                            }),
                         });
                     pass
                         .set_bind_group(
@@ -536,6 +545,7 @@ impl Renderer {
                                 .render(
                                     mesh,
                                     &mut pass,
+                                    dbg_transform,
                                 );
                         }
                     }
@@ -565,14 +575,20 @@ impl Renderer {
                         );
                 }
                 PreppedRenderInstr::EditClip(clip_edit) => {
-                    self.clip_pipeline.render(
-                        clip_edit,
-                        &mut encoder,
-                        self.uniform_buffer.unwrap_clip_edit_uniform_bind_group(),
-                    );
+                    self.clip_pipeline
+                        .render(
+                            clip_edit,
+                            &mut encoder,
+                            self.uniform_buffer.unwrap_clip_edit_uniform_bind_group(),
+                        );
                 }
                 PreppedRenderInstr::ClearDepth => {
-                    // TODO
+                    self.clear_depth_pipeline
+                        .render(
+                            &mut encoder,
+                            &depth_texture,
+                            1.0,
+                        );
                 }
             }
         }

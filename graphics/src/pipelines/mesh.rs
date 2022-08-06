@@ -6,6 +6,7 @@ use crate::{
     },
     shader::load_shader,
     SWAPCHAIN_FORMAT,
+    DEPTH_FORMAT,
 };
 use std::{
     sync::Arc,
@@ -47,6 +48,9 @@ pub struct GpuVec<T> {
     len: usize,
     capacity: usize,
     _p: PhantomData<T>,
+
+    #[cfg(debug_assertions)]
+    dbg_content: Vec<Option<T>>,
 }
 
 impl<T> GpuVec<T> {
@@ -54,11 +58,22 @@ impl<T> GpuVec<T> {
     pub fn len(&self) -> usize {
         self.len
     }
+
+    // TODO: continue to expose?
+    #[cfg(debug_assertions)]
+    pub fn dbg_content(&self) -> Option<&[Option<T>]> {
+        Some(&self.dbg_content)
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn dbg_content(&self) -> Option<&[Option<T>]> {
+        None
+    }
 }
 
 /// Types which can be stored in a `GpuVec`. Not intended to be implemented
 /// externally.
-pub trait GpuVecElem {
+pub trait GpuVecElem: Copy {
     const USAGES: BufferUsages;
     const SIZE: usize;
 
@@ -130,6 +145,12 @@ pub struct Vertex {
 /// Triangle within a `Mesh`.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Triangle(pub [usize; 3]);
+
+impl Triangle {
+    pub fn map<F: FnMut(usize) -> usize>(self, f: F) -> Self {
+        Triangle(self.0.map(f))
+    } 
+}
 
 
 // ==== pipeline ====
@@ -231,7 +252,13 @@ impl MeshPipeline {
                     ],
                 }),
                 primitive: PrimitiveState::default(),
-                depth_stencil: None,
+                depth_stencil: Some(DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
                 multisample: MultisampleState::default(),
                 multiview: None,
             });
@@ -254,8 +281,58 @@ impl MeshPipeline {
         &'a self,
         mesh: &'a DrawMesh<'a>,
         pass: &mut RenderPass<'a>,
+        _dbg_transform: Mat4<f32>,
     )
     {
+        #[cfg(debug_assertions)]
+        {
+            for triangle in &mesh.mesh.triangles.dbg_content {
+                assert!(
+                    triangle.is_some(),
+                    "attempt to render mesh with uninitialized triangle element",
+                );
+                let triangle = triangle.unwrap();
+                let mut tex_index = None;
+                for i in triangle.0 {
+                    assert!(
+                        i < mesh.mesh.vertices.len,
+                        "attempt to render mesh with triangle vertex index beyond end of vertex gpu vec",
+                    );
+                    assert!(
+                        mesh.mesh.vertices.dbg_content[i].is_some(),
+                        "attempt to render mesh with triangle vertex index referencing uninitialized vertex element",
+                    );
+
+                    let vertex = mesh.mesh.vertices.dbg_content[i].unwrap();
+
+                    assert!(
+                        vertex.tex_index < mesh.textures.0.len,
+                        "attempt to render mesh with (non-unused) texture index beyond end of gpu image array",
+                    );
+
+                    if let Some(tex_index) = tex_index {
+                        assert!(
+                            vertex.tex_index == tex_index,
+                            "attempt to render mesh with different texture indices within same triangle",
+                        );
+                    }
+                    tex_index = Some(vertex.tex_index);
+                }
+            }
+        }
+
+        /*
+        use crate::modifier::Transform3;
+        for &triangle in &mesh.mesh.triangles.dbg_content {
+            let triangle = triangle.unwrap();
+            let transed_tri_pos = triangle.0
+                .map(|i| mesh.mesh.vertices.dbg_content[i].unwrap())
+                .map(|v| v.pos)
+                .map(|p| Transform3(_dbg_transform).apply(p)); // TODO why are we convering back and forth like this
+            debug!(?transed_tri_pos);
+        }
+        */ 
+
         if mesh.mesh.triangles.len > 0 {
             pass.set_pipeline(&self.mesh_pipeline);
             pass
@@ -371,30 +448,22 @@ impl MeshPipeline {
         }))
     }
 
-/*
-impl crate::Renderer {
-    pub fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {}
-
-    pub fn set_gpu_vec_len<T: GpuVecElem>(
-        &self,
-        gpu_vec: &mut GpuVec<T>,
-        new_len: u32,
-    ) {}
-
-    pub fn patch_gpu_vec<T: GpuVecElem>(
-        &self,
-        gpu_vec: &mut GpuVec<T>,
-        patches: &[(u32, &[T])],
-    ) {}
-}
-*/
     pub(crate) fn create_gpu_vec<T: GpuVecElem>() -> GpuVec<T> {
-        GpuVec {
+        #[cfg(debug_assertions)]
+        return GpuVec {
             buffer: None,
             len: 0,
             capacity: 0,
             _p: PhantomData,
-        }
+            dbg_content: Vec::new(),
+        };
+        #[cfg(not(debug_assertions))]
+        return GpuVec {
+            buffer: None,
+            len: 0,
+            capacity: 0,
+            _p: PhantomData,
+        };
     }
 
     pub(crate) fn set_gpu_vec_len<T: GpuVecElem>(
@@ -404,8 +473,8 @@ impl crate::Renderer {
         new_len: usize,
     )
     {
-        if new_len > gpu_vec.capacity  {
-            while new_len > gpu_vec.capacity {
+        if new_len * T::SIZE > gpu_vec.capacity  {
+            while new_len * T::SIZE > gpu_vec.capacity {
                 if gpu_vec.capacity == 0 {
                     const GPU_VEC_STARTING_CAPACITY: usize = 512;
                     gpu_vec.capacity = GPU_VEC_STARTING_CAPACITY;
@@ -434,13 +503,23 @@ impl crate::Renderer {
                         0,
                         &new_buffer,
                         0,
-                        gpu_vec.len as u64,
+                        (gpu_vec.len * T::SIZE) as u64,
                     );
                 queue.submit(once(encoder.finish()));
             }
             gpu_vec.buffer = Some(new_buffer);
         }
         gpu_vec.len = new_len;
+
+        #[cfg(debug_assertions)]
+        {
+            while gpu_vec.dbg_content.len() > gpu_vec.len {
+                gpu_vec.dbg_content.pop().unwrap();
+            }
+            while gpu_vec.dbg_content.len() < gpu_vec.len {
+                gpu_vec.dbg_content.push(None);
+            }
+        }
     }
 
     pub fn patch_gpu_vec<T: GpuVecElem>(
@@ -506,6 +585,15 @@ impl crate::Renderer {
                 );
         }
         queue.submit(once(encoder.finish()));
+
+        #[cfg(debug_assertions)]
+        {
+            for &(i, patch) in patches {
+                for (j, &elem) in patch.iter().enumerate() {
+                    gpu_vec.dbg_content[i + j] = Some(elem);
+                }
+            }
+        }
     }
 }
 

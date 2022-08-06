@@ -2,9 +2,9 @@
 #![feature(array_zip)]
 
 
-use crate::game::{
-    Game,
-    UiSize,
+use crate::{
+    game::Game,
+    ui::UiSize,
 };
 use graphics::Renderer;
 use std::{
@@ -40,6 +40,7 @@ extern crate tracing;
 
 mod game;
 mod jar_assets;
+mod ui;
 
 
 fn main() {

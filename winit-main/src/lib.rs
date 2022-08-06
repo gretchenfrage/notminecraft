@@ -126,11 +126,15 @@ use winit::{
         EventLoopProxy,
         ControlFlow,
     },
-    event::Event,
+    event::{
+        Event,
+        WindowEvent,
+    },
     monitor::MonitorHandle,
     window::{
         WindowAttributes,
         Window,
+        WindowId,
     },
     error::OsError,
 };
@@ -275,6 +279,14 @@ impl Blocker {
     }
 }
 
+#[derive(Debug)]
+pub enum UserEvent {
+    Blocker(Blocker),
+    ScaleFactorChanged {
+        window_id: WindowId,
+        scale_factor: f64,
+    },
+}
 
 /// Handle for receiving events from the main event loop.
 ///
@@ -284,11 +296,11 @@ impl Blocker {
 /// whole exiting. Therefore, when this receives a disconnection error from
 /// the underlying receiver, it enters an infinite sleep cycle as it waits for
 /// the OS to kill the process. TODO update all comments
-pub struct EventReceiver(tokio_mpsc::UnboundedReceiver<Event<'static, Blocker>>);
+pub struct EventReceiver(tokio_mpsc::UnboundedReceiver<Event<'static, UserEvent>>);
 
 impl EventReceiver {
     /// Receive an event, blocking until one is available. 
-    pub async fn recv(&mut self) -> Event<'static, Blocker> {
+    pub async fn recv(&mut self) -> Event<'static, UserEvent> {
         match self.0.recv().await {
             Some(event) => event,
             None => sleep_forever(),
@@ -296,7 +308,7 @@ impl EventReceiver {
     }
 
     /// Try to receive an event immediately, never blocking.
-    pub fn try_recv(&mut self) -> Option<Event<'static, Blocker>> {
+    pub fn try_recv(&mut self) -> Option<Event<'static, UserEvent>> {
         match self.0.try_recv() {
             Ok(event) => Some(event),
             Err(tokio_mpsc::error::TryRecvError::Empty) => None,
@@ -306,7 +318,7 @@ impl EventReceiver {
 
     /// Iterator form of `self.try_recv()`. Non-blocking iterator that drains
     /// the events currently in the queue. 
-    pub fn try_iter<'a>(&'a mut self) -> impl Iterator<Item=Event<'static, Blocker>> + 'a {
+    pub fn try_iter<'a>(&'a mut self) -> impl Iterator<Item=Event<'static, UserEvent>> + 'a {
         iter::from_fn(move || self.try_recv())
     }
 }
@@ -361,25 +373,38 @@ where
     event_loop.run(move |event, window_target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        let event = match event.to_static() {
-            Some(event) => event,
-            None => return, // TODO: what if user wants the static event?
-        };
-
         match event.map_nonuser_event() {
-            Ok(nonuser_event) => {
+            Ok(event) => {
+                let event = match event {
+                    Event::WindowEvent {
+                        window_id,
+                        event: WindowEvent::ScaleFactorChanged {
+                            scale_factor,
+                            new_inner_size: _,
+                        },
+                    } => Event::UserEvent(UserEvent::ScaleFactorChanged {
+                        window_id,
+                        scale_factor,
+                    }),
+                    event => match event.to_static() {
+                        Some(event) => event,
+                        None => return,
+                    },
+                };
+
                 // send out event
                 let triggers_block = matches!(
-                    &nonuser_event,
+                    &event,
                     &Event::MainEventsCleared
                 );
                 
-                let _ = event_send.send(nonuser_event);
+                let _ = event_send.send(event);
 
                 if triggers_block {
                     // maybe send out a blocker, then block on it
                     let blocker = Blocker(msg_send_3.clone());
-                    let _ = event_send.send(Event::UserEvent(blocker));
+                    let blocker_event = Event::UserEvent(UserEvent::Blocker(blocker));
+                    let _ = event_send.send(blocker_event);
 
                     // we must still process messages while blocked blocked, or
                     // it would likely cause deadlock
