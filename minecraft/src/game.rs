@@ -2,6 +2,7 @@
 use crate::{
     jar_assets::JarReader,
     ui::{
+        UiSize,
         UiModify,
         Margins,
         text::{
@@ -80,9 +81,6 @@ pub fn hex_color(hex: u32) -> Rgba<f32> {
 }
 
 
-use crate::ui::UiSize;
-
-
 #[allow(dead_code)]
 pub struct Game {
     size: UiSize,
@@ -100,93 +98,13 @@ pub struct Game {
     title_cam_fov: f32,
 
     rng: Pcg64Mcg,
-    //version_text: LayedOutTextBlock,
-    //copyright_text: UiText,
     version_text: UiTextBlock,
     copyright_text: UiTextBlock,
     title_pixel_positions: Vec<Vec3<f32>>,
     splash_text: UiText,
     splash_size: Cosine,
 }
-/*
-fn lay_out_version_text(
-    renderer: &Renderer,
-    font: FontId,
-    size: UiSize,
-) -> LayedOutTextBlock
-{
-    renderer
-        .lay_out_text(&TextBlock {
-            spans: &[
-                TextSpan {
-                    text: "Not Minecraft Beta 1.0.2",
-                    font_id: font,
-                    font_size: 16.0 * size.scale,
-                    color: hex_color(0x505050FF),
-                },
-            ],
-            horizontal_align: HAlign::Left { width: Some(size.size.w) },
-            vertical_align: VAlign::Top,
-        })
-}
 
-fn lay_out_copyright_text(
-    renderer: &Renderer,
-    font: FontId,
-    size: UiSize,
-) -> LayedOutTextBlock
-{
-    renderer
-        .lay_out_text(&TextBlock {
-            spans: &[
-                TextSpan {
-                    text: "Everything in the universe is in the public domain.",
-                    font_id: font,
-                    font_size: 16.0 * size.scale,
-                    color: Rgba::white(),
-                },
-            ],
-            horizontal_align: HAlign::Right { width: size.size.w },
-            vertical_align: VAlign::Bottom { height: size.size.h },
-        })
-}
-
-fn lay_out_splash_text(
-    renderer: &Renderer,
-    font: FontId,
-    size: UiSize,
-) -> LayedOutTextBlock
-{
-    renderer
-        .lay_out_text(&TextBlock {
-            spans: &[
-                TextSpan {
-                    text: "Splash text!",
-                    font_id: font,
-                    font_size: 32.0 * size.scale,
-                    color: [1.0, 1.0, 0.0, 1.0].into(),
-                },
-            ],
-            horizontal_align: HAlign::Center { width: f32::INFINITY },
-            vertical_align: VAlign::Center { height: f32::INFINITY },
-        })
-}
-
-fn draw_text_with_shadow(
-    mut canvas: Canvas2,
-    text: &LayedOutTextBlock,
-    font_size: f32,
-    scale_factor: f32,
-)
-{
-    canvas.reborrow()
-        .translate([font_size / 8.0 * scale_factor; 2])
-        .color([0.25, 0.25, 0.25, 1.0])
-        .draw_text(&text);
-    canvas.reborrow()
-        .draw_text(&text);
-}
-*/
 const TITLE_PIXELS: &'static [&'static str] = &[
     "█   █ █ █   █ ███ ███ ███ ███ ███ ███",
     "██ ██ █ ██  █ █   █   █ █ █ █ █    █ ",
@@ -307,22 +225,6 @@ impl Game {
                 ],
             );
 
-        //let version_text = lay_out_version_text(&renderer, font, size);
-        //let copyright_text = lay_out_copyright_text(&renderer, font, size);
-        /*
-        let copyright_text = UiText::new(
-            &renderer,
-            UiTextConfig {
-                text: "Everything in the universe is in the public domain".into(),
-                font,
-                font_size: 16.0,
-                color: Rgba::white(),
-                h_align: HAlign::Right,
-                v_align: VAlign::Bottom,
-            },
-            Some(size.size.w),
-            size.scale,
-        );*/
         let main_menu_text_margins = Margins {
             top: 4.0,
             bottom: 4.0,
@@ -361,7 +263,6 @@ impl Game {
             },
             size,
         );
-        //let splash_text = lay_out_splash_text(&renderer, font, size);
         let splash_text = UiText::new(
             &renderer,
             UiTextConfig {
@@ -433,29 +334,6 @@ impl Game {
                 [0.0, 0.0],
                 self.size.size / (64.0 * self.size.scale),
             );
-        /*
-        draw_text_with_shadow(
-            canvas.reborrow()
-                .translate([4.0, 4.0]),
-            &self.version_text,
-            16.0,
-            self.size.scale,
-        );
-        draw_text_with_shadow(
-            canvas.reborrow()
-                .translate(self.size.size)
-                .translate([-2.0, 0.0]),
-            &self.copyright_text,
-            16.0,
-            self.size.scale,
-        );
-        */
-        /*
-        self.copyright_text
-            .draw(canvas.reborrow()
-                .translate(self.size.size)
-                .translate([-2.0, 0.0])); // TODO better syntax TODO actual text box element or something idk TODO margins?
-                */
         self.version_text.draw(canvas.reborrow());
         self.copyright_text.draw(canvas.reborrow());
         {
@@ -489,22 +367,6 @@ impl Game {
                 .translate(pos)
                 .draw_mesh(&self.title_pixel, &self.title_pixel_texture);
         }
-        /*
-        draw_text_with_shadow(
-            canvas.reborrow()
-                .translate(Vec2 {
-                    x: self.size.size.w / 4.0 * 3.0,
-                    y: self.size.size.h / 16.0 * 5.0,
-                })
-                .scale([
-                    self.splash_size.get().abs() / 16.0 + 1.0; 2
-                ])
-                .rotate(f32::to_radians(22.5)),
-            &self.splash_text,
-            32.0,
-            self.size.scale,
-        );
-    */
         self.renderer.draw_frame(&frame)
     }
 
@@ -513,14 +375,7 @@ impl Game {
 
         self.renderer.resize(size);
 
-        //let size = size.map(|n| n as f32);
-
         self.size.size = size.map(|n| n as f32);
-
-        //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
-        //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
-        //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
-        //self.copyright_text.set_wrap_width(&self.renderer, Some(size.w));
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
 
@@ -535,9 +390,6 @@ impl Game {
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
-        //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
-        //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
-        //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
 
         Ok(())
     }
