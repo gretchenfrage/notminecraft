@@ -1,5 +1,15 @@
 
-use crate::jar_assets::JarReader;
+use crate::{
+    jar_assets::JarReader,
+    ui::{
+        UiElem,
+        UiModify,
+        text::{
+            UiTextConfig,
+            UiText,
+        },
+    },
+};
 use graphics::{
     Renderer,
     frame_content::{
@@ -88,13 +98,13 @@ pub struct Game {
     title_cam_fov: f32,
 
     rng: Pcg64Mcg,
-    version_text: LayedOutTextBlock,
-    copyright_text: LayedOutTextBlock,
+    //version_text: LayedOutTextBlock,
+    copyright_text: UiText,
     title_pixel_positions: Vec<Vec3<f32>>,
-    splash_text: LayedOutTextBlock,
+    //splash_text: LayedOutTextBlock,
     splash_size: Cosine,
 }
-
+/*
 fn lay_out_version_text(
     renderer: &Renderer,
     font: FontId,
@@ -172,7 +182,7 @@ fn draw_text_with_shadow(
     canvas.reborrow()
         .draw_text(&text);
 }
-
+*/
 const TITLE_PIXELS: &'static [&'static str] = &[
     "█   █ █ █   █ ███ ███ ███ ███ ███ ███",
     "██ ██ █ ██  █ █   █   █ █ █ █ █    █ ",
@@ -289,9 +299,22 @@ impl Game {
                 ],
             );
 
-        let version_text = lay_out_version_text(&renderer, font, size);
-        let copyright_text = lay_out_copyright_text(&renderer, font, size);
-        let splash_text = lay_out_splash_text(&renderer, font, size);
+        //let version_text = lay_out_version_text(&renderer, font, size);
+        //let copyright_text = lay_out_copyright_text(&renderer, font, size);
+        let copyright_text = UiText::new(
+            &renderer,
+            UiTextConfig {
+                text: "Everything in the universe is in the public domain".into(),
+                font,
+                font_size: 16.0,
+                color: Rgba::white(),
+                h_align: HorizontalAlign::Right,
+                v_align: VerticalAlign::Bottom,
+            },
+            Some(size.size.w),
+            size.scale,
+        );
+        //let splash_text = lay_out_splash_text(&renderer, font, size);
 
         let title_pixel_positions = TITLE_PIXELS
             .iter()
@@ -324,10 +347,10 @@ impl Game {
             title_cam_fov: 1.38753,
 
             rng,
-            version_text,
+            //version_text,
             copyright_text,
             title_pixel_positions,
-            splash_text,
+            //splash_text,
             splash_size: Cosine::new(1.0 / 2.0),
         })
     }
@@ -350,6 +373,7 @@ impl Game {
                 [0.0, 0.0],
                 self.size.size / (64.0 * self.size.scale),
             );
+        /*
         draw_text_with_shadow(
             canvas.reborrow()
                 .translate([4.0, 4.0]),
@@ -365,13 +389,17 @@ impl Game {
             16.0,
             self.size.scale,
         );
-        
+        */
+        self.copyright_text
+            .draw(canvas.reborrow()
+                .translate(self.size.size)
+                .translate([-2.0, 0.0])); // TODO better syntax TODO actual text box element or something idk TODO margins?
         let mut title_canvas = canvas.reborrow()
             .begin_3d_perspective(
                 self.size.size,
                 [0.0, self.title_cam_height, self.title_cam_distance],
                 Quaternion::identity(),
-                self.title_cam_fov,
+                self.title_cam_fov, // TODO horizontal field of view
             )
             .rotate(Quaternion::rotation_x(self.title_angle))
             .translate([
@@ -385,7 +413,7 @@ impl Game {
                 .translate(pos)
                 .draw_mesh(&self.title_pixel, &self.title_pixel_texture);
         }
-
+        /*
         draw_text_with_shadow(
             canvas.reborrow()
                 .translate(Vec2 {
@@ -400,7 +428,7 @@ impl Game {
             32.0,
             self.size.scale,
         );
-
+    */
         self.renderer.draw_frame(&frame)
     }
 
@@ -408,11 +436,15 @@ impl Game {
         info!(?size, "setting size");
 
         self.renderer.resize(size);
-        self.size.size = size.map(|n| n as f32);
 
-        self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
-        self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
-        self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
+        let size = size.map(|n| n as f32);
+
+        self.size.size = size;
+
+        //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
+        //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
+        //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
+        self.copyright_text.set_wrap_width(&self.renderer, Some(size.w));
 
         Ok(())
     }
@@ -422,9 +454,10 @@ impl Game {
 
         self.size.scale = scale;
 
-        self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
-        self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
-        self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
+        self.copyright_text.set_scale(&self.renderer, scale);
+        //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
+        //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
+        //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
 
         Ok(())
     }

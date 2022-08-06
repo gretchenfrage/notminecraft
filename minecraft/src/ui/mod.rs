@@ -104,14 +104,14 @@ impl<'a> IntoIterator for &'a UiModify {
 }
 
 
-pub trait UiItem {
-    fn tick(&mut self, renderer: &Renderer, elapsed: f32);
+pub trait UiElem {
+    fn tick(&mut self, renderer: &Renderer, elapsed: f32) {}
 
     fn draw<'a>(&self, canvas: Canvas2<'a, '_>);
 
     fn set_scale(&mut self, renderer: &Renderer, scale: f32);
 }
 
-pub trait UiItemSetSize {
+pub trait UiElemSetSize {
     fn set_size(&mut self, renderer: &Renderer, size: Vec2<f32>);
 }

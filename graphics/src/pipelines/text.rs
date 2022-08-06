@@ -37,14 +37,19 @@ pub struct TextBlock<'a> {
     /// The spans of text to flow together.
     pub spans: &'a [TextSpan<'a>],
     /// Specification of horizontal align/wrap behavior.
-    pub horizontal_align: HorizontalAlign,
+    pub h_align: HorizontalAlign,
     /// Specification of vertical align/wrap behavior.
-    pub vertical_align: VerticalAlign,
+    pub v_align: VerticalAlign,
+    pub wrap_width: Option<f32>,
 }
 
 /// Specification of text horizontal align/wrap behavior.
 #[derive(Debug, Copy, Clone)]
 pub enum HorizontalAlign {
+    Left,
+    Center,
+    Right,
+    /*
     /// Left-justify the text.
     Left {
         /// The block width to wrap text at. If `None`, text will just continue
@@ -62,18 +67,22 @@ pub enum HorizontalAlign {
         /// The width of the block. Text will be pressed up against `width`
         /// and wrap between 0 and `width`.
         width: f32,
-    },
+    },*/
 }
 
 /// Specification of text vertical align/wrap behavior.
 #[derive(Debug, Copy, Clone)]
 pub enum VerticalAlign {
+    Top,
+    Center,
+    Bottom,
+    /*
     /// Press the text up against the top of the block (0).
     Top,
     /// Vertically center the text between 0 and `height`.
     Center { height: f32 },
     /// Press the text down against the bottom of the block (`height`).
-    Bottom { height: f32 },
+    Bottom { height: f32 },*/
 }
 
 /// Index for a font loaded into a `Renderer`.
@@ -86,7 +95,7 @@ pub struct TextSpan<'a> {
     /// The actual string of text.
     pub text: &'a str,
     /// Which font to use.
-    pub font_id: FontId,
+    pub font: FontId,
     /// Text height units.
     pub font_size: f32,
     /// Text color.
@@ -99,16 +108,37 @@ pub struct TextSpan<'a> {
 impl<'a> TextBlock<'a> {
     /// Produce a corresponding glyph_brush `Layout`.
     fn to_layout(&self) -> gb::Layout<gb::BuiltInLineBreaker> {
-        let gb_h_align = match self.horizontal_align {
+        let gb_h_align = match self.h_align {
+            HorizontalAlign::Left => gb::HorizontalAlign::Left,
+            HorizontalAlign::Center => gb::HorizontalAlign::Center,
+            HorizontalAlign::Right => gb::HorizontalAlign::Right,
+            /*
             HorizontalAlign::Left { .. } => gb::HorizontalAlign::Left,
             HorizontalAlign::Center { .. } => gb::HorizontalAlign::Center,
-            HorizontalAlign::Right { .. } => gb::HorizontalAlign::Right,
+            HorizontalAlign::Right { .. } => gb::HorizontalAlign::Right,*/
         };
-        let gb_v_align = match self.vertical_align {
+        let gb_v_align = match self.v_align {
             VerticalAlign::Top => gb::VerticalAlign::Top,
+            VerticalAlign::Center => gb::VerticalAlign::Center,
+            VerticalAlign::Bottom => gb::VerticalAlign::Bottom,
+            /*VerticalAlign::Top => gb::VerticalAlign::Top,
             VerticalAlign::Center { .. } => gb::VerticalAlign::Center,
-            VerticalAlign::Bottom { .. } => gb::VerticalAlign::Bottom,
+            VerticalAlign::Bottom { .. } => gb::VerticalAlign::Bottom,*/
         };
+        if self.wrap_width.is_some() {
+            gb::Layout::Wrap {
+                line_breaker: gb::BuiltInLineBreaker::UnicodeLineBreaker,
+                h_align: gb_h_align,
+                v_align: gb_v_align,
+            }
+        } else {
+            gb::Layout::SingleLine {
+                line_breaker: gb::BuiltInLineBreaker::UnicodeLineBreaker,
+                h_align: gb_h_align,
+                v_align: gb_v_align,
+            }
+        }
+        /*
         let single_line = matches!(
             self.horizontal_align,
             HorizontalAlign::Left { width: None },
@@ -126,10 +156,12 @@ impl<'a> TextBlock<'a> {
                 v_align: gb_v_align,
             }
         }
+        */
     }
 
     /// Produce a corresponding glyph_brush `SectionGeometry`.
     fn to_section_geometry(&self) -> gb::SectionGeometry {
+        /*
         let width = match self.horizontal_align {
             HorizontalAlign::Left { width } => width,
             HorizontalAlign::Center { width } => Some(width),
@@ -139,12 +171,15 @@ impl<'a> TextBlock<'a> {
             VerticalAlign::Top => None,
             VerticalAlign::Center { height } => Some(height),
             VerticalAlign::Bottom { height } => Some(height),
-        };
+        };*/
         gb::SectionGeometry {
             screen_position: (0.0, 0.0),
             bounds: (
+                self.wrap_width.unwrap_or(f32::INFINITY),
+                f32::INFINITY,
+                /*
                 width.unwrap_or(f32::INFINITY),
-                height.unwrap_or(f32::INFINITY),
+                height.unwrap_or(f32::INFINITY),*/
             ),
         }
     }
@@ -163,7 +198,7 @@ impl<'a> gb::ToSectionText for TextSpan<'a> {
                 x: self.font_size,
                 y: self.font_size,
             },
-            font_id: gb::FontId(self.font_id.0),
+            font_id: gb::FontId(self.font.0),
         }
     }
 }
