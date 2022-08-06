@@ -22,6 +22,15 @@ pub struct UiSize {
 }
 
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Margins {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiModify(Vec<Modifier2>);
 
@@ -103,7 +112,7 @@ impl<'a> IntoIterator for &'a UiModify {
     }    
 }
 
-
+/*
 pub trait UiElem {
     fn tick(&mut self, renderer: &Renderer, elapsed: f32) {}
 
@@ -115,3 +124,4 @@ pub trait UiElem {
 pub trait UiElemSetSize {
     fn set_size(&mut self, renderer: &Renderer, size: Vec2<f32>);
 }
+*/

@@ -2,11 +2,13 @@
 use crate::{
     jar_assets::JarReader,
     ui::{
-        UiElem,
         UiModify,
+        Margins,
         text::{
-            UiTextConfig,
             UiText,
+            UiTextConfig,
+            UiTextBlock,
+            UiTextBlockConfig,
         },
     },
 };
@@ -19,8 +21,8 @@ use graphics::{
         FontId,
         TextBlock,
         TextSpan,
-        HorizontalAlign,
-        VerticalAlign,
+        HAlign,
+        VAlign,
         LayedOutTextBlock,
         GpuImageArray,
         Mesh,
@@ -99,9 +101,11 @@ pub struct Game {
 
     rng: Pcg64Mcg,
     //version_text: LayedOutTextBlock,
-    copyright_text: UiText,
+    //copyright_text: UiText,
+    version_text: UiTextBlock,
+    copyright_text: UiTextBlock,
     title_pixel_positions: Vec<Vec3<f32>>,
-    //splash_text: LayedOutTextBlock,
+    splash_text: UiText,
     splash_size: Cosine,
 }
 /*
@@ -121,8 +125,8 @@ fn lay_out_version_text(
                     color: hex_color(0x505050FF),
                 },
             ],
-            horizontal_align: HorizontalAlign::Left { width: Some(size.size.w) },
-            vertical_align: VerticalAlign::Top,
+            horizontal_align: HAlign::Left { width: Some(size.size.w) },
+            vertical_align: VAlign::Top,
         })
 }
 
@@ -142,8 +146,8 @@ fn lay_out_copyright_text(
                     color: Rgba::white(),
                 },
             ],
-            horizontal_align: HorizontalAlign::Right { width: size.size.w },
-            vertical_align: VerticalAlign::Bottom { height: size.size.h },
+            horizontal_align: HAlign::Right { width: size.size.w },
+            vertical_align: VAlign::Bottom { height: size.size.h },
         })
 }
 
@@ -163,8 +167,8 @@ fn lay_out_splash_text(
                     color: [1.0, 1.0, 0.0, 1.0].into(),
                 },
             ],
-            horizontal_align: HorizontalAlign::Center { width: f32::INFINITY },
-            vertical_align: VerticalAlign::Center { height: f32::INFINITY },
+            horizontal_align: HAlign::Center { width: f32::INFINITY },
+            vertical_align: VAlign::Center { height: f32::INFINITY },
         })
 }
 
@@ -196,8 +200,12 @@ impl Game {
         Ok(WindowAttributes {
             title: "Not Minecraft".into(),
             inner_size: Some(PhysicalSize {
+                /*
                 width: 1250 / 2 * 4 / 3,
                 height: 725 / 2 * 4 / 3,
+                */
+                width: 849,
+                height: 529,
             }.into()),
             ..Default::default()
         })
@@ -301,6 +309,7 @@ impl Game {
 
         //let version_text = lay_out_version_text(&renderer, font, size);
         //let copyright_text = lay_out_copyright_text(&renderer, font, size);
+        /*
         let copyright_text = UiText::new(
             &renderer,
             UiTextConfig {
@@ -308,13 +317,64 @@ impl Game {
                 font,
                 font_size: 16.0,
                 color: Rgba::white(),
-                h_align: HorizontalAlign::Right,
-                v_align: VerticalAlign::Bottom,
+                h_align: HAlign::Right,
+                v_align: VAlign::Bottom,
             },
             Some(size.size.w),
             size.scale,
+        );*/
+        let main_menu_text_margins = Margins {
+            top: 4.0,
+            bottom: 4.0,
+            left: 4.0,
+            right: 4.0,
+        };
+        let version_text = UiTextBlock::new(
+            &renderer,
+            UiTextBlockConfig {
+                text_config: UiTextConfig {
+                    text: "Not Minecraft Beta 1.0.2".into(),
+                    font,
+                    font_size: 16.0,
+                    color: hex_color(0x505050FF),
+                    h_align: HAlign::Left,
+                    v_align: VAlign::Top,
+                },
+                margins: main_menu_text_margins,
+                wrap: true,
+            },
+            size,
+        );
+        let copyright_text = UiTextBlock::new(
+            &renderer,
+            UiTextBlockConfig {
+                text_config: UiTextConfig {
+                    text: "Everything in the universe is in the public domain".into(),
+                    font,
+                    font_size: 16.0,
+                    color: Rgba::white(),
+                    h_align: HAlign::Right,
+                    v_align: VAlign::Bottom,
+                },
+                margins: main_menu_text_margins,
+                wrap: true,
+            },
+            size,
         );
         //let splash_text = lay_out_splash_text(&renderer, font, size);
+        let splash_text = UiText::new(
+            &renderer,
+            UiTextConfig {
+                text: "Splash text!".into(),
+                font,
+                font_size: 32.0,
+                color: Rgba::yellow(),
+                h_align: HAlign::Center,
+                v_align: VAlign::Center,
+            },
+            None,
+            size.scale,
+        );
 
         let title_pixel_positions = TITLE_PIXELS
             .iter()
@@ -347,10 +407,10 @@ impl Game {
             title_cam_fov: 1.38753,
 
             rng,
-            //version_text,
+            version_text,
             copyright_text,
             title_pixel_positions,
-            //splash_text,
+            splash_text,
             splash_size: Cosine::new(1.0 / 2.0),
         })
     }
@@ -390,10 +450,26 @@ impl Game {
             self.size.scale,
         );
         */
+        /*
         self.copyright_text
             .draw(canvas.reborrow()
                 .translate(self.size.size)
                 .translate([-2.0, 0.0])); // TODO better syntax TODO actual text box element or something idk TODO margins?
+                */
+        self.version_text.draw(canvas.reborrow());
+        self.copyright_text.draw(canvas.reborrow());
+        {
+            let mut canvas = canvas.reborrow()
+                .translate(Vec2 {
+                    x: self.size.size.w / 4.0 * 3.0,
+                    y: self.size.size.h / 16.0 * 5.0,
+                })
+                .scale([
+                    self.splash_size.get().abs() / 16.0 + 1.0; 2
+                ])
+                .rotate(f32::to_radians(22.5));
+            self.splash_text.draw(canvas.reborrow());
+        }
         let mut title_canvas = canvas.reborrow()
             .begin_3d_perspective(
                 self.size.size,
@@ -437,14 +513,16 @@ impl Game {
 
         self.renderer.resize(size);
 
-        let size = size.map(|n| n as f32);
+        //let size = size.map(|n| n as f32);
 
-        self.size.size = size;
+        self.size.size = size.map(|n| n as f32);
 
         //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
         //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
         //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);
-        self.copyright_text.set_wrap_width(&self.renderer, Some(size.w));
+        //self.copyright_text.set_wrap_width(&self.renderer, Some(size.w));
+        self.version_text.set_size(&self.renderer, self.size.size);
+        self.copyright_text.set_size(&self.renderer, self.size.size);
 
         Ok(())
     }
@@ -454,7 +532,9 @@ impl Game {
 
         self.size.scale = scale;
 
-        self.copyright_text.set_scale(&self.renderer, scale);
+        self.version_text.set_size(&self.renderer, self.size.size);
+        self.copyright_text.set_scale(&self.renderer, self.size.scale);
+        self.splash_text.set_scale(&self.renderer, self.size.scale);
         //self.version_text = lay_out_version_text(&self.renderer, self.font, self.size);
         //self.copyright_text = lay_out_copyright_text(&self.renderer, self.font, self.size);
         //self.splash_text = lay_out_splash_text(&self.renderer, self.font, self.size);

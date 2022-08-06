@@ -399,8 +399,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                     color: Rgba::new(0x50, 0x50, 0x50, 0xFF),
                 },
             ],
-            horizontal_align: HorizontalAlign::Left { width: Some(renderer.size().w as f32) },
-            vertical_align: VerticalAlign::Top,
+            horizontal_align: HAlign::Left { width: Some(renderer.size().w as f32) },
+            vertical_align: VAlign::Top,
         });
     let copyright_text = renderer
         .lay_out_text(&TextBlock {
@@ -412,10 +412,10 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                     color: Rgba::white(),
                 },
             ],
-            horizontal_align: HorizontalAlign::Right { width: renderer.size().w as f32 },
-            //horizontal_align: HorizontalAlign::Left { width: None },
-            vertical_align: VerticalAlign::Bottom { height: renderer.size().h as f32 },
-            //vertical_align: VerticalAlign::Top,
+            horizontal_align: HAlign::Right { width: renderer.size().w as f32 },
+            //horizontal_align: HAlign::Left { width: None },
+            vertical_align: VAlign::Bottom { height: renderer.size().h as f32 },
+            //vertical_align: VAlign::Top,
         });
 
     const LOGO_SIZE: f32 = 470.0;
@@ -439,8 +439,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         color: Rgba::new(0xE0, 0xE0, 0xE0, 0xFF),
                     },
                 ],
-                horizontal_align: HorizontalAlign::Center { width: button_size.w },
-                vertical_align: VerticalAlign::Center { height: button_size.h },
+                horizontal_align: HAlign::Center { width: button_size.w },
+                vertical_align: VAlign::Center { height: button_size.h },
             })
     }
 
@@ -468,8 +468,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         color: Rgba::new(0xFF, 0xFF, 0x00, 0xFF),
                     },
                 ],
-                horizontal_align: HorizontalAlign::Center { width: f32::INFINITY },
-                vertical_align: VerticalAlign::Center { height: f32::INFINITY },
+                horizontal_align: HAlign::Center { width: f32::INFINITY },
+                vertical_align: VAlign::Center { height: f32::INFINITY },
             }))
         .collect::<Vec<_>>();
 
