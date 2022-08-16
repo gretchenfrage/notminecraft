@@ -13,6 +13,7 @@ use vek::*;
 
 
 pub mod text;
+pub mod tile_9;
 
 
 #[derive(Debug, Copy, Clone, PartialEq)]

@@ -11,6 +11,10 @@ use crate::{
             UiTextBlock,
             UiTextBlockConfig,
         },
+        tile_9::{
+            UiTile9,
+            Tile9PxRanges,
+        },
     },
 };
 use graphics::{
@@ -104,6 +108,7 @@ pub struct Game {
     title_pixel_positions: Vec<Vec3<f32>>,
     splash_text: UiText,
     splash_size: Cosine,
+    tile_9: UiTile9,
 }
 
 const TITLE_PIXELS: &'static [&'static str] = &[
@@ -294,6 +299,25 @@ impl Game {
             })
             .collect();
 
+        let tile_9 = UiTile9::new(
+            &renderer,
+            jar.read_image("gui/gui.png").await?,
+            Tile9PxRanges {
+                start: [0, 66].into(),
+                extent: [200, 20].into(),
+                top: 2,
+                bottom: 3,
+                left: 2,
+                right: 2,
+            },
+            2.0,
+            //10.0,
+            UiSize {
+                size: [900.0, 600.0].into(),
+                scale: size.scale,
+            },
+        );
+
         Ok(Game {
             size,
             renderer,
@@ -315,19 +339,23 @@ impl Game {
             title_pixel_positions,
             splash_text,
             splash_size: Cosine::new(1.0 / 2.0),
+            tile_9,
         })
     }
 
     pub async fn draw<'a>(&mut self, elapsed: f32) -> Result<()> {
-        trace!(%elapsed, "drawing");
+        trace!(%elapsed, "updating");
 
         self.splash_size.add_to_input(elapsed);
         for pos in &mut self.title_pixel_positions {
             pos.z = f32::min(0.0, pos.z + 75.0 * elapsed);
         }
 
+        trace!("drawing");
+
         let mut frame = FrameContent::new();
         let mut canvas = frame.canvas();
+
         canvas.reborrow()
             .color([0.25, 0.25, 0.25, 1.0])
             .draw_image_uv(
@@ -336,28 +364,33 @@ impl Game {
                 [0.0, 0.0],
                 self.size.size / (64.0 * self.size.scale),
             );
-        self.version_text.draw(canvas.reborrow());
-        self.copyright_text.draw(canvas.reborrow());
-        
-        let mut title_canvas = canvas.reborrow()
-            .begin_3d_perspective(
-                self.size.size,
-                [0.0, self.title_cam_height, self.title_cam_distance],
-                Quaternion::identity(),
-                self.title_cam_fov, // TODO horizontal field of view
-            )
-            .rotate(Quaternion::rotation_x(self.title_angle))
-            .translate([
-                -(TITLE_PIXELS[0].chars().count() as f32) / 2.0,
-                -(TITLE_PIXELS.len() as f32) / 2.0,
-                0.0,
-            ])
-            ;
-        for &pos in &self.title_pixel_positions {
-            title_canvas.reborrow()
-                .translate(pos)
-                .draw_mesh(&self.title_pixel, &self.title_pixel_texture);
+
+        {
+            let mut canvas = canvas.reborrow();
+            self.tile_9.draw(canvas.reborrow());
         }
+
+        {
+            let mut canvas = canvas.reborrow()
+                .begin_3d_perspective(
+                    self.size.size,
+                    [0.0, self.title_cam_height, self.title_cam_distance],
+                    Quaternion::identity(),
+                    self.title_cam_fov, // TODO horizontal field of view
+                )
+                .rotate(Quaternion::rotation_x(self.title_angle))
+                .translate([
+                    -(TITLE_PIXELS[0].chars().count() as f32) / 2.0,
+                    -(TITLE_PIXELS.len() as f32) / 2.0,
+                    0.0,
+                ]);
+            for &pos in &self.title_pixel_positions {
+                canvas.reborrow()
+                    .translate(pos)
+                    .draw_mesh(&self.title_pixel, &self.title_pixel_texture);
+            }
+        }
+
         {
             let mut canvas = canvas.reborrow()
                 .translate(Vec2 {
@@ -370,6 +403,10 @@ impl Game {
                 .rotate(f32::to_radians(22.5));
             self.splash_text.draw(canvas.reborrow());
         }
+        
+        self.version_text.draw(canvas.reborrow());
+        self.copyright_text.draw(canvas.reborrow());
+
         self.renderer.draw_frame(&frame)
     }
 
@@ -381,7 +418,7 @@ impl Game {
 
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
-
+        
         Ok(())
     }
 
@@ -393,6 +430,7 @@ impl Game {
         self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
+        self.tile_9.set_scale(self.size.scale);
 
         Ok(())
     }

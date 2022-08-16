@@ -38,8 +38,8 @@ mod game_behavior {
             GpuImage,
             TextBlock,
             TextSpan,
-            HorizontalAlign,
-            VerticalAlign,
+            HAlign,
+            VAlign,
             LayedOutTextBlock,
             FontId,
             GpuImageArray,
@@ -107,10 +107,10 @@ mod game_behavior {
                             color: Rgba::blue(),
                         }
                     ],
-                    horizontal_align: HorizontalAlign::Left {
+                    horizontal_align: HAlign::Left {
                         width: None,
                     },
-                    vertical_align: VerticalAlign::Top,
+                    vertical_align: VAlign::Top,
                 });
             let image_array = renderer
                 .load_image_array_files(

@@ -22,8 +22,8 @@ pub use crate::pipelines::{
     text::{
         TextBlock,
         TextSpan,
-        HorizontalAlign,
-        VerticalAlign,
+        HAlign,
+        VAlign,
         LayedOutTextBlock,
         FontId,
     },

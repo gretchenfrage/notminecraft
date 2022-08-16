@@ -16,7 +16,7 @@ use glyph_brush::{
     GlyphBrushBuilder,
     GlyphPositioner,
 };
-use wgpu::{
+use wgpu::{ 
     *,
     util::{
         DeviceExt,
@@ -37,15 +37,15 @@ pub struct TextBlock<'a> {
     /// The spans of text to flow together.
     pub spans: &'a [TextSpan<'a>],
     /// Specification of horizontal align/wrap behavior.
-    pub h_align: HorizontalAlign,
+    pub h_align: HAlign,
     /// Specification of vertical align/wrap behavior.
-    pub v_align: VerticalAlign,
+    pub v_align: VAlign,
     pub wrap_width: Option<f32>,
 }
 
 /// Specification of text horizontal align/wrap behavior.
 #[derive(Debug, Copy, Clone)]
-pub enum HorizontalAlign {
+pub enum HAlign {
     Left,
     Center,
     Right,
@@ -70,9 +70,19 @@ pub enum HorizontalAlign {
     },*/
 }
 
+impl HAlign {
+    pub fn sign(self) -> i8 {
+        match self {
+            HAlign::Left => -1,
+            HAlign::Center => 0,
+            HAlign::Right => 1,
+        }
+    }
+}
+
 /// Specification of text vertical align/wrap behavior.
 #[derive(Debug, Copy, Clone)]
-pub enum VerticalAlign {
+pub enum VAlign {
     Top,
     Center,
     Bottom,
@@ -83,6 +93,16 @@ pub enum VerticalAlign {
     Center { height: f32 },
     /// Press the text down against the bottom of the block (`height`).
     Bottom { height: f32 },*/
+}
+
+impl VAlign {
+    pub fn sign(self) -> i8 {
+        match self {
+            VAlign::Top => -1,
+            VAlign::Center => 0,
+            VAlign::Bottom => 1,
+        }
+    }
 }
 
 /// Index for a font loaded into a `Renderer`.
@@ -109,21 +129,21 @@ impl<'a> TextBlock<'a> {
     /// Produce a corresponding glyph_brush `Layout`.
     fn to_layout(&self) -> gb::Layout<gb::BuiltInLineBreaker> {
         let gb_h_align = match self.h_align {
-            HorizontalAlign::Left => gb::HorizontalAlign::Left,
-            HorizontalAlign::Center => gb::HorizontalAlign::Center,
-            HorizontalAlign::Right => gb::HorizontalAlign::Right,
+            HAlign::Left => gb::HorizontalAlign::Left,
+            HAlign::Center => gb::HorizontalAlign::Center,
+            HAlign::Right => gb::HorizontalAlign::Right,
             /*
-            HorizontalAlign::Left { .. } => gb::HorizontalAlign::Left,
-            HorizontalAlign::Center { .. } => gb::HorizontalAlign::Center,
-            HorizontalAlign::Right { .. } => gb::HorizontalAlign::Right,*/
+            HAlign::Left { .. } => gb::HorizontalAlign::Left,
+            HAlign::Center { .. } => gb::HorizontalAlign::Center,
+            HAlign::Right { .. } => gb::HorizontalAlign::Right,*/
         };
         let gb_v_align = match self.v_align {
-            VerticalAlign::Top => gb::VerticalAlign::Top,
-            VerticalAlign::Center => gb::VerticalAlign::Center,
-            VerticalAlign::Bottom => gb::VerticalAlign::Bottom,
-            /*VerticalAlign::Top => gb::VerticalAlign::Top,
-            VerticalAlign::Center { .. } => gb::VerticalAlign::Center,
-            VerticalAlign::Bottom { .. } => gb::VerticalAlign::Bottom,*/
+            VAlign::Top => gb::VerticalAlign::Top,
+            VAlign::Center => gb::VerticalAlign::Center,
+            VAlign::Bottom => gb::VerticalAlign::Bottom,
+            /*VAlign::Top => gb::VerticalAlign::Top,
+            VAlign::Center { .. } => gb::VerticalAlign::Center,
+            VAlign::Bottom { .. } => gb::VerticalAlign::Bottom,*/
         };
         if self.wrap_width.is_some() {
             gb::Layout::Wrap {
@@ -141,7 +161,7 @@ impl<'a> TextBlock<'a> {
         /*
         let single_line = matches!(
             self.horizontal_align,
-            HorizontalAlign::Left { width: None },
+            HAlign::Left { width: None },
         );
         if single_line {
             gb::Layout::SingleLine {
@@ -163,14 +183,14 @@ impl<'a> TextBlock<'a> {
     fn to_section_geometry(&self) -> gb::SectionGeometry {
         /*
         let width = match self.horizontal_align {
-            HorizontalAlign::Left { width } => width,
-            HorizontalAlign::Center { width } => Some(width),
-            HorizontalAlign::Right { width } => Some(width),
+            HAlign::Left { width } => width,
+            HAlign::Center { width } => Some(width),
+            HAlign::Right { width } => Some(width),
         };
         let height = match self.vertical_align {
-            VerticalAlign::Top => None,
-            VerticalAlign::Center { height } => Some(height),
-            VerticalAlign::Bottom { height } => Some(height),
+            VAlign::Top => None,
+            VAlign::Center { height } => Some(height),
+            VAlign::Bottom { height } => Some(height),
         };*/
         gb::SectionGeometry {
             screen_position: (0.0, 0.0),

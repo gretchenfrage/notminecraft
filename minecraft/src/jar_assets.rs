@@ -36,17 +36,27 @@ impl JarReader {
             .map_err(|_| anyhow!("non UTF-8 data"))
     }
 
+    pub async fn read_image(
+        &self,
+        path: impl AsRef<str>,
+    ) -> Result<DynamicImage>
+    {
+        let data = self.read(path).await?;
+        Ok(image::load_from_memory(&data)?)
+    }
+
     pub async fn read_image_part(
         &self,
         path: impl AsRef<str>,
         start: impl Into<Vec2<u32>>,
         extent: impl Into<Extent2<u32>>,
-    ) -> Result<DynamicImage> {
+    ) -> Result<DynamicImage>
+    {
         let start = start.into();
         let extent = extent.into();
 
-        let data = self.read(path).await?;
-        let image = image::load_from_memory(&data)?;
+        let image = self.read_image(path).await?;
+
         Ok(image.crop_imm(
             start.x,
             start.y,
