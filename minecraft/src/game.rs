@@ -11,9 +11,14 @@ use crate::{
             UiTextBlock,
             UiTextBlockConfig,
         },
-        tile_9::{
-            UiTile9,
-            Tile9PxRanges,
+        tile_9::Tile9PxRanges,
+        menu_button::{
+            UiMenuButton,
+            UiMenuButtonConfig,
+        },
+        v_stack::{
+            UiVStack,
+            UiVStackConfig,
         },
     },
 };
@@ -49,6 +54,7 @@ use rand::Rng;
 use rand_pcg::Pcg64Mcg;
 use vek::*;
 use anyhow::*;
+use image::DynamicImage;
 
 
 #[derive(Debug, Clone)]
@@ -108,7 +114,10 @@ pub struct Game {
     title_pixel_positions: Vec<Vec3<f32>>,
     splash_text: UiText,
     splash_size: Cosine,
-    tile_9: UiTile9,
+
+    singleplayer_button: UiMenuButton,
+    multiplayer_button: UiMenuButton,
+    button_stack: UiVStack,
 }
 
 const TITLE_PIXELS: &'static [&'static str] = &[
@@ -141,6 +150,8 @@ impl Game {
         let mut rng = Pcg64Mcg::new(0xcafef00dd15ea5e5);
 
         let jar = JarReader::new().await?;
+
+        let lang = jar.read_properties("lang/en_US.lang").await?;
 
         let menu_background = renderer.load_image(jar.read("gui/background.png").await?)?;
         let font = renderer.load_font_437(jar.read("font/default.png").await?)?;
@@ -299,23 +310,134 @@ impl Game {
             })
             .collect();
 
-        let tile_9 = UiTile9::new(
+        struct McMenuButtonFactory {
+            font: FontId,
+            font_size: f32,
+            text_color: Rgba<f32>,
+            texture: DynamicImage,
+            texture_scale: f32,
+            tile_9_px_ranges: Tile9PxRanges,
+            unscaled_height: f32,
+        }
+
+        impl McMenuButtonFactory {
+            async fn new(font: FontId, jar: &JarReader) -> Result<Self> {
+                Ok(McMenuButtonFactory {
+                    font,
+                    font_size: 16.0,
+                    text_color: hex_color(0xE0E0E0FF),
+                    texture: jar.read_image("gui/gui.png").await?,
+                    texture_scale: 2.0,
+                    tile_9_px_ranges: Tile9PxRanges {
+                        start: [0, 66].into(),
+                        extent: [200, 20].into(),
+                        top: 2,
+                        bottom: 3,
+                        left: 2,
+                        right: 2,
+                    },
+                    unscaled_height: 40.0,
+                })
+            }
+
+            fn create(
+                &self,
+                renderer: &Renderer,
+                text: String,
+                width: f32,
+                scale: f32,
+            ) -> UiMenuButton {
+                UiMenuButton::new(
+                    renderer,
+                    UiMenuButtonConfig {
+                        text,
+                        font: self.font,
+                        font_size: self.font_size,
+                        text_color: self.text_color,
+                        texture: self.texture.clone(),
+                        texture_scale: self.texture_scale,
+                        tile_9_px_ranges: self.tile_9_px_ranges,
+                        unscaled_height: self.unscaled_height,
+                    },
+                    width,
+                    scale,
+                )
+            }
+        }
+
+        let menu_button_factory = McMenuButtonFactory::new(font, &jar).await?;
+        let singleplayer_button = menu_button_factory
+            .create(
+                &renderer,
+                lang["menu.singleplayer"].clone(),
+                400.0 * size.scale,
+                size.scale,
+            );
+        let multiplayer_button = menu_button_factory
+            .create(
+                &renderer,
+                lang["menu.multiplayer"].clone(),
+                400.0 * size.scale,
+                size.scale,
+            );
+        /*
+        let singleplayer_button = UiMenuButton::new(
             &renderer,
-            jar.read_image("gui/gui.png").await?,
-            Tile9PxRanges {
-                start: [0, 66].into(),
-                extent: [200, 20].into(),
-                top: 2,
-                bottom: 3,
-                left: 2,
-                right: 2,
+            UiMenuButtonConfig {
+                text: lang["menu.singleplayer"].clone(),
+                font,
+                font_size: 16.0,
+                text_color: hex_color(0xE0E0E0FF),
+                texture: jar.read_image("gui/gui.png").await?,
+                texture_scale: 2.0,
+                tile_9_px_ranges: Tile9PxRanges {
+                    start: [0, 66].into(),
+                    extent: [200, 20].into(),
+                    top: 2,
+                    bottom: 3,
+                    left: 2,
+                    right: 2,
+                },
+                unscaled_height: 40.0,
             },
-            2.0,
-            //10.0,
-            UiSize {
-                size: [900.0, 600.0].into(),
-                scale: size.scale,
+            400.0 * size.scale,
+            size.scale,
+        );
+        let multiplayer_button = UiMenuButton::new(
+            &renderer,
+            UiMenuButtonConfig {
+                text: lang["menu.multiplayer"].clone(),
+                font,
+                font_size: 16.0,
+                text_color: hex_color(0xE0E0E0FF),
+                texture: jar.read_image("gui/gui.png").await?,
+                texture_scale: 2.0,
+                tile_9_px_ranges: Tile9PxRanges {
+                    start: [0, 66].into(),
+                    extent: [200, 20].into(),
+                    top: 2,
+                    bottom: 3,
+                    left: 2,
+                    right: 2,
+                },
+                unscaled_height: 40.0,
             },
+            400.0 * size.scale,
+            size.scale,
+        );
+        */
+        let button_stack = UiVStack::new(
+            UiVStackConfig {
+                unscaled_gap: 8.0,
+                num_items: 2,
+                get_item_height: |i| match i {
+                    0 => &singleplayer_button,
+                    1 => &multiplayer_button,
+                    _ => unreachable!()
+                }.size().size.h,
+            },
+            400.0 * size.scale,
+            size.scale,
         );
 
         Ok(Game {
@@ -339,7 +461,10 @@ impl Game {
             title_pixel_positions,
             splash_text,
             splash_size: Cosine::new(1.0 / 2.0),
-            tile_9,
+
+            singleplayer_button,
+            multiplayer_button,
+            button_stack,
         })
     }
 
@@ -367,7 +492,15 @@ impl Game {
 
         {
             let mut canvas = canvas.reborrow();
-            self.tile_9.draw(canvas.reborrow());
+            self.button_stack
+                .draw(
+                    canvas.reborrow(),
+                    |i, canvas| match i {
+                        0 => &self.singleplayer_button,
+                        1 => &self.multiplayer_button,
+                        _ => unreachable!(),
+                    }.draw(canvas)
+                );
         }
 
         {
@@ -430,7 +563,37 @@ impl Game {
         self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
-        self.tile_9.set_scale(self.size.scale);
+
+        self.button_stack
+            .set_scale(
+                self.size.scale,
+                &mut (
+                    &mut self.singleplayer_button,
+                    &mut self.multiplayer_button,
+                    &self.renderer,
+                ),
+                |&mut (ref mut singleplayer_button, ref mut multiplayer_button, renderer), i, scale| match i {
+                    0 => singleplayer_button,
+                    1 => multiplayer_button,
+                    _ => unreachable!(),
+                }.set_scale(renderer, scale),
+                |&(ref singleplayer_button, ref multiplayer_button, _), i| match i {
+                    0 => &singleplayer_button,
+                    1 => &multiplayer_button,
+                    _ => unreachable!(),
+                }.size().size.h,
+            );
+        self.button_stack
+            .set_width(
+                400.0 * self.size.scale,
+                |i, width| match i {
+                    0 => &mut self.singleplayer_button,
+                    1 => &mut self.multiplayer_button,
+                    _ => unreachable!(),
+                }.set_width(&self.renderer, width),
+            );
+        //self.singleplayer_button.set_scale(&self.renderer, self.size.scale);
+        //self.singleplayer_button.set_width(&self.renderer, 400.0 * self.size.scale);
 
         Ok(())
     }

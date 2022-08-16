@@ -139,13 +139,14 @@ impl UiText {
     }
 }
 
-
+#[derive(Debug, Clone)]
 pub struct UiTextBlockConfig {
     pub text_config: UiTextConfig,
     pub margins: Margins,
     pub wrap: bool,
 }
 
+#[derive(Debug)]
 pub struct UiTextBlock {
     ui_text: UiText,
     margins: Margins,

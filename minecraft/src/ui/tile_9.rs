@@ -10,7 +10,7 @@ use graphics::{
 use image::DynamicImage;
 use vek::*;
 
-
+#[derive(Debug)]
 pub struct UiTile9 {
     size: UiSize,
 
