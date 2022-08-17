@@ -1,6 +1,10 @@
 
-use super::UiSize;
+use super::{
+    UiSize,
+    UiPosInputEvent,
+};
 use graphics::frame_content::Canvas2;
+use vek::*;
 
 
 pub struct UiHCenter<I> {
@@ -9,6 +13,8 @@ pub struct UiHCenter<I> {
     x_translate: f32,
     width: f32,
     scale: f32,
+
+    debug_dot: Option<Vec2<f32>>,
 }
 
 pub struct UiHCenterConfig<F> {
@@ -38,6 +44,8 @@ impl<I> UiHCenter<I> {
             x_translate: (width - inner_width) / 2.0,
             width,
             scale,
+
+            debug_dot: None,
         }
     }
     
@@ -55,7 +63,16 @@ impl<I> UiHCenter<I> {
     {
         let mut canvas = canvas.reborrow()
             .translate([self.x_translate, 0.0]);
-        draw_inner(&self.inner, canvas);
+        draw_inner(&self.inner, canvas.reborrow());
+
+        if let Some(pos) = self.debug_dot {
+            let dot_size = Extent2 { w: 10.0, h: 10.0 };
+            canvas.reborrow()
+                .translate(pos)
+                .translate(-dot_size / 2.0)
+                .color(Rgba::red())
+                .draw_solid(dot_size);
+        }
     }
 
     pub fn set_width(&mut self, width: f32)
@@ -81,5 +98,26 @@ impl<I> UiHCenter<I> {
 
         set_inner_scale(&mut self.inner, self.scale);
         set_inner_width(&mut self.inner, self.scale * self.unscaled_inner_width);
+    }
+
+    pub fn on_pos_input_event<F>(
+        &mut self,
+        event: UiPosInputEvent,
+        inner_on_pos_input_event: F,
+    )
+    where
+        F: Fn(&mut I, UiPosInputEvent)
+    {
+        let event = event.map_pos(|v| v - Vec2::new(self.x_translate, 0.0));
+        /*match event {
+            UiPosInputEvent::CursorMoved(pos) => {
+                self.debug_dot = Some(pos);
+            }
+            _ => ()
+        }*/
+        inner_on_pos_input_event(
+            &mut self.inner,
+            event,
+        )
     }
 }

@@ -5,6 +5,7 @@ use crate::{
         UiSize,
         UiModify,
         Margins,
+        UiPosInputEvent,
         text::{
             UiText,
             UiTextConfig,
@@ -124,6 +125,8 @@ pub struct Game {
     splash_size: Cosine,
 
     buttons: UiVCenter<UiHCenter<UiVStack<ButtonsItems>>>,
+
+    debug_dot: Option<Vec2<f32>>,
 }
 
 struct ButtonsItems {
@@ -330,6 +333,7 @@ impl Game {
             texture: DynamicImage,
             texture_scale: f32,
             tile_9_px_ranges: Tile9PxRanges,
+            tile_9_px_ranges_highlight: Tile9PxRanges,
             unscaled_height: f32,
         }
 
@@ -343,6 +347,14 @@ impl Game {
                     texture_scale: 2.0,
                     tile_9_px_ranges: Tile9PxRanges {
                         start: [0, 66].into(),
+                        extent: [200, 20].into(),
+                        top: 2,
+                        bottom: 3,
+                        left: 2,
+                        right: 2,
+                    },
+                    tile_9_px_ranges_highlight: Tile9PxRanges {
+                        start: [0, 86].into(),
                         extent: [200, 20].into(),
                         top: 2,
                         bottom: 3,
@@ -370,6 +382,7 @@ impl Game {
                         texture: self.texture.clone(),
                         texture_scale: self.texture_scale,
                         tile_9_px_ranges: self.tile_9_px_ranges,
+                        tile_9_px_ranges_highlight: self.tile_9_px_ranges_highlight,
                         unscaled_height: self.unscaled_height,
                     },
                     width,
@@ -464,6 +477,8 @@ impl Game {
             splash_size: Cosine::new(1.0 / 2.0),
 
             buttons,
+
+            debug_dot: None,
         })
     }
 
@@ -545,6 +560,15 @@ impl Game {
         
         self.version_text.draw(canvas.reborrow());
         self.copyright_text.draw(canvas.reborrow());
+
+        if let Some(pos) = self.debug_dot {
+            let dot_size = Extent2 { w: 10.0, h: 10.0 };
+            canvas.reborrow()
+                .translate(pos)
+                .translate(-dot_size / 2.0)
+                .color(Rgba::red())
+                .draw_solid(dot_size);
+        }
 
         self.renderer.draw_frame(&frame)
     }
@@ -657,6 +681,30 @@ impl Game {
             MouseScrollDelta::PixelDelta(delta) => delta.y as f32 / (16.0 * self.size.scale),
         };
         self.set_scale(self.size.scale + n / 100.0).await?;
+        Ok(())
+    }
+
+    pub async fn on_pos_input_event(&mut self, event: UiPosInputEvent) -> Result<()> {
+        //debug!(?event);
+        self.buttons
+            .on_pos_input_event(
+                event,
+                |inner, event| inner
+                    .on_pos_input_event(
+                        event,
+                        |inner, event| inner
+                            .on_pos_input_event(
+                                event,
+                                |items, i, event| match i {
+                                    0 => items.singleplayer_button.on_pos_input_event(event),
+                                    1 => items.multiplayer_button.on_pos_input_event(event),
+                                    2 => items.mods_button.on_pos_input_event(event),
+                                    3 => items.options_button.on_pos_input_event(event),
+                                    _ => unreachable!(),
+                                }
+                            )
+                    )
+            );
         Ok(())
     }
 }

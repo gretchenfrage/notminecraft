@@ -12,6 +12,12 @@ use std::borrow::Borrow;
 use vek::*;
 
 
+pub use winit_main::reexports::event::{
+    MouseButton,
+    ElementState,
+};
+
+
 pub mod text;
 pub mod tile_9;
 pub mod menu_button;
@@ -115,4 +121,34 @@ impl<'a> IntoIterator for &'a UiModify {
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter().copied()
     }    
+}
+
+#[derive(Debug, Clone)]
+pub enum UiPosInputEvent {
+    CursorMoved(Vec2<f32>),
+    MouseInput {
+        pos: Vec2<f32>,
+        button: MouseButton,
+        state: ElementState,
+    },
+}
+
+impl UiPosInputEvent {
+    pub fn map_pos<F>(self, f: F) -> Self
+    where
+        F: Fn(Vec2<f32>) -> Vec2<f32>
+    {
+        match self {
+            UiPosInputEvent::CursorMoved(pos) => UiPosInputEvent::CursorMoved(f(pos)),
+            UiPosInputEvent::MouseInput {
+                pos,
+                button,
+                state,
+            } => UiPosInputEvent::MouseInput {
+                pos: f(pos),
+                button,
+                state,
+            },
+        }
+    }
 }

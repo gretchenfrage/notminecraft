@@ -1,6 +1,10 @@
 
-use super::UiSize;
+use super::{
+    UiSize,
+    UiPosInputEvent,
+};
 use graphics::frame_content::Canvas2;
+use vek::*;
 
 
 pub struct UiVCenter<I> {
@@ -64,7 +68,8 @@ impl<I> UiVCenter<I> {
     {
         self.height = height;
 
-        self.y_translate = (self.height - self.inner_height) * self.fraction_down;
+        //self.y_translate = (self.height - self.inner_height) * self.fraction_down;
+        self.y_translate = (self.height /*- self.inner_height TODO whatevers*/) * (self.fraction_down + 0.1 /* TODO whaaaatevers */) - self.inner_height /* TODO whaaaateversssssss */;
     }
 
     pub fn set_scale<F1, F2>(
@@ -82,6 +87,21 @@ impl<I> UiVCenter<I> {
         set_inner_scale(&mut self.inner, self.scale);
 
         self.inner_height = get_inner_height(&self.inner);
-        self.y_translate = (self.height - self.inner_height) * self.fraction_down;
+        debug!(inner_height=%self.inner_height);
+        self.y_translate = (self.height /*- self.inner_height TODO whatevers*/) * (self.fraction_down - 0.2 /* TODO whaaaatevers */) - self.inner_height /* TODO whaaaateversssssss */;
+    }
+
+    pub fn on_pos_input_event<F>(
+        &mut self,
+        event: UiPosInputEvent,
+        inner_on_pos_input_event: F,
+    )
+    where
+        F: Fn(&mut I, UiPosInputEvent)
+    {
+        inner_on_pos_input_event(
+            &mut self.inner,
+            event.map_pos(|v| v - Vec2::new(0.0, self.y_translate)),
+        )
     }
 }

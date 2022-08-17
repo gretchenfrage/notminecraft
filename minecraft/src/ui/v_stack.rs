@@ -1,6 +1,10 @@
 
-use super::UiSize;
+use super::{
+    UiSize,
+    UiPosInputEvent,
+};
 use graphics::frame_content::Canvas2;
+use vek::*;
 
 
 #[derive(Debug, Clone)]
@@ -105,29 +109,21 @@ impl<I> UiVStack<I> {
             height += get_item_height(&self.items, i);
         }
     }
-    /*
-    pub fn set_scale<P, F1, F2>(
+
+    pub fn on_pos_input_event<F>(
         &mut self,
-        scale: f32,
-        passthrough: &mut P,
-        mut set_item_scale: F1,
-        get_item_height: F2,
+        event: UiPosInputEvent,
+        item_on_pos_input_event: F,
     )
     where
-        F1: FnMut(&mut P, usize, f32),
-        F2: Fn(&P, usize) -> f32,
+        F: Fn(&mut I, usize, UiPosInputEvent)
     {
-        self.size.scale = scale;
-
-        let mut height = 0.0;
-        for (i, translate) in self.item_y_translates.iter_mut().enumerate() {
-            if i > 0 {
-                height += self.unscaled_gap * self.size.scale;
-            }
-            *translate = height;
-            set_item_scale(passthrough, i, self.size.scale);
-            height += get_item_height(passthrough, i);
+        for (i, &translate) in self.item_y_translates.iter().enumerate() {
+            item_on_pos_input_event(
+                &mut self.items,
+                i,
+                event.clone().map_pos(|v| v - Vec2::new(0.0, translate)),
+            );
         }
     }
-    */
 }

@@ -11,6 +11,7 @@ use super::{
     },
     Margins,
     UiSize,
+    UiPosInputEvent,
 };
 use graphics::{
     Renderer,
@@ -30,6 +31,8 @@ use vek::*;
 pub struct UiMenuButton {
     text: UiTextBlock,
     background: UiTile9,
+    background_highlight: UiTile9,
+    highlight: bool,
     unscaled_height: f32,
     size: UiSize,
 }
@@ -43,6 +46,7 @@ pub struct UiMenuButtonConfig {
     pub texture: DynamicImage,
     pub texture_scale: f32,
     pub tile_9_px_ranges: Tile9PxRanges,
+    pub tile_9_px_ranges_highlight: Tile9PxRanges,
     pub unscaled_height: f32,
 }
 
@@ -83,14 +87,23 @@ impl UiMenuButton {
         );
         let background = UiTile9::new(
             renderer,
-            config.texture,
+            config.texture.clone(),
             config.tile_9_px_ranges,
+            config.texture_scale,
+            size,
+        );
+        let background_highlight = UiTile9::new(
+            renderer,
+            config.texture,
+            config.tile_9_px_ranges_highlight,
             config.texture_scale,
             size,
         );
         UiMenuButton {
             text,
             background,
+            background_highlight,
+            highlight: false,
             unscaled_height: config.unscaled_height,
             size,
         }
@@ -101,7 +114,10 @@ impl UiMenuButton {
     }
 
     pub fn draw<'a>(&'a self, mut canvas: Canvas2<'a, '_>) {
-        self.background.draw(canvas.reborrow());
+        match self.highlight {
+            false => &self.background,
+            true => &self.background_highlight,
+        }.draw(canvas.reborrow());
         self.text.draw(canvas.reborrow());
     }
 
@@ -109,6 +125,7 @@ impl UiMenuButton {
         self.size.size.w = width;
 
         self.background.set_size(self.size.size);
+        self.background_highlight.set_size(self.size.size);
         self.text.set_size(renderer, self.size.size);
     }
 
@@ -116,11 +133,30 @@ impl UiMenuButton {
         self.size.scale = scale;
 
         self.background.set_scale(self.size.scale);
+        self.background_highlight.set_scale(self.size.scale);
         self.text.set_scale(renderer, self.size.scale);
 
         self.size.size.h = self.unscaled_height * self.size.scale;
 
         self.background.set_size(self.size.size);
+        self.background_highlight.set_size(self.size.size);
         self.text.set_size(renderer, self.size.size);
+    }
+
+    pub fn on_pos_input_event(&mut self, event: UiPosInputEvent) {
+        match event {
+            UiPosInputEvent::CursorMoved(pos) => {
+                let over =
+                    pos.x >= 0.0
+                    && pos.y >= 0.0
+                    && pos.x <= self.size.size.w
+                    && pos.y <= self.size.size.h;
+                if over {
+                    //debug!("over !");
+                }
+                self.highlight = over;
+            }
+            _ => (),
+        }
     }
 }
