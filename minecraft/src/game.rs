@@ -20,6 +20,10 @@ use crate::{
             UiVStack,
             UiVStackConfig,
         },
+        h_center::{
+            UiHCenter,
+            UiHCenterConfig,
+        },
     },
 };
 use graphics::{
@@ -117,7 +121,7 @@ pub struct Game {
 
     singleplayer_button: UiMenuButton,
     multiplayer_button: UiMenuButton,
-    button_stack: UiVStack,
+    buttons: UiHCenter<UiVStack>,
 }
 
 const TITLE_PIXELS: &'static [&'static str] = &[
@@ -439,6 +443,14 @@ impl Game {
             400.0 * size.scale,
             size.scale,
         );
+        let buttons = UiHCenter::new(
+            UiHCenterConfig {
+                inner: button_stack,
+                unscaled_inner_width: 400.0,
+            },
+            size.size.w,
+            size.scale,
+        );
 
         Ok(Game {
             size,
@@ -464,7 +476,8 @@ impl Game {
 
             singleplayer_button,
             multiplayer_button,
-            button_stack,
+            //button_stack,
+            buttons,
         })
     }
 
@@ -552,6 +565,8 @@ impl Game {
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
         
+        self.buttons.set_width(self.size.size.w);
+
         Ok(())
     }
 
@@ -563,7 +578,68 @@ impl Game {
         self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
-
+        self.buttons
+            .set_scale(
+                self.size.scale,
+                &mut (
+                    &mut self.singleplayer_button,
+                    &mut self.multiplayer_button,
+                    &self.renderer,
+                ),
+                // UiHCenter set_inner_scale callback
+                |passthrough, button_stack, scale| button_stack
+                    .set_scale(
+                        scale,
+                        passthrough,
+                        // UiVStack set_item_scale callback
+                        |
+                            &mut (
+                                ref mut singleplayer_button,
+                                ref mut multiplayer_button,
+                                renderer,
+                            ),
+                            i,
+                            scale
+                        | match i {
+                            0 => singleplayer_button,
+                            1 => multiplayer_button,
+                            _ => unreachable!(),
+                        }.set_scale(renderer, scale),
+                        // UiVStack get_item_height callback
+                        |
+                            &(
+                                ref singleplayer_button,
+                                ref multiplayer_button,
+                                _,
+                            ),
+                            i
+                        | match i {
+                            0 => &singleplayer_button,
+                            1 => &multiplayer_button,
+                            _ => unreachable!(),
+                        }.size().size.h,
+                    ),
+                // UiHCenter set_inner_width callback
+                |
+                    &mut (
+                        ref mut singleplayer_button,
+                        ref mut multiplayer_button,
+                        ref renderer,
+                    ),
+                    button_stack,
+                    width
+                | button_stack
+                    .set_width(
+                        width,
+                        // UiVStack set_item_width callback
+                        move |i, width| match i {
+                            0 => &mut singleplayer_button,
+                            1 => &mut multiplayer_button,
+                            _ => unreachable!(),
+                        }.set_width(renderer, width),
+                    )
+            );
+        /*
         self.button_stack
             .set_scale(
                 self.size.scale,
@@ -591,7 +667,7 @@ impl Game {
                     1 => &mut self.multiplayer_button,
                     _ => unreachable!(),
                 }.set_width(&self.renderer, width),
-            );
+            );*/
         //self.singleplayer_button.set_scale(&self.renderer, self.size.scale);
         //self.singleplayer_button.set_width(&self.renderer, 400.0 * self.size.scale);
 
