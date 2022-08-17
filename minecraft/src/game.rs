@@ -24,6 +24,10 @@ use crate::{
             UiHCenter,
             UiHCenterConfig,
         },
+        v_center::{
+            UiVCenter,
+            UiVCenterConfig,
+        },
     },
 };
 use graphics::{
@@ -119,12 +123,14 @@ pub struct Game {
     splash_text: UiText,
     splash_size: Cosine,
 
-    buttons: UiHCenter<UiVStack<ButtonsItems>>,
+    buttons: UiVCenter<UiHCenter<UiVStack<ButtonsItems>>>,
 }
 
 struct ButtonsItems {
     singleplayer_button: UiMenuButton,
     multiplayer_button: UiMenuButton,
+    mods_button: UiMenuButton,
+    options_button: UiMenuButton,
 }
 
 const TITLE_PIXELS: &'static [&'static str] = &[
@@ -373,123 +379,65 @@ impl Game {
         }
 
         let menu_button_factory = McMenuButtonFactory::new(font, &jar).await?;
-        /*
-        let singleplayer_button = menu_button_factory
-            .create(
-                &renderer,
-                lang["menu.singleplayer"].clone(),
-                400.0 * size.scale,
-                size.scale,
-            );
-        let multiplayer_button = menu_button_factory
-            .create(
-                &renderer,
-                lang["menu.multiplayer"].clone(),
-                400.0 * size.scale,
-                size.scale,
-            );
-
-        let singleplayer_button = UiMenuButton::new(
-            &renderer,
-            UiMenuButtonConfig {
-                text: lang["menu.singleplayer"].clone(),
-                font,
-                font_size: 16.0,
-                text_color: hex_color(0xE0E0E0FF),
-                texture: jar.read_image("gui/gui.png").await?,
-                texture_scale: 2.0,
-                tile_9_px_ranges: Tile9PxRanges {
-                    start: [0, 66].into(),
-                    extent: [200, 20].into(),
-                    top: 2,
-                    bottom: 3,
-                    left: 2,
-                    right: 2,
-                },
-                unscaled_height: 40.0,
-            },
-            400.0 * size.scale,
-            size.scale,
-        );
-        let multiplayer_button = UiMenuButton::new(
-            &renderer,
-            UiMenuButtonConfig {
-                text: lang["menu.multiplayer"].clone(),
-                font,
-                font_size: 16.0,
-                text_color: hex_color(0xE0E0E0FF),
-                texture: jar.read_image("gui/gui.png").await?,
-                texture_scale: 2.0,
-                tile_9_px_ranges: Tile9PxRanges {
-                    start: [0, 66].into(),
-                    extent: [200, 20].into(),
-                    top: 2,
-                    bottom: 3,
-                    left: 2,
-                    right: 2,
-                },
-                unscaled_height: 40.0,
-            },
-            400.0 * size.scale,
-            size.scale,
-        );
-        let button_stack = UiVStack::new(
-            UiVStackConfig {
-                items: 
-                unscaled_gap: 8.0,
-                num_items: 2,
-                get_item_height: |i| match i {
-                    0 => &singleplayer_button,
-                    1 => &multiplayer_button,
-                    _ => unreachable!()
-                }.size().size.h,
-            },
-            400.0 * size.scale,
-            size.scale,
-        );
-        let buttons = UiHCenter::new(
-            UiHCenterConfig {
-                inner: button_stack,
-                unscaled_inner_width: 400.0,
-            },
-            size.size.w,
-            size.scale,
-        );
-        */
-        let buttons = UiHCenter::new(
-            UiHCenterConfig {
-                create_inner: |width, scale| UiVStack::new(
-                    UiVStackConfig {
-                        create_items: |width, scale| ButtonsItems {
-                            singleplayer_button: menu_button_factory
-                                .create(
-                                    &renderer,
-                                    lang["menu.singleplayer"].clone(),
-                                    width,
-                                    scale,
-                                ),
-                            multiplayer_button: menu_button_factory
-                                .create(
-                                    &renderer,
-                                    lang["menu.multiplayer"].clone(),
-                                    width,
-                                    scale,
-                                ),
-                        },
-                        unscaled_gap: 8.0,
-                        num_items: 2,
-                        get_item_height: |items: &ButtonsItems, i| match i {
-                            0 => items.singleplayer_button.size().size.h,
-                            1 => items.multiplayer_button.size().size.h,
-                            _ => unreachable!(),
-                        },
+        
+        let buttons = UiVCenter::new(
+            UiVCenterConfig {
+                create_inner: |scale| UiHCenter::new(
+                    UiHCenterConfig {
+                        create_inner: |width, scale| UiVStack::new(
+                            UiVStackConfig {
+                                create_items: |width, scale| ButtonsItems {
+                                    singleplayer_button: menu_button_factory
+                                        .create(
+                                            &renderer,
+                                            lang["menu.singleplayer"].clone(),
+                                            width,
+                                            scale,
+                                        ),
+                                    multiplayer_button: menu_button_factory
+                                        .create(
+                                            &renderer,
+                                            lang["menu.multiplayer"].clone(),
+                                            width,
+                                            scale,
+                                        ),
+                                    mods_button: menu_button_factory
+                                        .create(
+                                            &renderer,
+                                            lang["menu.mods"].clone(),
+                                            width,
+                                            scale,
+                                        ),
+                                    options_button: menu_button_factory
+                                        .create(
+                                            &renderer,
+                                            lang["menu.options"].clone(),
+                                            width,
+                                            scale,
+                                        ),
+                                },
+                                unscaled_gap: 8.0,
+                                num_items: 4,
+                                get_item_height: |items: &ButtonsItems, i| match i {
+                                    0 => items.singleplayer_button.size().size.h,
+                                    1 => items.multiplayer_button.size().size.h,
+                                    2 => items.mods_button.size().size.h,
+                                    3 => items.options_button.size().size.h,
+                                    _ => unreachable!(),
+                                },
+                            },
+                            width,
+                            scale,
+                        ),
+                        unscaled_inner_width: 400.0,
                     },
-                    width,
-                    scale,
+                    size.size.w,
+                    size.scale,
                 ),
-                unscaled_inner_width: 400.0,
+                get_inner_height: |inner: &UiHCenter<UiVStack<ButtonsItems>>| inner.inner.size().size.h,
+                fraction_down: 0.6,
             },
-            size.size.w,
+            size.size.h,
             size.scale,
         );
 
@@ -515,9 +463,6 @@ impl Game {
             splash_text,
             splash_size: Cosine::new(1.0 / 2.0),
 
-            //singleplayer_button,
-            //multiplayer_button,
-            //button_stack,
             buttons,
         })
     }
@@ -550,23 +495,19 @@ impl Game {
                 |inner, canvas| inner
                     .draw(
                         canvas,
-                        |items, i, canvas| match i {
-                            0 => items.singleplayer_button.draw(canvas),
-                            1 => items.multiplayer_button.draw(canvas),
-                            _ => unreachable!(),
-                        },
-                    ),
+                        |inner, canvas| inner
+                            .draw(
+                                canvas,
+                                |items, i, canvas| match i {
+                                    0 => items.singleplayer_button.draw(canvas),
+                                    1 => items.multiplayer_button.draw(canvas),
+                                    2 => items.mods_button.draw(canvas),
+                                    3 => items.options_button.draw(canvas),
+                                    _ => unreachable!(),
+                                },
+                            ),
+                    )
             );
-        /*
-        self.button_stack
-            .draw(
-                canvas.reborrow(),
-                |i, canvas| match i {
-                    0 => &self.singleplayer_button,
-                    1 => &self.multiplayer_button,
-                    _ => unreachable!(),
-                }.draw(canvas)
-            );*/
 
         {
             let mut canvas = canvas.reborrow()
@@ -617,7 +558,8 @@ impl Game {
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
         
-        self.buttons.set_width(self.size.size.w);
+        self.buttons.set_height(self.size.size.h);
+        self.buttons.inner.set_width(self.size.size.w);
         
         Ok(())
     }
@@ -637,136 +579,70 @@ impl Game {
                 |inner, scale| inner
                     .set_scale(
                         scale,
-                        |items, i, scale| match i {
-                            0 => items.singleplayer_button
-                                .set_scale(
-                                    &self.renderer,
-                                    scale,
-                                ),
-                            1 => items.multiplayer_button
-                                .set_scale(
-                                    &self.renderer,
-                                    scale,
-                                ),
-                            _ => unreachable!(),
-                        },
-                        |items, i| match i {
-                            0 => items.singleplayer_button.size().size.h,
-                            1 => items.multiplayer_button.size().size.h,
-                            _ => unreachable!(),
-                        }
-                    ),
-                |inner, width| inner
-                    .set_width(
-                        width,
-                        |items, i, width| match i {
-                            0 => items.singleplayer_button
-                                .set_width(
-                                    &self.renderer,
-                                    width,
-                                ),
-                            1 => items.multiplayer_button
-                                .set_width(
-                                    &self.renderer,
-                                    width,
-                                ),
-                            _ => unreachable!(),
-                        },
-                    ),
-            );
-        /*
-        self.buttons
-            .set_scale(
-                self.size.scale,
-                &mut (
-                    &mut self.singleplayer_button,
-                    &mut self.multiplayer_button,
-                    &self.renderer,
-                ),
-                // UiHCenter set_inner_scale callback
-                |passthrough, button_stack, scale| button_stack
-                    .set_scale(
-                        scale,
-                        passthrough,
-                        // UiVStack set_item_scale callback
-                        |
-                            &mut (
-                                ref mut singleplayer_button,
-                                ref mut multiplayer_button,
-                                renderer,
+                        |inner, scale| inner
+                            .set_scale(
+                                scale,
+                                |items, i, scale| match i {
+                                    0 => items.singleplayer_button
+                                        .set_scale(
+                                            &self.renderer,
+                                            scale,
+                                        ),
+                                    1 => items.multiplayer_button
+                                        .set_scale(
+                                            &self.renderer,
+                                            scale,
+                                        ),
+                                    2 => items.mods_button
+                                        .set_scale(
+                                            &self.renderer,
+                                            scale,
+                                        ),
+                                    3 => items.options_button
+                                        .set_scale(
+                                            &self.renderer,
+                                            scale,
+                                        ),
+                                    _ => unreachable!(),
+                                },
+                                |items, i| match i {
+                                    0 => items.singleplayer_button.size().size.h,
+                                    1 => items.multiplayer_button.size().size.h,
+                                    2 => items.mods_button.size().size.h,
+                                    3 => items.options_button.size().size.h,
+                                    _ => unreachable!(),
+                                }
                             ),
-                            i,
-                            scale
-                        | match i {
-                            0 => singleplayer_button,
-                            1 => multiplayer_button,
-                            _ => unreachable!(),
-                        }.set_scale(renderer, scale),
-                        // UiVStack get_item_height callback
-                        |
-                            &(
-                                ref singleplayer_button,
-                                ref multiplayer_button,
-                                _,
+                        |inner, width| inner
+                            .set_width(
+                                width,
+                                |items, i, width| match i {
+                                    0 => items.singleplayer_button
+                                        .set_width(
+                                            &self.renderer,
+                                            width,
+                                        ),
+                                    1 => items.multiplayer_button
+                                        .set_width(
+                                            &self.renderer,
+                                            width,
+                                        ),
+                                    2 => items.mods_button
+                                        .set_width(
+                                            &self.renderer,
+                                            width,
+                                        ),
+                                    3 => items.options_button
+                                        .set_width(
+                                            &self.renderer,
+                                            width,
+                                        ),
+                                    _ => unreachable!(),
+                                },
                             ),
-                            i
-                        | match i {
-                            0 => &singleplayer_button,
-                            1 => &multiplayer_button,
-                            _ => unreachable!(),
-                        }.size().size.h,
                     ),
-                // UiHCenter set_inner_width callback
-                |
-                    &mut (
-                        ref mut singleplayer_button,
-                        ref mut multiplayer_button,
-                        ref renderer,
-                    ),
-                    button_stack,
-                    width
-                | button_stack
-                    .set_width(
-                        width,
-                        // UiVStack set_item_width callback
-                        move |i, width| match i {
-                            0 => singleplayer_button,
-                            1 => multiplayer_button,
-                            _ => unreachable!(),
-                        }.set_width(renderer, width),
-                    )
-            );*/
-        /*
-        self.button_stack
-            .set_scale(
-                self.size.scale,
-                &mut (
-                    &mut self.singleplayer_button,
-                    &mut self.multiplayer_button,
-                    &self.renderer,
-                ),
-                |&mut (ref mut singleplayer_button, ref mut multiplayer_button, renderer), i, scale| match i {
-                    0 => singleplayer_button,
-                    1 => multiplayer_button,
-                    _ => unreachable!(),
-                }.set_scale(renderer, scale),
-                |&(ref singleplayer_button, ref multiplayer_button, _), i| match i {
-                    0 => &singleplayer_button,
-                    1 => &multiplayer_button,
-                    _ => unreachable!(),
-                }.size().size.h,
+                |inner| inner.inner.size().size.h
             );
-        self.button_stack
-            .set_width(
-                400.0 * self.size.scale,
-                |i, width| match i {
-                    0 => &mut self.singleplayer_button,
-                    1 => &mut self.multiplayer_button,
-                    _ => unreachable!(),
-                }.set_width(&self.renderer, width),
-            );*/
-        //self.singleplayer_button.set_scale(&self.renderer, self.size.scale);
-        //self.singleplayer_button.set_width(&self.renderer, 400.0 * self.size.scale);
 
         Ok(())
     }

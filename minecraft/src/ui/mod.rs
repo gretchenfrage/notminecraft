@@ -17,6 +17,7 @@ pub mod tile_9;
 pub mod menu_button;
 pub mod v_stack;
 pub mod h_center;
+pub mod v_center;
 
 
 #[derive(Debug, Copy, Clone, PartialEq)]
