@@ -11,21 +11,31 @@ pub struct UiHCenter<I> {
     scale: f32,
 }
 
-pub struct UiHCenterConfig<I> {
-    pub inner: I,
+pub struct UiHCenterConfig<F> {
+    pub create_inner: F,
     pub unscaled_inner_width: f32,
 }
 
 impl<I> UiHCenter<I> {
-    pub fn new(
-        config: UiHCenterConfig<I>,
+    pub fn new<F>(
+        config: UiHCenterConfig<F>,
         width: f32,
         scale: f32,
-    ) -> Self {
+    ) -> Self
+    where
+        F: FnOnce(
+            // width
+            f32,
+            // scale
+            f32,
+        ) -> I,
+    {
+        let inner_width = config.unscaled_inner_width * scale;
+        let inner = (config.create_inner)(inner_width, scale);
         UiHCenter {
-            inner: config.inner,
+            inner,
             unscaled_inner_width: config.unscaled_inner_width,
-            x_translate: (width - config.unscaled_inner_width * scale) / 2.0,
+            x_translate: (width - inner_width) / 2.0,
             width,
             scale,
         }
@@ -55,22 +65,21 @@ impl<I> UiHCenter<I> {
         self.x_translate = (self.width - self.unscaled_inner_width * self.scale) / 2.0;
     }
 
-    pub fn set_scale<P, F1, F2>(
+    pub fn set_scale<F1, F2>(
         &mut self,
         scale: f32,
-        passthrough: &mut P,
         mut set_inner_scale: F1,
         mut set_inner_width: F2,
     )
     where
-        F1: FnOnce(&mut P, &mut I, f32),
-        F2: FnOnce(&mut P, &mut I, f32),
+        F1: FnOnce(&mut I, f32),
+        F2: FnOnce(&mut I, f32),
     {
         self.scale = scale;
 
         self.x_translate = (self.width - self.unscaled_inner_width * self.scale) / 2.0;
 
-        set_inner_scale(passthrough, &mut self.inner, self.scale);
-        set_inner_width(passthrough, &mut self.inner, self.scale * self.unscaled_inner_width);
+        set_inner_scale(&mut self.inner, self.scale);
+        set_inner_width(&mut self.inner, self.scale * self.unscaled_inner_width);
     }
 }
