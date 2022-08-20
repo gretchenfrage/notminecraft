@@ -263,8 +263,8 @@ fn test_foo() { // TODO
     let c = Clip3::min_x(0.5);
     let v = Vec3::new(1.0, 2.0, 0.0);
     assert_eq!(
-        c.dot(v),
-        a.apply_clip(&c).dot(a.apply(v)),
+        c.test_continuous(v),
+        a.apply_clip(&c).test_continuous(a.apply(v)),
     );
 }
 
@@ -318,7 +318,11 @@ impl Clip2 {
     /// Whether this clip would allow the given point to remain (as opposed to
     /// being clipped out).
     pub fn test(&self, v: Vec2<f32>) -> bool {
-        self.0.dot(Vec3::from_point_2d(v)) >= 0.0
+        self.test_continuous(v) >= 0.0
+    }
+
+    pub fn test_continuous(&self, v: Vec2<f32>) -> f32 {
+        self.0.dot(Vec3::from_point_2d(v))
     }
 
     // TODO do we want to expose this API?
@@ -373,6 +377,10 @@ impl Clip3 {
     /// Whether this clip would allow the given point to remain (as opposed to
     /// being clipped out).
     pub fn test(&self, v: Vec3<f32>) -> bool {
-        self.0.dot(Vec4::from_point(v)) >= 0.0
+        self.test_continuous(v) >= 0.0
+    }
+
+    pub fn test_continuous(&self, v: Vec3<f32>) -> f32 {
+        self.0.dot(Vec4::from_point(v))
     }
 }

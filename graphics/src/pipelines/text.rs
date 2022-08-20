@@ -49,25 +49,6 @@ pub enum HAlign {
     Left,
     Center,
     Right,
-    /*
-    /// Left-justify the text.
-    Left {
-        /// The block width to wrap text at. If `None`, text will just continue
-        /// rightwards forever.
-        width: Option<f32>,
-    },
-    /// Center-justify the text.
-    Center {
-        /// The width of the block. Text will be centered between 0 and `width`
-        /// and wrap within that range.
-        width: f32,
-    },
-    /// Right-justify the text.
-    Right {
-        /// The width of the block. Text will be pressed up against `width`
-        /// and wrap between 0 and `width`.
-        width: f32,
-    },*/
 }
 
 impl HAlign {
@@ -86,13 +67,6 @@ pub enum VAlign {
     Top,
     Center,
     Bottom,
-    /*
-    /// Press the text up against the top of the block (0).
-    Top,
-    /// Vertically center the text between 0 and `height`.
-    Center { height: f32 },
-    /// Press the text down against the bottom of the block (`height`).
-    Bottom { height: f32 },*/
 }
 
 impl VAlign {
@@ -416,6 +390,71 @@ impl TextPipeline {
     }
 }
 
+fn update_glyph_cache_texture(
+    glyph_cache_texture: &Texture,
+    queue: &Queue,
+    rect: gb::Rectangle<u32>,
+    unpadded_data: &[u8],
+) {
+    // pad data
+    let unpadded_bytes_per_row = rect.width();
+    let padded_bytes_per_row =
+        if unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT == 0 {
+            unpadded_bytes_per_row
+        } else {
+            unpadded_bytes_per_row - (unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT) + COPY_BYTES_PER_ROW_ALIGNMENT
+        };
+
+    let num_rows = rect.height();
+
+    let mut padded_data = Vec::new();
+    for row in 0..num_rows {
+        let start = row * unpadded_bytes_per_row;
+        let end = row * unpadded_bytes_per_row + unpadded_bytes_per_row;
+        padded_data.extend(unpadded_data[start as usize..end as usize].iter().copied());
+        for _ in 0..padded_bytes_per_row - unpadded_bytes_per_row {
+            padded_data.push(0);
+        }
+    }
+
+    // write the data to the texture
+    queue
+        .write_texture(
+            ImageCopyTexture {
+                texture: glyph_cache_texture,
+                mip_level: 0,
+                origin: Origin3d {
+                    x: rect.min[0],
+                    y: rect.min[1],
+                    z: 0,
+                },
+                aspect: TextureAspect::All
+            },
+            &padded_data,
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_bytes_per_row.try_into().unwrap()),
+                rows_per_image: Some(num_rows.try_into().unwrap()),
+            },
+            Extent3d {
+                width: rect.width(),
+                height: rect.height(),
+                depth_or_array_layers: 1,
+            },
+        );
+}
+
+/// Convert an `gb_glyph::Rect` to a (start, extent) tuple.
+fn rect_to_src_extent(rect: gb::ab_glyph::Rect) -> (Vec2<f32>, Extent2<f32>) {
+    (
+        Vec2::new(rect.min.x, rect.min.y),
+        (
+            Vec2::new(rect.max.x, rect.max.y)
+            - Vec2::new(rect.min.x, rect.min.y)
+        ).into(),
+    )
+}
+
 impl<'a> PreRenderer<'a> {
     pub(crate) fn pre_render(
         &mut self,
@@ -466,71 +505,20 @@ impl<'a> PreRenderer<'a> {
         // update the glyph cache texture as necessary
         // update the text vertex buffer as necessary
 
-        /// Convert an `gb_glyph::Rect` to a (start, extent) tuple.
-        fn rect_to_src_extent(rect: gb::ab_glyph::Rect) -> (Vec2<f32>, Extent2<f32>) {
-            (
-                Vec2::new(rect.min.x, rect.min.y),
-                Extent2::new(rect.max.x, rect.max.y) - Extent2::new(rect.min.x, rect.min.y),
-            )
-        }
+        
 
         // loop until glyph cache texture is large enough
         for attempt in 0.. {
             assert!(attempt < 100, "glyph cache update loop not breaking");
             let result = self.pipeline.glyph_brush
                 .process_queued(
-                    |rect, unpadded_data| {
-                        // callback for updating the glyph cache texture
-
-                        // pad data
-                        let unpadded_bytes_per_row = rect.width();
-                        let padded_bytes_per_row =
-                            if unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT == 0 {
-                                unpadded_bytes_per_row
-                            } else {
-                                unpadded_bytes_per_row - (unpadded_bytes_per_row % COPY_BYTES_PER_ROW_ALIGNMENT) + COPY_BYTES_PER_ROW_ALIGNMENT
-                            };
-
-                        let num_rows = rect.height();
-
-                        let mut padded_data = Vec::new();
-                        for row in 0..num_rows {
-                            let start = row * unpadded_bytes_per_row;
-                            let end = row * unpadded_bytes_per_row + unpadded_bytes_per_row;
-                            padded_data.extend(unpadded_data[start as usize..end as usize].iter().copied());
-                            for _ in 0..padded_bytes_per_row - unpadded_bytes_per_row {
-                                padded_data.push(0);
-                            }
-                        }
-
-                        // write the data to the texture
-                        queue
-                            .write_texture(
-                                ImageCopyTexture {
-                                    texture: &self.pipeline.glyph_cache_texture,
-                                    mip_level: 0,
-                                    origin: Origin3d {
-                                        x: rect.min[0],
-                                        y: rect.min[1],
-                                        z: 0,
-                                    },
-                                    aspect: TextureAspect::All
-                                },
-                                &padded_data,
-                                ImageDataLayout {
-                                    offset: 0,
-                                    bytes_per_row: Some(padded_bytes_per_row.try_into().unwrap()),
-                                    rows_per_image: Some(num_rows.try_into().unwrap()),
-                                },
-                                Extent3d {
-                                    width: rect.width(),
-                                    height: rect.height(),
-                                    depth_or_array_layers: 1,
-                                },
-                            );
-
-                        padded_data.clear();
-                    },
+                    // callback for updating the glyph cache texture
+                    |rect, unpadded_data| update_glyph_cache_texture(
+                        &self.pipeline.glyph_cache_texture,
+                        queue,
+                        rect,
+                        unpadded_data,
+                    ),
                     // callback to convert glyph_brush vertex to text quad
                     |glyph_vertex| TextQuad {
                         src: rect_to_src_extent(glyph_vertex.tex_coords),
