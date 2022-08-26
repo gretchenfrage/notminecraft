@@ -13,14 +13,14 @@ use vek::*;
 
 
 #[derive(Debug, Clone)]
-pub struct HMarginBlockConfig {
+pub struct UiHMarginBlockConfig {
     pub margin_left: f32,
     pub margin_right: f32,
 }
 
 #[derive(Debug, Clone)]
-pub struct HMarginBlock<I> {
-    config: HMarginBlockConfig,
+pub struct UiHMarginBlock<I> {
+    config: UiHMarginBlockConfig,
 
     size: Extent2<f32>,
     scale: f32,
@@ -30,7 +30,7 @@ pub struct HMarginBlock<I> {
 }
 
 fn inner_width(
-    config: &HMarginBlockConfig,
+    config: &UiHMarginBlockConfig,
     size: Extent2<f32>,
     scale: f32,
 ) -> f32
@@ -38,9 +38,9 @@ fn inner_width(
     size.w - (config.margin_left + config.margin_right) * scale
 }
 
-impl<I> HMarginBlock<I> {
+impl<I> UiHMarginBlock<I> {
     pub fn new<F>(
-        config: HMarginBlockConfig,
+        config: UiHMarginBlockConfig,
         create_inner: F,
         size: Extent2<f32>,
         scale: f32,
@@ -55,7 +55,7 @@ impl<I> HMarginBlock<I> {
         let inner = create_inner(inner_size, scale);
         let inner_x_translate = config.margin_left * scale;
         
-        HMarginBlock {
+        UiHMarginBlock {
             config,
 
             size,
@@ -67,7 +67,7 @@ impl<I> HMarginBlock<I> {
     }
 }
 
-impl<I> UiBlock for HMarginBlock<I>
+impl<I> UiBlock for UiHMarginBlock<I>
 where
     I: UiBlock<WidthChanged=False> + UiBlockSetWidth,
 {
@@ -109,7 +109,7 @@ where
     }
 }
 
-impl<I> UiBlockSetWidth for HMarginBlock<I>
+impl<I> UiBlockSetWidth for UiHMarginBlock<I>
 where
     I: UiBlockSetWidth,
 {
@@ -121,7 +121,7 @@ where
     }
 }
 
-impl<I> UiBlockSetHeight for HMarginBlock<I>
+impl<I> UiBlockSetHeight for UiHMarginBlock<I>
 where
     I: UiBlockSetHeight,
 {
@@ -134,26 +134,25 @@ where
 
 // ==== TODO: dedupe with macros, or traits ====
 
-/*
 #[derive(Debug, Clone)]
-pub struct VMarginBlockConfig {
+pub struct UiVMarginBlockConfig {
     pub margin_top: f32,
     pub margin_bottom: f32,
 }
 
 #[derive(Debug, Clone)]
-pub struct VMarginBlock<I> {
-    config: VMarginBlockConfig,
+pub struct UiVMarginBlock<I> {
+    config: UiVMarginBlockConfig,
 
     size: Extent2<f32>,
     scale: f32,
     
     inner_y_translate: f32,
-    inner: I,
+    pub inner: I,
 }
 
 fn inner_height(
-    config: &VMarginBlockConfig,
+    config: &UiVMarginBlockConfig,
     size: Extent2<f32>,
     scale: f32,
 ) -> f32
@@ -161,9 +160,9 @@ fn inner_height(
     size.h - (config.margin_top + config.margin_bottom) * scale
 }
 
-impl<I> VMarginBlock<I> {
+impl<I> UiVMarginBlock<I> {
     pub fn new<F>(
-        config: VMarginBlockConfig,
+        config: UiVMarginBlockConfig,
         create_inner: F,
         size: Extent2<f32>,
         scale: f32,
@@ -178,7 +177,7 @@ impl<I> VMarginBlock<I> {
         let inner = create_inner(inner_size, scale);
         let inner_y_translate = config.margin_top * scale;
         
-        VMarginBlock {
+        UiVMarginBlock {
             config,
 
             size,
@@ -190,7 +189,7 @@ impl<I> VMarginBlock<I> {
     }
 }
 
-impl<I> UiBlock for VMarginBlock<I>
+impl<I> UiBlock for UiVMarginBlock<I>
 where
     I: UiBlock<HeightChanged=False> + UiBlockSetHeight,
 {
@@ -232,7 +231,17 @@ where
     }
 }
 
-impl<I> UiBlockSetHeight for VMarginBlock<I>
+impl<I> UiBlockSetWidth for UiVMarginBlock<I>
+where
+    I: UiBlockSetWidth,
+{
+    fn set_width(&mut self, renderer: &Renderer, width: f32) {
+        self.size.w = width;
+        self.inner.set_width(renderer, width);
+    }
+}
+
+impl<I> UiBlockSetHeight for UiVMarginBlock<I>
 where
     I: UiBlockSetHeight,
 {
@@ -243,14 +252,3 @@ where
         self.inner.set_height(renderer, inner_height)
     }
 }
-
-impl<I> UiBlockSetWidth for VMarginBlock<I>
-where
-    I: UiBlockSetWidth,
-{
-    fn set_width(&mut self, renderer: &Renderer, width: f32) {
-        self.size.w = width;
-        self.inner.set_width(renderer, width);
-    }
-}
-*/

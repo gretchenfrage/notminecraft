@@ -54,6 +54,12 @@ use crate::{
             UiTileBlock,
             UiTileBlockConfig,
         },
+        margin_block::{
+            UiHMarginBlock,
+            UiHMarginBlockConfig,
+            UiVMarginBlock,
+            UiVMarginBlockConfig,
+        }
     },/*type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -172,10 +178,25 @@ pub struct Game {
     debug_dot: Option<Vec2<f32>>,
 }
 
-type MainMenu = UiLayerBlock<(
-    UiTileBlock,
-    Buttons,
-)>;
+type MainMenu = UiLayerBlock<MainMenuItems>;
+
+struct MainMenuItems {
+    background: UiTileBlock,
+    version_text: UiVMarginBlock<UiHMarginBlock<UiTextBlock>>,
+    copyright_text: UiVMarginBlock<UiHMarginBlock<UiTextBlock>>,
+    buttons: Buttons,
+}
+
+ui_block_items_struct!(
+    settable_width=true,
+    settable_height=true,
+    MainMenuItems {
+        background: UiTileBlock,
+        version_text: UiVMarginBlock<UiHMarginBlock<UiTextBlock>>,
+        copyright_text: UiVMarginBlock<UiHMarginBlock<UiTextBlock>>,
+        buttons: Buttons,
+    }    
+);
 
 type Buttons =
     UiHCenterBlock<
@@ -617,8 +638,8 @@ type Button =
         let bg_image = renderer.load_image(jar.read("gui/background.png").await?)?;
 
         let ui = UiLayerBlock::new(
-            |size, scale| (
-                UiTileBlock::new(
+            |size, scale| MainMenuItems {
+                background: UiTileBlock::new(
                     UiTileBlockConfig {
                         image: bg_image,
                         size_unscaled_untiled: [64.0; 2].into(),
@@ -627,7 +648,67 @@ type Button =
                     size,
                     scale,
                 ),
-                UiHCenterBlock::new(
+                version_text: UiVMarginBlock::new(
+                    UiVMarginBlockConfig {
+                        margin_top: 4.0,
+                        margin_bottom: 4.0,
+                    },
+                    |size, scale| UiHMarginBlock::new(
+                        UiHMarginBlockConfig {
+                            margin_left: 4.0,
+                            margin_right: 4.0,
+                        },
+                        |size, scale| UiTextBlock::new(
+                            &renderer,
+                            UiTextBlockConfig {
+                                text: "Not Minecraft Beta 1.0.2".into(),
+                                font,
+                                font_size: 16.0,
+                                color: hex_color(0x505050FF),
+                                h_align: HAlign::Left,
+                                v_align: VAlign::Top,
+                                wrap: true,
+                            },
+                            size,
+                            scale,
+                        ),
+                        size,
+                        scale,
+                    ),
+                    size,
+                    scale,
+                ),
+                copyright_text: UiVMarginBlock::new(
+                    UiVMarginBlockConfig {
+                        margin_top: 4.0,
+                        margin_bottom: 4.0,
+                    },
+                    |size, scale| UiHMarginBlock::new(
+                        UiHMarginBlockConfig {
+                            margin_left: 4.0,
+                            margin_right: 4.0,
+                        },
+                        |size, scale| UiTextBlock::new(
+                            &renderer,
+                            UiTextBlockConfig {
+                                text: "Everything in the universe is in the public domain.".into(),
+                                font,
+                                font_size: 16.0,
+                                color: Rgba::white(),
+                                h_align: HAlign::Right,
+                                v_align: VAlign::Bottom,
+                                wrap: true,
+                            },
+                            size,
+                            scale,
+                        ),
+                        size,
+                        scale,
+                    ),
+                    size,
+                    scale,
+                ),
+                buttons: UiHCenterBlock::new(
                     |scale| UiStableUnscaledWidthBlock::new(
                         400.0,
                         |size, scale| UiVStackBlock::new(
@@ -675,7 +756,7 @@ type Button =
                     size,
                     scale,
                 ),
-            ),
+            },
             size,
             scale,
         );
@@ -915,7 +996,7 @@ type Button =
             MouseScrollDelta::LineDelta(_, y) => y,
             MouseScrollDelta::PixelDelta(delta) => delta.y as f32 / (16.0 * self.scale),
         };
-        self.set_scale(self.scale + n / 100.0).await?;
+        self.set_scale(self.scale * (1.0 + n / 100.0)).await?;
         Ok(())
     }
 /*
