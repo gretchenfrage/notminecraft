@@ -12,7 +12,7 @@ use graphics::{
 use vek::*;
 
 
-pub struct StableUnscaledWidthBlock<I> {
+pub struct UiStableUnscaledWidthBlock<I> {
     unscaled_width: f32,
 
     size: Extent2<f32>,
@@ -21,7 +21,7 @@ pub struct StableUnscaledWidthBlock<I> {
     pub inner: I,
 }
 
-impl<I> StableUnscaledWidthBlock<I> {
+impl<I> UiStableUnscaledWidthBlock<I> {
     pub fn new<F>(
         unscaled_width: f32,
         create_inner: F,
@@ -37,7 +37,7 @@ impl<I> StableUnscaledWidthBlock<I> {
         };
         let inner = create_inner(size, scale);
         
-        StableUnscaledWidthBlock {
+        UiStableUnscaledWidthBlock {
             unscaled_width,
             size,
             scale,
@@ -48,7 +48,7 @@ impl<I> StableUnscaledWidthBlock<I> {
 
 impl<
     I: UiBlock<WidthChanged=False> + UiBlockSetWidth
-> UiBlock for StableUnscaledWidthBlock<I> {
+> UiBlock for UiStableUnscaledWidthBlock<I> {
     type WidthChanged = bool;
     type HeightChanged = <I as UiBlock>::HeightChanged;
 
@@ -87,7 +87,7 @@ impl<
     }
 }
 
-impl<I: UiBlockSetHeight> UiBlockSetHeight for StableUnscaledWidthBlock<I> {
+impl<I: UiBlockSetHeight> UiBlockSetHeight for UiStableUnscaledWidthBlock<I> {
     fn set_height(&mut self, renderer: &Renderer, height: f32) {
         self.inner.set_height(renderer, height);
     }
@@ -97,7 +97,7 @@ impl<I: UiBlockSetHeight> UiBlockSetHeight for StableUnscaledWidthBlock<I> {
 // ==== TODO dedupe this somehow ====
 
 
-pub struct StableUnscaledHeightBlock<I> {
+pub struct UiStableUnscaledHeightBlock<I> {
     unscaled_height: f32,
 
     size: Extent2<f32>,
@@ -106,7 +106,7 @@ pub struct StableUnscaledHeightBlock<I> {
     pub inner: I,
 }
 
-impl<I> StableUnscaledHeightBlock<I> {
+impl<I> UiStableUnscaledHeightBlock<I> {
     pub fn new<F>(
         unscaled_height: f32,
         create_inner: F,
@@ -122,7 +122,7 @@ impl<I> StableUnscaledHeightBlock<I> {
         };
         let inner = create_inner(size, scale);
         
-        StableUnscaledHeightBlock {
+        UiStableUnscaledHeightBlock {
             unscaled_height,
             size,
             scale,
@@ -133,7 +133,7 @@ impl<I> StableUnscaledHeightBlock<I> {
 
 impl<
     I: UiBlock<HeightChanged=False> + UiBlockSetHeight
-> UiBlock for StableUnscaledHeightBlock<I> {
+> UiBlock for UiStableUnscaledHeightBlock<I> {
     type WidthChanged = <I as UiBlock>::WidthChanged;
     type HeightChanged = bool;
 
@@ -172,7 +172,7 @@ impl<
     }
 }
 
-impl<I: UiBlockSetWidth> UiBlockSetWidth for StableUnscaledHeightBlock<I> {
+impl<I: UiBlockSetWidth> UiBlockSetWidth for UiStableUnscaledHeightBlock<I> {
     fn set_width(&mut self, renderer: &Renderer, width: f32) {
         self.inner.set_width(renderer, width);
     }

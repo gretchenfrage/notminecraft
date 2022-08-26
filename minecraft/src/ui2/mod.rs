@@ -126,3 +126,222 @@ impl<I: UiBlockSetHeight> UiBlockItemsSetHeight for Vec<I> {
     }
 }
 */
+
+macro_rules! ui_block_items_tuple {
+    ($($i:ident: $t:ident),*$(,)?)=>{
+        impl<
+            A: UiBlock,
+            $(
+                $t: UiBlock<
+                    WidthChanged=<A as UiBlock>::WidthChanged,
+                    HeightChanged=<A as UiBlock>::HeightChanged,
+                >,
+            )*
+        > UiBlockItems for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            type WidthChanged = <A as UiBlock>::WidthChanged;
+            type HeightChanged = <A as UiBlock>::HeightChanged;
+
+            fn len(&self) -> usize {
+                1 $( + {
+                    let $i = 1;
+                    $i
+                } )*
+            }
+
+            fn draw<'a>(&'a self, mut i: usize, canvas: Canvas2<'a, '_>) {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.draw(canvas);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.draw(canvas);
+                    }
+                    i -= 1;
+                })*
+
+                panic!("invalid index");
+            }
+
+            fn width(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.width();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.width();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn height(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.height();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.height();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn scale(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.scale();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.scale();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn set_scale(&mut self, mut i: usize, renderer: &Renderer, scale: f32) -> (
+                Self::WidthChanged,
+                Self::HeightChanged,
+            )
+            {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_scale(renderer, scale);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_scale(renderer, scale);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+
+        impl<
+            A: UiBlockSetWidth,
+            $(
+                $t: UiBlockSetWidth,
+            )*
+        > UiBlockItemsSetWidth for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            fn set_width(&mut self, mut i: usize, renderer: &Renderer, width: f32) {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_width(renderer, width);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_width(renderer, width);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+
+        impl<
+            A: UiBlockSetHeight,
+            $(
+                $t: UiBlockSetHeight,
+            )*
+        > UiBlockItemsSetHeight for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            fn set_height(&mut self, mut i: usize, renderer: &Renderer, height: f32) {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_height(renderer, height);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_height(renderer, height);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+    };
+}
+
+ui_block_items_tuple!();
+ui_block_items_tuple!(b: B);
+ui_block_items_tuple!(b: B, c: C);
+ui_block_items_tuple!(b: B, c: C, d: D);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I, j: J);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I, j: J, k: K);

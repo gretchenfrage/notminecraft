@@ -1,7 +1,7 @@
 
 use crate::{
     jar_assets::JarReader,
-    ui::{
+/*    ui::{
         UiSize,
         UiModify,
         Margins,
@@ -17,6 +17,7 @@ use crate::{
             UiMenuButton,
             UiMenuButtonConfig,
         },
+        /*
         v_stack::{
             UiVStack,
             UiVStackConfig,
@@ -28,8 +29,44 @@ use crate::{
         v_center::{
             UiVCenter,
             UiVCenterConfig,
+        },*/
+    },*/
+    ui2::{
+        UiBlock,
+        UiBlockSetWidth,
+        UiBlockSetHeight,
+        center_block::UiHCenterBlock,
+        layer_block::UiLayerBlock,
+        stable_unscaled_size_block::{
+            UiStableUnscaledWidthBlock,
+            UiStableUnscaledHeightBlock,
         },
-    },
+        stack_block::UiVStackBlock,
+        text_block::{UiTextBlock, UiTextBlockConfig},
+        tile_9_block::{
+            UiTile9Block,
+            UiTile9BlockConfig,
+            Tile9Images,
+            LoadTile9ImagesConfig,
+        },
+    },/*type Button =
+    UiStableUnscaledHeightBlock<
+        UiLayerBlock<(
+            UiTile9Block,
+            UiTextBlock,
+        )>
+    >;
+type Buttons =
+    UiHCenterBlock<
+        UiStableUnscaledWidthBlock<
+            UiVStackBlock<(
+                Button,
+                Button,
+                Button,
+                Button,
+            )>
+        >
+    >;*/
 };
 use graphics::{
     Renderer,
@@ -103,39 +140,60 @@ pub fn hex_color(hex: u32) -> Rgba<f32> {
 
 #[allow(dead_code)]
 pub struct Game {
-    size: UiSize,
+    size: Extent2<f32>,
+    scale: f32,
     renderer: Renderer,
     jar: JarReader,
 
-    menu_background: GpuImage,
+    //menu_background: GpuImage,
     font: FontId,
-    title_pixel: Mesh,
-    title_pixel_texture: GpuImageArray,
+    //title_pixel: Mesh,
+    //title_pixel_texture: GpuImageArray,
     
-    title_cam_distance: f32,
-    title_cam_height: f32,
-    title_angle: f32,
-    title_cam_fov: f32,
+    //title_cam_distance: f32,
+    //title_cam_height: f32,
+    //title_angle: f32,
+    //title_cam_fov: f32,
 
     rng: Pcg64Mcg,
-    version_text: UiTextBlock,
-    copyright_text: UiTextBlock,
-    title_pixel_positions: Vec<Vec3<f32>>,
-    splash_text: UiText,
-    splash_size: Cosine,
+    //version_text: UiTextBlock,
+    //copyright_text: UiTextBlock,
+    //title_pixel_positions: Vec<Vec3<f32>>,
+    //splash_text: UiText,
+    //splash_size: Cosine,
 
-    buttons: UiVCenter<UiHCenter<UiVStack<ButtonsItems>>>,
+    buttons: Buttons,
 
     debug_dot: Option<Vec2<f32>>,
 }
 
+type Buttons =
+    UiHCenterBlock<
+        UiStableUnscaledWidthBlock<
+            UiVStackBlock<(
+                Button,
+                Button,
+                Button,
+                Button,
+            )>
+        >
+    >;
+
+type Button =
+    UiStableUnscaledHeightBlock<
+        UiLayerBlock<(
+            UiTile9Block,
+            UiTextBlock,
+        )>
+    >;
+/*
 struct ButtonsItems {
     singleplayer_button: UiMenuButton,
     multiplayer_button: UiMenuButton,
     mods_button: UiMenuButton,
     options_button: UiMenuButton,
 }
-
+*/
 const TITLE_PIXELS: &'static [&'static str] = &[
     "█   █ █ █   █ ███ ███ ███ ███ ███ ███",
     "██ ██ █ ██  █ █   █   █ █ █ █ █    █ ",
@@ -161,17 +219,24 @@ impl Game {
         })
     }
 
-    pub async fn new(mut renderer: Renderer, size: UiSize) -> Result<Self> {
+    pub async fn new(
+        mut renderer: Renderer,
+        size: Extent2<u32>,
+        scale: f32,
+    ) -> Result<Self> {
         info!("loading");
+
+        let size = size.map(|n| n as f32);
+
         let mut rng = Pcg64Mcg::new(0xcafef00dd15ea5e5);
 
         let jar = JarReader::new().await?;
 
         let lang = jar.read_properties("lang/en_US.lang").await?;
 
-        let menu_background = renderer.load_image(jar.read("gui/background.png").await?)?;
+        //let menu_background = renderer.load_image(jar.read("gui/background.png").await?)?;
         let font = renderer.load_font_437(jar.read("font/default.png").await?)?;
-
+        /*
         const FACES_PER_TITLE_PIXEL: usize = 5;
         const VERTS_PER_FACE: usize = 4;
 
@@ -325,7 +390,7 @@ impl Game {
                 z: rng.gen_range(-75.0..=-40.0),
             })
             .collect();
-
+        /*
         struct McMenuButtonFactory {
             font: FontId,
             font_size: f32,
@@ -453,28 +518,156 @@ impl Game {
             size.size.h,
             size.scale,
         );
+    */*/
+
+    /*type Buttons =
+    UiHCenterBlock<
+        UiStableUnscaledWidthBlock<
+            UiVStackBlock<(
+                Button,
+                Button,
+                Button,
+                Button,
+            )>
+        >
+    >;
+
+type Button =
+    UiStableUnscaledHeightBlock<
+        UiLayerBlock<(
+            UiTile9Block,
+            UiTextBlock,
+        )>
+    >;*/
+        let button_raw_image = jar.read_image("gui/gui.png").await?;
+        let button_images = LoadTile9ImagesConfig {
+            raw_image: button_raw_image,
+            px_start: [0, 66].into(),
+            px_extent: [200, 20].into(),
+            px_top: 2,
+            px_bottom: 3,
+            px_left: 2,
+            px_right: 2,
+        }.load(&renderer);
+
+        fn create_button(
+            width: f32,
+            scale: f32,
+            text: String,
+            renderer: &Renderer,
+            images: Tile9Images,
+            font: FontId,
+        ) -> Button {
+            UiStableUnscaledHeightBlock::new(
+                40.0,
+                |size, scale| UiLayerBlock::new(
+                    |size, scale| (
+                        UiTile9Block::new(
+                            UiTile9BlockConfig {
+                                images,
+                                size_unscaled_untiled: Extent2::new(200.0, 20.0) * 2.0,
+                                frac_top: 2.0 / 20.0,
+                                frac_bottom: 3.0 / 20.0,
+                                frac_left: 2.0 / 200.0,
+                                frac_right: 2.0 / 200.0,
+                            },
+                            size,
+                            scale,
+                        ),
+                        UiTextBlock::new(
+                            &renderer,
+                            UiTextBlockConfig {
+                                text,
+                                font,
+                                font_size: 16.0,
+                                color: hex_color(0xE0E0E0FF),
+                                h_align: HAlign::Center,
+                                v_align: VAlign::Center,
+                                wrap: false,
+                            },
+                            size,
+                            scale,
+                        ),
+                    ),
+                    size,
+                    scale,
+                ),
+                width,
+                scale,
+            )
+        }
+
+        let buttons = UiHCenterBlock::new(
+            |scale| UiStableUnscaledWidthBlock::new(
+                400.0,
+                |size, scale| UiVStackBlock::new(
+                    8.0,
+                    |width, scale| (
+                        create_button(
+                            width,
+                            scale,
+                            lang["menu.singleplayer"].clone(),
+                            &renderer,
+                            button_images.clone(),
+                            font,
+                        ),
+                        create_button(
+                            width,
+                            scale,
+                            lang["menu.multiplayer"].clone(),
+                            &renderer,
+                            button_images.clone(),
+                            font,
+                        ),
+                        create_button(
+                            width,
+                            scale,
+                            lang["menu.mods"].clone(),
+                            &renderer,
+                            button_images.clone(),
+                            font,
+                        ),
+                        create_button(
+                            width,
+                            scale,
+                            lang["menu.options"].clone(),
+                            &renderer,
+                            button_images.clone(),
+                            font,
+                        ),
+                    ),
+                    size.w,
+                    scale,
+                ),
+                123456789.0, // TODO
+                scale,
+            ),
+            size,
+            scale,
+        );
 
         Ok(Game {
             size,
+            scale,
             renderer,
             jar,
 
-            menu_background,
+            //menu_background,
             font,
-            title_pixel,
-            title_pixel_texture,
+            //title_pixel,
+            //title_pixel_texture,
 
-            title_cam_distance: -45.0,
-            title_cam_height: -10.0,
-            title_angle: 0.48869,
-            title_cam_fov: 1.38753,
+            //title_cam_distance: -45.0,
+            //title_cam_height: -10.0,
+            //title_angle: 0.48869,
+            //title_cam_fov: 1.38753,
 
             rng,
-            version_text,
-            copyright_text,
-            title_pixel_positions,
-            splash_text,
-            splash_size: Cosine::new(1.0 / 2.0),
+            //version_text,
+            //copyright_text,
+            //title_pixel_positions,
+            //splash_text,
+            //splash_size: Cosine::new(1.0 / 2.0),
 
             buttons,
 
@@ -484,17 +677,20 @@ impl Game {
 
     pub async fn draw<'a>(&mut self, elapsed: f32) -> Result<()> {
         trace!(%elapsed, "updating");
-
+        /*
         self.splash_size.add_to_input(elapsed);
         for pos in &mut self.title_pixel_positions {
             pos.z = f32::min(0.0, pos.z + 75.0 * elapsed);
         }
-
+        */
         trace!("drawing");
 
         let mut frame = FrameContent::new();
         let mut canvas = frame.canvas();
 
+        self.buttons.draw(canvas.reborrow());
+
+        /*
         canvas.reborrow()
             .color([0.25, 0.25, 0.25, 1.0])
             .draw_image_uv(
@@ -569,7 +765,7 @@ impl Game {
                 .color(Rgba::red())
                 .draw_solid(dot_size);
         }
-
+        */
         self.renderer.draw_frame(&frame)
     }
 
@@ -577,22 +773,27 @@ impl Game {
         info!(?size, "setting size");
 
         self.renderer.resize(size);
-        self.size.size = size.map(|n| n as f32);
+        self.size = size.map(|n| n as f32);
 
+        self.buttons.set_width(&self.renderer, self.size.w);
+        self.buttons.set_height(&self.renderer, self.size.h);
+        /*
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
         
         self.buttons.set_height(self.size.size.h);
         self.buttons.inner.set_width(self.size.size.w);
-        
+        */
         Ok(())
     }
 
     pub async fn set_scale(&mut self, scale: f32) -> Result<()> {
         info!(?scale, "setting scale");
 
-        self.size.scale = scale;
+        self.scale = scale;
 
+        self.buttons.set_scale(&self.renderer, self.scale);
+        /*
         self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
         self.splash_text.set_scale(&self.renderer, self.size.scale);
@@ -667,7 +868,7 @@ impl Game {
                     ),
                 |inner| inner.inner.size().size.h
             );
-
+        */
         Ok(())
     }
 
@@ -678,14 +879,15 @@ impl Game {
     pub async fn mouse_wheel(&mut self, delta: MouseScrollDelta) -> Result<()> {
         let n = match delta {
             MouseScrollDelta::LineDelta(_, y) => y,
-            MouseScrollDelta::PixelDelta(delta) => delta.y as f32 / (16.0 * self.size.scale),
+            MouseScrollDelta::PixelDelta(delta) => delta.y as f32 / (16.0 * self.scale),
         };
-        self.set_scale(self.size.scale + n / 100.0).await?;
+        self.set_scale(self.scale + n / 100.0).await?;
         Ok(())
     }
-
+/*
     pub async fn on_pos_input_event(&mut self, event: UiPosInputEvent) -> Result<()> {
         //debug!(?event);
+        /*
         self.buttons
             .on_pos_input_event(
                 event,
@@ -704,7 +906,7 @@ impl Game {
                                 }
                             )
                     )
-            );
+            );*/
         Ok(())
-    }
+    }*/
 }

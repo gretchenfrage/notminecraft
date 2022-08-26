@@ -7,7 +7,7 @@ use graphics::frame_content::Canvas2;
 use vek::*;
 
 
-pub struct UiHCenter<I> {
+pub struct UiHCenterBlock<I> {
     pub inner: I,
     unscaled_inner_width: f32,
     x_translate: f32,
@@ -17,14 +17,14 @@ pub struct UiHCenter<I> {
     debug_dot: Option<Vec2<f32>>,
 }
 
-pub struct UiHCenterConfig<F> {
+pub struct UiHCenterBlockConfig<F> {
     pub create_inner: F,
     pub unscaled_inner_width: f32,
 }
 
-impl<I> UiHCenter<I> {
+impl<I> UiHCenterBlock<I> {
     pub fn new<F>(
-        config: UiHCenterConfig<F>,
+        config: UiHCenterBlockConfig<F>,
         width: f32,
         scale: f32,
     ) -> Self
@@ -38,7 +38,7 @@ impl<I> UiHCenter<I> {
     {
         let inner_width = config.unscaled_inner_width * scale;
         let inner = (config.create_inner)(inner_width, scale);
-        UiHCenter {
+        UiHCenterBlock {
             inner,
             unscaled_inner_width: config.unscaled_inner_width,
             x_translate: (width - inner_width) / 2.0,

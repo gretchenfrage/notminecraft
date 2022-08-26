@@ -8,23 +8,23 @@ use vek::*;
 
 
 #[derive(Debug, Clone)]
-pub struct UiVStack<I> {
+pub struct UiVStackBlock<I> {
     pub items: I,
     unscaled_gap: f32,
     size: UiSize,
     item_y_translates: Vec<f32>,
 }
 
-pub struct UiVStackConfig<F1, F2> {
+pub struct UiVStackBlockConfig<F1, F2> {
     pub create_items: F1,
     pub unscaled_gap: f32,
     pub num_items: usize,
     pub get_item_height: F2,
 }
 
-impl<I> UiVStack<I> {
+impl<I> UiVStackBlock<I> {
     pub fn new<F1, F2>(
-        mut config: UiVStackConfig<F1, F2>,
+        mut config: UiVStackBlockConfig<F1, F2>,
         width: f32,
         scale: f32,
     ) -> Self
@@ -50,7 +50,7 @@ impl<I> UiVStack<I> {
             height += (config.get_item_height)(&items, i);
         }
 
-        UiVStack {
+        UiVStackBlock {
             items: items,
             unscaled_gap: config.unscaled_gap,
             size: UiSize {

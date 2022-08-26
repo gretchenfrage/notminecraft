@@ -16,7 +16,7 @@ use graphics::{
 use vek::*;
 
 
-pub struct LayerBlock<I> {
+pub struct UiLayerBlock<I> {
     size: Extent2<f32>,
     scale: f32,
 
@@ -24,14 +24,17 @@ pub struct LayerBlock<I> {
 }
 
 
-impl<I> LayerBlock<I> {
-    pub fn new(
-        items: I,
+impl<I> UiLayerBlock<I> {
+    pub fn new<F>(
+        create_items: F,
         size: Extent2<f32>,
         scale: f32,
     ) -> Self
+    where
+        F: FnOnce(Extent2<f32>, f32) -> I,
     {
-        LayerBlock {
+        let items = create_items(size, scale);
+        UiLayerBlock {
             items,
             size,
             scale,
@@ -45,7 +48,7 @@ impl<
         WidthChanged=False,
         HeightChanged=False,
     >
-> UiBlock for LayerBlock<I>
+> UiBlock for UiLayerBlock<I>
 {
     type WidthChanged = False;
     type HeightChanged = False;
@@ -85,7 +88,7 @@ impl<
 
 impl<
     I: UiBlockItems + UiBlockItemsSetWidth,
-> UiBlockSetWidth for LayerBlock<I>
+> UiBlockSetWidth for UiLayerBlock<I>
 {
     fn set_width(&mut self, renderer: &Renderer, width: f32) {
         self.size.w = width;
@@ -98,7 +101,7 @@ impl<
 
 impl<
     I: UiBlockItems + UiBlockItemsSetHeight,
-> UiBlockSetHeight for LayerBlock<I>
+> UiBlockSetHeight for UiLayerBlock<I>
 {
     fn set_height(&mut self, renderer: &Renderer, height: f32) {
         self.size.h = height;

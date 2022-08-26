@@ -80,10 +80,8 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
     let renderer = Renderer::new(Arc::clone(&window)).await?;
     let mut game = Game::new(
         renderer,
-        UiSize {
-            size: size.map(|n| n as f32),
-            scale: window.scale_factor() as f32,
-        },
+        size,
+        window.scale_factor() as f32,
     ).await?;
 
     let frames_per_second = 60;
@@ -116,7 +114,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 WindowEvent::CursorMoved { position, .. } => {
                     let pos = Vec2::new(position.x as f32, position.y as f32);
                     cursor_pos = Some(pos);
-                    game.on_pos_input_event(UiPosInputEvent::CursorMoved(pos)).await?;
+                    //game.on_pos_input_event(UiPosInputEvent::CursorMoved(pos)).await?;
                 }
                 WindowEvent::MouseInput { button, state, .. } => {
                     if let Some(pos) = cursor_pos {
@@ -125,7 +123,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                             button,
                             state,
                         };
-                        game.on_pos_input_event(event).await?;
+                        //game.on_pos_input_event(event).await?;
                     } else {
                         debug!("MouseInput event with no previous CursorMoved events");
                     }
