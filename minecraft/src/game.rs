@@ -32,6 +32,7 @@ use crate::{
         },*/
     },*/
     ui2::{
+        ui_block_items_struct,
         UiBlock,
         UiBlockSetWidth,
         UiBlockSetHeight,
@@ -179,15 +180,27 @@ type MainMenu = UiLayerBlock<(
 type Buttons =
     UiHCenterBlock<
         UiStableUnscaledWidthBlock<
-            UiVStackBlock<(
-                Button,
-                Button,
-                Button,
-                Button,
-            )>
+            UiVStackBlock<ButtonsItems>
         >
     >;
 
+struct ButtonsItems {
+    singleplayer_button: Button,
+    multiplayer_button: Button,
+    mods_button: Button,
+    options_button: Button,
+}
+
+ui_block_items_struct!(
+    settable_width=true,
+    settable_height=false,
+    ButtonsItems {
+        singleplayer_button: Button,
+        multiplayer_button: Button,
+        mods_button: Button,
+        options_button: Button,
+    }
+);
 type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -195,14 +208,9 @@ type Button =
             UiTextBlock,
         )>
     >;
+
+
 /*
-struct ButtonsItems {
-    singleplayer_button: UiMenuButton,
-    multiplayer_button: UiMenuButton,
-    mods_button: UiMenuButton,
-    options_button: UiMenuButton,
-}
-*/
 const TITLE_PIXELS: &'static [&'static str] = &[
     "█   █ █ █   █ ███ ███ ███ ███ ███ ███",
     "██ ██ █ ██  █ █   █   █ █ █ █ █    █ ",
@@ -210,7 +218,7 @@ const TITLE_PIXELS: &'static [&'static str] = &[
     "█   █ █ █  ██ █   █   █ █ █ █ █    █ ",
     "█   █ █ █   █ ███ ███ █ █ █ █ █    █ ",
 ];
-
+*/
 impl Game {
     pub async fn window_config() -> Result<WindowAttributes> {
         Ok(WindowAttributes {
@@ -624,8 +632,8 @@ type Button =
                         400.0,
                         |size, scale| UiVStackBlock::new(
                             8.0,
-                            |width, scale| (
-                                create_button(
+                            |width, scale| ButtonsItems {
+                                singleplayer_button: create_button(
                                     width,
                                     scale,
                                     lang["menu.singleplayer"].clone(),
@@ -633,7 +641,7 @@ type Button =
                                     button_images.clone(),
                                     font,
                                 ),
-                                create_button(
+                                multiplayer_button: create_button(
                                     width,
                                     scale,
                                     lang["menu.multiplayer"].clone(),
@@ -641,7 +649,7 @@ type Button =
                                     button_images.clone(),
                                     font,
                                 ),
-                                create_button(
+                                mods_button: create_button(
                                     width,
                                     scale,
                                     lang["menu.mods"].clone(),
@@ -649,7 +657,7 @@ type Button =
                                     button_images.clone(),
                                     font,
                                 ),
-                                create_button(
+                                options_button: create_button(
                                     width,
                                     scale,
                                     lang["menu.options"].clone(),
@@ -657,7 +665,7 @@ type Button =
                                     button_images.clone(),
                                     font,
                                 ),
-                            ),
+                            },
                             size.w,
                             scale,
                         ),

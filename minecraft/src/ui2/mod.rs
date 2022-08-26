@@ -81,6 +81,172 @@ pub trait UiBlockItemsSetWidth {
 pub trait UiBlockItemsSetHeight {
     fn set_height(&mut self, i: usize, renderer: &Renderer, height: f32);
 }
+
+macro_rules! ui_block_items_struct {
+    (
+        settable_width=$settable_width:ident,
+        settable_height=$settable_height:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{
+        impl $crate::ui2::UiBlockItems for $struct {
+            type WidthChanged = $crate::ui2::ui_block_items_struct!(
+                @DimSizeChanged settable=$settable_width
+            );
+            type HeightChanged = $crate::ui2::ui_block_items_struct!(
+                @DimSizeChanged settable=$settable_height
+            );
+
+            fn len(&self) -> usize {
+                0 $( + {
+                    let $field = 1;
+                    $field
+                })*
+            }
+
+            fn draw<'a>(&'a self, mut i: usize, canvas: Canvas2<'a, '_>) {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui2::UiBlock>::draw(
+                            &self.$field,
+                            canvas,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn width(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui2::UiBlock>::width(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn height(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui2::UiBlock>::height(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn scale(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui2::UiBlock>::scale(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn set_scale(
+                &mut self,
+                mut i: usize,
+                renderer: &::graphics::Renderer,
+                scale: f32,
+            ) -> (
+                <Self as $crate::ui2::UiBlockItems>::WidthChanged,
+                <Self as $crate::ui2::UiBlockItems>::HeightChanged,
+            )
+            {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui2::UiBlock>::set_scale(
+                            &mut self.$field,
+                            renderer,
+                            scale,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+        }
+
+        $crate::ui2::ui_block_items_struct!(
+            @impl_dim_size_changed
+            settable=$settable_width,
+            $crate::ui2::UiBlockSetWidth,
+            $crate::ui2::UiBlockItemsSetWidth,
+            set_width,
+            $struct {$(
+                $field: $type,
+            )*}
+        );
+
+        $crate::ui2::ui_block_items_struct!(
+            @impl_dim_size_changed
+            settable=$settable_height,
+            $crate::ui2::UiBlockSetHeight,
+            $crate::ui2::UiBlockItemsSetHeight,
+            set_height,
+            $struct {$(
+                $field: $type,
+            )*}
+        );
+    };
+    (@DimSizeChanged settable=true)=>{ $crate::ui2::False };
+    (@DimSizeChanged settable=false)=>{ bool };
+    (
+        @impl_dim_size_changed
+        settable=true,
+        $inner_trait:path,
+        $trait:path,
+        $method:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{
+        impl $trait for $struct {
+            fn $method(
+                &mut self,
+                mut i: usize,
+                renderer: &::graphics::Renderer,
+                n: f32,
+            ) {
+                $({
+                    if i == 0 {
+                        return <$type as $inner_trait>::$method(
+                            &mut self.$field,
+                            renderer,
+                            n,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+        }
+    };
+    (
+        @impl_dim_size_changed
+        settable=false,
+        $inner_trait:path,
+        $trait:path,
+        $method:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{};
+}
+
+pub (crate) use ui_block_items_struct;
+
 /*
 impl<I: UiBlock> UiBlockItems for Vec<I> {
     type WidthChanged = <I as UiBlock>::WidthChanged;
