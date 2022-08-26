@@ -14,6 +14,7 @@ pub mod layer_block;
 pub mod stable_unscaled_size_block;
 pub mod center_block;
 pub mod stack_block;
+pub mod tile_block;
 
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]

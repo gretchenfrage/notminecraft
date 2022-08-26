@@ -49,6 +49,10 @@ use crate::{
             Tile9Images,
             LoadTile9ImagesConfig,
         },
+        tile_block::{
+            UiTileBlock,
+            UiTileBlockConfig,
+        },
     },/*type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -162,10 +166,15 @@ pub struct Game {
     //splash_text: UiText,
     //splash_size: Cosine,
 
-    buttons: Buttons,
+    ui: MainMenu,
 
     debug_dot: Option<Vec2<f32>>,
 }
+
+type MainMenu = UiLayerBlock<(
+    UiTileBlock,
+    Buttons,
+)>;
 
 type Buttons =
     UiHCenterBlock<
@@ -597,50 +606,67 @@ type Button =
             )
         }
 
-        let buttons = UiHCenterBlock::new(
-            |scale| UiStableUnscaledWidthBlock::new(
-                400.0,
-                |size, scale| UiVStackBlock::new(
-                    8.0,
-                    |width, scale| (
-                        create_button(
-                            width,
-                            scale,
-                            lang["menu.singleplayer"].clone(),
-                            &renderer,
-                            button_images.clone(),
-                            font,
-                        ),
-                        create_button(
-                            width,
-                            scale,
-                            lang["menu.multiplayer"].clone(),
-                            &renderer,
-                            button_images.clone(),
-                            font,
-                        ),
-                        create_button(
-                            width,
-                            scale,
-                            lang["menu.mods"].clone(),
-                            &renderer,
-                            button_images.clone(),
-                            font,
-                        ),
-                        create_button(
-                            width,
-                            scale,
-                            lang["menu.options"].clone(),
-                            &renderer,
-                            button_images.clone(),
-                            font,
-                        ),
-                    ),
-                    size.w,
+        let bg_image = renderer.load_image(jar.read("gui/background.png").await?)?;
+
+        let ui = UiLayerBlock::new(
+            |size, scale| (
+                UiTileBlock::new(
+                    UiTileBlockConfig {
+                        image: bg_image,
+                        size_unscaled_untiled: [64.0; 2].into(),
+                        color: [0.25, 0.25, 0.25, 1.0].into(),
+                    },
+                    size,
                     scale,
                 ),
-                123456789.0, // TODO
-                scale,
+                UiHCenterBlock::new(
+                    |scale| UiStableUnscaledWidthBlock::new(
+                        400.0,
+                        |size, scale| UiVStackBlock::new(
+                            8.0,
+                            |width, scale| (
+                                create_button(
+                                    width,
+                                    scale,
+                                    lang["menu.singleplayer"].clone(),
+                                    &renderer,
+                                    button_images.clone(),
+                                    font,
+                                ),
+                                create_button(
+                                    width,
+                                    scale,
+                                    lang["menu.multiplayer"].clone(),
+                                    &renderer,
+                                    button_images.clone(),
+                                    font,
+                                ),
+                                create_button(
+                                    width,
+                                    scale,
+                                    lang["menu.mods"].clone(),
+                                    &renderer,
+                                    button_images.clone(),
+                                    font,
+                                ),
+                                create_button(
+                                    width,
+                                    scale,
+                                    lang["menu.options"].clone(),
+                                    &renderer,
+                                    button_images.clone(),
+                                    font,
+                                ),
+                            ),
+                            size.w,
+                            scale,
+                        ),
+                        123456789.0, // TODO
+                        scale,
+                    ),
+                    size,
+                    scale,
+                ),
             ),
             size,
             scale,
@@ -669,7 +695,7 @@ type Button =
             //splash_text,
             //splash_size: Cosine::new(1.0 / 2.0),
 
-            buttons,
+            ui,
 
             debug_dot: None,
         })
@@ -688,7 +714,7 @@ type Button =
         let mut frame = FrameContent::new();
         let mut canvas = frame.canvas();
 
-        self.buttons.draw(canvas.reborrow());
+        self.ui.draw(canvas.reborrow());
 
         /*
         canvas.reborrow()
@@ -775,8 +801,8 @@ type Button =
         self.renderer.resize(size);
         self.size = size.map(|n| n as f32);
 
-        self.buttons.set_width(&self.renderer, self.size.w);
-        self.buttons.set_height(&self.renderer, self.size.h);
+        self.ui.set_width(&self.renderer, self.size.w);
+        self.ui.set_height(&self.renderer, self.size.h);
         /*
         self.version_text.set_size(&self.renderer, self.size.size);
         self.copyright_text.set_size(&self.renderer, self.size.size);
@@ -792,7 +818,7 @@ type Button =
 
         self.scale = scale;
 
-        self.buttons.set_scale(&self.renderer, self.scale);
+        self.ui.set_scale(&self.renderer, self.scale);
         /*
         self.version_text.set_scale(&self.renderer, self.size.scale);
         self.copyright_text.set_scale(&self.renderer, self.size.scale);
