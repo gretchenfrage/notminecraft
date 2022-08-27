@@ -36,7 +36,10 @@ use crate::{
         UiBlock,
         UiBlockSetWidth,
         UiBlockSetHeight,
-        center_block::UiHCenterBlock,
+        center_block::{
+            UiHCenterBlock,
+            UiVCenterBlock,
+        },
         layer_block::UiLayerBlock,
         stable_unscaled_size_block::{
             UiStableUnscaledWidthBlock,
@@ -59,7 +62,10 @@ use crate::{
             UiHMarginBlockConfig,
             UiVMarginBlock,
             UiVMarginBlockConfig,
-        }
+        },
+        mc::{
+            title::UiMcTitleBlock,
+        },
     },/*type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -177,7 +183,7 @@ pub struct Game {
 
     debug_dot: Option<Vec2<f32>>,
 }
-
+/*
 type MainMenu = UiLayerBlock<MainMenuItems>;
 
 struct MainMenuItems {
@@ -221,7 +227,43 @@ ui_block_items_struct!(
         mods_button: Button,
         options_button: Button,
     }
-);
+);*/
+
+type MainMenu =
+    UiLayerBlock<(
+        UiTileBlock, // background
+        UiHMarginBlock< // corner text
+            UiVMarginBlock<
+                UiLayerBlock<(
+                    UiTextBlock, // version
+                    UiTextBlock, // uncopyright
+                )>,
+            >,
+        >,
+        UiVCenterBlock< // center column
+            UiVStackBlock<(
+                UiHCenterBlock< // title block
+                    UiStableUnscaledWidthBlock<
+                        UiStableUnscaledHeightBlock<
+                            UiMcTitleBlock,
+                        >,
+                    >,
+                >,
+                UiHCenterBlock< // buttons
+                    UiStableUnscaledWidthBlock<
+                        UiVStackBlock<(
+                            Button, // singleplayer
+                            Button, // multiplayer
+                            Button, // mods
+                            Button, // options
+                        )>,
+                    >,
+                >,
+            )>,
+        >,
+    )>;
+
+
 type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -577,6 +619,8 @@ type Button =
             UiTextBlock,
         )>
     >;*/
+        let raw_title_pixel_texture = jar.read_image_part("terrain.png", [16, 0], [16, 16]).await?;
+
         let button_raw_image = jar.read_image("gui/gui.png").await?;
         let button_images = LoadTile9ImagesConfig {
             raw_image: button_raw_image,
@@ -636,7 +680,192 @@ type Button =
         }
 
         let bg_image = renderer.load_image(jar.read("gui/background.png").await?)?;
+        /*
+        type MainMenu =
+    UiLayerBlock<(
+        UiTileBlock, // background
+        UiVMarginBlock< // corner text
+            UiHMarginBlock<
+                UiLayerBlock<(
+                    UiTextBlock, // version
+                    UiTextBlock, // uncopyright
+                )>,
+            >,
+        >,
+        UiVStackBlock<( // center column
+            UiHCenterBlock< // title block
+                UiStableUnscaledWidthBlock<
+                    UiStableUnscaledHeightBlock<
+                        UiMcTitleBlock,
+                    >,
+                >,
+            >,
+            UiHCenterBlock< // buttons
+                UiStableUnscaledWidthBlock<
+                    UiVStackBlock<(
+                        Button, // singleplayer
+                        Button, // multiplayer
+                        Button, // mods
+                        Button, // options
+                    )>,
+                >,
+            >,
+        )>,
+    )>;
 
+
+type Button =
+    UiStableUnscaledHeightBlock<
+        UiLayerBlock<(
+            UiTile9Block,
+            UiTextBlock,
+        )>
+    >;*/
+        let ui = UiLayerBlock::new(
+            |size, scale| (
+                UiTileBlock::new(
+                    UiTileBlockConfig {
+                        image: bg_image,
+                        size_unscaled_untiled: [64.0; 2].into(),
+                        color: [0.25, 0.25, 0.25, 1.0].into(),
+                    },
+                    size,
+                    scale,
+                ),
+                UiHMarginBlock::new(
+                    UiHMarginBlockConfig {
+                        margin_left: 4.0,
+                        margin_right: 4.0,
+                    },
+                    |size, scale| UiVMarginBlock::new(
+                        UiVMarginBlockConfig {
+                            margin_top: 4.0,
+                            margin_bottom: 4.0,
+                        },
+                        |size, scale| UiLayerBlock::new(
+                            |size, scale| (
+                                UiTextBlock::new(
+                                    &renderer,
+                                    UiTextBlockConfig {
+                                        text: "Not Minecraft Beta 1.0.2".into(),
+                                        font,
+                                        font_size: 16.0,
+                                        color: hex_color(0x505050FF),
+                                        h_align: HAlign::Left,
+                                        v_align: VAlign::Top,
+                                        wrap: true,
+                                    },
+                                    size,
+                                    scale,
+                                ),
+                                UiTextBlock::new(
+                                    &renderer,
+                                    UiTextBlockConfig {
+                                        text: "Everything in the universe is in the public domain.".into(),
+                                        font,
+                                        font_size: 16.0,
+                                        color: Rgba::white(),
+                                        h_align: HAlign::Right,
+                                        v_align: VAlign::Bottom,
+                                        wrap: true,
+                                    },
+                                    size,
+                                    scale,
+                                ),
+                            ),
+                            size,
+                            scale,
+                        ),
+                        size,
+                        scale,
+                    ),
+                    size,
+                    scale,
+                ),
+                UiVCenterBlock::new(
+                    |scale| UiVStackBlock::new(
+                        25.0,
+                        |width, scale| (
+                            UiHCenterBlock::new(
+                                |scale| UiStableUnscaledWidthBlock::new(
+                                    600.0,
+                                    |size, scale| UiStableUnscaledHeightBlock::new(
+                                        300.0,
+                                        |size, scale| UiMcTitleBlock::new(
+                                            &renderer,
+                                            &mut rng,
+                                            raw_title_pixel_texture,
+                                            size,
+                                            scale,
+                                        ),
+                                        size.w,
+                                        scale,
+                                    ),
+                                    width,
+                                    scale,
+                                ),
+                                size,
+                                scale,
+                            ),
+                            UiHCenterBlock::new(
+                                |scale| UiStableUnscaledWidthBlock::new(
+                                    400.0,
+                                    |size, scale| UiVStackBlock::new(
+                                        8.0,
+                                        |width, scale| (
+                                            create_button(
+                                                width,
+                                                scale,
+                                                lang["menu.singleplayer"].clone(),
+                                                &renderer,
+                                                button_images.clone(),
+                                                font,
+                                            ),
+                                            create_button(
+                                                width,
+                                                scale,
+                                                lang["menu.multiplayer"].clone(),
+                                                &renderer,
+                                                button_images.clone(),
+                                                font,
+                                            ),
+                                            create_button(
+                                                width,
+                                                scale,
+                                                lang["menu.mods"].clone(),
+                                                &renderer,
+                                                button_images.clone(),
+                                                font,
+                                            ),
+                                            create_button(
+                                                width,
+                                                scale,
+                                                lang["menu.options"].clone(),
+                                                &renderer,
+                                                button_images.clone(),
+                                                font,
+                                            ),
+                                        ),
+                                        size.w,
+                                        scale,
+                                    ),
+                                    width,
+                                    scale,
+                                ),
+                                size,
+                                scale,
+                            ),
+                        ),
+                        size.w,
+                        scale,
+                    ),
+                    size,
+                    scale,
+                ),
+            ),
+            size,
+            scale,
+        );/*
         let ui = UiLayerBlock::new(
             |size, scale| MainMenuItems {
                 background: UiTileBlock::new(
@@ -760,7 +989,7 @@ type Button =
             size,
             scale,
         );
-
+    */
         Ok(Game {
             size,
             scale,

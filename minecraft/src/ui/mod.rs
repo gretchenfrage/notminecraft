@@ -6,6 +6,7 @@ use graphics::{
 };
 
 
+pub mod mc;
 pub mod text;
 pub mod text_block;
 pub mod margin_block;
