@@ -1,24 +1,34 @@
 
-use super::{
-    Margins,
-    UiSize,
-};
 use graphics::{
     Renderer,
     frame_content::{
-        Canvas2,
-        TextBlock,
-        TextSpan,
+        FontId,
         HAlign,
         VAlign,
+        TextBlock,
+        TextSpan,
         LayedOutTextBlock,
-        FontId,
+        Canvas2,
     },
 };
 use vek::*;
 
 
+/// The `UiText` drop shadow will be offset from the actual text by 1 /
+/// `SHADOW_DROP_DIVISOR` of the font height in the downwards-right direction.
 const SHADOW_DROP_DIVISOR: f32 = 8.0;
+
+/// The `UiText` drop shadow will be tinted by this color.
+const SHADOW_DROP_COLOR: Rgba<f32> = Rgba {
+    r: 0.25,
+    g: 0.25,
+    b: 0.25,
+    a: 1.0,
+};
+
+/// When we ask `ab_glyph` to lay out our text with bottom/right alignment,
+/// there's this gap between where it puts the text and the actual bottom-right
+/// corner. For now, we use this hack to fix it.
 const BOTTOM_RIGHT_MYSTERY_GAP: Extent2<f32> =
     Extent2 {
         w: 2.0 / 8.0,
@@ -36,21 +46,78 @@ pub struct UiTextConfig {
     pub v_align: VAlign,
 }
 
+/// UI helper utility (not a true UI block) for displaying text with easy-to-
+/// work-with positioning, a consistent _pre-scaling_ font size, and a drop
+/// shadow.
+///
+/// A true UI block renders starting at the origin, and then continuing
+/// rightwards and downwards. Conversely, this renders:
+///
+/// - If `h_align == HAlign::Left`: extending rightwards from the origin
+/// - If `h_align == HAlign::Right`: extending leftwards from the origin
+/// - If `h_align == HAlign::Center`: extending equally rightwards and
+///   leftwards from the origin
+///
+/// And equivalently for `v_align` and the vertical axis.
+///
+/// A true UI block has a width and a height. This, on the other hand, has a
+/// `wrap_width`, which is an `Option<f32>`. It is, however, settable.
 #[derive(Debug, Clone)]
 pub struct UiText {
     config: UiTextConfig,
+
     wrap_width: Option<f32>,
     scale: f32,
 
-    layed_out: LayedOutTextBlock,
+    text_translates: TextTranslates,
+    text: LayedOutTextBlock,
 }
 
-fn lay_out(
+#[derive(Debug, Clone)]
+struct TextTranslates {
+    mystery_gap_adjust_translate: Vec2<f32>,
+    text_shadow_translate: Vec2<f32>,
+    text_main_translate: Vec2<f32>,
+}
+
+fn text_translates(
+    config: &UiTextConfig,
+    scale: f32,
+) -> TextTranslates
+{
+    let align_sign = Vec2 {
+        x: config.h_align.sign(),
+        y: config.v_align.sign(),
+    };
+
+    let mystery_gap_adjust_fractional =
+        align_sign.map(|n| (n as f32 / 2.0 + 0.5));
+    let mystery_gap_adjust_translate =
+        mystery_gap_adjust_fractional
+        * config.font_size
+        * scale
+        * BOTTOM_RIGHT_MYSTERY_GAP;
+    
+    let shadow_drop = config.font_size / SHADOW_DROP_DIVISOR * scale;
+    let text_shadow_translate = align_sign
+        .map(|n| (n as f32 / -2.0 + 0.5) * shadow_drop);
+    let text_main_translate = align_sign
+        .map(|n| (n as f32 / -2.0 - 0.5) * shadow_drop);
+
+    TextTranslates {
+        mystery_gap_adjust_translate,
+        text_shadow_translate,
+        text_main_translate,
+    }
+}
+
+fn create_text(
     renderer: &Renderer,
     config: &UiTextConfig,
     wrap_width: Option<f32>,
     scale: f32,
-) -> LayedOutTextBlock {
+) -> LayedOutTextBlock
+{
     renderer
         .lay_out_text(&TextBlock {
             spans: &[
@@ -74,10 +141,14 @@ impl UiText {
         wrap_width: Option<f32>,
         scale: f32,
     ) -> Self {
-        let layed_out = lay_out(
+        let text = create_text(
             renderer,
             &config,
             wrap_width,
+            scale,
+        );
+        let text_translates = text_translates(
+            &config,
             scale,
         );
         UiText {
@@ -85,12 +156,25 @@ impl UiText {
             wrap_width,
             scale,
 
-            layed_out,
+            text_translates,
+            text,
         }
     }
 
-    fn re_lay_out(&mut self, renderer: &Renderer) {
-        self.layed_out = lay_out(
+    pub fn draw<'a>(&'a self, mut canvas: Canvas2<'a, '_>) {
+        let mut canvas = canvas.reborrow()
+            .translate(self.text_translates.mystery_gap_adjust_translate);
+        canvas.reborrow()
+            .translate(self.text_translates.text_shadow_translate)
+            .color(SHADOW_DROP_COLOR)
+            .draw_text(&self.text);
+        canvas.reborrow()
+            .translate(self.text_translates.text_main_translate)
+            .draw_text(&self.text);
+    }
+
+    fn recreate_text(&mut self, renderer: &Renderer) {
+        self.text = create_text(
             renderer,
             &self.config,
             self.wrap_width,
@@ -98,30 +182,12 @@ impl UiText {
         );
     }
 
-    pub fn draw<'a>(&'a self, mut canvas: Canvas2<'a, '_>) {
-        let shadow_drop = self.config.font_size / SHADOW_DROP_DIVISOR * self.scale;
-        let align_sign = Vec2 {
-            x: self.config.h_align.sign(),
-            y: self.config.v_align.sign(),
-        };
-        
-        let mystery_gap_adjust_fractional =
-            align_sign.map(|n| (n as f32 / 2.0 + 0.5));
-        let mystery_gap_adjust =
-            mystery_gap_adjust_fractional
-            * self.config.font_size
-            * self.scale
-            * BOTTOM_RIGHT_MYSTERY_GAP;
-        let mut canvas = canvas.reborrow()
-            .translate(mystery_gap_adjust);
+    pub fn wrap_width(&self) -> Option<f32> {
+        self.wrap_width
+    }
 
-        canvas.reborrow()
-            .translate(align_sign.map(|n| (n as f32 / -2.0 + 0.5) * shadow_drop))
-            .color([0.25, 0.25, 0.25, 1.0])
-            .draw_text(&self.layed_out);
-        canvas.reborrow()
-            .translate(align_sign.map(|n| (n as f32 / -2.0 - 0.5) * shadow_drop))
-            .draw_text(&self.layed_out);
+    pub fn scale(&self) -> f32 {
+        self.scale
     }
 
     pub fn set_wrap_width(
@@ -130,108 +196,14 @@ impl UiText {
         wrap_width: Option<f32>,
     ) {
         self.wrap_width = wrap_width;
-        self.re_lay_out(renderer);
+
+        self.recreate_text(renderer);
     }
 
     pub fn set_scale(&mut self, renderer: &Renderer, scale: f32) {
         self.scale = scale;
-        self.re_lay_out(renderer);
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct UiTextBlockConfig {
-    pub text_config: UiTextConfig,
-    pub margins: Margins,
-    pub wrap: bool,
-}
-
-#[derive(Debug)]
-pub struct UiTextBlock {
-    ui_text: UiText,
-    margins: Margins,
-    wrap: bool,
-    align_translate_fraction: Vec2<f32>,
-    margin_translate_unscaled: Vec2<f32>,
-    size: UiSize,
-}
-
-fn wrap_width(margins: Margins, wrap: bool, size: UiSize) -> Option<f32> {
-    if wrap {
-        let h_margins_unscaled = margins.left + margins.right;
-        let h_margins = h_margins_unscaled * size.scale;
-        Some(size.size.w - h_margins)
-    } else {
-        None
-    }
-}
-
-impl UiTextBlock {
-    pub fn new(
-        renderer: &Renderer,
-        config: UiTextBlockConfig,
-        size: UiSize,
-    ) -> Self {
-        let wrap_width = wrap_width(config.margins, config.wrap, size);
-        let align_translate_fraction = Vec2 {
-            x: match config.text_config.h_align {
-                HAlign::Left => 0.0,
-                HAlign::Center => 0.5,
-                HAlign::Right => 1.0,
-            },
-            y: match config.text_config.v_align {
-                VAlign::Top => 0.0,
-                VAlign::Center => 0.5,
-                VAlign::Bottom => 1.0,
-            },
-        };
-        let margin_translate_unscaled = Vec2 {
-            x: match config.text_config.h_align {
-                HAlign::Left => config.margins.left,
-                HAlign::Center => 0.0,
-                HAlign::Right => -config.margins.right,
-            },
-            y: match config.text_config.v_align {
-                VAlign::Top => config.margins.top,
-                VAlign::Center => 0.0,
-                VAlign::Bottom => -config.margins.bottom,
-            },
-        };
-        let ui_text = UiText::new(
-            renderer,
-            config.text_config,
-            wrap_width,
-            size.scale,
-        );
-        UiTextBlock {
-            ui_text,
-            margins: config.margins,
-            wrap: config.wrap,
-            align_translate_fraction,
-            margin_translate_unscaled,
-            size,
-        }
-    }
-
-    pub fn draw<'a>(&'a self, mut canvas: Canvas2<'a, '_>) {
-        let canvas = canvas.reborrow()
-            .translate(self.align_translate_fraction * self.size.size)
-            .translate(self.margin_translate_unscaled * self.size.scale);
-        self.ui_text.draw(canvas); // TODO allow for chaining syntax for these such cases
-    }
-
-    pub fn set_size(
-        &mut self,
-        renderer: &Renderer,
-        size: impl Into<Extent2<f32>>,
-    ) {
-        self.size.size = size.into();
-        let wrap_width = wrap_width(self.margins, self.wrap, self.size);
-        self.ui_text.set_wrap_width(renderer, wrap_width);
-    }
-
-    pub fn set_scale(&mut self, renderer: &Renderer, scale: f32) {
-        self.size.scale = scale;
-        self.ui_text.set_scale(renderer, self.size.scale);
+        self.text_translates = text_translates(&self.config, self.scale);
+        self.recreate_text(renderer);
     }
 }

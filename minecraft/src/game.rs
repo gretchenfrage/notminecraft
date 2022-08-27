@@ -31,7 +31,7 @@ use crate::{
             UiVCenterConfig,
         },*/
     },*/
-    ui2::{
+    ui::{
         ui_block_items_struct,
         UiBlock,
         UiBlockSetWidth,

@@ -4,10 +4,10 @@
 
 use crate::{
     game::Game,
-    ui::{
+/*    ui::{
         UiSize,
         UiPosInputEvent,
-    },
+    },*/
 };
 use graphics::Renderer;
 use std::{
@@ -44,7 +44,6 @@ extern crate tracing;
 mod game;
 mod jar_assets;
 mod ui;
-mod ui2;
 
 
 fn main() {
@@ -118,11 +117,12 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 }
                 WindowEvent::MouseInput { button, state, .. } => {
                     if let Some(pos) = cursor_pos {
+                        /*
                         let event = UiPosInputEvent::MouseInput {
                             pos,
                             button,
                             state,
-                        };
+                        };*/
                         //game.on_pos_input_event(event).await?;
                     } else {
                         debug!("MouseInput event with no previous CursorMoved events");

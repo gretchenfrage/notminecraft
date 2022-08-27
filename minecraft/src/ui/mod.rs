@@ -1,154 +1,514 @@
+//! General-ish UI framework.
 
 use graphics::{
     Renderer,
     frame_content::Canvas2,
-    modifier::{
-        Modifier2,
-        Transform2,
-        Clip2,
-    },
-};
-use std::borrow::Borrow;
-use vek::*;
-
-
-pub use winit_main::reexports::event::{
-    MouseButton,
-    ElementState,
 };
 
 
 pub mod text;
-pub mod tile_9;
-pub mod menu_button;
-pub mod v_stack;
-pub mod h_center;
-pub mod v_center;
+pub mod text_block;
+pub mod margin_block;
+pub mod tile_9_block;
+pub mod layer_block;
+pub mod stable_unscaled_size_block;
+pub mod center_block;
+pub mod stack_block;
+pub mod tile_block;
 
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct UiSize {
-    pub size: Extent2<f32>,
-    pub scale: f32,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct False;
+
+impl Into<bool> for False {
+    fn into(self) -> bool {
+        false
+    }
 }
 
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Margins {
-    pub top: f32,
-    pub bottom: f32,
-    pub left: f32,
-    pub right: f32,
+pub trait UiBlock {
+    type WidthChanged: Copy + Into<bool>;
+    type HeightChanged: Copy + Into<bool>;
+
+    fn draw<'a>(&'a self, canvas: Canvas2<'a, '_>);
+
+    fn width(&self) -> f32;
+
+    fn height(&self) -> f32;
+
+    fn scale(&self) -> f32;
+
+    fn set_scale(&mut self, renderer: &Renderer, scale: f32) -> (
+        Self::WidthChanged,
+        Self::HeightChanged,
+    );
+}
+
+pub trait UiBlockSetWidth {
+    fn set_width(&mut self, renderer: &Renderer, width: f32);
+}
+
+pub trait UiBlockSetHeight {
+    fn set_height(&mut self, renderer: &Renderer, height: f32);
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct UiModify(Vec<Modifier2>);
+pub trait UiBlockItems {
+    type WidthChanged: Copy + Into<bool>;
+    type HeightChanged: Copy + Into<bool>;
 
-impl UiModify {
-    pub fn new() -> Self {
-        UiModify(Vec::new())
-    }
+    fn len(&self) -> usize;
 
-    pub fn recycle(mut self) -> Self {
-        self.0.clear();
-        self
-    }
+    fn draw<'a>(&'a self, i: usize, canvas: Canvas2<'a, '_>);
 
-    pub fn modify<I: Into<Modifier2>>(mut self, modifier: I) -> Self {
-        self.0.push(modifier.into());
-        self
-    }
+    fn width(&self, i: usize) -> f32;
 
-    pub fn translate<V: Into<Vec2<f32>>>(self, v: V) -> Self {
-        self.modify(Transform2::translate(v))
-    }
+    fn height(&self, i: usize) -> f32;
 
-    pub fn scale<V: Into<Vec2<f32>>>(self, v: V) -> Self {
-        self.modify(Transform2::scale(v))
-    }
+    fn scale(&self, i: usize) -> f32;
 
-    pub fn rotate(self, f: f32) -> Self {
-        self.modify(Transform2::rotate(f))
-    }
+    fn set_scale(&mut self, i: usize, renderer: &Renderer, scale: f32) -> (
+        Self::WidthChanged,
+        Self::HeightChanged,
+    );
+}
 
-    pub fn color<C: Into<Rgba<f32>>>(self, c: C) -> Self {
-        self.modify(c.into())
-    }
+pub trait UiBlockItemsSetWidth {
+    fn set_width(&mut self, i: usize, renderer: &Renderer, width: f32);
+}
 
-    pub fn min_x(self, f: f32) -> Self {
-        self.modify(Clip2::min_x(f))
-    }
+pub trait UiBlockItemsSetHeight {
+    fn set_height(&mut self, i: usize, renderer: &Renderer, height: f32);
+}
 
-    pub fn max_x(self, f: f32) -> Self {
-        self.modify(Clip2::max_x(f))
-    }
+macro_rules! ui_block_items_struct {
+    (
+        settable_width=$settable_width:ident,
+        settable_height=$settable_height:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{
+        impl $crate::ui::UiBlockItems for $struct {
+            type WidthChanged = $crate::ui::ui_block_items_struct!(
+                @DimSizeChanged settable=$settable_width
+            );
+            type HeightChanged = $crate::ui::ui_block_items_struct!(
+                @DimSizeChanged settable=$settable_height
+            );
 
-    pub fn min_y(self, f: f32) -> Self {
-        self.modify(Clip2::min_y(f))
-    }
+            fn len(&self) -> usize {
+                0 $( + {
+                    let $field = 1;
+                    $field
+                })*
+            }
 
-    pub fn max_y(self, f: f32) -> Self {
-        self.modify(Clip2::max_y(f))
-    }
+            fn draw<'a>(&'a self, mut i: usize, canvas: Canvas2<'a, '_>) {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui::UiBlock>::draw(
+                            &self.$field,
+                            canvas,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
 
-    pub fn reverse_apply<V: Into<Vec2<f32>>>(
-        &self,
-        v: V,
-    ) -> Option<Vec2<f32>> {
-        let mut v = v.into();
-        for modifier in self {
-            v = match modifier {
-                Modifier2::Transform(t) => t.reverse_apply(v),
-                Modifier2::Color(_) => continue,
-                Modifier2::Clip(c) => Some(v).filter(|_| c.test(v))
-            }?;
+            fn width(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui::UiBlock>::width(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn height(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui::UiBlock>::height(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn scale(&self, mut i: usize) -> f32 {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui::UiBlock>::scale(
+                            &self.$field
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+
+            fn set_scale(
+                &mut self,
+                mut i: usize,
+                renderer: &::graphics::Renderer,
+                scale: f32,
+            ) -> (
+                <Self as $crate::ui::UiBlockItems>::WidthChanged,
+                <Self as $crate::ui::UiBlockItems>::HeightChanged,
+            )
+            {
+                $({
+                    if i == 0 {
+                        return <$type as $crate::ui::UiBlock>::set_scale(
+                            &mut self.$field,
+                            renderer,
+                            scale,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
         }
-        Some(v)
+
+        $crate::ui::ui_block_items_struct!(
+            @impl_dim_size_changed
+            settable=$settable_width,
+            $crate::ui::UiBlockSetWidth,
+            $crate::ui::UiBlockItemsSetWidth,
+            set_width,
+            $struct {$(
+                $field: $type,
+            )*}
+        );
+
+        $crate::ui::ui_block_items_struct!(
+            @impl_dim_size_changed
+            settable=$settable_height,
+            $crate::ui::UiBlockSetHeight,
+            $crate::ui::UiBlockItemsSetHeight,
+            set_height,
+            $struct {$(
+                $field: $type,
+            )*}
+        );
+    };
+    (@DimSizeChanged settable=true)=>{ $crate::ui::False };
+    (@DimSizeChanged settable=false)=>{ bool };
+    (
+        @impl_dim_size_changed
+        settable=true,
+        $inner_trait:path,
+        $trait:path,
+        $method:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{
+        impl $trait for $struct {
+            fn $method(
+                &mut self,
+                mut i: usize,
+                renderer: &::graphics::Renderer,
+                n: f32,
+            ) {
+                $({
+                    if i == 0 {
+                        return <$type as $inner_trait>::$method(
+                            &mut self.$field,
+                            renderer,
+                            n,
+                        );
+                    }
+                    i -= 1;
+                })*
+                panic!("invalid index");
+            }
+        }
+    };
+    (
+        @impl_dim_size_changed
+        settable=false,
+        $inner_trait:path,
+        $trait:path,
+        $method:ident,
+        $struct:ident {$(
+            $field:ident: $type:ty
+        ),*$(,)?}
+    )=>{};
+}
+
+pub (crate) use ui_block_items_struct;
+
+/*
+impl<I: UiBlock> UiBlockItems for Vec<I> {
+    type WidthChanged = <I as UiBlock>::WidthChanged;
+    type HeightChanged = <I as UiBlock>::HeightChanged;
+
+    fn len(&self) -> usize {
+        Vec::len(self)
     }
-}
 
-impl Borrow<[Modifier2]> for UiModify {
-    fn borrow(&self) -> &[Modifier2] {
-        &self.0
+    fn draw<'a>(&'a self, i: usize, canvas: Canvas2<'a, '_>) {
+        self[i].draw(canvas)
     }
-}
 
-impl<'a> IntoIterator for &'a UiModify {
-    type Item = Modifier2;
-    type IntoIter = std::iter::Copied<std::slice::Iter<'a, Modifier2>>;
+    fn width(&self, i: usize) -> f32 {
+        self[i].width()
+    }
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter().copied()
-    }    
-}
+    fn height(&self, i: usize) -> f32 {
+        self[i].height()
+    }
 
-#[derive(Debug, Clone)]
-pub enum UiPosInputEvent {
-    CursorMoved(Vec2<f32>),
-    MouseInput {
-        pos: Vec2<f32>,
-        button: MouseButton,
-        state: ElementState,
-    },
-}
+    fn scale(&self, i: usize) -> f32 {
+        self[i].scale()
+    }
 
-impl UiPosInputEvent {
-    pub fn map_pos<F>(self, f: F) -> Self
-    where
-        F: Fn(Vec2<f32>) -> Vec2<f32>
+    fn set_scale(&mut self, i: usize, renderer: &Renderer, scale: f32) -> (
+        Self::WidthChanged,
+        Self::HeightChanged,
+    )
     {
-        match self {
-            UiPosInputEvent::CursorMoved(pos) => UiPosInputEvent::CursorMoved(f(pos)),
-            UiPosInputEvent::MouseInput {
-                pos,
-                button,
-                state,
-            } => UiPosInputEvent::MouseInput {
-                pos: f(pos),
-                button,
-                state,
-            },
-        }
+        self[i].set_scale(renderer, scale)
     }
 }
+
+impl<I: UiBlockSetWidth> UiBlockItemsSetWidth for Vec<I> {
+    fn set_width(&mut self, i: usize, renderer: &Renderer, width: f32) {
+        self[i].set_width(renderer, width)
+    }
+}
+
+impl<I: UiBlockSetHeight> UiBlockItemsSetHeight for Vec<I> {
+    fn set_height(&mut self, i: usize, renderer: &Renderer, height: f32) {
+        self[i].set_height(renderer, height)
+    }
+}
+*/
+
+macro_rules! ui_block_items_tuple {
+    ($($i:ident: $t:ident),*$(,)?)=>{
+        impl<
+            A: UiBlock,
+            $(
+                $t: UiBlock<
+                    WidthChanged=<A as UiBlock>::WidthChanged,
+                    HeightChanged=<A as UiBlock>::HeightChanged,
+                >,
+            )*
+        > UiBlockItems for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            type WidthChanged = <A as UiBlock>::WidthChanged;
+            type HeightChanged = <A as UiBlock>::HeightChanged;
+
+            fn len(&self) -> usize {
+                1 $( + {
+                    let $i = 1;
+                    $i
+                } )*
+            }
+
+            fn draw<'a>(&'a self, mut i: usize, canvas: Canvas2<'a, '_>) {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.draw(canvas);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.draw(canvas);
+                    }
+                    i -= 1;
+                })*
+
+                panic!("invalid index");
+            }
+
+            fn width(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.width();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.width();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn height(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.height();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.height();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn scale(&self, mut i: usize) -> f32 {
+                let &(
+                    ref a,
+                    $( ref $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.scale();
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.scale();
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+
+            fn set_scale(&mut self, mut i: usize, renderer: &Renderer, scale: f32) -> (
+                Self::WidthChanged,
+                Self::HeightChanged,
+            )
+            {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_scale(renderer, scale);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_scale(renderer, scale);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+
+        impl<
+            A: UiBlockSetWidth,
+            $(
+                $t: UiBlockSetWidth,
+            )*
+        > UiBlockItemsSetWidth for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            fn set_width(&mut self, mut i: usize, renderer: &Renderer, width: f32) {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_width(renderer, width);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_width(renderer, width);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+
+        impl<
+            A: UiBlockSetHeight,
+            $(
+                $t: UiBlockSetHeight,
+            )*
+        > UiBlockItemsSetHeight for (
+            A,
+            $(
+                $t,
+            )*
+        )
+        {
+            fn set_height(&mut self, mut i: usize, renderer: &Renderer, height: f32) {
+                let &mut (
+                    ref mut a,
+                    $( ref mut $i, )*
+                ) = self;
+
+                if i == 0 {
+                    return a.set_height(renderer, height);
+                }
+                i -= 1;
+
+                $({
+                    if i == 0 {
+                        return $i.set_height(renderer, height);
+                    }
+                    i -= 1;
+                })*
+                
+                panic!("invalid index");
+            }
+        }
+    };
+}
+
+ui_block_items_tuple!();
+ui_block_items_tuple!(b: B);
+ui_block_items_tuple!(b: B, c: C);
+ui_block_items_tuple!(b: B, c: C, d: D);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I, j: J);
+ui_block_items_tuple!(b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I, j: J, k: K);
