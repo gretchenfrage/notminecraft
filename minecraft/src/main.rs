@@ -44,6 +44,7 @@ extern crate tracing;
 mod game;
 mod jar_assets;
 mod ui;
+mod ui2;
 
 
 fn main() {

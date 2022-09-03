@@ -1,3 +1,37 @@
+/*
+pub trait GuiElementPositioned {
+    fn draw(&mut self, renderer: &Renderer, canvas: Canvas2) // TODO events
+
+    fn on_event(&mut self, renderer: &Renderer, event: Event);
+}
+
+pub trait GuiContentTarget {
+    fn put_modifier(&mut self, stack_len: usize, modifier: Modifier2);
+
+    fn put_element<E: GuiElementPositioned>(&mut self, stack_len: usize, element: &mut E);
+}
+
+pub struct GuiContentCanvas<'a, T: GuiContentTarget, X, Y> {
+    pub target: &'a mut T,
+    pub stack_len: usize,
+    pub x_size: X,
+    pub y_size: Y,
+}
+
+impl<'a, T: GuiContentTarget, X, Y> GuiContentCanvas<'a, T, X, Y> {
+
+}
+
+pub trait GuiElement<XIn, YIn> {
+    type XOut;
+    type YOut;
+    type Positioned = 
+
+    fn position(self, x: XIn, y: YIn) -> (Self::XOut, Self::YOut)
+}
+*/
+
+
 //! General-ish UI framework.
 
 use graphics::{
