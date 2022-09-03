@@ -102,6 +102,11 @@ pub trait SizedGuiBlock<'a> {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>);
 }
 
+impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
+        visitor.visit_node(self);
+    }
+}
 
 pub trait DimConstraint {
     type In;
@@ -291,9 +296,249 @@ impl<'a, M: GuiVisitorSubmapIterMapper, I: SizedGuiBlockSeq<'a>> SizedGuiBlock<'
 }
 
 
-pub mod stack_block {
+mod margin_block {
+    use super::*;
+
+    pub fn h_margin_block<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
+        HMarginGuiBlock {
+            unscaled_margin_min,
+            unscaled_margin_max,
+            inner,
+        }
+    }
+
+    struct HMarginGuiBlock<I> {
+        unscaled_margin_min: f32,
+        unscaled_margin_max: f32,
+        inner: I,
+    }
+
+    impl<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>> GuiBlock<'a, DimParentSets, H> for HMarginGuiBlock<I> {
+        type Sized = HMarginSizedGuiBlock<I::Sized>;
+
+        fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
+            let margin_min = self.unscaled_margin_min * scale;
+            let margin_max = self.unscaled_margin_max * scale;
+
+            let inner_w = f32::max(w - margin_min - margin_max, 0.0);
+            let x_translate = (w - inner_w) / 2.0;
+
+            let ((), h_out, inner_sized) = self.inner.size(inner_w, h_in, scale);
+
+            let sized = HMarginSizedGuiBlock {
+                x_translate,
+                inner: inner_sized,
+            };
+
+            ((), h_out, sized)
+        }
+    }
+
+    struct HMarginSizedGuiBlock<I> {
+        x_translate: f32,
+        inner: I,
+    }
+
+    impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HMarginSizedGuiBlock<I> {
+        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
+            self.inner.visit_nodes(visitor.reborrow()
+                .translate([self.x_translate, 0.0]));
+        }
+    }
+
+
+    // ==== TODO dedupe somehow ====
+
+
+    pub fn v_margin_block<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, W, DimParentSets> {
+        VMarginGuiBlock {
+            unscaled_margin_min,
+            unscaled_margin_max,
+            inner,
+        }
+    }
+
+    struct VMarginGuiBlock<I> {
+        unscaled_margin_min: f32,
+        unscaled_margin_max: f32,
+        inner: I,
+    }
+
+    impl<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>> GuiBlock<'a, W, DimParentSets> for VMarginGuiBlock<I> {
+        type Sized = VMarginSizedGuiBlock<I::Sized>;
+
+        fn size(self, w_in: W::In, h: f32, scale: f32) -> (W::Out, (), Self::Sized) {
+            let margin_min = self.unscaled_margin_min * scale;
+            let margin_max = self.unscaled_margin_max * scale;
+
+            let inner_h = f32::max(h - margin_min - margin_max, 0.0);
+            let y_translate = (h - inner_h) / 2.0;
+
+            let (w_out, (), inner_sized) = self.inner.size(w_in, inner_h, scale);
+
+            let sized = VMarginSizedGuiBlock {
+                y_translate,
+                inner: inner_sized,
+            };
+
+            (w_out, (), sized)
+        }
+    }
+
+    struct VMarginSizedGuiBlock<I> {
+        y_translate: f32,
+        inner: I,
+    }
+
+    impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for VMarginSizedGuiBlock<I> {
+        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
+            self.inner.visit_nodes(visitor.reborrow()
+                .translate([0.0, self.y_translate]));
+        }
+    }
+}
+
+
+mod layer_block {
     use super::*;
     use std::iter::repeat;
+
+    pub fn layer_gui_block<'a, I: GuiBlockSeq<'a, DimParentSets, DimParentSets>>(items: I) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        LayerGuiBlock { items }
+    }
+
+    struct LayerGuiBlock<I> {
+        items: I,
+    }
+
+    impl<'a, I: GuiBlockSeq<'a, DimParentSets, DimParentSets>> GuiBlock<'a, DimParentSets, DimParentSets> for LayerGuiBlock<I> {
+        type Sized = SubmapIterSizedGuiBlock<LayerItemVisitorMapper, I::SizedSeq>;
+
+        fn size(self, w: f32, h: f32, scale: f32) -> ((), (), Self::Sized) {
+            let w_in_seq = repeat(w);
+            let h_in_seq = repeat(h);
+            let scale_seq = repeat(scale);
+
+            let (_, _, sized_seq) = self.items.size_all(w_in_seq, h_in_seq, scale_seq);
+
+            let sized = SubmapIterSizedGuiBlock::new(LayerItemVisitorMapper, sized_seq);
+
+            ((), (), sized)
+        }
+    }
+
+    struct LayerItemVisitorMapper;
+
+    impl GuiVisitorSubmapIterMapper for LayerItemVisitorMapper {
+        fn map_next<'a, 'b, T: GuiVisitorTarget<'a>>(&'b mut self, visitor: GuiVisitor<'b, T>) -> GuiVisitor<'b, T> {
+            visitor
+        }
+    }
+}
+
+
+mod stable_unscaled_dim_size {
+    use super::*;
+
+    pub fn h_stable_unscaled_dim_size_block<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(unscaled_dim_size: f32, inner: I) -> impl GuiBlock<'a, DimChildSets, H> {
+        HStableUnscaledDimSizeGuiBlock {
+            unscaled_dim_size,
+            inner,
+        }
+    }
+
+    struct HStableUnscaledDimSizeGuiBlock<I> {
+        unscaled_dim_size: f32,
+        inner: I,
+    }
+
+    impl<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>> GuiBlock<'a, DimChildSets, H> for HStableUnscaledDimSizeGuiBlock<I> {
+        type Sized = I::Sized;
+
+        fn size(self, (): (), h_in: H::In, scale: f32) -> (f32, H::Out, Self::Sized) {
+            let w = self.unscaled_dim_size * scale;
+            let ((), h_out, sized) = self.inner.size(w, h_in, scale);
+            (w, h_out, sized)
+        }        
+    }
+
+
+    // ==== TODO dedupe somehow ====
+
+
+    pub fn v_stable_unscaled_dim_size_block<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(unscaled_dim_size: f32, inner: I) -> impl GuiBlock<'a, W, DimChildSets> {
+        VStableUnscaledDimSizeGuiBlock {
+            unscaled_dim_size,
+            inner,
+        }
+    }
+
+    struct VStableUnscaledDimSizeGuiBlock<I> {
+        unscaled_dim_size: f32,
+        inner: I,
+    }
+
+    impl<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>> GuiBlock<'a, W, DimChildSets> for VStableUnscaledDimSizeGuiBlock<I> {
+        type Sized = I::Sized;
+
+        fn size(self, w_in: W::In, (): (), scale: f32) -> (W::Out, f32, Self::Sized) {
+            let h = self.unscaled_dim_size * scale;
+            let (w_out, (), sized) = self.inner.size(w_in, h, scale);
+            (w_out, h, sized)
+        }        
+    }
+}
+
+
+mod center_block {
+    use super::*;
+    
+    pub fn center_block<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>>(inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
+        HCenterGuiBlock { inner }
+    }
+
+    struct HCenterGuiBlock<I> {
+        inner: I,
+    }
+
+    impl<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>> GuiBlock<'a, DimParentSets, H> for HCenterGuiBlock<I> {
+        type Sized = HCenterSizedGuiBlock<I::Sized>;
+
+        fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
+            let (inner_w, h_out, inner_sized) = self.inner.size((), h_in, scale);
+            let sized = HCenterSizedGuiBlock {
+                x_translate: (w - inner_w) / 2.0,
+                inner: inner_sized,
+            };
+            ((), h_out, sized)
+        }
+    }
+
+
+    struct HCenterSizedGuiBlock<I> {
+        x_translate: f32,
+        inner: I,
+    }
+
+    impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HCenterSizedGuiBlock<I> {
+        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
+            self.inner.visit_nodes(visitor.reborrow()
+                .translate([self.x_translate, 0.0]));
+        }
+    }
+}
+
+
+mod stack_block {
+    use super::*;
+    use std::iter::repeat;
+
+    pub fn v_stack_block<'a, I: GuiBlockSeq<'a, DimParentSets, DimChildSets>>(unscaled_gap: f32, items: I) -> impl GuiBlock<'a, DimParentSets, DimChildSets> {
+        VStackGuiBlock {
+            unscaled_gap,
+            items,
+        }
+    }
 
     struct VStackGuiBlock<I> {
         unscaled_gap: f32,
@@ -356,87 +601,55 @@ pub mod stack_block {
             visitor
         }
     }
-
-    /*
-    struct VStackItemVisitorIter<'b, T, H> {
-        base_visitor: GuiVisitor<'b, T>,
-        item_heights: H,
-        gap: f32,
-        next_idx: usize,
-        next_y_translate: f32,
-    }
-
-    impl<'a, 'b, T: GuiVisitorTarget<'a>, H: Index<usize, Output=f32>> GuiVisitorIter<'a> for VStackItemVisitorIter<'b, T, H> {
-        type Target = T;
-
-        fn next<'b2>(&'b2 mut self) -> GuiVisitor<'b2, Self::Target> {
-            let visitor = self.base_visitor.reborrow()
-                .translate([0.0, self.next_y_translate]);
-
-            self.next_y_translate += self.item_heights[self.next_idx];
-            self.next_y_translate += self.gap;
-
-            self.next_idx += 1;
-
-            visitor
-        }
-    }
-
-    struct VStackSizedGuiBlock<H, I> {
-        gap: f32,
-        item_heights: H,
-        items: I,
-    }
-
-    impl<'a, H: Index<usize, Output=f32>, I: SizedGuiBlockSeq<'a>> SizedGuiBlock<'a> for VStackSizedGuiBlock<H, I> {
-        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
-            let visitors = VStackItemVisitorIter {
-                base_visitor: visitor,
-                item_heights: self.item_heights,
-                gap: self.gap,
-                next_idx: 0,
-                next_y_translate: 0.0,
-            };
-            self.items.visit_items_nodes(visitors);
-        }
-    }*/
 }
 
 
-mod center_block {
+mod tile_image_block {
     use super::*;
-    
-    pub fn center_block<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>>(inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
-        HCenterGuiBlock { inner }
-    }
+    use graphics::frame_content::GpuImage;
 
-    struct HCenterGuiBlock<I> {
-        inner: I,
-    }
-
-    impl<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>> GuiBlock<'a, DimParentSets, H> for HCenterGuiBlock<I> {
-        type Sized = HCenterSizedGuiBlock<I::Sized>;
-
-        fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
-            let (inner_w, h_out, inner_sized) = self.inner.size((), h_in, scale);
-            let sized = HCenterSizedGuiBlock {
-                x_translate: (w - inner_w) / 2.0,
-                inner: inner_sized,
-            };
-            ((), h_out, sized)
+    pub fn tile_image_gui_block<'a, E: Into<Extent2<f32>>>(image: &'a GpuImage, size_unscaled_untiled: E) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        let size_unscaled_untiled = size_unscaled_untiled.into();
+        TileImageGuiBlock {
+            image,
+            size_unscaled_untiled,
         }
     }
 
-
-    struct HCenterSizedGuiBlock<I> {
-        x_translate: f32,
-        inner: I,
+    struct TileImageGuiBlock<'a> {
+        image: &'a GpuImage,
+        size_unscaled_untiled: Extent2<f32>,
     }
 
-    impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HCenterSizedGuiBlock<I> {
-        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
-            self.inner.visit_nodes(visitor.reborrow()
-                .translate([self.x_translate, 0.0]));
+    impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for TileImageGuiBlock<'a> {
+        type Sized = SizedTileImageGuiBlock<'a>;
+
+        fn size(self, w: f32, h: f32, scale: f32) -> ((), (), Self::Sized) {
+            let sized = SizedTileImageGuiBlock {
+                block: self,
+                size: Extent2 { w, h },
+                scale,
+            };
+            ((), (), sized)
+        }
+    }
+
+    struct SizedTileImageGuiBlock<'a> {
+        block: TileImageGuiBlock<'a>,
+        size: Extent2<f32>,
+        scale: f32,
+    }
+
+    impl<'a> GuiNode<'a> for SizedTileImageGuiBlock<'a> {
+        fn draw(&'a mut self, _: &Renderer, mut canvas: Canvas2<'a, '_>) {
+            let tex_extent = self.size / (self.block.size_unscaled_untiled * self.scale);
+            canvas.reborrow()
+                .draw_image_uv(
+                    &self.block.image,
+                    self.size,
+                    [0.0, 0.0],
+                    tex_extent,
+                );
         }
     }
 }
