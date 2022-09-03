@@ -129,20 +129,10 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
 }
 
 
-pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>
-/*where
-    for<'i> &'i Self::WOutSeq: IntoIterator,
-    for<'i> <&'i Self::WOutSeq as IntoIterator>::Item: Borrow<W::Out>,
-    for<'i> &'i Self::HOutSeq: IntoIterator,
-    for<'i> <&'i Self::HOutSeq as IntoIterator>::Item: Borrow<H::Out>,*/
-{
+pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
     type SizedSeq: SizedGuiBlockSeq<'a>;
     type WOutSeq: Index<usize, Output=W::Out>;
     type HOutSeq: Index<usize, Output=H::Out>;
-    //type WOutSeq;
-    //type HOutSeq;
-    //type WOutSeq: IntoIterator<Item=W::Out>;
-    //type HOutSeq: IntoIterator<Item=H::Out>;
 
     fn len(&self) -> usize;
 
@@ -259,6 +249,48 @@ gui_seq_tuples!(
 );
 
 
+pub trait GuiVisitorSubmapIterMapper {
+    fn map_next<'a, 'b, T: GuiVisitorTarget<'a>>(&'b mut self, visitor: GuiVisitor<'b, T>) -> GuiVisitor<'b, T>;
+}
+
+pub struct GuiVisitorSubmapIter<'b, T, M> {
+    base_visitor: GuiVisitor<'b, T>,
+    mapper: M,
+}
+
+impl<'a, 'b, T: GuiVisitorTarget<'a>, M: GuiVisitorSubmapIterMapper> GuiVisitorIter<'a> for GuiVisitorSubmapIter<'b, T, M> {
+    type Target = T;
+
+    fn next<'b2>(&'b2 mut self) -> GuiVisitor<'b2, Self::Target> {
+        self.mapper.map_next(self.base_visitor.reborrow())
+    }
+}
+
+pub struct SubmapIterSizedGuiBlock<M, I> {
+    mapper: M,
+    items: I,
+}
+
+impl<M, I> SubmapIterSizedGuiBlock<M, I> {
+    pub fn new(mapper: M, items: I) -> Self {
+        SubmapIterSizedGuiBlock {
+            mapper,
+            items,
+        }
+    }
+}
+
+impl<'a, M: GuiVisitorSubmapIterMapper, I: SizedGuiBlockSeq<'a>> SizedGuiBlock<'a> for SubmapIterSizedGuiBlock<M, I> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
+        let visitors = GuiVisitorSubmapIter {
+            base_visitor: visitor,
+            mapper: self.mapper,
+        };
+        self.items.visit_items_nodes(visitors);
+    }
+}
+
+
 pub mod stack_block {
     use super::*;
     use std::iter::repeat;
@@ -269,7 +301,7 @@ pub mod stack_block {
     }
 
     impl<'a, I: GuiBlockSeq<'a, DimParentSets, DimChildSets>> GuiBlock<'a, DimParentSets, DimChildSets> for VStackGuiBlock<I> {
-        type Sized = VStackSizedGuiBlock<I::HOutSeq, I::SizedSeq>;
+        type Sized = SubmapIterSizedGuiBlock<VStackItemVisitorMapper<I::HOutSeq>, I::SizedSeq>;
 
         fn size(self, w: f32, (): (), scale: f32) -> ((), f32, Self::Sized) {
             let len = self.items.len();
@@ -281,11 +313,6 @@ pub mod stack_block {
             let scale_seq = repeat(scale);
 
             let (_, item_heights, sized_seq) = self.items.size_all(w_in_seq, h_in_seq, scale_seq);
-            /*
-            let h = item_heights.into_iter()
-                .enumerate()
-                .map(|(i, h)| if i == 0 { 0.0 } else { gap } + *h.borrow())
-                .sum();*/
 
             let mut height = 0.0;
             for i in 0..len {
@@ -294,43 +321,43 @@ pub mod stack_block {
                 }
                 height += item_heights[i];
             }
-
-            let sized = VStackSizedGuiBlock {
-                gap,
-                item_heights,
-                items: sized_seq,
-            };
+            
+            let sized = SubmapIterSizedGuiBlock::new(
+                VStackItemVisitorMapper {
+                    item_heights,
+                    gap,
+                    next_idx: 0,
+                    next_y_translate: 0.0,
+                },
+                sized_seq,
+            );
 
             ((), height, sized)
         }
     }
-    /*
-    struct VStackItemVisitorIter<'b, T, I> {
-        remaining: usize,
-        visitor: GuiVisitor<'b, T>,
+
+    struct VStackItemVisitorMapper<H> {
+        item_heights: H,
         gap: f32,
-        y_translate: f32,
-        item_heights_iter: I,
+        next_idx: usize,
+        next_y_translate: f32,
     }
 
-    impl<'a, 'b, T: GuiVisitorTarget<'a>, I: Iterator> GuiVisitorIter<'a> for VStackItemVisitorIter<'b, T, I>
-    where
-        <I as Iterator>::Item: Borrow<f32>,
-    {
-        type Target = T;
+    impl<H: Index<usize, Output=f32>> GuiVisitorSubmapIterMapper for VStackItemVisitorMapper<H> {
+        fn map_next<'a, 'b, T: GuiVisitorTarget<'a>>(&'b mut self, visitor: GuiVisitor<'b, T>) -> GuiVisitor<'b, T> {
+            let visitor = visitor
+                .translate([0.0, self.next_y_translate]);
 
-        fn next<'b2>(&'b2 mut self) -> GuiVisitor<'b2, Self::Target> {
-            let curr = self.visitor.reborrow()
-                .translate([0.0, self.y_translate]);
-            self.remaining -= 1;
-            if self.remaining > 0 {
-                self.y_translate += *self.item_heights_iter.next().unwrap().borrow();
-                self.y_translate += self.gap;
-            }
-            curr
+            self.next_y_translate += self.item_heights[self.next_idx];
+            self.next_y_translate += self.gap;
+
+            self.next_idx += 1;
+
+            visitor
         }
     }
-    */
+
+    /*
     struct VStackItemVisitorIter<'b, T, H> {
         base_visitor: GuiVisitor<'b, T>,
         item_heights: H,
@@ -369,30 +396,6 @@ pub mod stack_block {
                 gap: self.gap,
                 next_idx: 0,
                 next_y_translate: 0.0,
-            };
-            self.items.visit_items_nodes(visitors);
-        }
-    }
-    /*
-    struct VStackSizedGuiBlock<H, I> {
-        len: usize,
-        gap: f32,
-        item_heights: H,
-        items: I,
-    }
-
-    impl<'a, H, I: SizedGuiBlockSeq<'a>> SizedGuiBlock<'a> for VStackSizedGuiBlock<H, I>
-    where
-        for<'i> &'i H: IntoIterator,
-        for<'i> <&'i H as IntoIterator>::Item: Borrow<f32>,
-    {
-        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
-            let visitors = VStackItemVisitorIter {
-                remaining: self.len,
-                visitor,
-                gap: self.gap,
-                y_translate: 0.0,
-                item_heights_iter: self.item_heights.into_iter(),
             };
             self.items.visit_items_nodes(visitors);
         }
