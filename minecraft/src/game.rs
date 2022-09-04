@@ -1,6 +1,7 @@
 
 use crate::{
     jar_assets::JarReader,
+    /*
     ui::{
         ui_block_items_struct,
         UiBlock,
@@ -36,7 +37,8 @@ use crate::{
         mc::{
             title::UiMcTitleBlock,
         },
-    },
+    },*/
+    ui2::*,
 };
 use graphics::{
     Renderer,
@@ -54,7 +56,9 @@ use graphics::{
         Mesh,
         Vertex,
         Triangle,
+        FrameItem,
     },
+    modifier::Modifier2,
 };
 use winit_main::reexports::{
     window::WindowAttributes,
@@ -121,11 +125,21 @@ pub struct Game {
     //splash_text: UiText,
     //splash_size: Cosine,
 
-    ui: MainMenu,
+    //ui: MainMenu,
+    bg_image: GpuImage,
+
+    button_images: Tile9Images,
+
+    version_text: TextGuiBlock,
+    copyright_text: TextGuiBlock,
+    singleplayer_button_text: TextGuiBlock,
+    multiplayer_button_text: TextGuiBlock,
+    mods_button_text: TextGuiBlock,
+    options_button_text: TextGuiBlock,
 
     debug_dot: Option<Vec2<f32>>,
 }
-
+/*
 type MainMenu =
     UiLayerBlock<(
         UiTileBlock, // background
@@ -160,7 +174,6 @@ type MainMenu =
         >,
     )>;
 
-
 type Button =
     UiStableUnscaledHeightBlock<
         UiLayerBlock<(
@@ -168,6 +181,7 @@ type Button =
             UiTextBlock,
         )>
     >;
+*/
 
 impl Game {
     pub async fn window_config() -> Result<WindowAttributes> {
@@ -232,6 +246,81 @@ impl Game {
             px_right: 2,
         }.load(&renderer);
 
+        // version_text: TextGuiBlock,
+        // copyright_text: TextGuiBlock,
+        // singleplayer_button_text: TextGuiBlock,
+        // multiplayer_button_text: TextGuiBlock,
+        // mods_button_text: TextGuiBlock,
+        // options_button_text: TextGuiBlock,
+        let version_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: "Not Minecraft Beta 1.0.2".into(),
+                font,
+                color: hex_color(0x505050FF),
+            }],
+            16.0,
+            HAlign::Left,
+            VAlign::Top,
+            true,
+        );
+        let copyright_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: "Everything in the universe is in the public domain.".into(),
+                font,
+                color: Rgba::white(),
+            }],
+            16.0,
+            HAlign::Right,
+            VAlign::Bottom,
+            true,
+        );
+
+        let singleplayer_button_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: lang["menu.singleplayer"].clone(),
+                font,
+                color: hex_color(0xE0E0E0FF),
+            }],
+            16.0,
+            HAlign::Center,
+            VAlign::Center,
+            false,
+        );
+        let multiplayer_button_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: lang["menu.multiplayer"].clone(),
+                font,
+                color: hex_color(0xE0E0E0FF),
+            }],
+            16.0,
+            HAlign::Center,
+            VAlign::Center,
+            false,
+        );
+        let mods_button_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: lang["menu.mods"].clone(),
+                font,
+                color: hex_color(0xE0E0E0FF),
+            }],
+            16.0,
+            HAlign::Center,
+            VAlign::Center,
+            false,
+        );
+        let options_button_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: lang["menu.options"].clone(),
+                font,
+                color: hex_color(0xE0E0E0FF),
+            }],
+            16.0,
+            HAlign::Center,
+            VAlign::Center,
+            false,
+        );
+
+/*
         fn create_button(
             width: f32,
             scale: f32,
@@ -277,10 +366,10 @@ impl Game {
                 width,
                 scale,
             )
-        }
+        }*/
 
         let bg_image = renderer.load_image(jar.read("gui/background.png").await?)?;
-        
+        /*
         let ui = UiLayerBlock::new(
             |size, scale| (
                 UiTileBlock::new(
@@ -425,7 +514,7 @@ impl Game {
             ),
             size,
             scale,
-        );
+        );*/
 
         Ok(Game {
             size,
@@ -437,15 +526,33 @@ impl Game {
 
             rng,
 
+            bg_image,
+
+            button_images,
+
+            version_text,
+            copyright_text,
+            singleplayer_button_text,
+            multiplayer_button_text,
+            mods_button_text,
+            options_button_text,
+
             //splash_text,
             //splash_size: Cosine::new(1.0 / 2.0),
 
-            ui,
+            //ui,
 
             debug_dot: None,
         })
     }
-
+    /*
+    fn gui<'a>(&'a self) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        tile_image_gui_block(
+            &self.bg_image,
+            [64.0; 2],
+        )
+    }
+    */
     pub async fn draw<'a>(&mut self, elapsed: f32) -> Result<()> {
         trace!(%elapsed, "updating");
         /*
@@ -457,9 +564,134 @@ impl Game {
         trace!("drawing");
 
         let mut frame = FrameContent::new();
-        let mut canvas = frame.canvas();
+        //let mut canvas = frame.canvas();
 
-        self.ui.draw(canvas.reborrow());
+        //self.ui.draw(canvas.reborrow());
+
+        struct DrawGuiVisitorTarget<'r, 'a, 'b> {
+            renderer: &'r Renderer,
+            frame_content: &'b mut FrameContent<'a>,
+        }
+
+        impl<'r, 'a, 'b> GuiVisitorTarget<'a> for DrawGuiVisitorTarget<'r, 'a, 'b> {
+            fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2) {
+                self.frame_content.0.push((stack_len, FrameItem::PushModifier2(modifier)));
+            }
+
+            fn visit_node<I: GuiNode<'a>>(&mut self, stack_len: usize, mut node: I) {
+                node.draw(self.renderer, Canvas2 {
+                    target: self.frame_content,
+                    stack_len,
+                });
+            }
+        }
+
+
+
+        {
+            // TODO kinda tricky to factor out because the compiler needs to
+            // know that it won't borrow from renderer. but is actually a good
+            // refactoring opportunity revealed by that.
+            let gui = 
+                layer_gui_block((
+                    modifier_gui_block(
+                        Rgba::new(0.25, 0.25, 0.25, 1.0),
+                            tile_image_gui_block(
+                            &self.bg_image,
+                            [64.0; 2],
+                        ),
+                    ),
+                    
+                    h_center_gui_block(
+                        0.5,
+                        v_center_gui_block(
+                            0.0,
+                            h_stable_unscaled_dim_size_gui_block(
+                                400.0,
+                                v_stack_gui_block(
+                                    25.0 / 2.0,
+                                    (
+                                        v_stable_unscaled_dim_size_gui_block(
+                                            40.0,
+                                            layer_gui_block((
+                                                tile_9_gui_block(
+                                                    &self.button_images,
+                                                    Extent2::new(200.0, 20.0) * 2.0,
+                                                    2.0 / 20.0,
+                                                    3.0 / 20.0,
+                                                    2.0 / 200.0,
+                                                    2.0 / 200.0,
+                                                ),
+                                                &mut self.singleplayer_button_text,
+                                            )),
+                                        ),
+                                        v_stable_unscaled_dim_size_gui_block(
+                                            40.0,
+                                            layer_gui_block((
+                                                tile_9_gui_block(
+                                                    &self.button_images,
+                                                    Extent2::new(200.0, 20.0) * 2.0,
+                                                    2.0 / 20.0,
+                                                    3.0 / 20.0,
+                                                    2.0 / 200.0,
+                                                    2.0 / 200.0,
+                                                ),
+                                                &mut self.multiplayer_button_text,
+                                            )),
+                                        ),
+                                        v_stable_unscaled_dim_size_gui_block(
+                                            40.0,
+                                            layer_gui_block((
+                                                tile_9_gui_block(
+                                                    &self.button_images,
+                                                    Extent2::new(200.0, 20.0) * 2.0,
+                                                    2.0 / 20.0,
+                                                    3.0 / 20.0,
+                                                    2.0 / 200.0,
+                                                    2.0 / 200.0,
+                                                ),
+                                                &mut self.mods_button_text,
+                                            )),
+                                        ),
+                                        v_stable_unscaled_dim_size_gui_block(
+                                            40.0,
+                                            layer_gui_block((
+                                                tile_9_gui_block(
+                                                    &self.button_images,
+                                                    Extent2::new(200.0, 20.0) * 2.0,
+                                                    2.0 / 20.0,
+                                                    3.0 / 20.0,
+                                                    2.0 / 200.0,
+                                                    2.0 / 200.0,
+                                                ),
+                                                &mut self.options_button_text,
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    h_margin_gui_block(
+                        4.0,
+                        4.0,
+                        v_margin_gui_block(
+                            4.0,
+                            4.0,
+                            layer_gui_block((
+                                &mut self.version_text,
+                                &mut self.copyright_text,
+                            )),
+                        ),
+                    ),
+                ))
+                ;
+            let ((), (), sized_gui) = gui.size(self.size.w, self.size.h, self.scale);
+            sized_gui.visit_nodes(GuiVisitor::new(&mut DrawGuiVisitorTarget {
+                renderer: &self.renderer,
+                frame_content: &mut frame,
+            }));
+        }
 
         /*
         {
@@ -485,8 +717,8 @@ impl Game {
         self.renderer.resize(size);
         self.size = size.map(|n| n as f32);
 
-        self.ui.set_width(&self.renderer, self.size.w);
-        self.ui.set_height(&self.renderer, self.size.h);
+        //self.ui.set_width(&self.renderer, self.size.w);
+        //self.ui.set_height(&self.renderer, self.size.h);
         
         Ok(())
     }
@@ -496,7 +728,7 @@ impl Game {
 
         self.scale = scale;
 
-        self.ui.set_scale(&self.renderer, self.scale);
+        //self.ui.set_scale(&self.renderer, self.scale);
         
         Ok(())
     }

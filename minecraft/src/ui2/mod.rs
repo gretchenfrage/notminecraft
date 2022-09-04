@@ -22,10 +22,10 @@ use vek::*;
 pub enum InputEvent {}
 
 
-pub trait GuiNode<'a> { // TODO totally could split these out into seperate traits (wait... might be complicatin with trait impls)
-    fn draw(&'a mut self, renderer: &Renderer, canvas: Canvas2<'a, '_>) {}
+pub trait GuiNode<'a>: Sized { // TODO totally could split these out into seperate traits (wait... might be complicatin with trait impls)
+    fn draw(self, renderer: &Renderer, canvas: Canvas2<'a, '_>) {}
 
-    fn handle_input_event(&mut self, renderer: &Renderer, event: InputEvent) {}
+    fn handle_input_event(self, renderer: &Renderer, event: InputEvent) {}
 }
 
 pub trait GuiVisitorTarget<'a> {
@@ -299,7 +299,7 @@ impl<'a, M: GuiVisitorSubmapIterMapper, I: SizedGuiBlockSeq<'a>> SizedGuiBlock<'
 mod margin_block {
     use super::*;
 
-    pub fn h_margin_block<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
+    pub fn h_margin_gui_block<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
         HMarginGuiBlock {
             unscaled_margin_min,
             unscaled_margin_max,
@@ -350,7 +350,7 @@ mod margin_block {
     // ==== TODO dedupe somehow ====
 
 
-    pub fn v_margin_block<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, W, DimParentSets> {
+    pub fn v_margin_gui_block<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(unscaled_margin_min: f32, unscaled_margin_max: f32, inner: I) -> impl GuiBlock<'a, W, DimParentSets> {
         VMarginGuiBlock {
             unscaled_margin_min,
             unscaled_margin_max,
@@ -400,6 +400,10 @@ mod margin_block {
 
 
 pub use self::{
+    margin_block::{
+        h_margin_gui_block,
+        v_margin_gui_block,
+    },
     tile_9_block::{
         LoadTile9ImagesConfig,
         Tile9Images,
@@ -410,7 +414,10 @@ pub use self::{
         h_stable_unscaled_dim_size_gui_block,
         v_stable_unscaled_dim_size_gui_block,
     },
-    center_block::center_gui_block,
+    center_block::{
+        h_center_gui_block,
+        v_center_gui_block,
+    },
     stack_block::v_stack_gui_block,
     tile_image_block::tile_image_gui_block,
     modifier_block::modifier_gui_block,
@@ -589,15 +596,15 @@ mod tile_9_block {
     }
 
     impl<'a> GuiNode<'a> for Tile9SizedGuiBlock<'a> {
-        fn draw(&'a mut self, _: &Renderer, mut canvas: Canvas2<'a, '_>) {
+        fn draw(mut self, _: &Renderer, mut canvas: Canvas2<'a, '_>) {
             let half_height = self.size.h / 2.0;
             let half_width = self.size.w / 2.0;
 
-            let top = f32::min(self.size.h * self.block.frac_top * self.scale, half_height);
-            let bottom = f32::min(self.size.h * self.block.frac_bottom * self.scale, half_height);
+            let top = f32::min(self.block.size_unscaled_untiled.h * self.block.frac_top * self.scale, half_height);
+            let bottom = f32::min(self.block.size_unscaled_untiled.h * self.block.frac_bottom * self.scale, half_height);
 
-            let left = f32::min(self.size.w * self.block.frac_left * self.scale, half_width);
-            let right = f32::min(self.size.w * self.block.frac_right * self.scale, half_width);
+            let left = f32::min(self.block.size_unscaled_untiled.w * self.block.frac_left * self.scale, half_width);
+            let right = f32::min(self.block.size_unscaled_untiled.w * self.block.frac_right * self.scale, half_width);
 
             let middle_size = self.size - Vec2 {
                 x: left + right,
@@ -606,14 +613,14 @@ mod tile_9_block {
             let middle_tex_extent = 
                 middle_size
                 / (
-                    Extent2::new(1.0, 1.0)
-                    - Extent2 {
-                        w: self.block.frac_left + self.block.frac_right,
-                        h: self.block.frac_top + self.block.frac_bottom,
+                    Extent2 {
+                        w: 1.0 - (self.block.frac_left + self.block.frac_right),
+                        h: 1.0 - (self.block.frac_top + self.block.frac_bottom),
                     }
                     * self.block.size_unscaled_untiled
                     * self.scale
                 );
+            
 
             for ((is_bottom, is_right), image) in [
                 (false, false),
@@ -813,11 +820,15 @@ mod stable_unscaled_dim_size {
 mod center_block {
     use super::*;
     
-    pub fn center_gui_block<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>>(inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
-        HCenterGuiBlock { inner }
+    pub fn h_center_gui_block<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>>(frac: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
+        HCenterGuiBlock {
+            frac,
+            inner,
+        }
     }
 
     struct HCenterGuiBlock<I> {
+        frac: f32,
         inner: I,
     }
 
@@ -827,7 +838,7 @@ mod center_block {
         fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
             let (inner_w, h_out, inner_sized) = self.inner.size((), h_in, scale);
             let sized = HCenterSizedGuiBlock {
-                x_translate: (w - inner_w) / 2.0,
+                x_translate: (w - inner_w) * self.frac,
                 inner: inner_sized,
             };
             ((), h_out, sized)
@@ -846,6 +857,49 @@ mod center_block {
                 .translate([self.x_translate, 0.0]));
         }
     }
+
+
+    // ==== TODO dedupe somehow ====
+
+
+    pub fn v_center_gui_block<'a, W: DimConstraint, I: GuiBlock<'a, W, DimChildSets>>(frac: f32, inner: I) -> impl GuiBlock<'a, W, DimParentSets> {
+        VCenterGuiBlock {
+            frac,
+            inner,
+        }
+    }
+
+    struct VCenterGuiBlock<I> {
+        frac: f32,
+        inner: I,
+    }
+
+    impl<'a, W: DimConstraint, I: GuiBlock<'a, W, DimChildSets>> GuiBlock<'a, W, DimParentSets> for VCenterGuiBlock<I> {
+        type Sized = VCenterSizedGuiBlock<I::Sized>;
+
+        fn size(self, w_in: W::In, h: f32, scale: f32) -> (W::Out, (), Self::Sized) {
+            let (w_out, inner_h, inner_sized) = self.inner.size(w_in, (), scale);
+            let sized = VCenterSizedGuiBlock {
+                y_translate: (h - inner_h) * self.frac,
+                inner: inner_sized,
+            };
+            (w_out, (), sized)
+        }
+    }
+
+
+    struct VCenterSizedGuiBlock<I> {
+        y_translate: f32,
+        inner: I,
+    }
+
+    impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for VCenterSizedGuiBlock<I> {
+        fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
+            self.inner.visit_nodes(visitor.reborrow()
+                .translate([0.0, self.y_translate]));
+        }
+    }
+
 }
 
 
@@ -961,7 +1015,7 @@ mod tile_image_block {
     }
 
     impl<'a> GuiNode<'a> for SizedTileImageGuiBlock<'a> {
-        fn draw(&'a mut self, _: &Renderer, mut canvas: Canvas2<'a, '_>) {
+        fn draw(mut self, _: &Renderer, mut canvas: Canvas2<'a, '_>) {
             let tex_extent = self.size / (self.block.size_unscaled_untiled * self.scale);
             canvas.reborrow()
                 .draw_image_uv(
@@ -1109,7 +1163,7 @@ mod text_block {
     }
 
     impl<'a> GuiNode<'a> for TextSizedGuiBlock<'a> { // TODO hey hold on, does this reference even have to be 'a?
-        fn draw(&'a mut self, renderer: &Renderer, mut canvas: Canvas2<'a, '_>) {
+        fn draw(mut self, renderer: &Renderer, mut canvas: Canvas2<'a, '_>) {
             let wrap_width =
                 if self.block.wrap { Some(self.size.w) }
                 else { None };
