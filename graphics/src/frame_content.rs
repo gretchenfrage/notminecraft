@@ -66,16 +66,26 @@ pub enum DrawObj3<'a> {
     Mesh(DrawMesh<'a>),
 }
 
+/// Chainable utility for writing to `FrameContent`.
+///
+/// `'a` is the frame content's lifetime, thus meaningfully represents
+/// references to resources used for drawing. `'b` is merely the lifetime of
+/// this canvas.
 #[derive(Debug)]
 pub struct Canvas2<'a, 'b> {
-    target: &'b mut FrameContent<'a>,
-    stack_len: usize,
+    pub target: &'b mut FrameContent<'a>,
+    pub stack_len: usize,
 }
 
+/// Chainable utility for writing to `FrameContent` within a 3D context.
+///
+/// `'a` is the frame content's lifetime, thus meaningfully represents
+/// references to resources used for drawing. `'b` is merely the lifetime of
+/// this canvas.
 #[derive(Debug)]
 pub struct Canvas3<'a, 'b> {
-    target: &'b mut FrameContent<'a>,
-    stack_len: usize,
+    pub target: &'b mut FrameContent<'a>,
+    pub stack_len: usize,
 }
 
 impl<'a> FrameContent<'a> {
@@ -349,14 +359,14 @@ impl<'a, 'b> Canvas2<'a, 'b> {
     pub fn max_y(self, f: f32) -> Self {
         self.modify(Clip2::max_y(f))
     }
-
+    /*
     pub fn modifiers<I: Borrow<[Modifier2]>>(mut self, modifiers: I) -> Self {
         for &modifier in modifiers.borrow() {
             self = self.modify(modifier);
         }
         self
     }
-
+    */
     // TODO draw helpers
     pub fn draw<I: Into<DrawObj2>>(mut self, obj: I) -> Self {
         self.push(FrameItem::Draw2(obj.into()));
