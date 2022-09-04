@@ -136,6 +136,16 @@ impl Transform2 {
         }
     }
 
+    // TODO
+    pub fn reverse(&self) -> Option<Self> {
+        if self.0.determinant() != 0.0 {
+            let inverted = Mat3::from(Mat4::from(self.0).inverted());
+            Some(Transform2(inverted))
+        } else {
+            None
+        }
+    }
+
     /// Compose with another such that
     /// `b.apply(a.apply(v)) == a.compose(b).apply(v)`.
     pub fn then(&self, other: &Self) -> Self {

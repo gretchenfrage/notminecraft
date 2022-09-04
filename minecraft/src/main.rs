@@ -114,6 +114,7 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 WindowEvent::CursorMoved { position, .. } => {
                     let pos = Vec2::new(position.x as f32, position.y as f32);
                     cursor_pos = Some(pos);
+                    game.cursor_moved(pos)?;
                     //game.on_pos_input_event(UiPosInputEvent::CursorMoved(pos)).await?;
                 }
                 WindowEvent::MouseInput { button, state, .. } => {

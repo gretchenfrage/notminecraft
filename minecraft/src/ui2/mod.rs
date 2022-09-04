@@ -19,7 +19,18 @@ use std::{
 use vek::*;
 
 
-pub enum InputEvent {}
+#[derive(Debug, Clone)]
+pub enum InputEvent {
+    CursorMoved(Vec2<f32>),
+}
+
+impl InputEvent {
+    pub fn filter_map_pos<F: Fn(Vec2<f32>) -> Option<Vec2<f32>>>(self, f: F) -> Option<Self> {
+        match self {
+            InputEvent::CursorMoved(pos) => f(pos).map(InputEvent::CursorMoved),
+        }
+    }
+}
 
 
 pub trait GuiNode<'a>: Sized { // TODO totally could split these out into seperate traits (wait... might be complicatin with trait impls)
@@ -427,6 +438,7 @@ pub use self::{
     },
     mc_title_block::McTitleGuiBlock,
     mc_splash_text_block::McSplashTextGuiBlock,
+    cursor_is_over_tracker_block::CursorIsOverTrackerGuiBlock,
 };
 
 mod tile_9_block {
@@ -437,8 +449,8 @@ mod tile_9_block {
 
     /// Specification for how to slice a 9-part tileable image from a base image.
     #[derive(Debug, Clone)]
-    pub struct LoadTile9ImagesConfig {
-        pub raw_image: DynamicImage,
+    pub struct LoadTile9ImagesConfig<'a> {
+        pub raw_image: &'a DynamicImage,
         pub px_start: Vec2<u32>,
         pub px_extent: Extent2<u32>,
         pub px_top: u32,
@@ -447,7 +459,7 @@ mod tile_9_block {
         pub px_right: u32,
     }
 
-    impl LoadTile9ImagesConfig {
+    impl<'a> LoadTile9ImagesConfig<'a> {
         pub fn load(&self, renderer: &Renderer) -> Tile9Images {
             // TODO: we really could do the cropping on GPU relatively easily
             assert!(self.px_top + self.px_bottom < self.px_extent.h);
@@ -1517,6 +1529,55 @@ mod mc_splash_text_block {
                 .scale(self.block.bounce_scale.get().abs() / 16.0 + 1.0)
                 .rotate(f32::to_radians(22.5))
                 .draw_text(&self.block.layed_out);
+        }
+    }
+}
+
+
+mod cursor_is_over_tracker_block {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct CursorIsOverTrackerGuiBlock {
+        pub cursor_is_over: bool,
+    }
+
+    impl CursorIsOverTrackerGuiBlock {
+        pub fn new() -> Self {
+            CursorIsOverTrackerGuiBlock {
+                cursor_is_over: false,
+            }
+        }
+    }
+
+    impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for &'a mut CursorIsOverTrackerGuiBlock {
+        type Sized = CursorIsOverTrackerSizedGuiBlock<'a>;
+
+        fn size(self, w: f32, h: f32, scale: f32) -> ((), (), Self::Sized) {
+            let sized = CursorIsOverTrackerSizedGuiBlock {
+                block: self,
+                size: Extent2 { w, h },
+                scale,
+            };
+            ((), (), sized)
+        }
+    }
+
+    pub struct CursorIsOverTrackerSizedGuiBlock<'a> {
+        block: &'a mut CursorIsOverTrackerGuiBlock,
+        size: Extent2<f32>,
+        scale: f32,
+    }
+
+    impl<'a> GuiNode<'a> for CursorIsOverTrackerSizedGuiBlock<'a> {
+        fn handle_input_event(self, _: &Renderer, event: InputEvent) {
+            if let InputEvent::CursorMoved(pos) = event {
+                self.block.cursor_is_over =
+                    pos.x >= 0.0
+                    && pos.y >= 0.0
+                    && pos.x <= self.size.w
+                    && pos.y <= self.size.h;
+            }
         }
     }
 }
