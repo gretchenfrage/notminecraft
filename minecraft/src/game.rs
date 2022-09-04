@@ -122,8 +122,6 @@ pub struct Game {
     font: FontId,
 
     rng: Pcg64Mcg,
-    //splash_text: UiText,
-    //splash_size: Cosine,
 
     //ui: MainMenu,
     bg_image: GpuImage,
@@ -138,6 +136,11 @@ pub struct Game {
     multiplayer_button_text: TextGuiBlock,
     mods_button_text: TextGuiBlock,
     options_button_text: TextGuiBlock,
+    
+    //splash_text: TextGuiBlock,
+    //splash_size: Cosine,
+
+    splash_text: McSplashTextGuiBlock,
 
     debug_dot: Option<Vec2<f32>>,
 }
@@ -523,6 +526,39 @@ impl Game {
             &mut rng,
             raw_title_pixel_texture,
         );
+        /*
+        let splash_text = TextGuiBlock::new(
+            vec![TextGuiBlockSpan {
+                text: "Information wants to be free!".into(),
+                font,
+                color: Rgba::yellow(),
+            }],
+            32.0,
+            HAlign::Left,
+            VAlign::Top,
+            true,
+        );
+        let splash_size = Cosine::new(1.0 / 2.0);
+*/
+        /*
+         let splash_text = UiText::new(
+            &renderer,
+            UiTextConfig {
+                text: "Splash text!".into(),
+                font,
+                font_size: 32.0,
+                color: Rgba::yellow(),
+                h_align: HAlign::Center,
+                v_align: VAlign::Center,
+            },
+            None,
+            size.scale,
+        );*/
+
+        let splash_text = McSplashTextGuiBlock::new(
+            &renderer,
+            font,
+        );
 
         Ok(Game {
             size,
@@ -548,9 +584,11 @@ impl Game {
             options_button_text,
 
             //splash_text,
-            //splash_size: Cosine::new(1.0 / 2.0),
+            //splash_size,
 
             //ui,
+
+            splash_text,
 
             debug_dot: None,
         })
@@ -573,6 +611,7 @@ impl Game {
         */
 
         self.title_block.update(elapsed);
+        self.splash_text.update(elapsed);
 
         trace!("drawing");
 
@@ -614,7 +653,18 @@ impl Game {
                             [64.0; 2],
                         ),
                     ),
-                    
+                    h_margin_gui_block(
+                        4.0,
+                        4.0,
+                        v_margin_gui_block(
+                            4.0,
+                            4.0,
+                            layer_gui_block((
+                                &mut self.version_text,
+                                &mut self.copyright_text,
+                            )),
+                        ),
+                    ),
                     v_center_gui_block(
                         0.0,
                         v_stack_gui_block(
@@ -625,7 +675,7 @@ impl Game {
                                     h_stable_unscaled_dim_size_gui_block(
                                         500.0,
                                         v_stable_unscaled_dim_size_gui_block(
-                                            150.0,
+                                            200.0,
                                             &self.title_block,
                                         ),
                                     ),
@@ -700,18 +750,7 @@ impl Game {
                             ),
                         ),
                     ),
-                    h_margin_gui_block(
-                        4.0,
-                        4.0,
-                        v_margin_gui_block(
-                            4.0,
-                            4.0,
-                            layer_gui_block((
-                                &mut self.version_text,
-                                &mut self.copyright_text,
-                            )),
-                        ),
-                    ),
+                    &self.splash_text,
                 ))
                 ;
             let ((), (), sized_gui) = gui.size(self.size.w, self.size.h, self.scale);

@@ -52,7 +52,7 @@ pub enum HAlign {
 }
 
 impl HAlign {
-    pub fn sign(self) -> i8 {
+    pub fn sign(self) -> i8 { // TODO make this all a single Sign enum in the first place
         match self {
             HAlign::Left => -1,
             HAlign::Center => 0,
