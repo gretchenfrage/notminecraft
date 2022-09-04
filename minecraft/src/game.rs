@@ -128,6 +128,8 @@ pub struct Game {
     //ui: MainMenu,
     bg_image: GpuImage,
 
+    title_block: McTitleGuiBlock,
+
     button_images: Tile9Images,
 
     version_text: TextGuiBlock,
@@ -516,6 +518,12 @@ impl Game {
             scale,
         );*/
 
+        let title_block = McTitleGuiBlock::new(
+            &renderer,
+            &mut rng,
+            raw_title_pixel_texture,
+        );
+
         Ok(Game {
             size,
             scale,
@@ -527,6 +535,8 @@ impl Game {
             rng,
 
             bg_image,
+
+            title_block,
 
             button_images,
 
@@ -561,6 +571,9 @@ impl Game {
             pos.z = f32::min(0.0, pos.z + 75.0 * elapsed);
         }
         */
+
+        self.title_block.update(elapsed);
+
         trace!("drawing");
 
         let mut frame = FrameContent::new();
@@ -602,70 +615,85 @@ impl Game {
                         ),
                     ),
                     
-                    h_center_gui_block(
-                        0.5,
-                        v_center_gui_block(
+                    v_center_gui_block(
+                        0.0,
+                        v_stack_gui_block(
                             0.0,
-                            h_stable_unscaled_dim_size_gui_block(
-                                400.0,
-                                v_stack_gui_block(
-                                    25.0 / 2.0,
-                                    (
+                            (
+                                h_center_gui_block(
+                                    0.5,
+                                    h_stable_unscaled_dim_size_gui_block(
+                                        500.0,
                                         v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    &self.button_images,
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
-                                                ),
-                                                &mut self.singleplayer_button_text,
-                                            )),
+                                            150.0,
+                                            &self.title_block,
                                         ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    &self.button_images,
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
+                                    ),
+                                ),
+                                h_center_gui_block(
+                                    0.5,
+                                    h_stable_unscaled_dim_size_gui_block(
+                                        400.0,
+                                        v_stack_gui_block(
+                                            25.0 / 2.0,
+                                            (
+                                                v_stable_unscaled_dim_size_gui_block(
+                                                    40.0,
+                                                    layer_gui_block((
+                                                        tile_9_gui_block(
+                                                            &self.button_images,
+                                                            Extent2::new(200.0, 20.0) * 2.0,
+                                                            2.0 / 20.0,
+                                                            3.0 / 20.0,
+                                                            2.0 / 200.0,
+                                                            2.0 / 200.0,
+                                                        ),
+                                                        &mut self.singleplayer_button_text,
+                                                    )),
                                                 ),
-                                                &mut self.multiplayer_button_text,
-                                            )),
-                                        ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    &self.button_images,
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
+                                                v_stable_unscaled_dim_size_gui_block(
+                                                    40.0,
+                                                    layer_gui_block((
+                                                        tile_9_gui_block(
+                                                            &self.button_images,
+                                                            Extent2::new(200.0, 20.0) * 2.0,
+                                                            2.0 / 20.0,
+                                                            3.0 / 20.0,
+                                                            2.0 / 200.0,
+                                                            2.0 / 200.0,
+                                                        ),
+                                                        &mut self.multiplayer_button_text,
+                                                    )),
                                                 ),
-                                                &mut self.mods_button_text,
-                                            )),
-                                        ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    &self.button_images,
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
+                                                v_stable_unscaled_dim_size_gui_block(
+                                                    40.0,
+                                                    layer_gui_block((
+                                                        tile_9_gui_block(
+                                                            &self.button_images,
+                                                            Extent2::new(200.0, 20.0) * 2.0,
+                                                            2.0 / 20.0,
+                                                            3.0 / 20.0,
+                                                            2.0 / 200.0,
+                                                            2.0 / 200.0,
+                                                        ),
+                                                        &mut self.mods_button_text,
+                                                    )),
                                                 ),
-                                                &mut self.options_button_text,
-                                            )),
+                                                v_stable_unscaled_dim_size_gui_block(
+                                                    40.0,
+                                                    layer_gui_block((
+                                                        tile_9_gui_block(
+                                                            &self.button_images,
+                                                            Extent2::new(200.0, 20.0) * 2.0,
+                                                            2.0 / 20.0,
+                                                            3.0 / 20.0,
+                                                            2.0 / 200.0,
+                                                            2.0 / 200.0,
+                                                        ),
+                                                        &mut self.options_button_text,
+                                                    )),
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
