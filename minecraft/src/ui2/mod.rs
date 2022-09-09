@@ -15,13 +15,195 @@ use graphics::{
 use std::{
     borrow::Borrow,
     ops::Index,
+    collections::BTreeSet;
 };
 use vek::*;
+use winit_main::event::{
+    ElementState,
+    VirtualKeyCode,
+    ScanCode,
+    MouseButton,
+};
 
 
 #[derive(Debug, Clone)]
+pub struct GuiContext<'r, 'p> {
+    /// The renderer, for loading graphics resources.
+    pub renderer: &'r Renderer,
+
+    /// Set of pressed mouse buttons. Updates regardless of focus level.
+    pub pressed_mouse_buttons: &'p BTreeSet<MouseButton>,
+    /// Set of pressed keys, by semantic identifier. Updates regardless of focus level.
+    pub pressed_keys_semantic: &'p BTreeSet<VirtualKeyCode>,
+    /// Set of pressed keys, by physical identifier. Updates regardless of focus level.
+    pub pressed_keys_physical: &'p BTreeSet<ScanCode>,
+
+    /// Current focus level of node's space.
+    pub focus_level: FocusLevel,
+
+    /// Current position of cursor in node's space, if one currently exists.
+    pub cursor_pos: Option<Vec2<f32>>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum FocusLevel {
+    /// Space is not focused.
+    ///
+    /// Cursor may or may not exist in this space. If one does, cursor input
+    /// events will be received. Focus input events will not be received.
+    /// Captured mouse events will not be received.
+    Unfocused,
+    /// Space is focused, but not mouse-captured.
+    ///
+    /// Cursor may or may not exist in this space. If one does, cursor input
+    /// events will be received. Focus input events will be received. Captured
+    /// mouse events will not be received.
+    Focused,
+    /// Space is mouse-captured (focused + cursor is grabbed and hidden).
+    ///
+    /// Cursor will not exist in this space, so no cursor input events will be
+    /// received. Focus input events will be received. Captured mouse events
+    /// will be received.
+    MouseCaptured,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum CursorEventConsumed {
+    Consumed,
+    NotConsumed,
+}
+
+/// Amount of scrolling.
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub enum ScrolledAmount {
+    /// Scrolling in pixels, such as from a trackpad.
+    Pixels(Vec2<f32>),
+    /// Scrolling in lines, such as from a traditional mouse wheel.
+    Lines(Vec2<f32>),
+}
+
+pub trait GuiNode<'a>: Sized {
+    /// Draw to the canvas.
+    fn draw(self, ctx: &GuiContext, canvas: Canvas2<'a, '_>) {}
+
+    /// Called when mouse button is pressed down and:
+    /// - window is focused, but not cursor-captured
+    /// - cursor pos is not clipped or otherwise modified out of this node's space
+    ///
+    /// Guaranteed that `ctx.cursor_pos == Some(pos)`.
+    ///
+    /// For logic regarding something happening during a period where a mouse
+    /// button is being depressed, should use `ctx.pressed_mouse_buttons` and
+    /// `ctx.focus_level`.
+    fn on_cursor_click(self, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>) -> CursorEventConsumed;
+
+    /// Called when scrolling occurs and _either_:
+    /// - cursor pos is over window and not clipped or otherwise modified out of this node's space
+    /// - window is cursor-capturedkk
+    fn on_cursor_scroll(self, ctx: &GuiContext, amount: ScrolledAmount) -> CursorEventConsumed;
+}
+
+pub trait GuiStateFrame<'a> {
+    fn size_visit_nodes<T: GuiVisitorTarget<'a>>(
+        &'a mut self,
+        size: Extent2<f32>,
+        scale: f32,
+        visitor: GuiVisitor<'_, T>,
+    )
+    where
+        Self: Sized;
+
+    fn on_keyboard_key_press(&mut self, ctx: &GuiContext, key_semantic: Option<VirtualKeyCode>, key_physical: ScanCode);
+
+    fn on_character_input(&mut self, ctx: &GuiContext, c: char);
+
+    fn on_captured_mouse_click(&mut self, ctx: &GuiContext, button: MouseButton);
+
+    fn on_captured_mouse_move(&mut self, ctx: &GuiContext, amount: Vec2<f32>);
+
+    fn on_captured_mouse_scroll(&mut self, ctx: &GuiContext, amount: ScrolledAmount);
+}
+
+/*
+#[derive(Debug, Clone)]
+pub struct GuiContext<'r, 'p> {
+    /// Set of pressed mouse buttons. Updates regardless of focus level.
+    pub pressed_mouse_buttons: &'p BTreeSet<MouseButton>,
+    /// Set of pressed keys, by semantic identifier. Updates regardless of focus level.
+    pub pressed_keys_semantic: &'p BTreeSet<VirtualKeyCode>,
+    /// Set of pressed keys, by physical identifier. Updates regardless of focus level.
+    pub pressed_keys_physical: &'p BTreeSet<ScanCode>,
+    pub renderer: &'r Renderer,
+    /// Window's current focus level.
+    pub focus_level: FocusLevel,
+    /// Current cursor position on screen, if any.
+    pub cursor_pos: Option<Vec2<f32>>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum FocusLevel {
+    /// Window is not focused, cursor is free.
+    Unfocused,
+    /// Window is focused, cursor is still free.
+    Focused,
+    /// Window is focused and cursor is grabbed and hidden.
+    MouseCaptured,
+}
+
+/*
+#[derive(Debug, Clone)]
 pub enum InputEvent {
-    CursorMoved(Vec2<f32>),
+    /// Mouse button was pressed or released.
+    MouseButtonStateChanged {
+        state: ElementState,
+        button: MouseButton,
+    },
+    /// Virtual cursor was moved.
+    CursorMoved {
+        /// Old position on screen.
+        old_pos: Option<Vec2<f32>>,
+        /// New position on screen.
+        new_pos: Vec2<f32>,
+    },
+    /// Physical mouse was moved.
+    MouseMoved {
+        /// Position change in unspecific units.
+        amount: Vec<f32>,
+    },
+    /// Scrolling occurred.
+    Scrolled {
+        /// Amount of scrolling.
+        amount: ScrolledAmount,
+    }
+    /// Keyboard key was pressed or released.
+    KeyboardKeyStateChanged {
+        /// Whether pressed or released.
+        state: ElementState,
+        /// Semantic identifier of key, if any.
+        key_semantic: Option<VirtualKeyCode>,
+        /// Physical identifier of key.
+        key_physical: ScanCode,
+    },
+    /// A unicode character was inputted to the window.
+    CharacterInput(char),
+}*/
+
+/// Amount of scrolling.
+#[derive(Debug, Copy, Clone)]
+pub enum ScrolledAmount {
+    /// Scrolling in pixels, such as from a trackpad.
+    Pixels(Vec2<f32>),
+    /// Scrolling in lines, such as from a traditional mouse wheel.
+    Lines(Vec2<f32>),
+}
+
+impl ScrolledAmount {
+    pub fn to_pixels(self, pixels_per_line: f32) -> Self {
+        match self {
+            ScrolledAmount::Pixels(amount) => amount,
+            ScrolledAmount::Lines(amount) => amount * pixels_per_line,
+        }
+    }
 }
 
 impl InputEvent {
@@ -33,12 +215,62 @@ impl InputEvent {
 }
 
 
-pub trait GuiNode<'a>: Sized { // TODO totally could split these out into seperate traits (wait... might be complicatin with trait impls)
-    fn draw(self, renderer: &Renderer, canvas: Canvas2<'a, '_>) {}
+pub trait GuiNode<'a>: Sized {
+    /// Draw to the canvas.
+    fn draw(self, ctx: &GuiContext, canvas: Canvas2<'a, '_>) {}
 
-    fn handle_input_event(self, renderer: &Renderer, event: InputEvent) {}
+    /// Called when mouse button is pressed down and:
+    /// - window is focused, but not cursor-captured
+    /// - cursor pos is not clipped or otherwise modified out of this node's space
+    ///
+    /// Guaranteed that `ctx.cursor_pos == Some(pos)`.
+    ///
+    /// For logic regarding something happening during a period where a mouse
+    /// button is being depressed, should use `ctx.pressed_mouse_buttons` and
+    /// `ctx.focus_level`.
+    fn on_cursor_press(self, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>);
+
+    /// Called when a mouse button is pressed down and window is cursor-captured.
+    ///
+    /// Guaranteed that `button` in `ctx.pressed_mouse_buttons`.
+    fn on_captured_mouse_press(self, ctx: &GuiContext, button: MouseButton);
+
+    /// Called upon a physical mouse movement while the window is cursor-captured.
+    ///
+    /// Units are unspecified.
+    fn on_captured_mouse_movement(self, ctx: &GuiContext, amount: Vec2<f32>);
+
+    /// Called when scrolling occurs and _either_:
+    /// - cursor pos is over window and not clipped or otherwise modified out of this node's space
+    /// - window is cursor-capturedkk
+    fn on_cursor_scroll(self, ctx: &GuiContext, amount: ScrolledAmount);
+
+    /*
+    /// Called when any mouse button is pressed while the window is focused.
+    ///
+    /// For logic that corresponds to a period of a mouse button being depressed, should use
+    /// `ctx.pressed_mouse_buttons` instead. 
+    fn on_mouse_button_pressed(self, ctx: &GuiContext, button: MouseButton);
+
+    /// Called when the cursor changes position, whether or not the window is focused.
+    fn on_cursor_moved(self, ctx: &GuiContext, old_pos: Option<Vec2<f32>>, new_pos: Vec2<f32>);
+
+    /// Called upon physical mouse movement while the window is cursor-captured.
+    fn on_mouse_movement(self, ctx: &GuiContext, amount: Vec2<f32>);
+
+    /// Called when scrolling occurs while the window is focused or the cursor is over the window.
+    fn on_scrolled(self, ctx: &GuiContext, amount: ScrolledAmount);
+
+    /// Called when any keyboard key is pressed while the window is focused.
+    ///
+    /// For logic that corresponds to a period of a key being depressed, should use
+    /// `ctx.pressed_keys_semantic` and `ctx.pressed_keys_physical` instead.
+    fn on_keyboard_key_pressed(self, ctx: &GuiContext, key_semantic: Option<VirtualKeyCode>, key_physical: ScanCode);
+
+    /// Called upon a unicode character being inputted into the window.
+    fn on_character_input(self, ctx: &GuiContext, c: char);*/
 }
-
+*/
 pub trait GuiVisitorTarget<'a> {
     fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2);
 
