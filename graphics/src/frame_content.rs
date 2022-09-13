@@ -10,7 +10,6 @@ use crate::{
     },
     view_proj::ViewProj,
 };
-use std::borrow::Borrow;
 use vek::*;
 
 
@@ -359,15 +358,7 @@ impl<'a, 'b> Canvas2<'a, 'b> {
     pub fn max_y(self, f: f32) -> Self {
         self.modify(Clip2::max_y(f))
     }
-    /*
-    pub fn modifiers<I: Borrow<[Modifier2]>>(mut self, modifiers: I) -> Self {
-        for &modifier in modifiers.borrow() {
-            self = self.modify(modifier);
-        }
-        self
-    }
-    */
-    // TODO draw helpers
+
     pub fn draw<I: Into<DrawObj2>>(mut self, obj: I) -> Self {
         self.push(FrameItem::Draw2(obj.into()));
         self

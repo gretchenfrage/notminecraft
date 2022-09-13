@@ -48,6 +48,7 @@ use std::{
     path::Path,
     sync::Arc,
     borrow::Borrow,
+    fmt::{self, Debug, Formatter},
 };
 use anyhow::Result;
 use tracing::*;
@@ -96,6 +97,12 @@ pub struct Renderer {
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
+}
+
+impl Debug for Renderer {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("Renderer")
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

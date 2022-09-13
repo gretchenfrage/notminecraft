@@ -3,11 +3,7 @@
 
 
 use crate::{
-    game::Game,
-/*    ui::{
-        UiSize,
-        UiPosInputEvent,
-    },*/
+    //game::Game,
 };
 use graphics::Renderer;
 use std::{
@@ -41,10 +37,10 @@ use vek::*;
 extern crate tracing;
 
 
-mod game;
+//mod game;
+mod util;
 mod jar_assets;
-//mod ui;
-mod ui2;
+mod gui;
 
 
 fn main() {
@@ -73,23 +69,24 @@ fn main() {
 }
 
 async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> Result<()> {
-    let window = event_loop.create_window(Game::window_config().await?).await?;
+    let window = event_loop.create_window(Default::default() /*Game::window_config().await?*/).await?;
     let window = Arc::new(window);
     let size = window.inner_size();
     let size = Extent2::new(size.width, size.height);
     let renderer = Renderer::new(Arc::clone(&window)).await?;
+    /*
     let mut game = Game::new(
         renderer,
         size,
         window.scale_factor() as f32,
     ).await?;
-
+    */
     let frames_per_second = 60;
     let frame_delay = Duration::from_secs(1) / frames_per_second;
 
     let mut last_frame_instant = None;
 
-    let mut cursor_pos = None;
+    //let mut cursor_pos = None;
 
     loop {
         let event = events.recv().await;
@@ -102,38 +99,13 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                         trace!("not resizing window because of 0 size"); // TODO factor in
                     } else {
                         trace!("resizing window");
-                        game.set_size(Extent2::new(size.width, size.height)).await?;
-                    }
-                }
-                WindowEvent::KeyboardInput { input, .. } => {
-                    game.keyboard_input(input).await?;
-                }
-                WindowEvent::MouseWheel { delta, .. } => {
-                    game.mouse_wheel(delta).await?;
-                }
-                WindowEvent::CursorMoved { position, .. } => {
-                    let pos = Vec2::new(position.x as f32, position.y as f32);
-                    cursor_pos = Some(pos);
-                    game.cursor_moved(pos)?;
-                    //game.on_pos_input_event(UiPosInputEvent::CursorMoved(pos)).await?;
-                }
-                WindowEvent::MouseInput { button, state, .. } => {
-                    if let Some(pos) = cursor_pos {
-                        /*
-                        let event = UiPosInputEvent::MouseInput {
-                            pos,
-                            button,
-                            state,
-                        };*/
-                        //game.on_pos_input_event(event).await?;
-                    } else {
-                        debug!("MouseInput event with no previous CursorMoved events");
+                        //game.set_size(Extent2::new(size.width, size.height)).await?;
                     }
                 }
                 _ => (),
             },
             Event::UserEvent(UserEvent::ScaleFactorChanged { scale_factor, .. }) => {
-                game.set_scale(scale_factor as f32).await?;
+                //game.set_scale(scale_factor as f32).await?;
             }
             Event::MainEventsCleared => {
                 // track time
@@ -145,11 +117,13 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
                 let elapsed = (elapsed.as_nanos() as f64 / 1000000000.0) as f32;
 
                 // draw frame
+                /*
                 trace!("drawing frame");
                 let result = game.draw(elapsed).await;                
                 if let Err(e) = result {
                     error!(error=%e, "draw_frame error");
                 }
+                */
 
                 // unblock
                 debug_assert!(matches!(
