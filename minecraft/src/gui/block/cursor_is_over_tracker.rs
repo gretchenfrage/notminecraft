@@ -1,18 +1,50 @@
 
 use crate::gui::{
-    GuiNode,
     GuiContext,
-    block::{
-        GuiBlock,
-        DimParentSets,
-    },
+    block::SimpleGuiNode,
 };
+use vek::*;
 
 
-struct TrackCursorIsOver<'v> {
+
+struct CursorIsOverTracker<'v> {
     var: &'v mut bool,
 }
 
+impl<'a, 'v> SimpleGuiNode<'a> for CursorIsOverTracker<'v> {
+    fn clips_cursor(&self, _size: Extent2<f32>, _scale: f32, pos: Vec2<f32>) -> bool { false }
+
+    fn on_cursor_change(self, size: Extent2<f32>, _scale: f32, ctx: &GuiContext) {
+        let cursor_is_over = ctx
+            .cursor
+            .map(|cursor| cursor.unclipped
+                && cursor.pos.x >= 0.0
+                && cursor.pos.y >= 0.0
+                && cursor.pos.x <= size.w
+                && cursor.pos.y <= size.h
+            )
+            .unwrap_or(false);
+        *self.var = cursor_is_over;
+    }
+}
+
+
+
+#[test]
+fn test_is_gui_block() {
+    use crate::gui::block::{
+        DimParentSets,
+        GuiBlock,
+    };
+    
+    fn assert_impls<'a, T: GuiBlock<'a, DimParentSets, DimParentSets>>() {}
+
+    fn posit_lifetimes<'a, 'v>() {
+        assert_impls::<'a, CursorIsOverTracker<'v>>();
+    }
+}
+
+/*
 impl<'v> GuiBlock<'v, DimParentSets, DimParentSets> for TrackCursorIsOver<'v> {
     type Sized = TrackCursorIsOverSized<'v>;
 
@@ -47,7 +79,7 @@ impl<'a, 'v> GuiNode<'a> for TrackCursorIsOverSized<'v> {
             .unwrap_or(false);
         *self.block.var = cursor_is_over;
     }
-}
+}*/
 
 /*
 struct CursorIsOverTracker {

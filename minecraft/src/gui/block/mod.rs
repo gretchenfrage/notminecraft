@@ -3,13 +3,18 @@ use super::{
     GuiNode,
     GuiVisitor,
     GuiVisitorTarget,
+    GuiContext,
+    MouseButton,
+    ScrolledAmount,
 };
+use graphics::frame_content::Canvas2;
 use std::ops::Index;
+use vek::*;
 
 
 //mod mc;
 mod center;
-//mod cursor_is_over_trakcer;
+mod cursor_is_over_tracker;
 //mod layer;
 //mod margin;
 //mod modifier;
@@ -59,10 +64,99 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
 pub trait SizedGuiBlock<'a> {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>);
 }
-
+/*
 impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
         visitor.visit_node(self);
+    }
+}
+*/
+
+// ==== "simple" ((sized) block) / node utility ====
+
+
+pub trait SimpleGuiBlock<'a> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, size: Extent2<f32>, scale: f32, visitor: GuiVisitor<'_, T>);
+}
+
+pub struct SimpleSizedGuiBlock<B> {
+    block: B,
+    size: Extent2<f32>,
+    scale: f32,
+}
+
+impl<'a, B: SimpleGuiBlock<'a>> GuiBlock<'a, DimParentSets, DimParentSets> for B {
+    type Sized = SimpleSizedGuiBlock<B>;
+
+    fn size(self, w: f32, h: f32, scale: f32) -> ((), (), Self::Sized) {
+        let sized = SimpleSizedGuiBlock {
+            block: self,
+            size: Extent2 { w, h },
+            scale,
+        };
+        ((), (), sized)
+    }
+}
+
+impl<'a, B: SimpleGuiBlock<'a>> SizedGuiBlock<'a> for SimpleSizedGuiBlock<B> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
+        self.block.visit_nodes(self.size, self.scale, visitor);
+    }
+}
+
+pub trait SimpleGuiNode<'a>: Sized {
+    fn clips_cursor(&self, size: Extent2<f32>, _: f32, pos: Vec2<f32>) -> bool {
+        pos.x >= 0.0
+            && pos.y >= 0.0
+            && pos.x <= size.w
+            && pos.y <= size.h
+    }
+
+    fn draw(self, size: Extent2<f32>, scale: f32, ctx: &GuiContext, canvas: Canvas2<'a, '_>) {}
+
+    fn on_cursor_press(self, size: Extent2<f32>, scale: f32, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>) {}
+
+    fn on_cursor_release(self, size: Extent2<f32>, scale: f32, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>) {}
+
+    fn on_cursor_scroll(self, size: Extent2<f32>, scale: f32, ctx: &GuiContext, amount: ScrolledAmount, pos: Vec2<f32>) {}
+
+    fn on_cursor_change(self, size: Extent2<f32>, scale: f32, ctx: &GuiContext) {}
+}
+
+impl<'a, B: SimpleGuiNode<'a>> GuiNode<'a> for SimpleSizedGuiBlock<B> {
+    fn clips_cursor(&self, pos: Vec2<f32>) -> bool {
+        self.block.clips_cursor(self.size, self.scale, pos)
+    }
+
+    fn draw(self, ctx: &GuiContext, canvas: Canvas2<'a, '_>) {
+        self.block.draw(self.size, self.scale, ctx, canvas)
+    }
+
+    fn on_cursor_press(self, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>) {
+        self.block.on_cursor_press(self.size, self.scale, ctx, button, pos)
+    }
+
+    fn on_cursor_release(self, ctx: &GuiContext, button: MouseButton, pos: Vec2<f32>) {
+        self.block.on_cursor_release(self.size, self.scale, ctx, button, pos)
+    }
+
+    fn on_cursor_scroll(self, ctx: &GuiContext, amount: ScrolledAmount, pos: Vec2<f32>) {
+        self.block.on_cursor_scroll(self.size, self.scale, ctx, amount, pos)
+    }
+
+    fn on_cursor_change(self, ctx: &GuiContext) {
+        self.block.on_cursor_change(self.size, self.scale, ctx)
+    }
+}
+
+impl<'a, B: SimpleGuiNode<'a>> SimpleGuiBlock<'a> for B {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, size: Extent2<f32>, scale: f32, visitor: GuiVisitor<'_, T>) {
+        visitor
+            .visit_node(SimpleSizedGuiBlock {
+                block: self,
+                size,
+                scale,
+            });
     }
 }
 
