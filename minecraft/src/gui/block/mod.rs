@@ -19,7 +19,7 @@ mod cursor_is_over_tracker;
 mod layer;
 mod margin;
 mod modify;
-//mod stable_unscaled_dim_size;
+mod stable_unscaled_size;
 //mod stack;
 //mod text;
 //mod tile_9;
@@ -33,6 +33,7 @@ pub use self::{
     layer::layer,
     margin::{h_margin, v_margin},
     modify::modify,
+    stable_unscaled_size::{h_stable_unscaled_size, v_stable_unscaled_size},
 };
 
 
