@@ -18,7 +18,7 @@ mod center;
 mod cursor_is_over_tracker;
 mod layer;
 mod margin;
-//mod modifier;
+mod modify;
 //mod stable_unscaled_dim_size;
 //mod stack;
 //mod text;
@@ -32,6 +32,7 @@ pub use self::{
     cursor_is_over_tracker::cursor_is_over_tracker,
     layer::layer,
     margin::{h_margin, v_margin},
+    modify::modify,
 };
 
 
