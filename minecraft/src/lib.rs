@@ -1,10 +1,7 @@
 
 #![feature(array_zip)]
 
-
-use crate::{
-    //game::Game,
-};
+/*
 use graphics::Renderer;
 use std::{
     panic,
@@ -32,17 +29,19 @@ use tokio::time::sleep;
 use backtrace::Backtrace;
 use anyhow::*;
 use vek::*;
+*/
 
+/*
 #[macro_use]
 extern crate tracing;
-
+*/
 
 //mod game;
-mod util;
-mod jar_assets;
-mod gui;
+pub mod util;
+pub mod jar_assets;
+pub mod gui;
 
-
+/*
 fn main() {
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
@@ -148,3 +147,4 @@ async fn window_main(event_loop: EventLoopHandle, mut events: EventReceiver) -> 
 
     Ok(())
 }
+*/

@@ -6,17 +6,9 @@ use graphics::{
         Transform2,
         Clip2,
     },
-    frame_content::{
-        FrameContent,
-        FrameItem,
-        Canvas2,
-    },
+    frame_content::Canvas2,
 };
-use std::{
-    borrow::Borrow,
-    ops::Index,
-    collections::BTreeSet,
-};
+use std::collections::BTreeSet;
 use vek::*;
 
 
@@ -30,6 +22,7 @@ pub use winit_main::reexports::event::{
 };
 
 
+#[allow(unused_variables)]
 pub trait GuiNode<'a>: Sized {
     /// Whether this node makes a cursor at the given position, in this node's
     /// space, be considered clipped from the nodes beneath this one.
@@ -112,12 +105,6 @@ pub enum FocusLevel {
     MouseCaptured,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub enum CursorEventConsumed {
-    Consumed,
-    NotConsumed,
-}
-
 /// Amount of scrolling.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ScrolledAmount {
@@ -125,6 +112,15 @@ pub enum ScrolledAmount {
     Pixels(Vec2<f32>),
     /// Scrolling in lines, such as from a traditional mouse wheel.
     Lines(Vec2<f32>),
+}
+
+impl ScrolledAmount {
+    pub fn to_pixels(self, font_size: impl Into<Extent2<f32>>) -> Vec2<f32> {
+        match self {
+            ScrolledAmount::Pixels(v) => v,
+            ScrolledAmount::Lines(l) => l * font_size.into(),
+        }
+    }
 }
 
 /*
@@ -216,7 +212,7 @@ impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
         self.modify(Clip2::max_y(f))
     }
 
-    pub fn visit_node<I: GuiNode<'a>>(mut self, node: I) -> Self {
+    pub fn visit_node<I: GuiNode<'a>>(self, node: I) -> Self {
         self.target.visit_node(self.stack_len, node);
         self
     }

@@ -13,10 +13,11 @@ use vek::*;
 
 
 //mod mc;
+mod axis_swap;
 mod center;
 mod cursor_is_over_tracker;
-//mod layer;
-//mod margin;
+mod layer;
+mod margin;
 //mod modifier;
 //mod stable_unscaled_dim_size;
 //mod stack;
@@ -26,7 +27,11 @@ mod cursor_is_over_tracker;
 
 
 pub use self::{
+    axis_swap::axis_swap,
     center::{h_center, v_center},
+    cursor_is_over_tracker::cursor_is_over_tracker,
+    layer::layer,
+    margin::{h_margin, v_margin},
 };
 
 
@@ -104,8 +109,9 @@ impl<'a, B: SimpleGuiBlock<'a>> SizedGuiBlock<'a> for SimpleSizedGuiBlock<B> {
     }
 }
 
+#[allow(unused_variables)]
 pub trait SimpleGuiNode<'a>: Sized {
-    fn clips_cursor(&self, size: Extent2<f32>, _: f32, pos: Vec2<f32>) -> bool {
+    fn clips_cursor(&self, size: Extent2<f32>, scale: f32, pos: Vec2<f32>) -> bool {
         pos.x >= 0.0
             && pos.y >= 0.0
             && pos.x <= size.w
@@ -210,12 +216,12 @@ macro_rules! gui_seq_tuple {
             >(self, w_in_seq: WInSeq, h_in_seq: HInSeq, scale_seq: ScaleSeq) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq) {
                 let ( $( $a, )* ) = self;
 
-                let mut w_in_iter = w_in_seq.into_iter();
-                let mut h_in_iter = h_in_seq.into_iter();
-                let mut scale_iter = scale_seq.into_iter();;
+                let mut _w_in_iter = w_in_seq.into_iter();
+                let mut _h_in_iter = h_in_seq.into_iter();
+                let mut _scale_iter = scale_seq.into_iter();
 
                 $(
-                let ($a_w_out, $a_h_out, $a_sized) = $a.size(w_in_iter.next().unwrap(), h_in_iter.next().unwrap(), scale_iter.next().unwrap());
+                let ($a_w_out, $a_h_out, $a_sized) = $a.size(_w_in_iter.next().unwrap(), _h_in_iter.next().unwrap(), _scale_iter.next().unwrap());
                 )*
 
                 let w_out_seq = [ $( $a_w_out, )* ];
@@ -230,11 +236,11 @@ macro_rules! gui_seq_tuple {
             'a,
             $( $A: SizedGuiBlock<'a>, )*
         > SizedGuiBlockSeq<'a> for ( $( $A, )* ) {
-            fn visit_items_nodes<I: GuiVisitorIter<'a>>(self, mut visitors: I) {
+            fn visit_items_nodes<I: GuiVisitorIter<'a>>(self, mut _visitors: I) {
                 let ( $( $a, )* ) = self;
 
                 $(
-                $a.visit_nodes(visitors.next());
+                $a.visit_nodes(_visitors.next());
                 )*
             }
         }
