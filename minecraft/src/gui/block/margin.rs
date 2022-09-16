@@ -12,28 +12,34 @@ use crate::gui::{
 };
 
 
+/// Gui block with a parent-set width that puts a left and right margin around
+/// its child (of constant pre-scale size), setting the child's width to a
+/// smaller value. Passes through the height constraint.
 pub fn h_margin<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(
-    unscaled_margin_low: f32,
-    unscaled_margin_high: f32,
+    unscaled_margin_left: f32,
+    unscaled_margin_right: f32,
     inner: I,
 ) -> impl GuiBlock<'a, DimParentSets, H> {
     HMargin {
-        unscaled_margin_low,
-        unscaled_margin_high,
+        unscaled_margin_left,
+        unscaled_margin_right,
         inner,
     }
 }
 
 
+/// Gui block with a parent-set height that puts a top and bottom margin around
+/// its child (of constant pre-scale size), setting the child's height to a
+/// smaller value. Passes through the width constraint.
 pub fn v_margin<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(
-    unscaled_margin_low: f32,
-    unscaled_margin_high: f32,
+    unscaled_margin_top: f32,
+    unscaled_margin_bottom: f32,
     inner: I,
 ) -> impl GuiBlock<'a, W, DimParentSets> {
     axis_swap(
         h_margin(
-            unscaled_margin_low,
-            unscaled_margin_high,
+            unscaled_margin_top,
+            unscaled_margin_bottom,
             axis_swap(inner),
         ),
     )

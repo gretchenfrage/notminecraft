@@ -7,6 +7,9 @@ use crate::gui::{
         DimConstraint,
         GuiBlock,
         SizedGuiBlock,
+        GuiBlockSeq,
+        SizedGuiBlockSeq,
+        GuiVisitorIter,
     },
 };
 use vek::*;
@@ -20,6 +23,16 @@ pub fn axis_swap<
     H: DimConstraint,
     I: GuiBlock<'a, W, H>,
 >(inner: I) -> impl GuiBlock<'a, H, W> {
+    AxisSwap { inner }
+}
+
+/// Sequence equivalent of `axis_swap`.
+pub fn axis_swap_seq<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    I: GuiBlockSeq<'a, W, H>,
+>(inner: I) -> impl GuiBlockSeq<'a, H, W> {
     AxisSwap { inner }
 }
 
@@ -64,5 +77,66 @@ impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for AxisSwap<I> {
                 1.0, 0.0, 0.0,
                 0.0, 0.0, 1.0,
             ))));
+    }
+}
+
+impl<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    I: GuiBlockSeq<'a, H, W>,
+> GuiBlockSeq<'a, W, H> for AxisSwap<I> {
+    type SizedSeq = AxisSwap<I::SizedSeq>;
+    type WOutSeq = I::HOutSeq;
+    type HOutSeq = I::WOutSeq;
+
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn size_all<
+        WInSeq: IntoIterator<Item=W::In>,
+        HInSeq: IntoIterator<Item=H::In>,
+        ScaleSeq: IntoIterator<Item=f32>,
+    >(
+        self,
+        w_in_seq: WInSeq,
+        h_in_seq: HInSeq,
+        scale_seq: ScaleSeq,
+    ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq) {
+        let (
+            inner_w_out_seq,
+            inner_h_out_seq,
+            inner_sized_seq,
+        ) = self.inner.size_all(h_in_seq, w_in_seq, scale_seq);
+        let sized = AxisSwap { inner: inner_sized_seq };
+        (inner_h_out_seq, inner_w_out_seq, sized)
+    }
+}
+
+impl<'a, I: SizedGuiBlockSeq<'a>> SizedGuiBlockSeq<'a> for AxisSwap<I> {
+    fn visit_items_nodes<It: GuiVisitorIter<'a>>(self, visitors: It) {
+        self.inner
+            .visit_items_nodes(AxisSwapGuiVisitorIter {
+                inner: visitors,
+            })
+    }
+}
+
+pub struct AxisSwapGuiVisitorIter<I> {
+    inner: I,
+}
+
+impl<'a, I: GuiVisitorIter<'a>> GuiVisitorIter<'a> for AxisSwapGuiVisitorIter<I> {
+    type Target = I::Target;
+
+    fn next<'b>(&'b mut self) -> GuiVisitor<'b, Self::Target> {
+        self.inner
+            .next()
+            .modify(Transform2(Mat3::new(
+                0.0, 1.0, 0.0,
+                1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0,
+            )))
     }
 }

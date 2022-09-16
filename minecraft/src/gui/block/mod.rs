@@ -20,24 +20,29 @@ mod layer;
 mod margin;
 mod modify;
 mod stable_unscaled_size;
-//mod stack;
+mod stack;
 //mod text;
 //mod tile_9;
 //mod tile_image;
 
 
 pub use self::{
-    axis_swap::axis_swap,
+    axis_swap::{
+        axis_swap,
+        axis_swap_seq,
+    },
     center::{h_center, v_center},
     cursor_is_over_tracker::cursor_is_over_tracker,
     layer::layer,
     margin::{h_margin, v_margin},
     modify::modify,
     stable_unscaled_size::{h_stable_unscaled_size, v_stable_unscaled_size},
+    stack::{v_stack, h_stack},
 };
 
 
 // ==== dim constraint definition ====
+
 
 pub trait DimConstraint {
     type In;
@@ -71,6 +76,7 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
 pub trait SizedGuiBlock<'a> {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>);
 }
+
 /*
 impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
