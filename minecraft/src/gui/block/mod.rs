@@ -1,11 +1,16 @@
 
 use super::{
-    GuiNode,
-    GuiVisitor,
-    GuiVisitorTarget,
-    GuiContext,
-    MouseButton,
-    ScrolledAmount,
+    context::{
+        GuiContext,
+        GuiGlobalContext,
+        MouseButton,
+        ScrolledAmount,
+    },
+    node::{
+        GuiNode,
+        GuiVisitor,
+        GuiVisitorTarget,
+    },
 };
 use graphics::frame_content::Canvas2;
 use std::ops::Index;
@@ -13,14 +18,14 @@ use vek::*;
 
 
 //mod mc;
-mod axis_swap;
+/*mod axis_swap;
 mod center;
 mod cursor_is_over_tracker;
 mod layer;
 mod margin;
 mod modify;
 mod stable_unscaled_size;
-mod stack;
+mod stack;*/
 //mod text;
 //mod tile_9;
 //mod tile_image;
@@ -70,11 +75,11 @@ impl DimConstraint for DimChildSets {
 pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
     type Sized: SizedGuiBlock<'a>;
 
-    fn size(self, w_in: W::In, h_in: H::In, scale: f32) -> (W::Out, H::Out, Self::Sized);
+    fn size(self, ctx: &GuiGlobalContext, w_in: W::In, h_in: H::In, scale: f32) -> (W::Out, H::Out, Self::Sized);
 }
 
 pub trait SizedGuiBlock<'a> {
-    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>);
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, ctx: GuiContext, visitor: GuiVisitor<'_, T>);
 }
 
 /*
