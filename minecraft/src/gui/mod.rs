@@ -22,6 +22,135 @@ pub use winit_main::reexports::event::{
 };
 
 
+#[derive(Debug, Copy, Clone)]
+pub struct GuiGlobalContext<'c> {
+    pub renderer: &'c Renderer,
+    pub focus_level: FocusLevel,
+    pub pressed_keys_semantic: &'c BTreeSet<VirtualKeyCode>,
+    pub pressed_keys_physical: &'c BTreeSet<ScanCode>,
+    pub pressed_mouse_buttons: &'c BTreeSet<MouseButton>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct GuiContext<'c> {
+    pub global: &'c GuiGlobalContext<'c>,
+    pub cursor_pos: Option<Vec2<f32>>,
+    pub size: Extent2<f32>,
+    pub scale: f32,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum FocusLevel {
+    Unfocused,
+    Focused,
+    MouseCaptured,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ScrolledAmount {
+    Pixels(Vec2<f32>),
+    Lines(Vec2<f32>),
+}
+
+impl ScrolledAmount {
+    pub fn to_pixels(self, font_size: impl Into<Extent2<f32>>) -> Vec2<f32> {
+        match self {
+            ScrolledAmount::Pixels(v) => v,
+            ScrolledAmount::Lines(l) => l * font_size.into(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum BlocksCursor {
+    Blocks,
+    DoesntBlock,
+}
+
+
+pub trait GuiNode<'a> {
+    fn on_cursor_move(self, ctx: GuiContext, pos: Vec2<f32>);
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiContext,
+        button: MouseButton,
+        pos: Vec2<f32>,
+        hits: bool,
+    ) -> BlocksCursor;
+
+    fn on_cursor_unclick(
+        self,
+        ctx: GuiContext,
+        button: MouseButton,
+        pos: Vec2<f32>,
+        hits: bool,
+    ) -> BlocksCursor;
+
+    fn on_cursor_scroll(
+        self,
+        ctx: GuiContext,
+        amount: ScrolledAmount,
+        pos: Vec2<f32>,
+        hits: bool,
+    ) -> BlocksCursor;
+}
+
+
+pub trait GuiStateFrame {
+    /*fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
+        &'a mut self,
+        ctx: GuiContext,
+        visitor: GuiVisitor<'_, T>,
+    )
+    where
+        Self: Sized;*/
+
+    fn on_focus_change(&mut self, ctx: GuiContext);
+
+    fn on_key_press(&mut self, ctx: GuiContext, key_semantic: Option<VirtualKeyCode>, key_physical: ScanCode);
+
+    fn on_key_release(&mut self, ctx: GuiContext, key_semantic: Option<VirtualKeyCode>, key_physical: ScanCode);
+
+    fn on_captured_mouse_click(&mut self, ctx: GuiContext, button: MouseButton);
+
+    fn on_captured_mouse_move(&mut self, ctx: GuiContext, amount: Vec2<f32>);
+
+    fn on_captured_mouse_scroll(&mut self, ctx: GuiContext, amount: ScrolledAmount);
+
+    fn on_character_input(&mut self, ctx: GuiContext, c: char);
+}
+/*
+pub trait GuiStateFrameObj {
+    fn on_cursor_move(&mut self, ctx: GuiContext, pos: Vec2<f32>);
+
+    fn on_cursor_click(
+        &mut self,
+        ctx: GuiContext,
+        button: MouseButton,
+        pos: Vec2<f32>,
+    );
+
+    fn on_cursor_unclick(
+        &mut self,
+        ctx: GuiContext,
+        button: MouseButton,
+        pos: Vec2<f32>,
+    );
+
+    fn on_cursor_scroll(
+        &mut self,
+        ctx: GuiContext,
+        amount: ScrolledAmount,
+        pos: Vec2<f32>,
+    );
+}
+
+impl<T: GuiStateFrame> GuiStateFrameObj for T {
+
+}
+*/
+/*
 #[allow(unused_variables)]
 pub trait GuiNode<'a>: Sized {
     /// Whether this node makes a cursor at the given position, in this node's
@@ -122,6 +251,7 @@ impl ScrolledAmount {
         }
     }
 }
+*/
 
 /*
 pub trait GuiStateFrame {

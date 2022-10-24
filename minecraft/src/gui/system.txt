@@ -40,6 +40,7 @@ Ok so, state that is maintained between events and doesn't get transformed betwe
 
 Events that the state as a whole gets notified for:
 - window became focused or unfocused
+    - doesn't get notification for when it itself triggers a cursor capture, but also should only be able to trigger a cursor capture if it's focused in the first place
 - keyboard key pressed or unpressed
     - doesn't get sent in if window is unfocused
     - but also, virtual presses/releases are _not_ generated for pressed keys when window becomes focused/unfocused
