@@ -47,8 +47,8 @@ pub fn v_margin<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(
 
 
 struct HMargin<I> {
-    unscaled_margin_low: f32,
-    unscaled_margin_high: f32,
+    unscaled_margin_left: f32,
+    unscaled_margin_right: f32,
     inner: I,
 }
 
@@ -60,8 +60,8 @@ impl<
     type Sized = HMarginSized<I::Sized>;
 
     fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
-        let margin_min = self.unscaled_margin_low * scale;
-        let margin_max = self.unscaled_margin_high * scale;
+        let margin_min = self.unscaled_margin_left * scale;
+        let margin_max = self.unscaled_margin_right * scale;
 
         let inner_w = f32::max(w - margin_min - margin_max, 0.0);
         let x_translate = (w - inner_w) / 2.0;
