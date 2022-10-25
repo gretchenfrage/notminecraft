@@ -47,29 +47,32 @@ pub trait GuiVisitorTarget<'a> {
     fn visit_node<I: GuiNode<'a>>(&mut self, stack_len: usize, node: I);
 }
 
-pub struct GuiVisitor<'b, T> {
+pub struct GuiVisitor<'b, 'c, T> {
     pub target: &'b mut T,
     pub stack_len: usize,
+    pub ctx: GuiContext<'c>,
 }
 
-impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
-    pub fn new(target: &'b mut T) -> Self {
+impl<'a, 'b, 'c, T: GuiVisitorTarget<'a>> GuiVisitor<'b, 'c, T> {
+    /*pub fn new(target: &'b mut T) -> Self {
         GuiVisitor {
             target,
             stack_len: 0,
         }
-    }
+    }*/
 
-    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, T> {
+    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, 'c, T> {
         GuiVisitor {
             target: self.target,
             stack_len: self.stack_len,
+            ctx: self.ctx,
         }
     }
 
     pub fn modify<I: Into<Modifier2>>(mut self, modifier: I) -> Self {
         self.target.push_modifier(self.stack_len, modifier.into());
         self.stack_len += 1;
+        todo!("update ctx");
         self
     }
 

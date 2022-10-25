@@ -19,7 +19,7 @@ pub trait GuiStateFrame {
     fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
         &'a mut self,
         ctx: GuiContext,
-        visitor: GuiVisitor<'_, T>,
+        visitor: GuiVisitor<T>,
     )
     where
         Self: Sized;
