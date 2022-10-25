@@ -16,13 +16,32 @@ use crate::gui::{
 use std::ops::Index;
 
 
+/// Sequence version of `GuiBlock`. Essentially a compile-time heterogenous
+/// tuple of `GuiBlock` implementations.
+///
+/// Blanket-impl'd on tuple types. All elements must have the same dimensional
+/// constraints. Facilitates avoiding allocations.
 pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
+    /// Sequence of sized version of self's elements. Possibly a tuple.
     type SizedSeq: SizedGuiBlockSeq<'a>;
+
+    /// Sequence of `<W as DimConstraint>::Out` of self's elements. Possibly
+    /// a fixed-size array.
     type WOutSeq: Index<usize, Output=W::Out>;
+
+    /// Sequence of `<H as DimConstraint>::Out` of self's elements. Possibly
+    /// a fixed-size array.
     type HOutSeq: Index<usize, Output=H::Out>;
 
+    /// Number of elements.
     fn len(&self) -> usize;
 
+    /// Call `GuiBlock::size` on all self's elements.
+    ///
+    /// Elements' `DimensionalConstraint::In`s and scales are passed in
+    /// iterators, which should work for `self.len()` elements. Returns
+    /// their return values as three unzipped sequences, which should work
+    /// for `self.len()` elements.
     fn size_all<
         WInSeq: IntoIterator<Item=W::In>,
         HInSeq: IntoIterator<Item=H::In>,
@@ -36,13 +55,26 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
     ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq);
 }
 
+/// Sequence version of `SizedGuiBlock`. Essentially a compile-time
+/// heterogenous tuple of `SizedGuiBlock` implementations.
+///
+/// Blanket-impl'd on tuple types. Facilitates avoiding allocations.
 pub trait SizedGuiBlockSeq<'a> {
+    /// Call `GuiBlock::visit_nodes` on all items. A special streaming iterator
+    /// is given to produce the visitor for each item, which should work for
+    /// `GuiBlockSeq::len(gui_block_seq)` items.
     fn visit_items_nodes<I: GuiVisitorIter<'a>>(self, visitors: I);
 }
 
+/// Streaming iterator of `GuiVisitor`s, for use with `SizedGuiBlockSeq`.
 pub trait GuiVisitorIter<'a> {
     type Target: GuiVisitorTarget<'a>;
 
+    /// Return the next item.
+    ///
+    /// Doesn't use `Option` because the number of items this should be able to
+    /// yield is indicated by `GuiBlockSeq::size`. Behavior unspecified if
+    /// called more times than that.
     fn next<'b>(&'b mut self) -> GuiVisitor<'b, 'b, Self::Target>;
 }
 

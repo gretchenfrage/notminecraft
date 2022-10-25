@@ -1,3 +1,5 @@
+//! Block-based GUI node sizing and layout system.
+
 /*
 use super::{
     context::{

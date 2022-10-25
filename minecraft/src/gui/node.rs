@@ -1,56 +1,125 @@
 
-use graphics::modifier::{
-	Modifier2,
-	Transform2,
-	Clip2,
+
+use crate::gui::{
+    context::{
+    	GuiSpatialContext,
+        MouseButton,
+    },
+    event::{
+        BlocksCursor,
+        ScrolledAmount,
+    },
 };
-use crate::gui::context::{
-	GuiContext,
-    MouseButton,
-    ScrolledAmount,
-    BlocksCursor,
+use graphics::{
+    frame_content::Canvas2,
+    modifier::{
+        Modifier2,
+        Transform2,
+        Clip2,
+    },
 };
 use vek::*;
 
 
+/// Positionable unit of GUI behavior. Expected to have its sizing data already
+/// bound into it.
 pub trait GuiNode<'a> {
-    fn on_cursor_move(self, ctx: GuiContext, pos: Vec2<f32>);
+    /// Called upon the cursor being moved to a new position, if the cursor
+    /// exists in this space, whether or not window is focused. Position
+    /// relativized to this space.
+    ///
+    /// Context guarantees:
+    /// - `cursor_pos` == `Some(pos)`.
+    fn on_cursor_move(self, ctx: GuiSpatialContext, pos: Vec2<f32>);
 
+    /// Called upon a mouse button being pressed, if the cursor exists in this
+    /// space and the window is focused. Position is relativized to this space.
+    ///
+    /// As in `on_key_press`, "virtual" calls will not be made upon a window
+    /// gaining focus.
+    ///
+    /// Returns whether this node "blocks" the event from "hitting" nodes
+    /// underneath it. The argument `hits` is true if no nodes above this one
+    /// have "blocked" it.
+    ///
+    /// Context guarantees:
+    /// - `pressed_mouse_buttons` contains `button`.
+    /// - `cursor_pos` == `Some(pos)`.
+    /// - `focus_level` == `Focused`.
     fn on_cursor_click(
         self,
-        ctx: GuiContext,
+        ctx: GuiSpatialContext,
         button: MouseButton,
         pos: Vec2<f32>,
         hits: bool,
     ) -> BlocksCursor;
 
+    /// Called upon a mouse button being released, if the cursor exists in
+    /// this space and the window is focused. Position is relativized to this
+    /// space.
+    ///
+    /// As in `on_key_release`, "virtual" calls will not be made upon a window
+    /// losing focus. **This means that, if one is putting logic in
+    /// `on_cursor_unclick`, they often should also put logic in
+    /// `on_focus_change` to handle "cancellations."**
+    ///
+    /// Returns whether this node "blocks" the event from "hitting" nodes
+    /// underneath it. The argument `hits` is true if no nodes above this one
+    /// have "blocked" it.
+    ///
+    /// Context guarantees:
+    /// - `pressed_mouse_button` does not contain `button`.
+    /// - `cursor_pos` == `Some(pos)`.
+    /// - `focus_level` == `Focused`.
     fn on_cursor_unclick(
         self,
-        ctx: GuiContext,
+        ctx: GuiSpatialContext,
         button: MouseButton,
         pos: Vec2<f32>,
         hits: bool,
     ) -> BlocksCursor;
 
+    /// Called upon a mouse scrolling, if the cursor exists in this space,
+    /// whether or not the window is focused. Position is relativized to this
+    /// space.
+    ///
+    /// I hope the OS filters out these events if it's blocked by another
+    /// window.
+    ///
+    /// Returns whether this node "blocks" the event from "hitting" nodes
+    /// underneath it. The argument `hits` is true if no nodes above this one
+    /// have "blocked" it.
+    ///
+    /// Context guarantees:
+    /// - `cursor_pos` == `Some(pos)`.
     fn on_cursor_scroll(
         self,
-        ctx: GuiContext,
+        ctx: GuiSpatialContext,
         amount: ScrolledAmount,
         pos: Vec2<f32>,
         hits: bool,
     ) -> BlocksCursor;
+
+    /// Called to request that node draw to `canvas`. Canvas is relativized
+    /// to this space.
+    fn draw(self, ctx: GuiSpatialContext, canvas: Canvas2<'a, '_>);
 }
 
+
+/// Behavior backing a `GuiVisitor`.
 pub trait GuiVisitorTarget<'a> {
     fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2);
 
     fn visit_node<I: GuiNode<'a>>(&mut self, stack_len: usize, node: I);
 }
 
+/// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
+/// `GuiSpatialContext` updated as transforms are applied, which may be
+/// read.
 pub struct GuiVisitor<'b, 'c, T> {
     pub target: &'b mut T,
     pub stack_len: usize,
-    pub ctx: GuiContext<'c>,
+    pub ctx: GuiSpatialContext<'c>,
 }
 
 impl<'a, 'b, 'c, T: GuiVisitorTarget<'a>> GuiVisitor<'b, 'c, T> {
@@ -108,8 +177,11 @@ impl<'a, 'b, 'c, T: GuiVisitorTarget<'a>> GuiVisitor<'b, 'c, T> {
         self.modify(Clip2::max_y(f))
     }
 
+    /// Generally, this will immediately call the relevant callback on `node`,
+    /// passing `self.ctx` as `ctx`.
     pub fn visit_node<I: GuiNode<'a>>(self, node: I) -> Self {
         self.target.visit_node(self.stack_len, node);
         self
     }
 }
+
