@@ -65,5 +65,6 @@ pub use self::{
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
         },
+        sized_gui_block_seq_flatten::SizedGuiBlockSeqFlatten,
     },
 };

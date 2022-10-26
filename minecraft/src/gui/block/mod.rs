@@ -1,23 +1,6 @@
 //! Block-based GUI node sizing and layout system.
 
 /*
-use super::{
-    context::{
-        GuiContext,
-        GuiGlobalContext,
-        MouseButton,
-        ScrolledAmount,
-    },
-    node::{
-        GuiNode,
-        GuiVisitor,
-        GuiVisitorTarget,
-    },
-};
-use graphics::frame_content::Canvas2;
-use std::ops::Index;
-use vek::*;
-
 mod blocks;
 */
 //mod mc;
@@ -37,6 +20,7 @@ mod stack;*/
 pub mod dim_constraint;
 pub mod gui_block;
 pub mod gui_block_seq;
+pub mod sized_gui_block_seq_flatten;
 
 /*
 pub use blocks::{
@@ -66,11 +50,7 @@ pub use blocks::{
 
 
 /*
-impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
-    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, T>) {
-        visitor.visit_node(self);
-    }
-}
+
 */
 
 // ==== "simple" ((sized) block) / node utility ====

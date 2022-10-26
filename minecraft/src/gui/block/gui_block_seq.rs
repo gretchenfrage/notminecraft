@@ -60,14 +60,31 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
 ///
 /// Blanket-impl'd on tuple types. Facilitates avoiding allocations.
 pub trait SizedGuiBlockSeq<'a> {
+    /// Call `visit_nodes` on each item, in order, getting their GUI visitors
+    /// by mapping `visitor` through `maperator`. 
     fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<T>, maperator: M)
     where
         T: GuiVisitorTarget<'a>,
-        M: GuiVisitorMaperator<'a, T>;
+        M: GuiVisitorMaperator<'a>;
 }
 
-pub trait GuiVisitorMaperator<'a, T: GuiVisitorTarget<'a>> {
-    fn next<'b, 'c>(&mut self, visitor: &'b mut GuiVisitor<'_, 'c, T>) -> GuiVisitor<'b, 'c, T>;
+/// A GUI visitor "maperator" for use with `SizedGuiBlockSeq`.
+///
+/// It's like an iterator of `GuiVisitor`s but:
+/// - It's more like a streaming iterator, each item borrows from the same
+///   underlying `GuiVisitor` for disjoint lifetimes.
+/// - The caller has to pass in the underlying `visitor` each time (this
+///   simplifies the API for our use case).
+pub trait GuiVisitorMaperator<'a> {
+    /// Reborrow and map the underlying visitor to the next item visitor.
+    ///
+    /// Doesn't use `Option` because the number of items is determined by
+    /// `GuiBlockSeq::len`. Behavior is unspecified if called more times than
+    /// that.
+    fn next<'b, 'c, T: GuiVisitorTarget<'a>>(
+        &'b mut self,
+        visitor: &'b mut GuiVisitor<'_, 'c, T>,
+    ) -> GuiVisitor<'b, 'c, T>;
 }
 
 
@@ -135,7 +152,7 @@ macro_rules! gui_seq_tuple {
             )
             where
                 T: GuiVisitorTarget<'a>,
-                M: GuiVisitorMaperator<'a, T>,
+                M: GuiVisitorMaperator<'a>,
             {
                 let ( $( $a, )* ) = self;
 
