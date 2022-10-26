@@ -2,6 +2,7 @@
 use crate::gui::{
     context::GuiGlobalContext,
     node::{
+        GuiNode,
         GuiVisitorTarget,
         GuiVisitor,
     },
@@ -26,6 +27,11 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
 }
 
 /// GUI block after being fixed to a particular size. Not yet positioned.
+///
+/// Auto-impl'd for `GuiNode` impls. A `SizedGuiBlock<'a>` is isomorphic to a
+/// `() => [GuiNode<'a>]` function, we simply find it makes the API nicer for
+/// it to be done in this way. As such, a `GuiNode => [GuiNode]` conversion is
+/// quite natural.
 pub trait SizedGuiBlock<'a> {
     /// Visit this block's nodes and subnodes in order. The visitor carries
     /// with it position data. Further transformations may be applied to the
@@ -35,4 +41,11 @@ pub trait SizedGuiBlock<'a> {
         self,
         visitor: GuiVisitor<T>,
     );
+}
+
+
+impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: GuiVisitor<'_, '_, T>) {
+        visitor.visit_node(self);
+    }
 }
