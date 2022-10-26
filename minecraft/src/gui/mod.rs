@@ -66,5 +66,15 @@ pub use self::{
             GuiVisitorMaperator,
         },
         sized_gui_block_seq_flatten::SizedGuiBlockSeqFlatten,
+        blocks::{
+            axis_swap::{
+                axis_swap,
+                axis_swap_seq,
+            },
+            align::{
+                h_align,
+                v_align,
+            },
+        },
     },
 };
