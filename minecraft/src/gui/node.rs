@@ -116,13 +116,13 @@ pub trait GuiVisitorTarget<'a> {
 /// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
 /// `GuiSpatialContext` updated as transforms are applied, which may be
 /// read.
-pub struct GuiVisitor<'b, 'c, T> { // TODO I think c is unnecesary
+pub struct GuiVisitor<'b, T> { // TODO I think c is unnecesary
     pub target: &'b mut T,
     pub stack_len: usize,
-    pub ctx: GuiSpatialContext<'c>,
+    pub ctx: GuiSpatialContext<'b>,
 }
 
-impl<'a, 'b, 'c, T: GuiVisitorTarget<'a>> GuiVisitor<'b, 'c, T> {
+impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
     /*pub fn new(target: &'b mut T) -> Self {
         GuiVisitor {
             target,
@@ -130,7 +130,7 @@ impl<'a, 'b, 'c, T: GuiVisitorTarget<'a>> GuiVisitor<'b, 'c, T> {
         }
     }*/
 
-    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, 'c, T> {
+    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, T> {
         GuiVisitor {
             target: self.target,
             stack_len: self.stack_len,

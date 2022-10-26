@@ -81,10 +81,10 @@ pub trait GuiVisitorMaperator<'a> {
     /// Doesn't use `Option` because the number of items is determined by
     /// `GuiBlockSeq::len`. Behavior is unspecified if called more times than
     /// that.
-    fn next<'b, 'c, T: GuiVisitorTarget<'a>>(
+    fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
-        visitor: &'b mut GuiVisitor<'_, 'c, T>,
-    ) -> GuiVisitor<'b, 'c, T>;
+        visitor: &'b mut GuiVisitor<T>,
+    ) -> GuiVisitor<'b, T>;
 }
 
 
