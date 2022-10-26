@@ -63,7 +63,7 @@ pub use self::{
         gui_block_seq::{
             GuiBlockSeq,
             SizedGuiBlockSeq,
-            GuiVisitorIter,
+            GuiVisitorMaperator,
         },
     },
 };

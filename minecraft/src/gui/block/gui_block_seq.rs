@@ -60,22 +60,14 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
 ///
 /// Blanket-impl'd on tuple types. Facilitates avoiding allocations.
 pub trait SizedGuiBlockSeq<'a> {
-    /// Call `GuiBlock::visit_nodes` on all items. A special streaming iterator
-    /// is given to produce the visitor for each item, which should work for
-    /// `GuiBlockSeq::len(gui_block_seq)` items.
-    fn visit_items_nodes<I: GuiVisitorIter<'a>>(self, visitors: I);
+    fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<T>, maperator: M)
+    where
+        T: GuiVisitorTarget<'a>,
+        M: GuiVisitorMaperator<'a, T>;
 }
 
-/// Streaming iterator of `GuiVisitor`s, for use with `SizedGuiBlockSeq`.
-pub trait GuiVisitorIter<'a> {
-    type Target: GuiVisitorTarget<'a>;
-
-    /// Return the next item.
-    ///
-    /// Doesn't use `Option` because the number of items this should be able to
-    /// yield is indicated by `GuiBlockSeq::size`. Behavior unspecified if
-    /// called more times than that.
-    fn next<'b>(&'b mut self) -> GuiVisitor<'b, 'b, Self::Target>;
+pub trait GuiVisitorMaperator<'a, T: GuiVisitorTarget<'a>> {
+    fn next<'b, 'c>(&mut self, visitor: &'b mut GuiVisitor<'_, 'c, T>) -> GuiVisitor<'b, 'c, T>;
 }
 
 
@@ -136,11 +128,19 @@ macro_rules! gui_seq_tuple {
             'a,
             $( $A: SizedGuiBlock<'a>, )*
         > SizedGuiBlockSeq<'a> for ( $( $A, )* ) {
-            fn visit_items_nodes<I: GuiVisitorIter<'a>>(self, mut _visitors: I) {
+            fn visit_items_nodes<T, M>(
+                self,
+                _visitor: &mut GuiVisitor<T>,
+                mut _maperator: M,
+            )
+            where
+                T: GuiVisitorTarget<'a>,
+                M: GuiVisitorMaperator<'a, T>,
+            {
                 let ( $( $a, )* ) = self;
 
                 $(
-                $a.visit_nodes(_visitors.next());
+                $a.visit_nodes(&mut _maperator.next(_visitor));
                 )*
             }
         }

@@ -116,7 +116,7 @@ pub trait GuiVisitorTarget<'a> {
 /// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
 /// `GuiSpatialContext` updated as transforms are applied, which may be
 /// read.
-pub struct GuiVisitor<'b, 'c, T> {
+pub struct GuiVisitor<'b, 'c, T> { // TODO I think c is unnecesary
     pub target: &'b mut T,
     pub stack_len: usize,
     pub ctx: GuiSpatialContext<'c>,
