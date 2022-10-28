@@ -12,6 +12,7 @@ mod logical_size;
 mod stack;
 mod tile_image;
 mod tile_9;
+mod text;
 
 
 //mod mc;
@@ -57,4 +58,8 @@ pub use self::{
         Tile9Images,
         tile_9,
     },
+    text::{
+        GuiTextBlockConfig,
+        GuiTextBlock,
+    }
 };
