@@ -2,13 +2,13 @@
 use crate::gui::{
     GuiVisitor,
     GuiVisitorTarget,
-    axis_swap,
     DimConstraint,
     DimParentSets,
     GuiBlock,
     SizedGuiBlock,
     GuiGlobalContext,
 };
+use super::axis_swap;
 
 
 /// Gui block with a parent-set width that puts a left and right margin around

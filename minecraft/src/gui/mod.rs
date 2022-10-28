@@ -36,6 +36,8 @@ mod state_frame;
 mod node;
 mod block;
 
+pub mod blocks;
+
 pub use self::{
     context::{
         GuiGlobalContext,
@@ -65,22 +67,6 @@ pub use self::{
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
         },
-        sized_gui_block_seq_flatten::SizedGuiBlockSeqFlatten,
-        blocks::{
-            axis_swap::{
-                axis_swap,
-                axis_swap_seq,
-            },
-            align::{
-                h_align,
-                v_align,
-            },
-            layer::layer,
-            margin::{
-                h_margin,
-                v_margin,
-            },
-            modify::modify,
-        },
+        sized_gui_block_seq_flatten::SizedGuiBlockFlatten,
     },
 };

@@ -2,7 +2,6 @@
 use crate::gui::{
     GuiVisitor,
     GuiVisitorTarget,
-    axis_swap,
     DimConstraint,
     DimParentSets,
     DimChildSets,
@@ -10,6 +9,7 @@ use crate::gui::{
     SizedGuiBlock,
     GuiGlobalContext,
 };
+use super::axis_swap;
 
 
 /// Gui block that horizontally aligns its child.

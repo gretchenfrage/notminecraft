@@ -5,7 +5,7 @@ use crate::gui::{
     DimParentSets,
     GuiBlock,
     GuiBlockSeq,
-    SizedGuiBlockSeqFlatten,
+    SizedGuiBlockFlatten,
     GuiVisitorMaperator,
     GuiGlobalContext,
 };
@@ -30,7 +30,7 @@ impl<
 > GuiBlock<'a, DimParentSets, DimParentSets> for Layer<I>
 {
     //type Sized = SubmapIterSizedGuiBlock<LayerItemVisitorMapper, I::SizedSeq>;
-    type Sized = SizedGuiBlockSeqFlatten<I::SizedSeq, IdentityMaperator>;
+    type Sized = SizedGuiBlockFlatten<I::SizedSeq, IdentityMaperator>;
 
     fn size(
         self,
@@ -50,7 +50,7 @@ impl<
         ) = self.0.size_all(ctx, w_in_seq, h_in_seq, scale_seq);
 
         //let sized = SubmapIterSizedGuiBlock::new(LayerItemVisitorMapper, sized_seq);
-        let sized = SizedGuiBlockSeqFlatten(sized_seq, IdentityMaperator);
+        let sized = SizedGuiBlockFlatten(sized_seq, IdentityMaperator);
 
         ((), (), sized)
     }

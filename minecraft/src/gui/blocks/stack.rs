@@ -2,16 +2,17 @@
 use crate::gui::{
     GuiVisitor,
     GuiVisitorTarget,
-    block::{
-        axis_swap,
-        axis_swap_seq,
-        DimParentSets,
-        DimChildSets,
-        GuiBlock,
-        GuiBlockSeq,
-        SubmapIterSizedGuiBlock,
-        GuiVisitorSubmapIterMapper,
-    },
+    GuiGlobalContext,
+    GuiVisitorMaperator,
+    SizedGuiBlockFlatten,
+    DimParentSets,
+    DimChildSets,
+    GuiBlock,
+    GuiBlockSeq,
+};
+use super::{
+    axis_swap,
+    axis_swap_seq,
 };
 use std::{
     iter::repeat,
@@ -22,11 +23,11 @@ use std::{
 /// Gui block that arranges a sequence of blocks in a vertical stack with a
 /// consistent pre-scale gap size.
 pub fn v_stack<'a, I: GuiBlockSeq<'a, DimParentSets, DimChildSets>>(
-    unscaled_gap: f32,
+    logical_gap: f32,
     items: I,
 ) -> impl GuiBlock<'a, DimParentSets, DimChildSets> {
     VStack {
-        unscaled_gap,
+        logical_gap,
         items,
     }
 }
@@ -34,15 +35,15 @@ pub fn v_stack<'a, I: GuiBlockSeq<'a, DimParentSets, DimChildSets>>(
 /// Gui block that arranges a sequence of blocks in a horizontal stack with a
 /// consistent pre-scale gap size.
 pub fn h_stack<'a, I: GuiBlockSeq<'a, DimChildSets, DimParentSets>>(
-    unscaled_gap: f32,
+    logical_gap: f32,
     items: I,
 ) -> impl GuiBlock<'a, DimChildSets, DimParentSets> {
-    axis_swap(v_stack(unscaled_gap, axis_swap_seq(items)))
+    axis_swap(v_stack(logical_gap, axis_swap_seq(items)))
 }
 
 
 struct VStack<I> {
-    unscaled_gap: f32,
+    logical_gap: f32,
     items: I,
 }
 
@@ -51,15 +52,22 @@ impl<
     I: GuiBlockSeq<'a, DimParentSets, DimChildSets>,
 > GuiBlock<'a, DimParentSets, DimChildSets> for VStack<I>
 {
-    type Sized = SubmapIterSizedGuiBlock<
-        VStackItemVisitorMapper<I::HOutSeq>,
+    type Sized = SizedGuiBlockFlatten<
         I::SizedSeq,
+        VStackMaperator<I::HOutSeq>,
     >;
 
-    fn size(self, w: f32, (): (), scale: f32) -> ((), f32, Self::Sized) {
+    fn size(
+        self,
+        ctx: &GuiGlobalContext,
+        w: f32,
+        (): (),
+        scale: f32,
+    ) -> ((), f32, Self::Sized)
+    {
         let len = self.items.len();
 
-        let gap = self.unscaled_gap * scale;
+        let scaled_gap = self.logical_gap * scale;
 
         let w_in_seq = repeat(w);
         let h_in_seq = repeat(());
@@ -69,50 +77,51 @@ impl<
             _,
             item_heights,
             sized_seq,
-        ) = self.items.size_all(w_in_seq, h_in_seq, scale_seq);
+        ) = self.items.size_all(ctx, w_in_seq, h_in_seq, scale_seq);
 
         let mut height = 0.0;
         for i in 0..len {
             if i > 0 {
-                height += gap;
+                height += scaled_gap;
             }
             height += item_heights[i];
         }
         
-        let sized = SubmapIterSizedGuiBlock::new(
-            VStackItemVisitorMapper {
-                item_heights,
-                gap,
-                next_idx: 0,
-                next_y_translate: 0.0,
-            },
-            sized_seq,
-        );
+        let maperator = VStackMaperator {
+            item_heights,
+            scaled_gap,
+            next_idx: 0,
+            next_y_translate: 0.0,
+        };
 
-        ((), height, sized)
+        ((), height, SizedGuiBlockFlatten(sized_seq, maperator))
     }
 }
 
-struct VStackItemVisitorMapper<H> {
+struct VStackMaperator<H> {
     item_heights: H,
-    gap: f32,
+    scaled_gap: f32,
     next_idx: usize,
     next_y_translate: f32,
 }
 
 impl<
+    'a,
     H: Index<usize, Output=f32>,
-> GuiVisitorSubmapIterMapper for VStackItemVisitorMapper<H>
+> GuiVisitorMaperator<'a> for VStackMaperator<H>
 {
-    fn map_next<'a, 'b, T: GuiVisitorTarget<'a>>(&'b mut self, visitor: GuiVisitor<'b, T>) -> GuiVisitor<'b, T> {
-        let visitor = visitor
-            .translate([0.0, self.next_y_translate]);
+    fn next<'b, T: GuiVisitorTarget<'a>>(
+        &'b mut self,
+        visitor: &'b mut GuiVisitor<T>,
+    ) -> GuiVisitor<'b, T>
+    {
+        let y_translate = self.next_y_translate;
 
         self.next_y_translate += self.item_heights[self.next_idx];
-        self.next_y_translate += self.gap;
-
+        self.next_y_translate += self.scaled_gap;
         self.next_idx += 1;
 
-        visitor
+        visitor.reborrow()
+            .translate([0.0, y_translate])
     }
 }
