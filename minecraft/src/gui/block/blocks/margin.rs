@@ -2,13 +2,12 @@
 use crate::gui::{
     GuiVisitor,
     GuiVisitorTarget,
-    block::{
-        axis_swap,
-        DimConstraint,
-        DimParentSets,
-        GuiBlock,
-        SizedGuiBlock,
-    },
+    axis_swap,
+    DimConstraint,
+    DimParentSets,
+    GuiBlock,
+    SizedGuiBlock,
+    GuiGlobalContext,
 };
 
 
@@ -59,14 +58,24 @@ impl<
 > GuiBlock<'a, DimParentSets, H> for HMargin<I> {
     type Sized = HMarginSized<I::Sized>;
 
-    fn size(self, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
+    fn size(
+        self,
+        ctx: &GuiGlobalContext,
+        w: f32,
+        h_in: H::In,
+        scale: f32,
+    ) -> ((), H::Out, Self::Sized) {
         let margin_min = self.unscaled_margin_left * scale;
         let margin_max = self.unscaled_margin_right * scale;
 
         let inner_w = f32::max(w - margin_min - margin_max, 0.0);
         let x_translate = (w - inner_w) / 2.0;
 
-        let ((), h_out, inner_sized) = self.inner.size(inner_w, h_in, scale);
+        let (
+            (),
+            h_out,
+            inner_sized,
+        ) = self.inner.size(ctx, inner_w, h_in, scale);
 
         let sized = HMarginSized {
             x_translate,
@@ -83,8 +92,11 @@ struct HMarginSized<I> {
 }
 
 impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HMarginSized<I> {
-    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
-        self.inner.visit_nodes(visitor.reborrow()
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'_, T>,
+    ) {
+        self.inner.visit_nodes(&mut visitor.reborrow()
             .translate([self.x_translate, 0.0]));
     }
 }

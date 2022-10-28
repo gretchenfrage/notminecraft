@@ -43,10 +43,7 @@ pub use self::{
         GuiWindowContext,
         FocusLevel,
     },
-    event::{
-        ScrolledAmount,
-        BlocksCursor,
-    },
+    event::ScrolledAmount,
     state_frame::GuiStateFrame,
     node::{
         GuiNode,
@@ -59,7 +56,10 @@ pub use self::{
             DimParentSets,
             DimChildSets,
         },
-        gui_block::{GuiBlock, SizedGuiBlock},
+        gui_block::{
+            GuiBlock,
+            SizedGuiBlock,
+        },
         gui_block_seq::{
             GuiBlockSeq,
             SizedGuiBlockSeq,
@@ -75,6 +75,12 @@ pub use self::{
                 h_align,
                 v_align,
             },
+            layer::layer,
+            margin::{
+                h_margin,
+                v_margin,
+            },
+            modify::modify,
         },
     },
 };

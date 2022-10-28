@@ -1,7 +1,10 @@
 //! State maintained by event loop between GUI events.
 
 
-use graphics::Renderer;
+use graphics::{
+    Renderer,
+    modifier::Transform2,
+};
 use std::collections::BTreeSet;
 use vek::*;
 
@@ -43,6 +46,21 @@ pub struct GuiSpatialContext<'c> {
     ///
     /// Guaranteed to be `None` if `focus_level` == `MouseCaptured`.
     pub cursor_pos: Option<Vec2<f32>>,
+}
+
+impl<'c> GuiSpatialContext<'c> {
+    /// Relativize the spatial contextual state against the given
+    /// transformation.
+    ///
+    /// That effectively means applying the transformation to coordinates
+    /// in reverse. Irreversibility-safe.
+    pub fn relativize(&mut self, transform: Transform2) {
+        if let Some(cursor_pos) = self.cursor_pos {
+            self.cursor_pos = transform
+                .reverse()
+                .map(|reversed| reversed.apply(cursor_pos));
+        }
+    }
 }
 
 /// State maintained by event loop between GUI events that is accessable by

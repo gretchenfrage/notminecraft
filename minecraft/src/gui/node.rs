@@ -5,10 +5,7 @@ use crate::gui::{
     	GuiSpatialContext,
         MouseButton,
     },
-    event::{
-        BlocksCursor,
-        ScrolledAmount,
-    },
+    event::ScrolledAmount,
 };
 use graphics::{
     frame_content::Canvas2,
@@ -23,14 +20,20 @@ use vek::*;
 
 /// Positionable unit of GUI behavior. Expected to have its sizing data already
 /// bound into it.
-pub trait GuiNode<'a> {
+pub trait GuiNode<'a>: Sized {
+    /// Determine whether this node "blocks" a cursor event at the given
+    /// position. The event will still be passed to nodes underneath this one,
+    /// but their `hits` argument will be false.
+    fn blocks_cursor(&self, pos: Vec2<f32>) -> bool;
+
     /// Called upon the cursor being moved to a new position, if the cursor
     /// exists in this space, whether or not window is focused. Position
     /// relativized to this space.
     ///
     /// Context guarantees:
     /// - `cursor_pos` == `Some(pos)`.
-    fn on_cursor_move(self, ctx: GuiSpatialContext, pos: Vec2<f32>);
+    #[allow(unused_variables)]
+    fn on_cursor_move(self, ctx: GuiSpatialContext, pos: Vec2<f32>) {}
 
     /// Called upon a mouse button being pressed, if the cursor exists in this
     /// space and the window is focused. Position is relativized to this space.
@@ -38,21 +41,20 @@ pub trait GuiNode<'a> {
     /// As in `on_key_press`, "virtual" calls will not be made upon a window
     /// gaining focus.
     ///
-    /// Returns whether this node "blocks" the event from "hitting" nodes
-    /// underneath it. The argument `hits` is true if no nodes above this one
-    /// have "blocked" it.
+    /// See `blocks_cursor` regarding `hits`.
     ///
     /// Context guarantees:
     /// - `pressed_mouse_buttons` contains `button`.
     /// - `cursor_pos` == `Some(pos)`.
     /// - `focus_level` == `Focused`.
+    #[allow(unused_variables)]
     fn on_cursor_click(
         self,
         ctx: GuiSpatialContext,
         button: MouseButton,
         pos: Vec2<f32>,
         hits: bool,
-    ) -> BlocksCursor;
+    ) {}
 
     /// Called upon a mouse button being released, if the cursor exists in
     /// this space and the window is focused. Position is relativized to this
@@ -63,21 +65,20 @@ pub trait GuiNode<'a> {
     /// `on_cursor_unclick`, they often should also put logic in
     /// `on_focus_change` to handle "cancellations."**
     ///
-    /// Returns whether this node "blocks" the event from "hitting" nodes
-    /// underneath it. The argument `hits` is true if no nodes above this one
-    /// have "blocked" it.
+    /// See `blocks_cursor` regarding `hits`.
     ///
     /// Context guarantees:
     /// - `pressed_mouse_button` does not contain `button`.
     /// - `cursor_pos` == `Some(pos)`.
     /// - `focus_level` == `Focused`.
+    #[allow(unused_variables)]
     fn on_cursor_unclick(
         self,
         ctx: GuiSpatialContext,
         button: MouseButton,
         pos: Vec2<f32>,
         hits: bool,
-    ) -> BlocksCursor;
+    ) {}
 
     /// Called upon a mouse scrolling, if the cursor exists in this space,
     /// whether or not the window is focused. Position is relativized to this
@@ -86,23 +87,23 @@ pub trait GuiNode<'a> {
     /// I hope the OS filters out these events if it's blocked by another
     /// window.
     ///
-    /// Returns whether this node "blocks" the event from "hitting" nodes
-    /// underneath it. The argument `hits` is true if no nodes above this one
-    /// have "blocked" it.
+    /// See `blocks_cursor` regarding `hits`.
     ///
     /// Context guarantees:
     /// - `cursor_pos` == `Some(pos)`.
+    #[allow(unused_variables)]
     fn on_cursor_scroll(
         self,
         ctx: GuiSpatialContext,
         amount: ScrolledAmount,
         pos: Vec2<f32>,
         hits: bool,
-    ) -> BlocksCursor;
+    ) {}
 
     /// Called to request that node draw to `canvas`. Canvas is relativized
     /// to this space.
-    fn draw(self, ctx: GuiSpatialContext, canvas: Canvas2<'a, '_>);
+    #[allow(unused_variables)]
+    fn draw(self, ctx: GuiSpatialContext, canvas: Canvas2<'a, '_>) {}
 }
 
 
@@ -116,19 +117,20 @@ pub trait GuiVisitorTarget<'a> {
 /// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
 /// `GuiSpatialContext` updated as transforms are applied, which may be
 /// read.
-pub struct GuiVisitor<'b, T> { // TODO I think c is unnecesary
+pub struct GuiVisitor<'b, T> {
     pub target: &'b mut T,
     pub stack_len: usize,
     pub ctx: GuiSpatialContext<'b>,
 }
 
 impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
-    /*pub fn new(target: &'b mut T) -> Self {
+    pub fn new(target: &'b mut T, ctx: GuiSpatialContext<'b>) -> Self {
         GuiVisitor {
             target,
             stack_len: 0,
+            ctx,
         }
-    }*/
+    }
 
     pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, T> {
         GuiVisitor {
@@ -139,9 +141,15 @@ impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
     }
 
     pub fn modify<I: Into<Modifier2>>(mut self, modifier: I) -> Self {
-        self.target.push_modifier(self.stack_len, modifier.into());
+        let modifier = modifier.into();
+
+        self.target.push_modifier(self.stack_len, modifier);
         self.stack_len += 1;
-        todo!("update ctx");
+
+        if let Modifier2::Transform(transform) = modifier {
+            self.ctx.relativize(transform);
+        }
+
         self
     }
 

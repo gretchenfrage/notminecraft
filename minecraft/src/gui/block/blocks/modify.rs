@@ -3,11 +3,10 @@ use graphics::modifier::Modifier2;
 use crate::gui::{
     GuiVisitor,
     GuiVisitorTarget,
-    block::{
-        DimConstraint,
-        GuiBlock,
-        SizedGuiBlock,
-    },
+    DimConstraint,
+    GuiBlock,
+    SizedGuiBlock,
+    GuiGlobalContext,
 };
 
 
@@ -32,12 +31,29 @@ struct Modify<I> {
     inner: I,
 }
 
-impl<'a, W: DimConstraint, H: DimConstraint, I: GuiBlock<'a, W, H>> GuiBlock<'a, W, H> for Modify<I> {
-    type Sized = ModifySized<I::Sized>;
+impl<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    I: GuiBlock<'a, W, H>,
+> GuiBlock<'a, W, H> for Modify<I>
+{
+    type Sized = Modify<I::Sized>;
 
-    fn size(self, w_in: W::In, h_in: H::In, scale: f32) -> (W::Out, H::Out, Self::Sized) {
-        let (w_out, h_out, inner_sized) = self.inner.size(w_in, h_in, scale);
-        let sized = ModifySized {
+    fn size(
+        self,
+        ctx: &GuiGlobalContext,
+        w_in: W::In,
+        h_in: H::In,
+        scale: f32,
+    ) -> (W::Out, H::Out, Self::Sized)
+    {
+        let (
+            w_out,
+            h_out,
+            inner_sized,
+        ) = self.inner.size(ctx, w_in, h_in, scale);
+        let sized = Modify {
             modifier: self.modifier,
             inner: inner_sized,
         };
@@ -45,14 +61,12 @@ impl<'a, W: DimConstraint, H: DimConstraint, I: GuiBlock<'a, W, H>> GuiBlock<'a,
     }
 }
 
-struct ModifySized<I> {
-    modifier: Modifier2,
-    inner: I,
-}
-
-impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for ModifySized<I> {
-    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, mut visitor: GuiVisitor<'_, T>) {
-        self.inner.visit_nodes(visitor.reborrow()
+impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for Modify<I> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'_, T>,
+    ) {
+        self.inner.visit_nodes(&mut visitor.reborrow()
             .modify(self.modifier));
     }
 }

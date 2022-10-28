@@ -21,12 +21,3 @@ impl ScrolledAmount {
         }
     }
 }
-
-
-/// `GuiNode` cursor-related handler return value for whether it "blocks" the
-/// event from "hitting" nodes buried further down.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BlocksCursor {
-    Blocks,
-    DoesntBlock,
-}
