@@ -1,6 +1,8 @@
 //! Block implementations.
 
 
+mod simple_gui_block;
+
 mod axis_swap;
 mod align;
 mod layer;
@@ -8,6 +10,8 @@ mod margin;
 mod modify;
 mod logical_size;
 mod stack;
+mod tile_image;
+
 
 //mod mc;
 /*mod axis_swap;

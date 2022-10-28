@@ -103,7 +103,7 @@ pub trait GuiNode<'a>: Sized {
     /// Called to request that node draw to `canvas`. Canvas is relativized
     /// to this space.
     #[allow(unused_variables)]
-    fn draw(self, ctx: GuiSpatialContext, canvas: Canvas2<'a, '_>) {}
+    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {}
 }
 
 
