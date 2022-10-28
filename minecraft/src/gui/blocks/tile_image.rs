@@ -2,6 +2,8 @@
 use crate::gui::{
     GuiNode,
     GuiSpatialContext,
+    GuiBlock,
+    DimParentSets,
 };
 use super::simple_gui_block::{
     SimpleGuiBlock,
@@ -12,6 +14,19 @@ use graphics::frame_content::{
     Canvas2,
 };
 use vek::*;
+
+
+pub fn tile_image<'a, E: Into<Extent2<f32>>>(
+    image: &'a GpuImage,
+    image_logical_size: E,
+) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
+{
+    let image_logical_size = image_logical_size.into();
+    TileImage {
+        image,
+        image_logical_size,
+    }
+}
 
 
 struct TileImage<'a> {

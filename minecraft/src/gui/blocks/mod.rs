@@ -11,6 +11,7 @@ mod modify;
 mod logical_size;
 mod stack;
 mod tile_image;
+mod tile_9;
 
 
 //mod mc;
@@ -49,5 +50,11 @@ pub use self::{
     stack::{
         v_stack,
         h_stack,
+    },
+    tile_image::tile_image,
+    tile_9::{
+        Tile9ImagesBuilder,
+        Tile9Images,
+        tile_9,
     },
 };
