@@ -67,12 +67,3 @@ impl<'a> GuiVisitorMaperator<'a> for IdentityMaperator {
         visitor.reborrow()
     }
 }
-
-/*
-struct LayerItemVisitorMapper;
-
-impl GuiVisitorSubmapIterMapper for LayerItemVisitorMapper {
-    fn map_next<'a, 'b, T: GuiVisitorTarget<'a>>(&'b mut self, visitor: GuiVisitor<'b, T>) -> GuiVisitor<'b, T> {
-        visitor
-    }
-}*/

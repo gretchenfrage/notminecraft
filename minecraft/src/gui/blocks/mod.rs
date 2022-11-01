@@ -60,6 +60,6 @@ pub use self::{
     },
     text::{
         GuiTextBlockConfig,
-        GuiTextBlock,
+        GuiTextBlock, 
     }
 };

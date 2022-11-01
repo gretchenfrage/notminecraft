@@ -24,19 +24,18 @@ pub trait GuiNode<'a>: Sized {
     /// Determine whether this node "blocks" a cursor event at the given
     /// position. The event will still be passed to nodes underneath this one,
     /// but their `hits` argument will be false.
-    fn blocks_cursor(&self, pos: Vec2<f32>) -> bool;
-
-    /// Called upon the cursor being moved to a new position, if the cursor
-    /// exists in this space, whether or not window is focused. Position
-    /// relativized to this space.
     ///
-    /// Context guarantees:
-    /// - `cursor_pos` == `Some(pos)`.
-    #[allow(unused_variables)]
-    fn on_cursor_move(self, ctx: GuiSpatialContext, pos: Vec2<f32>) {}
+    /// Handlers' `hits` arguments will also be passed as false if that
+    /// position is clipped out for this node.
+    fn blocks_cursor(&self, ctx: GuiSpatialContext, pos: Vec2<f32>) -> bool;
 
-    /// Called upon a mouse button being pressed, if the cursor exists in this
-    /// space and the window is focused. Position is relativized to this space.
+    /// Called upon the cursor being moved to a new position.
+    ///
+    /// See `blocks_cursor` regarding `hits`.
+    #[allow(unused_variables)]
+    fn on_cursor_move(self, ctx: GuiSpatialContext, hits: bool) {}
+
+    /// Called upon a mouse button being pressed, if the window is focused.
     ///
     /// As in `on_key_press`, "virtual" calls will not be made upon a window
     /// gaining focus.
@@ -45,20 +44,16 @@ pub trait GuiNode<'a>: Sized {
     ///
     /// Context guarantees:
     /// - `pressed_mouse_buttons` contains `button`.
-    /// - `cursor_pos` == `Some(pos)`.
     /// - `focus_level` == `Focused`.
     #[allow(unused_variables)]
     fn on_cursor_click(
         self,
         ctx: GuiSpatialContext,
-        button: MouseButton,
-        pos: Vec2<f32>,
         hits: bool,
+        button: MouseButton,
     ) {}
 
-    /// Called upon a mouse button being released, if the cursor exists in
-    /// this space and the window is focused. Position is relativized to this
-    /// space.
+    /// Called upon a mouse button being released, if the window is focused
     ///
     /// As in `on_key_release`, "virtual" calls will not be made upon a window
     /// losing focus. **This means that, if one is putting logic in
@@ -69,35 +64,27 @@ pub trait GuiNode<'a>: Sized {
     ///
     /// Context guarantees:
     /// - `pressed_mouse_button` does not contain `button`.
-    /// - `cursor_pos` == `Some(pos)`.
     /// - `focus_level` == `Focused`.
     #[allow(unused_variables)]
     fn on_cursor_unclick(
         self,
         ctx: GuiSpatialContext,
-        button: MouseButton,
-        pos: Vec2<f32>,
         hits: bool,
+        button: MouseButton,
     ) {}
 
-    /// Called upon a mouse scrolling, if the cursor exists in this space,
-    /// whether or not the window is focused. Position is relativized to this
-    /// space.
+    /// Called upon mouse scrolling, whether or not the window is focused.
     ///
     /// I hope the OS filters out these events if it's blocked by another
     /// window.
     ///
     /// See `blocks_cursor` regarding `hits`.
-    ///
-    /// Context guarantees:
-    /// - `cursor_pos` == `Some(pos)`.
     #[allow(unused_variables)]
     fn on_cursor_scroll(
         self,
         ctx: GuiSpatialContext,
-        amount: ScrolledAmount,
-        pos: Vec2<f32>,
         hits: bool,
+        amount: ScrolledAmount,
     ) {}
 
     /// Called to request that node draw to `canvas`. Canvas is relativized

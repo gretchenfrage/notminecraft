@@ -33,8 +33,10 @@
 mod context;
 mod event;
 mod state_frame;
+mod state_frame_obj;
 mod node;
 mod block;
+mod gui_event_loop;
 
 pub mod blocks;
 
