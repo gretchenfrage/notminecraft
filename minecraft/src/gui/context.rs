@@ -1,6 +1,9 @@
 //! State maintained by event loop between GUI events.
 
-
+use crate::{
+    resource_pack::ResourcePack,
+    localization::Localization,
+};
 use graphics::{
     Renderer,
     modifier::Transform2,
@@ -21,6 +24,8 @@ pub use winit::event::{
 #[derive(Debug, Copy, Clone)]
 pub struct GuiGlobalContext<'c> {
     pub renderer: &'c Renderer,
+    pub resources: &'c ResourcePack,
+    pub lang: &'c Localization,
     /// Window focus level.
     pub focus_level: FocusLevel,
     /// Set of pressed virtual key codes, if the window is focused. Empty set

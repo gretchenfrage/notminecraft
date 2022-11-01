@@ -37,20 +37,26 @@ extern crate tracing;
 */
 
 //mod game;
+pub mod resource_pack;
+pub mod localization;
+pub mod gui;
 pub mod util;
 pub mod jar_assets;
-pub mod gui;
 pub mod main_menu;
 
 use crate::{
     gui::GuiEventLoop,
+    resource_pack::ResourcePack,
+    localization::Localization,
     main_menu::MainMenu,
 };
 
 fn main() {
     let event_loop = GuiEventLoop::new();
+    let resources = ResourcePack::new(event_loop.renderer());
+    let lang = Localization::new();
     let gui_state = MainMenu::new(event_loop.renderer());
-    event_loop.run(Box::new(gui_state));
+    event_loop.run(Box::new(gui_state), resources, lang);
 }
 
 /*

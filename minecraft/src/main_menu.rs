@@ -3,28 +3,24 @@ use crate::gui::{
 	*,
 	blocks::*,
 };
-use graphics::{
-	Renderer,
-	frame_content::GpuImage,
-};
+use graphics::Renderer;
 
 
 pub struct MainMenu {
-	bg_image: GpuImage,
 }
 
 impl MainMenu {
 	pub fn new(renderer: &Renderer) -> Self {
-		let bg_image = renderer
-			.load_image(include_bytes!("eg-img.png"))
-			.unwrap();
 		MainMenu {
-			bg_image
 		}
 	}
 
-	pub fn gui(&mut self) -> impl GuiBlock<DimParentSets, DimParentSets> {
-		tile_image(&self.bg_image, [508.0, 460.0])
+	pub fn gui<'a>(
+		&'a mut self,
+		ctx: &GuiWindowContext,
+	) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
+	{
+		tile_image(&ctx.spatial.global.resources.menu_bg, [508.0, 460.0])
 	}
 }
 
@@ -35,7 +31,7 @@ impl GuiStateFrame for MainMenu {
         mut visitor: GuiVisitor<T>,
     ) {
 		let ((), (), sized) = self
-			.gui()
+			.gui(ctx)
 			.size(
 				ctx.spatial.global,
 				ctx.size.w as f32,

@@ -1,13 +1,17 @@
 
-use crate::gui::{
-	context::{
-		GuiGlobalContext,
-		GuiSpatialContext,
-		GuiWindowContext,
-		FocusLevel,
+use crate::{
+	resource_pack::ResourcePack,
+	localization::Localization,
+	gui::{
+		context::{
+			GuiGlobalContext,
+			GuiSpatialContext,
+			GuiWindowContext,
+			FocusLevel,
+		},
+		event::ScrolledAmount,
+		state_frame_obj::GuiStateFrameObj,
 	},
-	event::ScrolledAmount,
-	state_frame_obj::GuiStateFrameObj,
 };
 use graphics::{
 	Renderer,
@@ -43,6 +47,8 @@ use vek::*;
 
 struct State {
     renderer: Renderer,
+    resources: ResourcePack,
+    lang: Localization,
     focus_level: FocusLevel,
 	pressed_keys_semantic: HashSet<VirtualKeyCode>,
     pressed_keys_physical: HashSet<ScanCode>,
@@ -58,10 +64,18 @@ struct State {
 }
 
 impl State {
-	fn new(window: &Window, renderer: Renderer) -> Self {
+	fn new(
+		window: &Window,
+		renderer: Renderer,
+		resources: ResourcePack,
+		lang: Localization,
+	) -> Self
+	{
 		let winit_size = window.inner_size();
 		State {
 			renderer,
+			resources,
+			lang,
 			focus_level: FocusLevel::Focused,
 			pressed_keys_semantic: HashSet::new(),
 			pressed_keys_physical: HashSet::new(),
@@ -87,6 +101,8 @@ impl State {
 			spatial: GuiSpatialContext {
 				global: &GuiGlobalContext {
 					renderer: &self.renderer,
+					resources: &self.resources,
+					lang: &self.lang,
 					focus_level: self.focus_level,
 					pressed_keys_semantic:
 						if self.focus_level >= FocusLevel::Focused {
@@ -151,9 +167,19 @@ impl GuiEventLoop {
 		&self.renderer
 	}
 
-	pub fn run(self, state_frame: Box<dyn GuiStateFrameObj>) -> ! {
+	pub fn run(
+		self,
+		state_frame: Box<dyn GuiStateFrameObj>,
+		resources: ResourcePack,
+		lang: Localization,
+	) -> ! {
 		let mut stack = Stack::new(state_frame);
-		let mut state = State::new(&self.window, self.renderer);
+		let mut state = State::new(
+			&self.window,
+			self.renderer,
+			resources,
+			lang,
+		);
 
 		self.event_loop.run(move |event, _target, control_flow| match event {
 			Event::WindowEvent { event, .. } => match event {
