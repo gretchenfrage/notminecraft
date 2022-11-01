@@ -40,6 +40,18 @@ extern crate tracing;
 pub mod util;
 pub mod jar_assets;
 pub mod gui;
+pub mod main_menu;
+
+use crate::{
+    gui::GuiEventLoop,
+    main_menu::MainMenu,
+};
+
+fn main() {
+    let event_loop = GuiEventLoop::new();
+    let gui_state = MainMenu::new(event_loop.renderer());
+    event_loop.run(Box::new(gui_state));
+}
 
 /*
 fn main() {

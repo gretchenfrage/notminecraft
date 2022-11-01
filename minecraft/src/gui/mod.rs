@@ -72,5 +72,5 @@ pub use self::{
         },
         sized_gui_block_seq_flatten::SizedGuiBlockFlatten,
     },
-    gui_event_loop::run as run_event_loop,
+    gui_event_loop::GuiEventLoop,
 };

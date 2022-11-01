@@ -122,209 +122,240 @@ impl Stack {
 	}
 }
 
+pub struct GuiEventLoop {
+	event_loop: EventLoop<()>,
+	window: Arc<Window>,
+	renderer: Renderer,
+}
 
-pub fn run(state_frame: Box<dyn GuiStateFrameObj>) -> ! {
-	let mut stack = Stack::new(state_frame);
+impl GuiEventLoop {
+	pub fn new() -> Self {
+		let event_loop = EventLoop::new();
+		let window = WindowBuilder::new()
+			.build(&event_loop)
+			.expect("failed to build window");
+		let window = Arc::new(window);
 
-	let event_loop = EventLoop::new();
-	let window = WindowBuilder::new()
-		.build(&event_loop)
-		.expect("failed to build window");
-	let window = Arc::new(window);
+		let renderer = Renderer::new(Arc::clone(&window))
+			.block_on()
+			.expect("failed to create renderer");
+		
+		GuiEventLoop {
+			event_loop,
+			window,
+			renderer,
+		}		
+	}
 
-	let renderer = Renderer::new(Arc::clone(&window))
-		.block_on()
-		.expect("failed to create renderer");
+	pub fn renderer(&self) -> &Renderer {
+		&self.renderer
+	}
 
-	let mut state = State::new(&window, renderer);
+	pub fn run(self, state_frame: Box<dyn GuiStateFrameObj>) -> ! {
+		let mut stack = Stack::new(state_frame);
+		let mut state = State::new(&self.window, self.renderer);
 
-	event_loop.run(move |event, _target, control_flow| match event {
-		Event::WindowEvent { event, .. } => match event {
-			WindowEvent::Resized(winit_size) => {
-				state.size.w = winit_size.width;
-				state.size.h = winit_size.height;
-			}
-			WindowEvent::CloseRequested => {
-				todo!()
-			}
-			WindowEvent::Destroyed => {
-				todo!()
-			}
-			WindowEvent::ReceivedCharacter(c) => {
-				state.with_ctx(|ctx| stack.top().on_character_input(ctx, c));
-			}
-			WindowEvent::Focused(focused) => {
-				state.focus_level =
-					if focused { FocusLevel::Focused }
-					else { FocusLevel::Unfocused };
-				state.with_ctx(|ctx| stack.top().on_focus_change(ctx));
-			}
-			WindowEvent::KeyboardInput {
-				is_synthetic: false,
-				input,
-				..
-			} => {
-				let focused = state.focus_level >= FocusLevel::Focused;
-				match input.state {
-					ElementState::Pressed => {
-						// semantic press
-						if let Some(key) = input.virtual_keycode {
+		self.event_loop.run(move |event, _target, control_flow| match event {
+			Event::WindowEvent { event, .. } => match event {
+				WindowEvent::Resized(winit_size) => {
+					state.size.w = winit_size.width;
+					state.size.h = winit_size.height;
+
+					state.renderer.resize(state.size);
+				}
+				WindowEvent::CloseRequested => {
+					todo!()
+				}
+				WindowEvent::Destroyed => {
+					todo!()
+				}
+				WindowEvent::ReceivedCharacter(c) => {
+					state.with_ctx(|ctx| stack
+						.top()
+						.on_character_input(ctx, c));
+				}
+				WindowEvent::Focused(focused) => {
+					state.focus_level =
+						if focused { FocusLevel::Focused }
+						else { FocusLevel::Unfocused };
+					state.with_ctx(|ctx| stack.top().on_focus_change(ctx));
+				}
+				WindowEvent::KeyboardInput {
+					is_synthetic: false,
+					input,
+					..
+				} => {
+					let focused = state.focus_level >= FocusLevel::Focused;
+					match input.state {
+						ElementState::Pressed => {
+							// semantic press
+							if let Some(key) = input.virtual_keycode {
+								let changed = state
+									.pressed_keys_semantic
+									.insert(key);
+								if changed && focused {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_key_press_semantic(ctx, key));
+								}
+							}
+
+							// physical press
+							let key = input.scancode;
 							let changed = state
-								.pressed_keys_semantic
+								.pressed_keys_physical
 								.insert(key);
 							if changed && focused {
 								state.with_ctx(|ctx| stack
 									.top()
-									.on_key_press_semantic(ctx, key));
+									.on_key_press_physical(ctx, key));
 							}
 						}
+						ElementState::Released => {
+							// semantic release
+							if let Some(key) = input.virtual_keycode {
+								let changed = state
+									.pressed_keys_semantic
+									.remove(&key);
+								if changed && focused {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_key_press_semantic(ctx, key));
+								}
+							}
 
-						// physical press
-						let key = input.scancode;
-						let changed = state.pressed_keys_physical.insert(key);
-						if changed && focused {
-							state.with_ctx(|ctx| stack
-								.top()
-								.on_key_press_physical(ctx, key));
-						}
-					}
-					ElementState::Released => {
-						// semantic release
-						if let Some(key) = input.virtual_keycode {
+							// physical release
+							let key = input.scancode;
 							let changed = state
-								.pressed_keys_semantic
+								.pressed_keys_physical
 								.remove(&key);
 							if changed && focused {
 								state.with_ctx(|ctx| stack
 									.top()
-									.on_key_press_semantic(ctx, key));
+									.on_key_press_physical(ctx, key));
 							}
 						}
-
-						// physical release
-						let key = input.scancode;
-						let changed = state.pressed_keys_physical.remove(&key);
-						if changed && focused {
+					}
+				}
+				WindowEvent::CursorMoved { position, .. } => {
+					state.cursor_pos = Some(Vec2 {
+						x: position.x as f32,
+						y: position.y as f32,
+					});
+					if state.focus_level < FocusLevel::MouseCaptured {
+						state.with_ctx(|ctx| stack.top().on_cursor_move(ctx));
+					}
+				}
+				WindowEvent::MouseWheel { delta, .. } => {
+					let amount = match delta {
+						MouseScrollDelta::LineDelta(
+							x,
+							y,
+						) => ScrolledAmount::Lines(Vec2 { x, y }),
+						MouseScrollDelta::PixelDelta(
+							pos,
+						) => ScrolledAmount::Pixels(Vec2 {
+							x: pos.x as f32,
+							y: pos.y as f32,
+						}),
+					};
+					match state.focus_level {
+						FocusLevel::Unfocused => (),
+						FocusLevel::Focused => {
 							state.with_ctx(|ctx| stack
 								.top()
-								.on_key_press_physical(ctx, key));
+								.on_cursor_scroll(ctx, amount));
+						}
+						FocusLevel::MouseCaptured => {
+							state.with_ctx(|ctx| stack
+								.top()
+								.on_captured_mouse_scroll(ctx, amount));
 						}
 					}
 				}
-			}
-			WindowEvent::CursorMoved { position, .. } => {
-				state.cursor_pos = Some(Vec2 {
-					x: position.x as f32,
-					y: position.y as f32,
-				});
-				if state.focus_level < FocusLevel::MouseCaptured {
-					state.with_ctx(|ctx| stack.top().on_cursor_move(ctx));
+				WindowEvent::MouseInput {
+					state: element_state,
+					button,
+					..
+				} => match element_state {
+					ElementState::Pressed => {
+						let changed = state
+							.pressed_mouse_buttons
+							.insert(button);
+						if changed {
+							match state.focus_level {
+								FocusLevel::Unfocused => (),
+								FocusLevel::Focused => {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_cursor_click(ctx, button));
+								}
+								FocusLevel::MouseCaptured => {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_captured_mouse_click(ctx, button));
+								}
+							}
+						}
+					}
+					ElementState::Released => {
+						let changed = state
+							.pressed_mouse_buttons
+							.remove(&button);
+						if changed {
+							match state.focus_level {
+								FocusLevel::Unfocused => (),
+								FocusLevel::Focused => {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_cursor_release(ctx, button));
+								}
+								FocusLevel::MouseCaptured => {
+									state.with_ctx(|ctx| stack
+										.top()
+										.on_captured_mouse_release(
+											ctx,
+											button,
+										));
+								}
+							}
+						}
+					}
 				}
+				WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+					state.scale = scale_factor as f32;
+				}
+				_ => (),
 			}
-			WindowEvent::MouseWheel { delta, .. } => {
-				let amount = match delta {
-					MouseScrollDelta::LineDelta(
-						x,
-						y,
-					) => ScrolledAmount::Lines(Vec2 { x, y }),
-					MouseScrollDelta::PixelDelta(
-						pos,
-					) => ScrolledAmount::Pixels(Vec2 {
-						x: pos.x as f32,
-						y: pos.y as f32,
-					}),
-				};
-				match state.focus_level {
-					FocusLevel::Unfocused => (),
-					FocusLevel::Focused => {
+			Event::DeviceEvent { event, .. } => match event {
+				DeviceEvent::MouseMotion { delta: (x, y) } => {
+					if state.focus_level == FocusLevel::MouseCaptured {
 						state.with_ctx(|ctx| stack
 							.top()
-							.on_cursor_scroll(ctx, amount));
-					}
-					FocusLevel::MouseCaptured => {
-						state.with_ctx(|ctx| stack
-							.top()
-							.on_captured_mouse_scroll(ctx, amount));
+							.on_captured_mouse_move(
+								ctx,
+								Vec2 { x: x as f32, y: y as f32 },
+							));
 					}
 				}
+				_ => (),
 			}
-			WindowEvent::MouseInput {
-				state: element_state,
-				button,
-				..
-			} => match element_state {
-				ElementState::Pressed => {
-					let changed = state
-						.pressed_mouse_buttons
-						.insert(button);
-					if changed {
-						match state.focus_level {
-							FocusLevel::Unfocused => (),
-							FocusLevel::Focused => {
-								state.with_ctx(|ctx| stack
-									.top()
-									.on_cursor_click(ctx, button));
-							}
-							FocusLevel::MouseCaptured => {
-								state.with_ctx(|ctx| stack
-									.top()
-									.on_captured_mouse_click(ctx, button));
-							}
-						}
-					}
-				}
-				ElementState::Released => {
-					let changed = state
-						.pressed_mouse_buttons
-						.remove(&button);
-					if changed {
-						match state.focus_level {
-							FocusLevel::Unfocused => (),
-							FocusLevel::Focused => {
-								state.with_ctx(|ctx| stack
-									.top()
-									.on_cursor_release(ctx, button));
-							}
-							FocusLevel::MouseCaptured => {
-								state.with_ctx(|ctx| stack
-									.top()
-									.on_captured_mouse_release(ctx, button));
-							}
-						}
-					}
-				}
+			Event::MainEventsCleared => {
+				let mut frame_content = FrameContent::new();
+				state.with_ctx(|ctx| stack
+					.top()
+					.draw(ctx, &mut frame_content));
+				state.renderer
+					.draw_frame(&frame_content)
+					.expect("failed to draw frame");
 			}
-			WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-				state.scale = scale_factor as f32;
+			Event::RedrawEventsCleared => {
+				*control_flow = ControlFlow::Poll;
+			}
+			Event::LoopDestroyed => {
+				todo!()
 			}
 			_ => (),
-		}
-		Event::DeviceEvent { event, .. } => match event {
-			DeviceEvent::MouseMotion { delta: (x, y) } => {
-				if state.focus_level == FocusLevel::MouseCaptured {
-					state.with_ctx(|ctx| stack
-						.top()
-						.on_captured_mouse_move(
-							ctx,
-							Vec2 { x: x as f32, y: y as f32 },
-						));
-				}
-			}
-			_ => (),
-		}
-		Event::MainEventsCleared => {
-			let mut frame_content = FrameContent::new();
-			state.with_ctx(|ctx| stack.top().draw(ctx, &mut frame_content));
-			state.renderer
-				.draw_frame(&frame_content)
-				.expect("failed to draw frame");
-		}
-		Event::RedrawEventsCleared => {
-			*control_flow = ControlFlow::Poll;
-		}
-		Event::LoopDestroyed => {
-			todo!()
-		}
-		_ => (),
-	});
+		});
+	}
 }

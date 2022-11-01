@@ -32,7 +32,8 @@ pub trait GuiStateFrame {
 
     /// Called upon the window's focus level changing, except when caused by
     /// the window explicitly asking for that to happen.
-    fn on_focus_change(&mut self, ctx: &GuiWindowContext);
+    #[allow(unused_variables)]
+    fn on_focus_change(&mut self, ctx: &GuiWindowContext) {}
 
     /*
     /// Called upon a key being pressed, if window focused.
@@ -70,29 +71,33 @@ pub trait GuiStateFrame {
     );
     */
 
+    #[allow(unused_variables)]
     fn on_key_press_semantic(
         &mut self,
         ctx: &GuiWindowContext,
         key: VirtualKeyCode,
-    );
+    ) {}
 
+    #[allow(unused_variables)]
     fn on_key_release_semantic(
         &mut self,
         ctx: &GuiWindowContext,
         key: VirtualKeyCode,
-    );
+    ) {}
 
+    #[allow(unused_variables)]
     fn on_key_press_physical(
         &mut self,
         ctx: &GuiWindowContext,
         key: ScanCode,
-    );
+    ) {}
 
+    #[allow(unused_variables)]
     fn on_key_release_physical(
         &mut self,
         ctx: &GuiWindowContext,
         key: ScanCode,
-    );
+    ) {}
 
     /// Called upon a _captured_ mouse button being pressed down. See `GuiNode`
     /// for positional cursor clicks.
@@ -103,11 +108,12 @@ pub trait GuiStateFrame {
     /// Context guarantees:
     /// - `presed_mouse_buttons` contains `button`.
     /// - `focus_level` == `MouseCaptured`.
+    #[allow(unused_variables)]
     fn on_captured_mouse_click(
         &mut self,
         ctx: &GuiWindowContext,
         button: MouseButton,
-    );
+    ) {}
 
     /// Called upon a _captured_ mouse button being released. See `GuiNode` for
     /// positional cursor unclicks.
@@ -120,36 +126,40 @@ pub trait GuiStateFrame {
     /// Context guarantees:
     /// - `pressed_mouse_buttons` does not contain `button`.
     /// - `focus_level` == `MouseCaptured`.
+    #[allow(unused_variables)]
     fn on_captured_mouse_release(
         &mut self,
         ctx: &GuiWindowContext,
         button: MouseButton,
-    );
+    ) {}
 
     /// Called upon a _captured_ mouse being moved. See `GuiNode` for
     /// positional cursor movements.
     ///
     /// Context guarantees:
     /// - `focus_level` == `MouseCaptured`.
+    #[allow(unused_variables)]
     fn on_captured_mouse_move(
         &mut self,
         ctx: &GuiWindowContext,
         amount: Vec2<f32>,
-    );
+    ) {}
 
     /// Called upon a _captured_ mouse scrolling. See `GuiNode` for positional
     /// cursor scrolling.
     ///
     /// Context guarantees:
     /// - `focus_level` == `MouseCaptured`.
+    #[allow(unused_variables)]
     fn on_captured_mouse_scroll(
         &mut self,
         ctx: &GuiWindowContext,
         amount: ScrolledAmount,
-    );
+    ) {}
 
     /// Called upon, uh, character input to the window.
-    fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char);
+    #[allow(unused_variables)]
+    fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {}
 }
 
 

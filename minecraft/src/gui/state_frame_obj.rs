@@ -156,7 +156,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
     ) {
     	self
     		.visit_nodes(
-    			ctx,
+                ctx,
     			GuiVisitor::new(
     				&mut DrawTarget::new(ctx.spatial, target),
     				ctx.spatial,
