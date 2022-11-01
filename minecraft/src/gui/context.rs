@@ -5,11 +5,11 @@ use graphics::{
     Renderer,
     modifier::Transform2,
 };
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use vek::*;
 
 
-pub use winit_main::reexports::event::{
+pub use winit::event::{
     VirtualKeyCode,
     ScanCode,
     MouseButton,
@@ -25,13 +25,13 @@ pub struct GuiGlobalContext<'c> {
     pub focus_level: FocusLevel,
     /// Set of pressed virtual key codes, if the window is focused. Empty set
     /// if the window is not focused.
-    pub pressed_keys_semantic: &'c BTreeSet<VirtualKeyCode>,
+    pub pressed_keys_semantic: &'c HashSet<VirtualKeyCode>,
     /// Set of pressed physical keyboard scan codes, if the window is focused.
     /// Empty set if the window is not focused.
-    pub pressed_keys_physical: &'c BTreeSet<ScanCode>,
+    pub pressed_keys_physical: &'c HashSet<ScanCode>,
     /// Set of pressed mouse buttons, if the window is focused. Empty set if
     /// the window is not focused.
-    pub pressed_mouse_buttons: &'c BTreeSet<MouseButton>,
+    pub pressed_mouse_buttons: &'c HashSet<MouseButton>,
 }
 
 /// State maintained by event loop between GUI events that may be subject to
@@ -40,9 +40,9 @@ pub struct GuiGlobalContext<'c> {
 pub struct GuiSpatialContext<'c> {
     /// Space-invariant state.
     pub global: &'c GuiGlobalContext<'c>,
-    /// Cursor position in this space, if cursor exists and has a position in
-    /// this space, even if the window is unfocused or the cursor is outside of
-    /// the window or blocked by a different window.
+    /// Cursor position in this space, if cursor exists and has a finite
+    /// position in this space, even if the window is unfocused or the cursor
+    /// is outside of the window or blocked by a different window or clipped.
     ///
     /// Guaranteed to be `None` if `focus_level` == `MouseCaptured`.
     pub cursor_pos: Option<Vec2<f32>>,
@@ -69,7 +69,7 @@ pub struct GuiWindowContext<'c> {
     /// Spatial state without any spatial transformations.
     pub spatial: GuiSpatialContext<'c>,
     /// Window canvas size.
-    pub size: Extent2<f32>,
+    pub size: Extent2<u32>,
     /// Window UI scaling factor.
     pub scale: f32,
 }

@@ -49,6 +49,7 @@ pub use self::{
     },
     event::ScrolledAmount,
     state_frame::GuiStateFrame,
+    state_frame_obj::GuiStateFrameObj,
     node::{
         GuiNode,
         GuiVisitorTarget,
@@ -71,4 +72,5 @@ pub use self::{
         },
         sized_gui_block_seq_flatten::SizedGuiBlockFlatten,
     },
+    gui_event_loop::run as run_event_loop,
 };

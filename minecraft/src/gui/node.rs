@@ -29,18 +29,28 @@ pub trait GuiNode<'a>: Sized {
     /// position is clipped out for this node.
     fn blocks_cursor(&self, ctx: GuiSpatialContext, pos: Vec2<f32>) -> bool;
 
-    /// Called upon the cursor being moved to a new position.
+    /// Called upon the cursor being moved to a new position, whether or not
+    /// the window is focused.
+    ///
+    /// See `StateFrame::on_captured_mouse_move` for mouse-captured equivalent.
     ///
     /// See `blocks_cursor` regarding `hits`.
+    ///
+    /// Context guarantees:
+    /// - `focus_level` < `MouseCaptured`
     #[allow(unused_variables)]
     fn on_cursor_move(self, ctx: GuiSpatialContext, hits: bool) {}
 
-    /// Called upon a mouse button being pressed, if the window is focused.
+    /// Called upon a non-captured mouse button being pressed, if the window is
+    /// focused.
     ///
     /// As in `on_key_press`, "virtual" calls will not be made upon a window
     /// gaining focus.
     ///
     /// See `blocks_cursor` regarding `hits`.
+    ///
+    /// See `StateFrame::on_captured_mouse_click` for mouse-captured
+    /// equivalent.
     ///
     /// Context guarantees:
     /// - `pressed_mouse_buttons` contains `button`.
@@ -53,32 +63,43 @@ pub trait GuiNode<'a>: Sized {
         button: MouseButton,
     ) {}
 
-    /// Called upon a mouse button being released, if the window is focused
+    /// Called upon a non-captured mouse button being released, if the window
+    /// is focused.
     ///
     /// As in `on_key_release`, "virtual" calls will not be made upon a window
     /// losing focus. **This means that, if one is putting logic in
-    /// `on_cursor_unclick`, they often should also put logic in
+    /// `on_cursor_release`, they often should also put logic in
     /// `on_focus_change` to handle "cancellations."**
     ///
     /// See `blocks_cursor` regarding `hits`.
+    ///
+    /// See `StateFrame::on_captured_mouse_release` for mouse-captured
+    /// equivalent.
     ///
     /// Context guarantees:
     /// - `pressed_mouse_button` does not contain `button`.
     /// - `focus_level` == `Focused`.
     #[allow(unused_variables)]
-    fn on_cursor_unclick(
+    fn on_cursor_release(
         self,
         ctx: GuiSpatialContext,
         hits: bool,
         button: MouseButton,
     ) {}
 
-    /// Called upon mouse scrolling, whether or not the window is focused.
+    /// Called upon non-captured mouse scrolling, whether or not the window is
+    /// focused.
     ///
     /// I hope the OS filters out these events if it's blocked by another
     /// window.
     ///
     /// See `blocks_cursor` regarding `hits`.
+    ///
+    /// See `StateFrame::on_captured_mouse_scroll` for mosue-captured
+    /// equivalent.
+    ///
+    /// Context guarantees:
+    /// - `focus_level` < `MouseCaptured`.
     #[allow(unused_variables)]
     fn on_cursor_scroll(
         self,

@@ -11,12 +11,11 @@ async_zip = "0.0.6"
 image = "0.24"
 rand = "0.8"
 rand_pcg = "0.3"
+winit = "0.26"
+pollster = "0.2"
 
 [dependencies.graphics]
 path = "../graphics"
-
-[dependencies.winit-main]
-path = "../winit-main"
 
 [dependencies.anyhow]
 version = "1"

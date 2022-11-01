@@ -34,6 +34,7 @@ pub trait GuiStateFrame {
     /// the window explicitly asking for that to happen.
     fn on_focus_change(&mut self, ctx: &GuiWindowContext);
 
+    /*
     /// Called upon a key being pressed, if window focused.
     ///
     /// The context's `pressed_keys` sets are empty when the window is
@@ -66,6 +67,31 @@ pub trait GuiStateFrame {
         ctx: &GuiWindowContext,
         key_semantic: Option<VirtualKeyCode>,
         key_physical: ScanCode,
+    );
+    */
+
+    fn on_key_press_semantic(
+        &mut self,
+        ctx: &GuiWindowContext,
+        key: VirtualKeyCode,
+    );
+
+    fn on_key_release_semantic(
+        &mut self,
+        ctx: &GuiWindowContext,
+        key: VirtualKeyCode,
+    );
+
+    fn on_key_press_physical(
+        &mut self,
+        ctx: &GuiWindowContext,
+        key: ScanCode,
+    );
+
+    fn on_key_release_physical(
+        &mut self,
+        ctx: &GuiWindowContext,
+        key: ScanCode,
     );
 
     /// Called upon a _captured_ mouse button being pressed down. See `GuiNode`

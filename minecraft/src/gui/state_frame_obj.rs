@@ -35,7 +35,7 @@ use crate::gui::{
 /// putting the dynamic dispatch boundary here, the compile can optimize GUI
 /// component sizing, layout, and usage into a very efficient monomorphized
 /// machine-code monolith.
-pub trait GuiStateFrameObj {
+pub trait GuiStateFrameObj: GuiStateFrame {
     fn on_cursor_move(&mut self, ctx: &GuiWindowContext);
 
     fn on_cursor_click(
@@ -44,7 +44,7 @@ pub trait GuiStateFrameObj {
         button: MouseButton,
     );
 
-    fn on_cursor_unclick(
+    fn on_cursor_release(
         &mut self,
         ctx: &GuiWindowContext,
         button: MouseButton,
@@ -111,7 +111,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
     	handle_cursor_event(self, ctx, Callback(button));
     }
 
-    fn on_cursor_unclick(
+    fn on_cursor_release(
         &mut self,
         ctx: &GuiWindowContext,
         button: MouseButton,
@@ -124,7 +124,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
 				ctx: GuiSpatialContext,
 				hits: bool,
 			) {
-				node.on_cursor_unclick(ctx, hits, self.0);
+				node.on_cursor_release(ctx, hits, self.0);
 			}
     	}
     	handle_cursor_event(self, ctx, Callback(button));
