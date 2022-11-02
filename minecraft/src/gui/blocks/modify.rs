@@ -67,6 +67,7 @@ impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for Modify<I> {
         visitor: &mut GuiVisitor<'_, T>,
     ) {
         self.inner.visit_nodes(&mut visitor.reborrow()
+            .debug_tag("modify")
             .modify(self.modifier));
     }
 }

@@ -28,6 +28,7 @@ enum FrameItemNorm<'a> {
         is_begin_3d: bool,
     },
     Draw(DrawObjNorm<'a>),
+    PushDebugTag, // TODO merge in to push modifier?
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +92,7 @@ where
                         is_begin_3d: false,
                     },
                     &FrameItem::Draw3(ref o) => FrameItemNorm::Draw(o.into()),
+                    &FrameItem::PushDebugTag(_) => FrameItemNorm::PushDebugTag,
                 },
             ))
     }
@@ -162,15 +164,16 @@ pub struct RenderCompiler<'a, I> {
 
 #[derive(Debug, Clone)]
 struct StackEntry {
-    kind: ModifierKind,
+    kind: StackEntryKind,
     is_begin_3d: bool,
 }
 
 #[derive(Debug, Clone)]
-enum ModifierKind {
+enum StackEntryKind {
     Transform,
     Color,
     Clip,
+    DebugTag,
 }
 
 fn base_transform(surface_size: Extent2<u32>) -> Transform3 {
@@ -246,13 +249,13 @@ where
                 while self.stack.len() > stack_len {
                     let entry = self.stack.pop().unwrap();
                     match entry.kind {
-                        ModifierKind::Transform => {
+                        StackEntryKind::Transform => {
                             self.cumul_transform_stack.pop().unwrap();
                         }
-                        ModifierKind::Color => {
+                        StackEntryKind::Color => {
                             self.cumul_color_stack.pop().unwrap();
                         }
-                        ModifierKind::Clip => {
+                        StackEntryKind::Clip => {
                             self.clip_stack.pop().unwrap();
                             if let Some(i) = self.clip_valid_up_to {
                                 if i > self.clip_stack.len() {
@@ -260,6 +263,7 @@ where
                                 }
                             }
                         }
+                        StackEntryKind::DebugTag => (),
                     }
                     if entry.is_begin_3d {
                         debug_assert!(self.currently_3d);
@@ -276,16 +280,16 @@ where
                         let kind = match modifier {
                             Modifier3::Transform(t) => {
                                 self.cumul_transform_stack.push(t.then(&self.transform()));
-                                ModifierKind::Transform
+                                StackEntryKind::Transform
                             }
                             Modifier3::Color(c) => {
                                 self.cumul_color_stack.push(c * self.color());
-                                ModifierKind::Color
+                                StackEntryKind::Color
                             }
                             Modifier3::Clip(c) => {
                                 let c = self.transform().apply_clip(&c);
                                 self.clip_stack.push(c);
-                                ModifierKind::Clip
+                                StackEntryKind::Clip
                             }
                         };
                         self.stack.push(StackEntry {
@@ -299,6 +303,12 @@ where
                     }
                     FrameItemNorm::Draw(obj) => {
                         self.trying_to_draw = Some(obj);
+                    }
+                    FrameItemNorm::PushDebugTag => {
+                        self.stack.push(StackEntry {
+                            kind: StackEntryKind::DebugTag,
+                            is_begin_3d: false,
+                        })
                     }
                 }
             }

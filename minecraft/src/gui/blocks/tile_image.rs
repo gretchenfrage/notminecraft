@@ -40,6 +40,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<TileImage<'a>> {
     fn draw(self, _: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
         let extent = self.size / (self.inner.image_logical_size * self.scale);
         canvas.reborrow()
+            .debug_tag("tile_image")
             .draw_image_uv(
                 &self.inner.image,
                 self.size,

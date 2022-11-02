@@ -15,6 +15,10 @@ use graphics::{
         Clip2,
     },
 };
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+};
 use vek::*;
 
 
@@ -120,6 +124,8 @@ pub trait GuiVisitorTarget<'a> {
     fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2);
 
     fn visit_node<I: GuiNode<'a>>(&mut self, stack_len: usize, node: I);
+
+    fn push_debug_tag(&mut self, stack_len: usize, tag: Cow<'static, str>);
 }
 
 /// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
@@ -197,6 +203,11 @@ impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
     /// passing `self.ctx` as `ctx`.
     pub fn visit_node<I: GuiNode<'a>>(self, node: I) -> Self {
         self.target.visit_node(self.stack_len, node);
+        self
+    }
+
+    pub fn debug_tag<I: Into<Cow<'static, str>>>(self, tag: I) -> Self {
+        self.target.push_debug_tag(self.stack_len, tag.into());
         self
     }
 }

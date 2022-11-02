@@ -10,6 +10,7 @@ use crate::{
     },
     view_proj::ViewProj,
 };
+use std::borrow::Cow;
 use vek::*;
 
 
@@ -48,6 +49,7 @@ pub enum FrameItem<'a> {
     Begin3d(ViewProj),
     PushModifier3(Modifier3),
     Draw3(DrawObj3<'a>),
+    PushDebugTag(Cow<'static, str>),
 }
 
 #[derive(Debug, Clone)]
@@ -296,6 +298,10 @@ impl<'a> FrameContent<'a> {
                         }
                     }
                 }
+                &FrameItem::PushDebugTag(ref t) => {
+                    writeln!(&mut buf, "<debug \"{}\">", t);
+                    tag_stack.push("debug");
+                }
             }
         }
         while tag_stack.len() > 0 {
@@ -441,6 +447,11 @@ impl<'a, 'b> Canvas2<'a, 'b> {
                 size.w / size.h,
             ))
     }
+
+    pub fn debug_tag<I: Into<Cow<'static, str>>>(mut self, tag: I) -> Self {
+        self.push(FrameItem::PushDebugTag(tag.into()));
+        self
+    }
 }
 
 impl<'a, 'b> Canvas3<'a, 'b> {
@@ -536,5 +547,10 @@ impl<'a, 'b> Canvas3<'a, 'b> {
             mesh,
             textures: textures.clone(),
         }))
+    }
+
+    pub fn debug_tag<I: Into<Cow<'static, str>>>(mut self, tag: I) -> Self {
+        self.push(FrameItem::PushDebugTag(tag.into()));
+        self
     }
 }

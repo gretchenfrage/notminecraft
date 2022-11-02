@@ -116,6 +116,7 @@ impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HMarginSized<I> {
         visitor: &mut GuiVisitor<'_, T>,
     ) {
         self.inner.visit_nodes(&mut visitor.reborrow()
+            .debug_tag("h_margin")
             .translate([self.x_translate, 0.0]));
     }
 }

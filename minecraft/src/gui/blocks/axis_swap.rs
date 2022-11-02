@@ -70,6 +70,7 @@ impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for AxisSwap<I> {
         T: GuiVisitorTarget<'a>,
     {
         self.0.visit_nodes(&mut visitor.reborrow()
+            .debug_tag("axis_swap")
             .modify(Transform2(Mat3::new(
                 0.0, 1.0, 0.0,
                 1.0, 0.0, 0.0,

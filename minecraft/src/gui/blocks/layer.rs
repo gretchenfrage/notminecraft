@@ -29,7 +29,6 @@ impl<
     I: GuiBlockSeq<'a, DimParentSets, DimParentSets>,
 > GuiBlock<'a, DimParentSets, DimParentSets> for Layer<I>
 {
-    //type Sized = SubmapIterSizedGuiBlock<LayerItemVisitorMapper, I::SizedSeq>;
     type Sized = SizedGuiBlockFlatten<I::SizedSeq, IdentityMaperator>;
 
     fn size(
@@ -64,5 +63,6 @@ impl<'a> GuiVisitorMaperator<'a> for IdentityMaperator {
     ) -> GuiVisitor<'b, T>
     {
         visitor.reborrow()
+            .debug_tag("layer item")
     }
 }

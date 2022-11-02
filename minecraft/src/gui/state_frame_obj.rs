@@ -23,6 +23,7 @@ use crate::gui::{
 	},
 	state_frame::GuiStateFrame,
 };
+use std::borrow::Cow;
 
 
 // ==== trait ====
@@ -235,6 +236,11 @@ impl<'a, 'c, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'c, F>
 
         self.callback.call(node, ctx, hits);
     }
+
+    fn push_debug_tag(&mut self, stack_len: usize, _: Cow<'static, str>) {
+        self.set_stack_len(stack_len);
+        self.under.push(self.top);
+    }
 }
 
 fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
@@ -305,5 +311,14 @@ impl<'a, 'c> GuiVisitorTarget<'a> for DrawTarget<'a, 'c> {
     		target: self.frame_content,
     		stack_len: self.under.len(),
     	});
+    }
+
+    fn push_debug_tag(&mut self, stack_len: usize, tag: Cow<'static, str>) {
+        self.set_stack_len(stack_len);
+
+        self.frame_content.0.push((
+            self.under.len(),
+            FrameItem::PushDebugTag(tag),
+        ));
     }
 }
