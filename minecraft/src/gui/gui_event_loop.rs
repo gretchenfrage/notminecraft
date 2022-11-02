@@ -19,7 +19,10 @@ use graphics::{
 };
 use std::{
 	collections::HashSet,
-	sync::Arc,
+	sync::{
+		Arc,
+		RwLock,
+	},
 };
 use winit::{
     event_loop::{
@@ -46,7 +49,7 @@ use vek::*;
 
 
 struct State {
-    renderer: Renderer,
+    renderer: RwLock<Renderer>,
     resources: ResourcePack,
     lang: Localization,
     focus_level: FocusLevel,
@@ -73,7 +76,7 @@ impl State {
 	{
 		let winit_size = window.inner_size();
 		State {
-			renderer,
+			renderer: RwLock::new(renderer),
 			resources,
 			lang,
 			focus_level: FocusLevel::Focused,
@@ -141,7 +144,7 @@ impl Stack {
 pub struct GuiEventLoop {
 	event_loop: EventLoop<()>,
 	window: Arc<Window>,
-	renderer: Renderer,
+	pub renderer: Renderer,
 }
 
 impl GuiEventLoop {
@@ -161,10 +164,6 @@ impl GuiEventLoop {
 			window,
 			renderer,
 		}		
-	}
-
-	pub fn renderer(&self) -> &Renderer {
-		&self.renderer
 	}
 
 	pub fn run(
@@ -187,7 +186,7 @@ impl GuiEventLoop {
 					state.size.w = winit_size.width;
 					state.size.h = winit_size.height;
 
-					state.renderer.resize(state.size);
+					state.renderer.try_write().unwrap().resize(state.size);
 				}
 				WindowEvent::CloseRequested => {
 					todo!()
@@ -366,15 +365,16 @@ impl GuiEventLoop {
 				}
 				_ => (),
 			}
-			Event::MainEventsCleared => {
+			Event::MainEventsCleared => state.with_ctx(|ctx| {
 				let mut frame_content = FrameContent::new();
-				state.with_ctx(|ctx| stack
-					.top()
-					.draw(ctx, &mut frame_content));
-				state.renderer
+				stack.top().draw(ctx, &mut frame_content);
+				println!("{}", frame_content.to_pseudo_xml());
+				ctx.spatial.global.renderer
+					.try_write()
+					.unwrap()
 					.draw_frame(&frame_content)
 					.expect("failed to draw frame");
-			}
+			}),
 			Event::RedrawEventsCleared => {
 				*control_flow = ControlFlow::Poll;
 			}

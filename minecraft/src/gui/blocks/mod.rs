@@ -39,6 +39,7 @@ pub use self::{
     },
     layer::layer,
     margin::{
+        margin,
         h_margin,
         v_margin,
     },

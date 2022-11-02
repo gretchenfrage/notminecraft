@@ -24,7 +24,7 @@ pub trait GuiStateFrame {
     /// followed by invoking some positional handler on the nodes.
     fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
         &'a mut self,
-        ctx: &GuiWindowContext,
+        ctx: &'a GuiWindowContext,
         visitor: GuiVisitor<T>,
     )
     where

@@ -58,7 +58,7 @@ pub trait GuiStateFrameObj: GuiStateFrame {
 
     fn draw<'a>(
         &'a mut self,
-        ctx: &GuiWindowContext,
+        ctx: &'a GuiWindowContext,
         target: &mut FrameContent<'a>,
     );
 }
@@ -151,7 +151,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
 
     fn draw<'a>(
         &'a mut self,
-        ctx: &GuiWindowContext,
+        ctx: &'a GuiWindowContext,
         target: &mut FrameContent<'a>,
     ) {
     	self
@@ -209,7 +209,7 @@ impl<'c, F> CursorTarget<'c, F> {
 	}
 
 	fn set_stack_len(&mut self, stack_len: usize) {
-        assert!(self.under.len() <= stack_len, "stack_len too high");
+        assert!(stack_len <= self.under.len(), "stack_len too high");
         while self.under.len() > stack_len {
             self.top = self.under.pop().unwrap();
         }
@@ -239,7 +239,7 @@ impl<'a, 'c, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'c, F>
 
 fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
 	frame: &'a mut T,
-	ctx: &GuiWindowContext,
+	ctx: &'a GuiWindowContext,
 	callback: F,
 ) {
 	frame
@@ -255,6 +255,7 @@ fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
 
 // ==== draw node visitor target ====
 
+#[derive(Debug)]
 struct DrawTarget<'a, 'c> {
 	top: GuiSpatialContext<'c>,
     under: Vec<GuiSpatialContext<'c>>,
@@ -275,7 +276,7 @@ impl<'a, 'c> DrawTarget<'a, 'c> {
 	}
 
 	fn set_stack_len(&mut self, stack_len: usize) {
-        assert!(self.under.len() <= stack_len, "stack_len too high");
+        assert!(stack_len <= self.under.len(), "stack_len too high");
         while self.under.len() > stack_len {
             self.top = self.under.pop().unwrap();
         }

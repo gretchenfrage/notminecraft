@@ -23,10 +23,28 @@ pub struct ResourcePack {
 }
 
 impl ResourcePack {
-	pub fn new(renderer: &Renderer) -> Self {
-		let font = renderer.load_font(fs::read("/usr/share/fonts/truetype/fonts-gujr-extra/aakar-medium.ttf").unwrap()).unwrap();
-		let title_pixel = renderer.load_image(fs::read("/home/phoenix/Pictures/Screenshots/Screenshot from 2022-11-01 18-04-29.png").unwrap()).unwrap();
-		let gui_png = image::load_from_memory(&fs::read("/home/phoenix/Pictures/Screenshots/Screenshot from 2022-11-01 18-04-29.png").unwrap()).unwrap();
+	pub fn new(renderer: &mut Renderer) -> Self {
+		let font = renderer
+			.load_font_437(fs::read(
+				"/home/phoenix/minecraft-beta-1.0_01/font/default.png"
+			).unwrap()).unwrap();
+		let title_pixel = 
+			renderer.load_image_raw(
+				image::load_from_memory(&fs::read(
+					"/home/phoenix/minecraft-beta-1.0_01/terrain.png"
+				).unwrap()).unwrap()
+				.crop_imm(
+					16,
+					0,
+					16,
+					16,
+				)
+			);
+
+		let gui_png =
+			image::load_from_memory(&fs::read(
+				"/home/phoenix/minecraft-beta-1.0_01/gui/gui.png"
+			).unwrap()).unwrap();
 		let button = Tile9ImagesBuilder {
             base_image: &gui_png,
             px_start: [0, 66].into(),
@@ -45,7 +63,11 @@ impl ResourcePack {
             px_left: 2,
             px_right: 2,
         }.build(&renderer);
-        let menu_bg = renderer.load_image(fs::read("/home/phoenix/Pictures/Screenshots/Screenshot from 2022-11-01 18-04-29.png").unwrap()).unwrap();
+
+        let menu_bg = renderer
+        	.load_image(fs::read(
+        		"/home/phoenix/minecraft-beta-1.0_01/gui/background.png"
+        	).unwrap()).unwrap();
 		
 		ResourcePack {
 			font,

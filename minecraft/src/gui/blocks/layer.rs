@@ -49,7 +49,6 @@ impl<
             sized_seq,
         ) = self.0.size_all(ctx, w_in_seq, h_in_seq, scale_seq);
 
-        //let sized = SubmapIterSizedGuiBlock::new(LayerItemVisitorMapper, sized_seq);
         let sized = SizedGuiBlockFlatten(sized_seq, IdentityMaperator);
 
         ((), (), sized)

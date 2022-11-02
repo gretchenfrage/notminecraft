@@ -52,10 +52,14 @@ use crate::{
 };
 
 fn main() {
-    let event_loop = GuiEventLoop::new();
-    let resources = ResourcePack::new(event_loop.renderer());
+    let mut event_loop = GuiEventLoop::new();
+    let resources = ResourcePack::new(&mut event_loop.renderer);
     let lang = Localization::new();
-    let gui_state = MainMenu::new(event_loop.renderer());
+    let gui_state = MainMenu::new(
+        &event_loop.renderer,
+        &resources,
+        &lang,
+    );
     event_loop.run(Box::new(gui_state), resources, lang);
 }
 

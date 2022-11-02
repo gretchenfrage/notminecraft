@@ -11,17 +11,36 @@ use crate::gui::{
 use super::axis_swap;
 
 
+/// Gui block with a parent-set size that puts margins around its left, right,
+/// top, and bottom sides (of constant pre-scale size), setting the child's
+/// size to smaller values.
+pub fn margin<'a, I: GuiBlock<'a, DimParentSets, DimParentSets>>(
+    logical_margin_left: f32,
+    logical_margin_right: f32,
+    logical_margin_top: f32,
+    logical_margin_bottom: f32,
+    inner: I,
+) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
+{
+    h_margin(logical_margin_left, logical_margin_right,
+        v_margin(logical_margin_top, logical_margin_bottom,
+            inner,
+        )
+    )
+}
+
+
 /// Gui block with a parent-set width that puts a left and right margin around
 /// its child (of constant pre-scale size), setting the child's width to a
 /// smaller value. Passes through the height constraint.
 pub fn h_margin<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(
-    unscaled_margin_left: f32,
-    unscaled_margin_right: f32,
+    logical_margin_left: f32,
+    logical_margin_right: f32,
     inner: I,
 ) -> impl GuiBlock<'a, DimParentSets, H> {
     HMargin {
-        unscaled_margin_left,
-        unscaled_margin_right,
+        logical_margin_left,
+        logical_margin_right,
         inner,
     }
 }
@@ -31,14 +50,14 @@ pub fn h_margin<'a, H: DimConstraint, I: GuiBlock<'a, DimParentSets, H>>(
 /// its child (of constant pre-scale size), setting the child's height to a
 /// smaller value. Passes through the width constraint.
 pub fn v_margin<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(
-    unscaled_margin_top: f32,
-    unscaled_margin_bottom: f32,
+    logical_margin_top: f32,
+    logical_margin_bottom: f32,
     inner: I,
 ) -> impl GuiBlock<'a, W, DimParentSets> {
     axis_swap(
         h_margin(
-            unscaled_margin_top,
-            unscaled_margin_bottom,
+            logical_margin_top,
+            logical_margin_bottom,
             axis_swap(inner),
         ),
     )
@@ -46,8 +65,8 @@ pub fn v_margin<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(
 
 
 struct HMargin<I> {
-    unscaled_margin_left: f32,
-    unscaled_margin_right: f32,
+    logical_margin_left: f32,
+    logical_margin_right: f32,
     inner: I,
 }
 
@@ -65,8 +84,8 @@ impl<
         h_in: H::In,
         scale: f32,
     ) -> ((), H::Out, Self::Sized) {
-        let margin_min = self.unscaled_margin_left * scale;
-        let margin_max = self.unscaled_margin_right * scale;
+        let margin_min = self.logical_margin_left * scale;
+        let margin_max = self.logical_margin_right * scale;
 
         let inner_w = f32::max(w - margin_min - margin_max, 0.0);
         let x_translate = (w - inner_w) / 2.0;

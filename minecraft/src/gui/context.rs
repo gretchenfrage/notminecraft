@@ -8,7 +8,10 @@ use graphics::{
     Renderer,
     modifier::Transform2,
 };
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    sync::RwLock,
+};
 use vek::*;
 
 
@@ -23,7 +26,7 @@ pub use winit::event::{
 /// state frame and all nodes, unaffected by the layout process.
 #[derive(Debug, Copy, Clone)]
 pub struct GuiGlobalContext<'c> {
-    pub renderer: &'c Renderer,
+    pub renderer: &'c RwLock<Renderer>, // TODO temporary hack
     pub resources: &'c ResourcePack,
     pub lang: &'c Localization,
     /// Window focus level.
@@ -66,6 +69,14 @@ impl<'c> GuiSpatialContext<'c> {
                 .map(|reversed| reversed.apply(cursor_pos));
         }
     }
+
+    pub fn resources(&self) -> &ResourcePack {
+        &self.global.resources
+    }
+
+    pub fn lang(&self) -> &Localization {
+        &self.global.lang
+    }
 }
 
 /// State maintained by event loop between GUI events that is accessable by
@@ -77,6 +88,20 @@ pub struct GuiWindowContext<'c> {
     pub size: Extent2<u32>,
     /// Window UI scaling factor.
     pub scale: f32,
+}
+
+impl<'c> GuiWindowContext<'c> {
+    pub fn global(&self) -> &GuiGlobalContext {
+        &self.spatial.global
+    }
+
+    pub fn resources(&self) -> &ResourcePack {
+        &self.spatial.global.resources
+    }
+
+    pub fn lang(&self) -> &Localization {
+        &self.spatial.global.lang
+    }
 }
 
 /// Window focus level. These form a semantically meaningful ordering, in which
