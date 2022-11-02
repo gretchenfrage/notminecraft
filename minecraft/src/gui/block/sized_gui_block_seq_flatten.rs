@@ -20,6 +20,7 @@ use crate::gui::{
 /// Its `visit_nodes` implementation calls `visit_nodes` for each
 /// `SizedGuiBlock` in the sequence, mapping `visitor` through the maperator
 /// to produce each other's modified visitor.
+#[derive(Debug)]
 pub struct SizedGuiBlockFlatten<S, M>(pub S, pub M);
 
 impl<

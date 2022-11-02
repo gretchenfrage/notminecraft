@@ -368,7 +368,7 @@ impl GuiEventLoop {
 			Event::MainEventsCleared => state.with_ctx(|ctx| {
 				let mut frame_content = FrameContent::new();
 				stack.top().draw(ctx, &mut frame_content);
-				println!("{}", frame_content.to_pseudo_xml());
+				//println!("{}", frame_content.to_pseudo_xml());
 				ctx.spatial.global.renderer
 					.try_write()
 					.unwrap()

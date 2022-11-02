@@ -21,6 +21,63 @@ use vek::*;
 pub struct MainMenu {
 	version_text: GuiTextBlock,
     uncopyright_text: GuiTextBlock,
+    singleplayer_button: MenuButton,
+    multiplayer_button: MenuButton,
+    mods_button: MenuButton,
+    options_button: MenuButton,
+}
+
+pub struct MenuButton {
+    text: GuiTextBlock,
+}
+
+pub struct MenuButtonBuilder<'a> {
+    pub text: &'a str,
+}
+
+impl<'a> MenuButtonBuilder<'a> {
+    pub fn new(text: &'a str) -> Self {
+        MenuButtonBuilder {
+            text,
+        }
+    }
+
+    pub fn build(self, resources: &ResourcePack) -> MenuButton {
+        let text = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: self.text,
+            font: resources.font,
+            logical_font_size: 16.0,
+            color: hex_color(0xE0E0E0FF),
+            h_align: HAlign::Center,
+            v_align: VAlign::Center,
+            wrap: false,
+        });
+        MenuButton {
+            text,
+        }
+    }
+}
+
+impl MenuButton {
+    pub fn gui<'a>(
+        &'a mut self,
+        ctx: &'a GuiWindowContext,
+    ) -> impl GuiBlock<'a, DimParentSets, DimChildSets>
+    {
+        logical_height(40.0,
+            layer((
+                tile_9(
+                    &ctx.resources().button,
+                    [400.0, 40.0],
+                    2.0 / 20.0,
+                    3.0 / 20.0,
+                    2.0 / 200.0,
+                    2.0 / 200.0,
+                ),
+                &mut self.text,
+            )),
+        )
+    }
 }
 
 impl MainMenu {
@@ -48,32 +105,26 @@ impl MainMenu {
 			v_align: VAlign::Bottom,
 			wrap: true,
 		});
+        let singleplayer_button = MenuButtonBuilder
+            ::new(&lang.menu_singleplayer)
+            .build(resources);
+        let multiplayer_button = MenuButtonBuilder
+            ::new(&lang.menu_multiplayer)
+            .build(resources);
+        let mods_button = MenuButtonBuilder
+            ::new(&lang.menu_mods)
+            .build(resources);
+        let options_button = MenuButtonBuilder
+            ::new(&lang.menu_options)
+            .build(resources);
 		MainMenu {
 			version_text,
 			uncopyright_text,
+            singleplayer_button,
+            multiplayer_button,
+            mods_button,
+            options_button,
 		}
-	}
-
-	fn gui_bg<'a>(
-		ctx: &'a GuiWindowContext
-	) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
-	{
-		modify(Rgba::new(0.25, 0.25, 0.25, 1.0),
-            tile_image(&ctx.resources().menu_bg, 64.0)
-        )
-	}
-
-	fn gui_corner_text<'a>(
-		&'a mut self,
-		ctx: &'a GuiWindowContext,
-	) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
-	{
-		margin(4.0, 4.0, 4.0, 4.0,
-			layer((
-				&mut self.version_text,
-				&mut self.uncopyright_text,
-			))
-		)
 	}
 
 	fn gui<'a>(
@@ -82,8 +133,27 @@ impl MainMenu {
 	) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
 	{
 		layer((
-			Self::gui_bg(ctx),
-			self.gui_corner_text(ctx),
+			modify(Rgba::new(0.25, 0.25, 0.25, 1.0),
+                tile_image(&ctx.resources().menu_bg, 64.0)
+            ),
+			margin(4.0, 4.0, 4.0, 4.0,
+                layer((
+                    &mut self.version_text,
+                    &mut self.uncopyright_text,
+                ))
+            ),
+            h_align(0.5,
+                logical_width(400.0,
+                    v_align(0.0,
+                        v_stack(12.5, (
+                            self.singleplayer_button.gui(ctx),
+                            self.multiplayer_button.gui(ctx),
+                            self.mods_button.gui(ctx),
+                            self.options_button.gui(ctx),
+                        )),
+                    ),
+                ),
+            ),
 		))
 		//tile_image(&ctx.spatial.global.resources.menu_bg, [508.0, 460.0])
 		/*

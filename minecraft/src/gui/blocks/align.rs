@@ -40,6 +40,7 @@ pub fn v_align<
 }
 
 
+#[derive(Debug)]
 struct HAlign<I> {
     frac: f32,
     inner: I,
@@ -59,6 +60,7 @@ impl<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>> GuiBlock<'a, DimPar
 }
 
 
+#[derive(Debug)]
 struct HAlignSized<I> {
     x_translate: f32,
     inner: I,

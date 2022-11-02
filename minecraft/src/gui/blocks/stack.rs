@@ -17,6 +17,7 @@ use super::{
 use std::{
     iter::repeat,
     ops::Index,
+    fmt::Debug,
 };
 
 
@@ -42,6 +43,7 @@ pub fn h_stack<'a, I: GuiBlockSeq<'a, DimChildSets, DimParentSets>>(
 }
 
 
+#[derive(Debug)]
 struct VStack<I> {
     logical_gap: f32,
     items: I,
@@ -98,6 +100,7 @@ impl<
     }
 }
 
+#[derive(Debug)]
 struct VStackMaperator<H> {
     item_heights: H,
     scaled_gap: f32,
@@ -107,7 +110,7 @@ struct VStackMaperator<H> {
 
 impl<
     'a,
-    H: Index<usize, Output=f32>,
+    H: Index<usize, Output=f32> + Debug,
 > GuiVisitorMaperator<'a> for VStackMaperator<H>
 {
     fn next<'b, T: GuiVisitorTarget<'a>>(

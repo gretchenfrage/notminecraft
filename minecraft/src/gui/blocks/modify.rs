@@ -26,6 +26,7 @@ pub fn modify<
 }
 
 
+#[derive(Debug)]
 struct Modify<I> {
     modifier: Modifier2,
     inner: I,

@@ -22,6 +22,7 @@ pub fn layer<
 }
 
 
+#[derive(Debug)]
 struct Layer<I>(I);
 
 impl<
@@ -54,6 +55,7 @@ impl<
     }
 }
 
+#[derive(Debug)]
 pub struct IdentityMaperator;
 
 impl<'a> GuiVisitorMaperator<'a> for IdentityMaperator {

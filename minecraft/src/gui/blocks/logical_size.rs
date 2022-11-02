@@ -47,6 +47,7 @@ pub fn logical_size<
 }
 
 
+#[derive(Debug)]
 struct LogicalWidth<I> {
     logical_width: f32,
     inner: I,

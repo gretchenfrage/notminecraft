@@ -47,6 +47,7 @@ const BOTTOM_RIGHT_MYSTERY_GAP: Extent2<f32> =
 // ==== config ====
 
 
+#[derive(Debug)]
 pub struct GuiTextBlockConfig<'a> {
     pub text: &'a str,
     pub font: FontId,
@@ -67,6 +68,7 @@ pub struct GuiTextBlockConfig<'a> {
 /// cache its layout so it doesn't have to recalculate unless the size or scale
 /// changes. The way this is done is that `GuiBlock` is implemented not for
 /// `GuiTextBlock` itself, but for `&mut GuiTextBlock`.
+#[derive(Debug)]
 pub struct GuiTextBlock {
     text: String,
     font: FontId,
@@ -79,7 +81,7 @@ pub struct GuiTextBlock {
     cache: Option<(SizeArgs, LayedOutTextBlock)>,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct SizeArgs {
     wrap_width: Option<f32>,
     scale: f32,

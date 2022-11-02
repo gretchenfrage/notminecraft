@@ -13,7 +13,10 @@ use crate::gui::{
         },
     },
 };
-use std::ops::Index;
+use std::{
+    ops::Index,
+    fmt::Debug,
+};
 
 
 /// Sequence version of `GuiBlock`. Essentially a compile-time heterogenous
@@ -21,17 +24,17 @@ use std::ops::Index;
 ///
 /// Blanket-impl'd on tuple types. All elements must have the same dimensional
 /// constraints. Facilitates avoiding allocations.
-pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
+pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
     /// Sequence of sized version of self's elements. Possibly a tuple.
     type SizedSeq: SizedGuiBlockSeq<'a>;
 
     /// Sequence of `<W as DimConstraint>::Out` of self's elements. Possibly
     /// a fixed-size array.
-    type WOutSeq: Index<usize, Output=W::Out>;
+    type WOutSeq: Index<usize, Output=W::Out> + Debug;
 
     /// Sequence of `<H as DimConstraint>::Out` of self's elements. Possibly
     /// a fixed-size array.
-    type HOutSeq: Index<usize, Output=H::Out>;
+    type HOutSeq: Index<usize, Output=H::Out> + Debug;
 
     /// Number of elements.
     fn len(&self) -> usize;
@@ -59,7 +62,7 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
 /// heterogenous tuple of `SizedGuiBlock` implementations.
 ///
 /// Blanket-impl'd on tuple types. Facilitates avoiding allocations.
-pub trait SizedGuiBlockSeq<'a> {
+pub trait SizedGuiBlockSeq<'a>: Debug {
     /// Call `visit_nodes` on each item, in order, getting their GUI visitors
     /// by mapping `visitor` through `maperator`. 
     fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<T>, maperator: M)
@@ -75,7 +78,7 @@ pub trait SizedGuiBlockSeq<'a> {
 ///   underlying `GuiVisitor` for disjoint lifetimes.
 /// - The caller has to pass in the underlying `visitor` each time (this
 ///   simplifies the API for our use case).
-pub trait GuiVisitorMaperator<'a> {
+pub trait GuiVisitorMaperator<'a>: Debug {
     /// Reborrow and map the underlying visitor to the next item visitor.
     ///
     /// Doesn't use `Option` because the number of items is determined by
@@ -194,6 +197,7 @@ gui_seq_tuples!(
     (A08, a08, a08_w_out, a08_h_out, a08_sized),
     (A09, a09, a09_w_out, a09_h_out, a09_sized),
     (A10, a10, a10_w_out, a10_h_out, a10_sized),
+    /*
     (A11, a11, a11_w_out, a11_h_out, a11_sized),
     (A12, a12, a12_w_out, a12_h_out, a12_sized),
     (A13, a13, a13_w_out, a13_h_out, a13_sized),
@@ -204,4 +208,5 @@ gui_seq_tuples!(
     (A18, a18, a18_w_out, a18_h_out, a18_sized),
     (A19, a19, a19_w_out, a19_h_out, a19_sized),
     (A20, a20, a20_w_out, a20_h_out, a20_sized),
+    */
 );

@@ -36,6 +36,7 @@ pub fn axis_swap_seq<
 }
 
 
+#[derive(Debug)]
 struct AxisSwap<I>(I);
 
 

@@ -29,6 +29,7 @@ pub fn tile_image<'a, E: Into<Extent2<f32>>>(
 }
 
 
+#[derive(Debug)]
 struct TileImage<'a> {
     image: &'a GpuImage,
     image_logical_size: Extent2<f32>,

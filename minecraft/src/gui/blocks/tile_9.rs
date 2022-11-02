@@ -138,9 +138,9 @@ pub struct Tile9Images {
 // ==== GUI block ====
 
 
-pub fn tile_9<'a>(
+pub fn tile_9<'a, I: Into<Extent2<f32>>>(
     images: &'a Tile9Images,
-    logical_tile_size: Extent2<f32>,
+    logical_tile_size: I,
     frac_top: f32,
     frac_bottom: f32,
     frac_left: f32,
@@ -148,7 +148,7 @@ pub fn tile_9<'a>(
 ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
     Tile9 {
         images,
-        logical_tile_size,
+        logical_tile_size: logical_tile_size.into(),
         frac_top,
         frac_bottom,
         frac_left,
@@ -156,6 +156,7 @@ pub fn tile_9<'a>(
     }
 }
 
+#[derive(Debug)]
 struct Tile9<'a> {
     images: &'a Tile9Images,
     /// Size of the whole (unsliced) image before scaling and tiling.

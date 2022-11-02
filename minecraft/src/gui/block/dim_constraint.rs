@@ -1,5 +1,7 @@
 //! Type-level dimensional constraints.
 
+use std::fmt::Debug;
+
 
 /// Dimensional constraint on some axis (X or Y). A type-level tuple of `In`
 /// and `Out` associated types, generally never instantiated itself.
@@ -8,8 +10,8 @@
 /// is passed as the constraint, and `Self::Out` is returned as remaining size
 /// determination within that constraint.
 pub trait DimConstraint {
-    type In;
-    type Out;
+    type In: Debug;
+    type Out: Debug;
 }
 
 

@@ -6,6 +6,7 @@ use crate::gui::{
 	DimParentSets,
 	GuiGlobalContext,
 };
+use std::fmt::Debug;
 use vek::*;
 
 
@@ -16,6 +17,7 @@ use vek::*;
 ///
 /// Due to the orphan rule, it would not be useful to expose this to other
 /// crates.
+#[derive(Debug)]
 pub struct SimpleGuiBlock<I> {
 	pub inner: I,
 	pub size: Extent2<f32>,
@@ -24,6 +26,7 @@ pub struct SimpleGuiBlock<I> {
 
 impl<'a, I> GuiBlock<'a, DimParentSets, DimParentSets> for I
 where
+	I: Debug,
 	SimpleGuiBlock<I>: GuiNode<'a>,
 {
 	type Sized = SimpleGuiBlock<I>;

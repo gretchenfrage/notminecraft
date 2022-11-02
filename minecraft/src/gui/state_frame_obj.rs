@@ -293,15 +293,16 @@ impl<'a, 'c> GuiVisitorTarget<'a> for DrawTarget<'a, 'c> {
 	fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2) {
         self.set_stack_len(stack_len);
 
+        self.frame_content.0.push((
+        	self.under.len(),
+        	FrameItem::PushModifier2(modifier),
+        ));
+
         self.under.push(self.top);
         if let Modifier2::Transform(transform) = modifier {
 	        self.top.relativize(transform);
 	    }
 
-        self.frame_content.0.push((
-        	self.under.len(),
-        	FrameItem::PushModifier2(modifier),
-        ));
     }
 
     fn visit_node<I: GuiNode<'a>>(&mut self, stack_len: usize, node: I) {
@@ -320,5 +321,7 @@ impl<'a, 'c> GuiVisitorTarget<'a> for DrawTarget<'a, 'c> {
             self.under.len(),
             FrameItem::PushDebugTag(tag),
         ));
+
+        self.under.push(self.top);
     }
 }

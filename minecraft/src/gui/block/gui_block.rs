@@ -8,11 +8,12 @@ use crate::gui::{
     },
     block::dim_constraint::DimConstraint,
 };
+use std::fmt::Debug;
 
 
 /// GUI block, often borrowing from some part of a `&'a mut FrameState`, not
 /// yet sized or positioned.
-pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
+pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint>: Debug {
     /// Sized version of self.
     type Sized: SizedGuiBlock<'a>;
 
@@ -32,7 +33,7 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint> {
 /// `() => [GuiNode<'a>]` function, we simply find it makes the API nicer for
 /// it to be done in this way. As such, a `GuiNode => [GuiNode]` conversion is
 /// quite natural.
-pub trait SizedGuiBlock<'a> {
+pub trait SizedGuiBlock<'a>: Debug {
     /// Visit this block's nodes and subnodes in order. The visitor carries
     /// with it position data. Further transformations may be applied to the
     /// visitor before passing it to `visit_nodes` calls on child

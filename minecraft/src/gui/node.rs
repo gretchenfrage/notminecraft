@@ -24,7 +24,7 @@ use vek::*;
 
 /// Positionable unit of GUI behavior. Expected to have its sizing data already
 /// bound into it.
-pub trait GuiNode<'a>: Sized {
+pub trait GuiNode<'a>: Sized + Debug {
     /// Determine whether this node "blocks" a cursor event at the given
     /// position. The event will still be passed to nodes underneath this one,
     /// but their `hits` argument will be false.
@@ -206,8 +206,9 @@ impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
         self
     }
 
-    pub fn debug_tag<I: Into<Cow<'static, str>>>(self, tag: I) -> Self {
+    pub fn debug_tag<I: Into<Cow<'static, str>>>(mut self, tag: I) -> Self {
         self.target.push_debug_tag(self.stack_len, tag.into());
+        self.stack_len += 1;
         self
     }
 }

@@ -64,6 +64,7 @@ pub fn v_margin<'a, W: DimConstraint, I: GuiBlock<'a, W, DimParentSets>>(
 }
 
 
+#[derive(Debug)]
 struct HMargin<I> {
     logical_margin_left: f32,
     logical_margin_right: f32,
@@ -105,6 +106,7 @@ impl<
     }
 }
 
+#[derive(Debug)]
 struct HMarginSized<I> {
     x_translate: f32,
     inner: I,
