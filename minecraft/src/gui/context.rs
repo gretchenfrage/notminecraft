@@ -1,6 +1,6 @@
 //! State maintained by event loop between GUI events.
 
-use crate::{
+use crate::asset::{
     resource_pack::ResourcePack,
     localization::Localization,
 };

@@ -1,7 +1,9 @@
 
 use crate::{
-	resource_pack::ResourcePack,
-	localization::Localization,
+	asset::{
+		resource_pack::ResourcePack,
+		localization::Localization,
+	},
 	gui::{
 		context::{
 			GuiGlobalContext,

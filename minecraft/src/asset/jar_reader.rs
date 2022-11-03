@@ -1,21 +1,23 @@
 //! Extracting assets from minecraft.jar.
 
+
 use std::{
     env,
     collections::HashMap,
 };
-use anyhow::*;
-use async_zip::read::fs::ZipFileReader;
 use tokio::io::AsyncReadExt;
-use vek::*;
+use async_zip::read::fs::ZipFileReader;
 use image::DynamicImage;
+use anyhow::*;
+use vek::*;
 
 
-/// Reader for extracting assets from minecraft.jar.
+/// Tokio-based reader for extracting assets from minecraft.jar. 
 pub struct JarReader(ZipFileReader);
 
-
 impl JarReader {
+    /// Attempt to construct, getting the minecraft.jar path from the
+    /// `MINECRAFT_JAR` environment variable.
     pub async fn new() -> Result<Self> {
         Ok(JarReader(ZipFileReader::new(env::var("MINECRAFT_JAR")?).await?))
     }

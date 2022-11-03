@@ -1,7 +1,9 @@
 
 use crate::{
-	resource_pack::ResourcePack,
-	localization::Localization,
+    asset::{
+    	resource_pack::ResourcePack,
+    	localization::Localization,
+    },
 	gui::{
 		*,
 		blocks::*,
@@ -19,6 +21,7 @@ use vek::*;
 
 
 pub struct MainMenu {
+    title: GuiTextBlock,
 	version_text: GuiTextBlock,
     uncopyright_text: GuiTextBlock,
     singleplayer_button: MenuButton,
@@ -67,7 +70,7 @@ impl MenuButton {
         logical_height(40.0,
             layer((
                 tile_9(
-                    &ctx.resources().button,
+                    &ctx.resources().menu_button,
                     [400.0, 40.0],
                     2.0 / 20.0,
                     3.0 / 20.0,
@@ -87,6 +90,15 @@ impl MainMenu {
 		lang: &Localization,
 	) -> Self
 	{
+        let title = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: "minecraft lol",
+            font: resources.font,
+            logical_font_size: 64.0,
+            color: Rgba::white(),
+            h_align: HAlign::Center,
+            v_align: VAlign::Center,
+            wrap: false,
+        });
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &lang.menu_version,
 			font: resources.font,
@@ -118,6 +130,7 @@ impl MainMenu {
             ::new(&lang.menu_options)
             .build(resources);
 		MainMenu {
+            title,
 			version_text,
 			uncopyright_text,
             singleplayer_button,
@@ -145,7 +158,10 @@ impl MainMenu {
             h_align(0.5,
                 logical_width(400.0,
                     v_align(0.0,
-                        v_stack(12.5, (
+                        v_stack(8.0, (
+                            logical_height(200.0,
+                                &mut self.title,
+                            ),
                             self.singleplayer_button.gui(ctx),
                             self.multiplayer_button.gui(ctx),
                             self.mods_button.gui(ctx),

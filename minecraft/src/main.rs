@@ -37,29 +37,39 @@ extern crate tracing;
 */
 
 //mod game;
-pub mod resource_pack;
-pub mod localization;
+//pub mod resource_pack;
+//pub mod localization;
+pub mod asset;
 pub mod gui;
 pub mod util;
-pub mod jar_assets;
 pub mod main_menu;
 
 use crate::{
+    asset::jar_assets::JarAssets,
     gui::GuiEventLoop,
-    resource_pack::ResourcePack,
-    localization::Localization,
     main_menu::MainMenu,
 };
+use tokio::runtime::Runtime;
+
 
 fn main() {
     let mut event_loop = GuiEventLoop::new();
-    let resources = ResourcePack::new(&mut event_loop.renderer);
-    let lang = Localization::new();
+
+    let rt = Runtime::new().unwrap();
+    let (
+        resources,
+        lang,
+    ) = rt
+        .block_on(JarAssets::read())
+        .expect("failure to load jar assets")
+        .load(&mut event_loop.renderer);
+
     let gui_state = MainMenu::new(
         &event_loop.renderer,
         &resources,
         &lang,
     );
+
     event_loop.run(Box::new(gui_state), resources, lang);
 }
 

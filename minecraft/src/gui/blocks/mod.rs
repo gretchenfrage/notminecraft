@@ -55,8 +55,9 @@ pub use self::{
     },
     tile_image::tile_image,
     tile_9::{
-        Tile9ImagesBuilder,
-        Tile9Images,
+        Tile9CropConfig,
+        tile_9_crop,
+        Tile9Parts,
         tile_9,
     },
     text::{

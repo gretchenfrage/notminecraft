@@ -1,8 +1,9 @@
-
+/*
 use crate::gui::blocks::{
 	Tile9Images,
 	Tile9ImagesBuilder,
 };
+use
 use graphics::{
 	Renderer,
 	frame_content::{
@@ -11,17 +12,25 @@ use graphics::{
 	},
 };
 use std::fs;
+use image::DynamicImage;*/
+
+use crate::gui::blocks::Tile9Parts;
+use graphics::frame_content::{
+	FontId,
+	GpuImage,
+};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResourcePack {
 	pub font: FontId,
-	pub title_pixel: GpuImage,
-	pub button: Tile9Images,
-	pub button_highlighted: Tile9Images,
+
+	pub menu_title_block: GpuImage,
+	pub menu_button: Tile9Parts<GpuImage>,
+	pub menu_button_highlight: Tile9Parts<GpuImage>,
 	pub menu_bg: GpuImage,
 }
-
+/*
 impl ResourcePack {
 	pub fn new(renderer: &mut Renderer) -> Self {
 		let font = renderer
@@ -78,3 +87,4 @@ impl ResourcePack {
 		}
 	}
 }
+*/
