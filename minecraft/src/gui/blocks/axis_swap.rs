@@ -66,17 +66,18 @@ impl<
 }
 
 impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for AxisSwap<I> {
-    fn visit_nodes<T>(self, visitor: &mut GuiVisitor<'a, '_, T>)
+    fn visit_nodes<T>(self, visitor: &mut GuiVisitor<'a, '_, T>, forward: bool)
     where
         T: GuiVisitorTarget<'a>,
     {
-        self.0.visit_nodes(&mut visitor.reborrow()
+        let mut visitor = visitor.reborrow()
             .debug_tag("axis_swap")
             .modify(Transform2(Mat3::new(
                 0.0, 1.0, 0.0,
                 1.0, 0.0, 0.0,
                 0.0, 0.0, 1.0,
-            ))));
+            )));
+        self.0.visit_nodes(&mut visitor, forward);
     }
 }
 
@@ -116,13 +117,18 @@ impl<
 }
 
 impl<'a, I: SizedGuiBlockSeq<'a>> SizedGuiBlockSeq<'a> for AxisSwap<I> {
-    fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<'a, '_, T>, maperator: M)
+    fn visit_items_nodes<T, M>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        maperator: M,
+        forward: bool,
+    )
     where
         T: GuiVisitorTarget<'a>,
         M: GuiVisitorMaperator<'a>,
     {
         self.0
-            .visit_items_nodes(visitor, AxisSwap(maperator))
+            .visit_items_nodes(visitor, AxisSwap(maperator), forward)
     }
 }
 

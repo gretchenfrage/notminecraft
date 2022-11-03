@@ -73,7 +73,11 @@ pub use self::{
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
         },
-        sized_gui_block_seq_flatten::SizedGuiBlockFlatten,
+        sized_gui_block_seq_flatten::{
+            DirMaperators,
+            DirSymMaperator,
+            SizedGuiBlockFlatten,
+        },
     },
     gui_event_loop::GuiEventLoop,
 };

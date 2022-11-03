@@ -69,6 +69,7 @@ pub trait SizedGuiBlockSeq<'a>: Debug {
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
         maperator: M,
+        forward: bool,
     )
     where
         T: GuiVisitorTarget<'a>,
@@ -92,6 +93,59 @@ pub trait GuiVisitorMaperator<'a>: Debug {
         &'b mut self,
         visitor: &'b mut GuiVisitor<'a, '_, T>,
     ) -> GuiVisitor<'a, 'b, T>;
+}
+
+
+
+// adapted from
+// https://stackoverflow.com/a/42174800/4957011
+// :)
+/*
+macro_rules! reverse {
+    (
+        []
+        $( ($($reversed:tt)*) ),*$(,)?
+    )=>{
+        $( ($($reversed)*), )*
+    };
+    (
+        [($($first:tt)*) $( , ($($rest:tt)*) )*$(,)?]
+        $( ($($reversed:tt)*) ),*$(,)?
+    )=>{
+        reverse!(
+            [$( ($($rest)*), )*]
+            ($($first)*) $( , ($($reversed)*) )* ,
+        )
+    };
+}
+*/
+
+
+macro_rules! reverse_visit_nodes {
+    (
+        $maperator:ident,
+        $visitor:ident,
+        [],
+        {$($output:tt)*},
+    )=>{
+        { $($output)* }
+    };
+    (
+        $maperator:ident,
+        $visitor:ident,
+        [$a_head:ident $($a_tail:ident)*],
+        {$($output:tt)*},
+    )=>{
+        reverse_visit_nodes!(
+            $maperator,
+            $visitor,
+            [$($a_tail)*],
+            {
+                $a_head.visit_nodes(&mut $maperator.next($visitor), false);
+                $($output)*
+            },
+        )
+    };
 }
 
 
@@ -156,6 +210,7 @@ macro_rules! gui_seq_tuple {
                 self,
                 _visitor: &mut GuiVisitor<'a, '_, T>,
                 mut _maperator: M,
+                forward: bool,
             )
             where
                 T: GuiVisitorTarget<'a>,
@@ -163,9 +218,18 @@ macro_rules! gui_seq_tuple {
             {
                 let ( $( $a, )* ) = self;
 
-                $(
-                $a.visit_nodes(&mut _maperator.next(_visitor));
-                )*
+                if forward {
+                    $(
+                    $a.visit_nodes(&mut _maperator.next(_visitor), true);
+                    )*
+                } else {
+                    reverse_visit_nodes!(
+                        _maperator,
+                        _visitor,
+                        [$( $a )*],
+                        {},
+                    );
+                }
             }
         }
     };

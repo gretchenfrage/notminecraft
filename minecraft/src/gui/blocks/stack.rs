@@ -4,6 +4,7 @@ use crate::gui::{
     GuiVisitorTarget,
     GuiGlobalContext,
     GuiVisitorMaperator,
+    DirMaperators,
     SizedGuiBlockFlatten,
     DimParentSets,
     DimChildSets,
@@ -56,7 +57,7 @@ impl<
 {
     type Sized = SizedGuiBlockFlatten<
         I::SizedSeq,
-        VStackMaperator<I::HOutSeq>,
+        VStackDirMaperators<I::HOutSeq>,
     >;
 
     fn size(
@@ -89,29 +90,72 @@ impl<
             height += item_heights[i];
         }
         
-        let maperator = VStackMaperator {
+        let maperator = VStackDirMaperators {
             item_heights,
             scaled_gap,
-            next_idx: 0,
-            next_y_translate: 0.0,
+            len,
         };
 
         ((), height, SizedGuiBlockFlatten(sized_seq, maperator))
     }
 }
 
+
 #[derive(Debug)]
-struct VStackMaperator<H> {
+struct VStackDirMaperators<H> {
     item_heights: H,
     scaled_gap: f32,
-    next_idx: usize,
-    next_y_translate: f32,
+    len: usize
 }
 
 impl<
     'a,
     H: Index<usize, Output=f32> + Debug,
-> GuiVisitorMaperator<'a> for VStackMaperator<H>
+> DirMaperators<'a> for VStackDirMaperators<H> {
+    type Forward = VStackMaperatorForward<H>;
+    type Reverse = VStackMaperatorReverse<H>;
+
+    fn forward(self) -> Self::Forward {
+        VStackMaperatorForward {
+            item_heights: self.item_heights,
+            scaled_gap: self.scaled_gap,
+            next_y_translate: 0.0,
+            next_idx: 0,
+        }
+    }
+
+    fn reverse(self) -> Self::Reverse {
+        let mut next_y_translate = 0.0;
+        let mut next_idx = 0;
+
+        while next_idx < self.len {
+            next_y_translate += self.item_heights[next_idx];
+            next_y_translate += self.scaled_gap;
+            next_idx += 1;
+        }
+
+        VStackMaperatorReverse {
+            item_heights: self.item_heights,
+            scaled_gap: self.scaled_gap,
+            prev_idx: next_idx,
+            prev_y_translate: next_y_translate,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+struct VStackMaperatorForward<H> {
+    item_heights: H,
+    scaled_gap: f32,
+    next_y_translate: f32,
+    next_idx: usize,
+}
+
+impl<
+    'a,
+    H: Index<usize, Output=f32> + Debug,
+> GuiVisitorMaperator<'a> for VStackMaperatorForward<H>
 {
     fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
@@ -126,5 +170,33 @@ impl<
 
         visitor.reborrow()
             .translate([0.0, y_translate])
+    }
+}
+
+
+#[derive(Debug)]
+struct VStackMaperatorReverse<H> {
+    item_heights: H,
+    scaled_gap: f32,
+    prev_idx: usize,
+    prev_y_translate: f32,
+}
+
+impl<
+    'a,
+    H: Index<usize, Output=f32> + Debug,
+> GuiVisitorMaperator<'a> for VStackMaperatorReverse<H>
+{
+    fn next<'b, T: GuiVisitorTarget<'a>>(
+        &'b mut self,
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>
+    {
+        self.prev_idx -= 1;
+        self.prev_y_translate -= self.scaled_gap;
+        self.prev_y_translate -= self.item_heights[self.prev_idx];
+
+        visitor.reborrow()
+            .translate([0.0, self.prev_y_translate])
     }
 }

@@ -12,10 +12,36 @@ use crate::gui::{
         },
     },
 };
+use std::fmt::Debug;
 
 
-/// `SizedGuiBlock` comprising a `SizedGuiBlockSeq` and a
-/// `GuiVisitorMaperator`.
+pub trait DirMaperators<'a>: Debug {
+    type Forward: GuiVisitorMaperator<'a>;
+    type Reverse: GuiVisitorMaperator<'a>;
+
+    fn forward(self) -> Self::Forward;
+    fn reverse(self) -> Self::Reverse;
+}
+
+
+#[derive(Debug)]
+pub struct DirSymMaperator<M>(pub M);
+
+impl<
+    'a,
+    M: GuiVisitorMaperator<'a>,
+> DirMaperators<'a> for DirSymMaperator<M>
+{
+    type Forward = M;
+    type Reverse = M;
+
+    fn forward(self) -> Self::Forward { self.0 }
+    fn reverse(self) -> Self::Reverse { self.0 }
+}
+
+
+/// `SizedGuiBlock` comprising a `SizedGuiBlockSeq` and a direction ->
+/// `GuiVisitorMaperator` constructor.
 ///
 /// Its `visit_nodes` implementation calls `visit_nodes` for each
 /// `SizedGuiBlock` in the sequence, mapping `visitor` through the maperator
@@ -26,14 +52,21 @@ pub struct SizedGuiBlockFlatten<S, M>(pub S, pub M);
 impl<
     'a,
     S: SizedGuiBlockSeq<'a>,
-    M: GuiVisitorMaperator<'a>,
+    M: DirMaperators<'a>,
 > SizedGuiBlock<'a> for SizedGuiBlockFlatten<S, M>
 {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
     ) {
-        let SizedGuiBlockFlatten(seq, maperator) = self;
-        seq.visit_items_nodes(visitor, maperator);
+        let SizedGuiBlockFlatten(seq, maperators) = self;
+        if forward {
+            let maperator = maperators.forward();
+            seq.visit_items_nodes(visitor, maperator, true);
+        } else {
+            let maperator = maperators.reverse();
+            seq.visit_items_nodes(visitor, maperator, false);
+        }
     }
 }

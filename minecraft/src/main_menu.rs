@@ -31,7 +31,7 @@ impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for GuiButtonBgBlock {
 
     fn size(
         self,
-        ctx: &GuiGlobalContext<'a>,
+        _ctx: &GuiGlobalContext<'a>,
         w: f32,
         h: f32,
         scale: f32,
@@ -55,6 +55,7 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
     ) {
         let highlight = visitor.ctx.cursor_pos
             .map(|pos|
@@ -76,15 +77,15 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
             2.0 / 200.0,
         )
             .size(&visitor.ctx.global, self.size.w, self.size.h, self.scale);
-        inner_sized.visit_nodes(visitor);
+        inner_sized.visit_nodes(visitor, forward);
     }
 }
 
 
 #[derive(Debug)]
-struct GuiPrintOnClickBlock(&'static str);
+struct GuiPrintOnClickBlock<'s>(&'s str);
 
-impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock> {
+impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
     fn blocks_cursor(&self, _: GuiSpatialContext<'a>) -> bool { false }
 
     fn on_cursor_click(
@@ -93,9 +94,9 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock> {
         hits: bool,
         button: MouseButton,
     ) {
-        if !dbg!(hits) { return }
-        if !dbg!(ctx.cursor_in_area(0.0, self.size)) { return }
-        if dbg!(button) != MouseButton::Left { return }
+        if !hits { return }
+        if !ctx.cursor_in_area(0.0, self.size) { return }
+        if button != MouseButton::Left { return }
 
         println!("{}", self.inner.0);
     }
@@ -114,6 +115,7 @@ pub struct MainMenu {
 
 pub struct MenuButton {
     text: GuiTextBlock,
+    print_on_click: String,
 }
 
 pub struct MenuButtonBuilder<'a> {
@@ -139,6 +141,7 @@ impl<'a> MenuButtonBuilder<'a> {
         });
         MenuButton {
             text,
+            print_on_click: self.text.to_owned(),
         }
     }
 }
@@ -146,14 +149,14 @@ impl<'a> MenuButtonBuilder<'a> {
 impl MenuButton {
     pub fn gui<'a>(
         &'a mut self,
-        ctx: &'a GuiWindowContext<'a>,
+        _ctx: &'a GuiWindowContext<'a>,
     ) -> impl GuiBlock<'a, DimParentSets, DimChildSets>
     {
         logical_height(40.0,
             layer((
                 GuiButtonBgBlock,
                 &mut self.text,
-                GuiPrintOnClickBlock("menu button"),
+                GuiPrintOnClickBlock(&self.print_on_click),
             )),
         )
     }
@@ -161,7 +164,7 @@ impl MenuButton {
 
 impl MainMenu {
 	pub fn new(
-		renderer: &Renderer,
+		_renderer: &Renderer,
 		resources: &ResourcePack,
 		lang: &Localization,
 	) -> Self
@@ -255,6 +258,7 @@ impl GuiStateFrame for MainMenu {
         &'a mut self,
         ctx: &'a GuiWindowContext<'a>,
         mut visitor: GuiVisitor<'a, '_, T>,
+        forward: bool,
     ) {
 		let ((), (), sized) = self
 			.gui(ctx)
@@ -264,6 +268,6 @@ impl GuiStateFrame for MainMenu {
 				ctx.size.h as f32,
 				ctx.scale,
 			);
-		sized.visit_nodes(&mut visitor);
+		sized.visit_nodes(&mut visitor, forward);
     }
 }

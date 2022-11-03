@@ -26,6 +26,7 @@ pub trait GuiStateFrame {
         &'a mut self,
         ctx: &'a GuiWindowContext<'a>,
         visitor: GuiVisitor<'a, '_, T>,
+        forward: bool,
     )
     where
         Self: Sized;

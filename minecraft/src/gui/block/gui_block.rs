@@ -41,6 +41,7 @@ pub trait SizedGuiBlock<'a>: Debug {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
     );
 }
 
@@ -49,6 +50,7 @@ impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
+        _forward: bool,
     ) {
         visitor.reborrow()
             .visit_node(self);

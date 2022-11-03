@@ -162,6 +162,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
     				&mut DrawTarget::new(ctx.spatial, target),
     				ctx.spatial,
 				),
+                true,
     		);
     }
 }
@@ -228,12 +229,9 @@ impl<'a, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'a, F> {
     	self.set_stack_len(stack_len);
                 
         let ctx = self.top.ctx;
-        let hits = dbg!(self.unblocked) && dbg!(self.top.unclipped);
+        let hits = self.unblocked && self.top.unclipped;
 
         //if let Some(pos) = ctx.cursor_pos {
-        if node.blocks_cursor(ctx) {
-            println!("node blocked cursor: {:?}", node);
-        }
         self.unblocked = self.unblocked && !node.blocks_cursor(ctx);
         //}
 
@@ -258,6 +256,7 @@ fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
 				&mut CursorTarget::new(ctx.spatial, callback),
 				ctx.spatial,
 			),
+            false,
 		);
 }
 

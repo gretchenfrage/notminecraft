@@ -7,6 +7,7 @@ use crate::gui::{
     GuiBlockSeq,
     SizedGuiBlockFlatten,
     GuiVisitorMaperator,
+    DirSymMaperator,
     GuiGlobalContext,
 };
 use std::iter::repeat;
@@ -30,7 +31,10 @@ impl<
     I: GuiBlockSeq<'a, DimParentSets, DimParentSets>,
 > GuiBlock<'a, DimParentSets, DimParentSets> for Layer<I>
 {
-    type Sized = SizedGuiBlockFlatten<I::SizedSeq, IdentityMaperator>;
+    type Sized = SizedGuiBlockFlatten<
+        I::SizedSeq,
+        DirSymMaperator<IdentityMaperator>,
+    >;
 
     fn size(
         self,
@@ -49,7 +53,10 @@ impl<
             sized_seq,
         ) = self.0.size_all(ctx, w_in_seq, h_in_seq, scale_seq);
 
-        let sized = SizedGuiBlockFlatten(sized_seq, IdentityMaperator);
+        let sized = SizedGuiBlockFlatten(
+            sized_seq,
+            DirSymMaperator(IdentityMaperator),
+        );
 
         ((), (), sized)
     }
