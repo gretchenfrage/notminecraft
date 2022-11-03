@@ -3,6 +3,8 @@
 
 pub mod simple_gui_block;
 
+pub mod mc;
+
 mod axis_swap;
 mod align;
 mod layer;

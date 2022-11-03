@@ -1,3 +1,7 @@
+//! Submodule for highly minecraft-specific gui blocks.
 
-pub mod splash_text;
-pub mod title;
+mod splash_text;
+//pub mod title;
+
+
+pub use self::splash_text::GuiSplashText;

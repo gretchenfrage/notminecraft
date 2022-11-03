@@ -8,6 +8,7 @@ use crate::{
 		*,
 		blocks::{
             *,
+            mc::*,
             simple_gui_block::SimpleGuiBlock,
         },
 	},
@@ -111,6 +112,7 @@ pub struct MainMenu {
     multiplayer_button: MenuButton,
     mods_button: MenuButton,
     options_button: MenuButton,
+    splash_text: GuiSplashText,
 }
 
 pub struct MenuButton {
@@ -208,6 +210,7 @@ impl MainMenu {
         let options_button = MenuButtonBuilder
             ::new(&lang.menu_options)
             .build(resources);
+        let splash_text = GuiSplashText::new();
 		MainMenu {
             title,
 			version_text,
@@ -216,6 +219,7 @@ impl MainMenu {
             multiplayer_button,
             mods_button,
             options_button,
+            splash_text,
 		}
 	}
 
@@ -236,15 +240,22 @@ impl MainMenu {
             ),
             h_align(0.5,
                 logical_width(400.0,
-                    v_align(0.0,
-                        v_stack(8.0, (
+                    layer((
+                        v_align(0.0,
+                            v_stack(8.0, (
+                                logical_height(200.0,
+                                    &mut self.title,
+                                ),
+                                self.singleplayer_button.gui(ctx),
+                                self.multiplayer_button.gui(ctx),
+                                self.mods_button.gui(ctx),
+                                self.options_button.gui(ctx),
+                            )),
+                        ),
+                        v_align(0.0,
                             logical_height(200.0,
-                                &mut self.title,
+                                &mut self.splash_text,
                             ),
-                            self.singleplayer_button.gui(ctx),
-                            self.multiplayer_button.gui(ctx),
-                            self.mods_button.gui(ctx),
-                            self.options_button.gui(ctx),
                         )),
                     ),
                 ),
@@ -254,20 +265,9 @@ impl MainMenu {
 }
 
 impl GuiStateFrame for MainMenu {
-	fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
-        &'a mut self,
-        ctx: &'a GuiWindowContext<'a>,
-        mut visitor: GuiVisitor<'a, '_, T>,
-        forward: bool,
-    ) {
-		let ((), (), sized) = self
-			.gui(ctx)
-			.size(
-				ctx.spatial.global,
-				ctx.size.w as f32,
-				ctx.size.h as f32,
-				ctx.scale,
-			);
-		sized.visit_nodes(&mut visitor, forward);
+	impl_visit_nodes!();
+
+    fn update(&mut self, _ctx: &GuiWindowContext, elapsed: f32) {
+        self.splash_text.update(elapsed);
     }
 }

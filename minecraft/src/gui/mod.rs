@@ -51,7 +51,10 @@ pub use self::{
         MouseButton,
     },
     event::ScrolledAmount,
-    state_frame::GuiStateFrame,
+    state_frame::{
+        GuiStateFrame,
+        impl_visit_nodes,
+    },
     state_frame_obj::GuiStateFrameObj,
     node::{
         GuiNode,

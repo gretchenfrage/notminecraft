@@ -78,11 +78,11 @@ pub struct GuiTextBlock {
     v_align: VAlign,
     wrap: bool,
     
-    cache: Option<(SizeArgs, LayedOutTextBlock)>,
+    cache: Option<(CacheKey, LayedOutTextBlock)>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-struct SizeArgs {
+struct CacheKey {
     wrap_width: Option<f32>,
     scale: f32,
 }
@@ -102,12 +102,12 @@ impl GuiTextBlock {
         }
     }
 
-    fn create_sized(
+    fn create_cache_content(
         &self,
         renderer: &Renderer,
-        size_args: SizeArgs,
+        cache_key: CacheKey,
     ) -> LayedOutTextBlock {
-        let font_size = self.logical_font_size * size_args.scale;
+        let font_size = self.logical_font_size * cache_key.scale;
 
         renderer
             .lay_out_text(&TextBlock {
@@ -121,18 +121,18 @@ impl GuiTextBlock {
                 ],
                 h_align: self.h_align,
                 v_align: self.v_align,
-                wrap_width: size_args.wrap_width,
+                wrap_width: cache_key.wrap_width,
             })
     }
 
-    fn validate_cache(&mut self, renderer: &Renderer, size_args: SizeArgs) {
+    fn validate_cache(&mut self, renderer: &Renderer, cache_key: CacheKey) {
         let dirty = match self.cache {
             None => true,
-            Some((cached_cache_key, _)) => cached_cache_key != size_args,
+            Some((cached_cache_key, _)) => cached_cache_key != cache_key,
         };
         if dirty {
-            let content = self.create_sized(renderer, size_args);
-            self.cache = Some((size_args, content));
+            let content = self.create_cache_content(renderer, cache_key);
+            self.cache = Some((cache_key, content));
         }  
     }
 }
@@ -141,12 +141,12 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
     fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
-        let size_args = SizeArgs {
+        let cache_key = CacheKey {
             wrap_width: Some(self.size.w).filter(|_| self.inner.wrap),
             scale: self.scale,
         };
 
-        self.inner.validate_cache(&ctx.global.renderer.try_read().unwrap(), size_args);
+        self.inner.validate_cache(&ctx.global.renderer.try_read().unwrap(), cache_key);
         let layed_out = self.inner.cache
             .as_ref()
             .map(|&(_, ref content)| content)

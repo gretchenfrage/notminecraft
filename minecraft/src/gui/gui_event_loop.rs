@@ -25,6 +25,10 @@ use std::{
 		Arc,
 		RwLock,
 	},
+	time::{
+		Instant,
+		Duration,
+	},
 };
 use winit::{
     event_loop::{
@@ -181,6 +185,8 @@ impl GuiEventLoop {
 			resources,
 			lang,
 		);
+
+		let mut prev_update_time = None;
 
 		self.event_loop.run(move |event, _target, control_flow| match event {
 			Event::WindowEvent { event, .. } => match event {
@@ -368,9 +374,20 @@ impl GuiEventLoop {
 				_ => (),
 			}
 			Event::MainEventsCleared => state.with_ctx(|ctx| {
+				let curr_update_time = Instant::now();
+
+				if let Some(prev_update_time) = prev_update_time {
+					let elapsed: Duration = curr_update_time - prev_update_time;
+					let elapsed = elapsed.as_secs_f32();
+
+					stack.top().update(ctx, elapsed);
+				}
+
+				prev_update_time = Some(curr_update_time);
+
 				let mut frame_content = FrameContent::new();
 				stack.top().draw(ctx, &mut frame_content);
-				//println!("{}", frame_content.to_pseudo_xml());
+				
 				ctx.spatial.global.renderer
 					.try_write()
 					.unwrap()
