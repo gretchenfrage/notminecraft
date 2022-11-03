@@ -77,6 +77,24 @@ impl<'c> GuiSpatialContext<'c> {
     pub fn lang(&self) -> &'c Localization {
         &self.global.lang
     }
+
+    pub fn cursor_in_area<A, B>(&self, min: A, max: B) -> bool
+    where
+        A: Into<Vec2<f32>>,
+        B: Into<Vec2<f32>>,
+    {
+        if let Some(pos) = self.cursor_pos {
+            let min = min.into();
+            let max = max.into();
+            
+            pos.x >= min.x
+                && pos.y >= min.y
+                && pos.x <= max.x
+                && pos.y <= max.y
+        } else {
+            false
+        }
+    }
 }
 
 /// State maintained by event loop between GUI events that is accessable by

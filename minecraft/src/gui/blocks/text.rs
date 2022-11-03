@@ -138,7 +138,7 @@ impl GuiTextBlock {
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
-    fn blocks_cursor(&self, _: GuiSpatialContext, _: Vec2<f32>) -> bool { false }
+    fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let size_args = SizeArgs {

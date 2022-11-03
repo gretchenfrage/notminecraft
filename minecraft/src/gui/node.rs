@@ -25,13 +25,14 @@ use vek::*;
 /// Positionable unit of GUI behavior. Expected to have its sizing data already
 /// bound into it.
 pub trait GuiNode<'a>: Sized + Debug {
+    /*
     /// Determine whether this node "blocks" a cursor event at the given
     /// position. The event will still be passed to nodes underneath this one,
     /// but their `hits` argument will be false.
     ///
     /// Handlers' `hits` arguments will also be passed as false if that
-    /// position is clipped out for this node.
-    fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>, pos: Vec2<f32>) -> bool;
+    /// position is clipped out for this node.*/
+    fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>) -> bool;
 
     /// Called upon the cursor being moved to a new position, whether or not
     /// the window is focused.

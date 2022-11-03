@@ -228,11 +228,14 @@ impl<'a, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'a, F> {
     	self.set_stack_len(stack_len);
                 
         let ctx = self.top.ctx;
-        let hits = self.unblocked && self.top.unclipped;
+        let hits = dbg!(self.unblocked) && dbg!(self.top.unclipped);
 
-        if let Some(pos) = ctx.cursor_pos {
-            self.unblocked = self.unblocked && !node.blocks_cursor(ctx, pos);
+        //if let Some(pos) = ctx.cursor_pos {
+        if node.blocks_cursor(ctx) {
+            println!("node blocked cursor: {:?}", node);
         }
+        self.unblocked = self.unblocked && !node.blocks_cursor(ctx);
+        //}
 
         self.callback.call(node, ctx, hits);
     }

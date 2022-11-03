@@ -6,7 +6,10 @@ use crate::{
     },
 	gui::{
 		*,
-		blocks::*,
+		blocks::{
+            *,
+            simple_gui_block::SimpleGuiBlock,
+        },
 	},
 	util::hex_color::hex_color,
 };
@@ -78,6 +81,27 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
 }
 
 
+#[derive(Debug)]
+struct GuiPrintOnClickBlock(&'static str);
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock> {
+    fn blocks_cursor(&self, _: GuiSpatialContext<'a>) -> bool { false }
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        button: MouseButton,
+    ) {
+        if !dbg!(hits) { return }
+        if !dbg!(ctx.cursor_in_area(0.0, self.size)) { return }
+        if dbg!(button) != MouseButton::Left { return }
+
+        println!("{}", self.inner.0);
+    }
+}
+
+
 pub struct MainMenu {
     title: GuiTextBlock,
 	version_text: GuiTextBlock,
@@ -127,16 +151,9 @@ impl MenuButton {
     {
         logical_height(40.0,
             layer((
-                /*tile_9(
-                    &ctx.resources().menu_button,
-                    [400.0, 40.0],
-                    2.0 / 20.0,
-                    3.0 / 20.0,
-                    2.0 / 200.0,
-                    2.0 / 200.0,
-                ),*/
                 GuiButtonBgBlock,
                 &mut self.text,
+                GuiPrintOnClickBlock("menu button"),
             )),
         )
     }

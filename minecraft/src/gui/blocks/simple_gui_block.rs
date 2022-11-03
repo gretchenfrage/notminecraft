@@ -54,11 +54,8 @@ where
 /// area.
 macro_rules! simple_blocks_cursor_impl {
 	()=>{
-		fn blocks_cursor(&self, _: GuiSpatialContext, pos: Vec2<f32>) -> bool {
-			pos.x >= 0.0
-				&& pos.y >= 0.0
-				&& pos.x <= self.size.w
-				&& pos.y <= self.size.h
+		fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
+			ctx.cursor_in_area(0.0, self.size)
 		}
 	};
 }
