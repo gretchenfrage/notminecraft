@@ -23,30 +23,30 @@ use std::{
 
 
 /// Gui block that arranges a sequence of blocks in a vertical stack with a
-/// consistent pre-scale gap size.
+/// consistent ~~pre-scale~~ gap size.
 pub fn v_stack<'a, I: GuiBlockSeq<'a, DimParentSets, DimChildSets>>(
-    logical_gap: f32,
+    gap: f32,
     items: I,
 ) -> impl GuiBlock<'a, DimParentSets, DimChildSets> {
     VStack {
-        logical_gap,
+        gap,
         items,
     }
 }
 
 /// Gui block that arranges a sequence of blocks in a horizontal stack with a
-/// consistent pre-scale gap size.
+/// consistent ~~pre-scale~~ gap size.
 pub fn h_stack<'a, I: GuiBlockSeq<'a, DimChildSets, DimParentSets>>(
-    logical_gap: f32,
+    gap: f32,
     items: I,
 ) -> impl GuiBlock<'a, DimChildSets, DimParentSets> {
-    axis_swap(v_stack(logical_gap, axis_swap_seq(items)))
+    axis_swap(v_stack(gap, axis_swap_seq(items)))
 }
 
 
 #[derive(Debug)]
 struct VStack<I> {
-    logical_gap: f32,
+    gap: f32,
     items: I,
 }
 
@@ -70,8 +70,6 @@ impl<
     {
         let len = self.items.len();
 
-        let scaled_gap = self.logical_gap * scale;
-
         let w_in_seq = repeat(w);
         let h_in_seq = repeat(());
         let scale_seq = repeat(scale);
@@ -85,14 +83,14 @@ impl<
         let mut height = 0.0;
         for i in 0..len {
             if i > 0 {
-                height += scaled_gap;
+                height += self.gap;
             }
             height += item_heights[i];
         }
         
         let maperator = VStackDirMaperators {
             item_heights,
-            scaled_gap,
+            gap: self.gap,
             len,
         };
 
@@ -104,7 +102,7 @@ impl<
 #[derive(Debug)]
 struct VStackDirMaperators<H> {
     item_heights: H,
-    scaled_gap: f32,
+    gap: f32,
     len: usize
 }
 
@@ -118,7 +116,7 @@ impl<
     fn forward(self) -> Self::Forward {
         VStackMaperatorForward {
             item_heights: self.item_heights,
-            scaled_gap: self.scaled_gap,
+            gap: self.gap,
             next_y_translate: 0.0,
             next_idx: 0,
         }
@@ -130,13 +128,13 @@ impl<
 
         while next_idx < self.len {
             next_y_translate += self.item_heights[next_idx];
-            next_y_translate += self.scaled_gap;
+            next_y_translate += self.gap;
             next_idx += 1;
         }
 
         VStackMaperatorReverse {
             item_heights: self.item_heights,
-            scaled_gap: self.scaled_gap,
+            gap: self.gap,
             prev_idx: next_idx,
             prev_y_translate: next_y_translate,
         }
@@ -147,7 +145,7 @@ impl<
 #[derive(Debug)]
 struct VStackMaperatorForward<H> {
     item_heights: H,
-    scaled_gap: f32,
+    gap: f32,
     next_y_translate: f32,
     next_idx: usize,
 }
@@ -165,7 +163,7 @@ impl<
         let y_translate = self.next_y_translate;
 
         self.next_y_translate += self.item_heights[self.next_idx];
-        self.next_y_translate += self.scaled_gap;
+        self.next_y_translate += self.gap;
         self.next_idx += 1;
 
         visitor.reborrow()
@@ -177,7 +175,7 @@ impl<
 #[derive(Debug)]
 struct VStackMaperatorReverse<H> {
     item_heights: H,
-    scaled_gap: f32,
+    gap: f32,
     prev_idx: usize,
     prev_y_translate: f32,
 }
@@ -193,7 +191,7 @@ impl<
     ) -> GuiVisitor<'a, 'b, T>
     {
         self.prev_idx -= 1;
-        self.prev_y_translate -= self.scaled_gap;
+        self.prev_y_translate -= self.gap;
         self.prev_y_translate -= self.item_heights[self.prev_idx];
 
         visitor.reborrow()

@@ -242,7 +242,7 @@ impl MainMenu {
                 logical_width(400.0,
                     layer((
                         v_align(0.0,
-                            v_stack(8.0, (
+                            v_stack(25.0, (
                                 logical_height(200.0,
                                     &mut self.title,
                                 ),

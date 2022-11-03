@@ -72,7 +72,7 @@ impl JarAssets {
 		let lang = jar.read_properties("lang/en_US.lang").await?;
 
 		let	menu_splash_text =
-			"Grapes are easy to acquire and easy to eat!".to_owned();
+			"Now it's YOUR craft!".to_owned();
 		let menu_version =
 			"Not Minecraft Beta 1.0.2".to_owned();
 		let menu_uncopyright =
