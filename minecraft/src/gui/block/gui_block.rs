@@ -20,7 +20,7 @@ pub trait GuiBlock<'a, W: DimConstraint, H: DimConstraint>: Debug {
     /// Compute the size of this block. Position is not yet knowable.
     fn size(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w_in: W::In,
         h_in: H::In,
         scale: f32,
@@ -40,7 +40,7 @@ pub trait SizedGuiBlock<'a>: Debug {
     /// `SizedGuiBlock`s.
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
-        visitor: &mut GuiVisitor<T>,
+        visitor: &mut GuiVisitor<'a, '_, T>,
     );
 }
 
@@ -48,7 +48,7 @@ pub trait SizedGuiBlock<'a>: Debug {
 impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
-        visitor: &mut GuiVisitor<T>,
+        visitor: &mut GuiVisitor<'a, '_, T>,
     ) {
         visitor.reborrow()
             .visit_node(self);

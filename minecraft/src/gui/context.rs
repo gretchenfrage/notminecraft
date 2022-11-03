@@ -70,11 +70,11 @@ impl<'c> GuiSpatialContext<'c> {
         }
     }
 
-    pub fn resources(&self) -> &ResourcePack {
+    pub fn resources(&self) -> &'c ResourcePack {
         &self.global.resources
     }
 
-    pub fn lang(&self) -> &Localization {
+    pub fn lang(&self) -> &'c Localization {
         &self.global.lang
     }
 }
@@ -91,15 +91,15 @@ pub struct GuiWindowContext<'c> {
 }
 
 impl<'c> GuiWindowContext<'c> {
-    pub fn global(&self) -> &GuiGlobalContext {
+    pub fn global(&self) -> &'c GuiGlobalContext<'c> {
         &self.spatial.global
     }
 
-    pub fn resources(&self) -> &ResourcePack {
+    pub fn resources(&self) -> &'c ResourcePack {
         &self.spatial.global.resources
     }
 
-    pub fn lang(&self) -> &Localization {
+    pub fn lang(&self) -> &'c Localization {
         &self.spatial.global.lang
     }
 }

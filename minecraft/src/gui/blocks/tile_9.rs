@@ -137,7 +137,7 @@ struct Tile9<'a> {
 impl<'a> GuiNode<'a> for SimpleGuiBlock<Tile9<'a>> {
     simple_blocks_cursor_impl!();
 
-    fn draw(self, _: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(self, _: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let mut canvas = canvas.reborrow()
             .debug_tag("tile_9");
 

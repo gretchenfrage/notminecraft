@@ -62,7 +62,7 @@ impl<
 
     fn size(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         (): (),
         h_in: H::In,
         scale: f32,

@@ -38,7 +38,7 @@ struct TileImage<'a> {
 impl<'a> GuiNode<'a> for SimpleGuiBlock<TileImage<'a>> {
     simple_blocks_cursor_impl!();
 
-    fn draw(self, _: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(self, _: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let extent = self.size / (self.inner.image_logical_size * self.scale);
         canvas.reborrow()
             .debug_tag("tile_image")

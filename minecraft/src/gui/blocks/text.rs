@@ -140,7 +140,7 @@ impl GuiTextBlock {
 impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
     fn blocks_cursor(&self, _: GuiSpatialContext, _: Vec2<f32>) -> bool { false }
 
-    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let size_args = SizeArgs {
             wrap_width: Some(self.size.w).filter(|_| self.inner.wrap),
             scale: self.scale,

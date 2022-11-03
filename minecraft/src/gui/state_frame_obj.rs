@@ -59,7 +59,7 @@ pub trait GuiStateFrameObj: GuiStateFrame {
 
     fn draw<'a>(
         &'a mut self,
-        ctx: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext<'a>,
         target: &mut FrameContent<'a>,
     );
 }
@@ -152,7 +152,7 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
 
     fn draw<'a>(
         &'a mut self,
-        ctx: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext<'a>,
         target: &mut FrameContent<'a>,
     ) {
     	self
@@ -169,20 +169,20 @@ impl<T: GuiStateFrame> GuiStateFrameObj for T {
 
 // ==== cursor node visitor target ====
 
-struct CursorTarget<'c, F> {
-    top: CursorTargetStackElem<'c>,
-    under: Vec<CursorTargetStackElem<'c>>,
+struct CursorTarget<'a, F> {
+    top: CursorTargetStackElem<'a>,
+    under: Vec<CursorTargetStackElem<'a>>,
     unblocked: bool,
     callback: F,
 }
 
 #[derive(Copy, Clone)]
-struct CursorTargetStackElem<'c> {
-    ctx: GuiSpatialContext<'c>,
+struct CursorTargetStackElem<'a> {
+    ctx: GuiSpatialContext<'a>,
     unclipped: bool,
 }
 
-impl<'c> CursorTargetStackElem<'c> {
+impl<'a> CursorTargetStackElem<'a> {
     fn relativize(&mut self, modifier: Modifier2) {
         match modifier {
             Modifier2::Transform(transform) => self.ctx.relativize(transform),
@@ -196,8 +196,8 @@ impl<'c> CursorTargetStackElem<'c> {
     }
 }
 
-impl<'c, F> CursorTarget<'c, F> {
-	fn new(ctx: GuiSpatialContext<'c>, callback: F) -> Self {
+impl<'a, F> CursorTarget<'a, F> {
+	fn new(ctx: GuiSpatialContext<'a>, callback: F) -> Self {
 		CursorTarget {
 			top: CursorTargetStackElem {
 				ctx,
@@ -217,7 +217,7 @@ impl<'c, F> CursorTarget<'c, F> {
     }
 }
 
-impl<'a, 'c, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'c, F> {
+impl<'a, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'a, F> {
 	fn push_modifier(&mut self, stack_len: usize, modifier: Modifier2) {
         self.set_stack_len(stack_len);
         self.under.push(self.top);
@@ -245,7 +245,7 @@ impl<'a, 'c, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'c, F>
 
 fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
 	frame: &'a mut T,
-	ctx: &'a GuiWindowContext,
+	ctx: &'a GuiWindowContext<'a>,
 	callback: F,
 ) {
 	frame
@@ -263,14 +263,14 @@ fn handle_cursor_event<'a, F: CursorCallback<'a>, T: GuiStateFrame>(
 
 #[derive(Debug)]
 struct DrawTarget<'a, 'c> {
-	top: GuiSpatialContext<'c>,
-    under: Vec<GuiSpatialContext<'c>>,
+	top: GuiSpatialContext<'a>,
+    under: Vec<GuiSpatialContext<'a>>,
     frame_content: &'c mut FrameContent<'a>,
 }
 
 impl<'a, 'c> DrawTarget<'a, 'c> {
 	fn new(
-		ctx: GuiSpatialContext<'c>,
+		ctx: GuiSpatialContext<'a>,
 		frame_content: &'c mut FrameContent<'a>,
 	) -> Self
 	{

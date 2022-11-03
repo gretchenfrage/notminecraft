@@ -33,7 +33,7 @@ where
 
 	fn size(
 		self,
-		_: &GuiGlobalContext,
+		_: &GuiGlobalContext<'a>,
 		w: f32,
 		h: f32,
 		scale: f32,

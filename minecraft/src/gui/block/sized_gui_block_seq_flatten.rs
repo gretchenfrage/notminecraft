@@ -31,7 +31,7 @@ impl<
 {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
-        visitor: &mut GuiVisitor<T>,
+        visitor: &mut GuiVisitor<'a, '_, T>,
     ) {
         let SizedGuiBlockFlatten(seq, maperator) = self;
         seq.visit_items_nodes(visitor, maperator);

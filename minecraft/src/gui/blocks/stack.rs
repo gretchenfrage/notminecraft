@@ -61,7 +61,7 @@ impl<
 
     fn size(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w: f32,
         (): (),
         scale: f32,
@@ -115,8 +115,8 @@ impl<
 {
     fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
-        visitor: &'b mut GuiVisitor<T>,
-    ) -> GuiVisitor<'b, T>
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>
     {
         let y_translate = self.next_y_translate;
 

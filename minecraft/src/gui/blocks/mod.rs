@@ -1,7 +1,7 @@
 //! Block implementations.
 
 
-mod simple_gui_block;
+pub mod simple_gui_block;
 
 mod axis_swap;
 mod align;

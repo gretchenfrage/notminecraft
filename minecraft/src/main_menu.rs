@@ -20,6 +20,64 @@ use graphics::{
 use vek::*;
 
 
+#[derive(Debug)]
+struct GuiButtonBgBlock;
+
+impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for GuiButtonBgBlock {
+    type Sized = GuiButtonBgBlockSized;
+
+    fn size(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w: f32,
+        h: f32,
+        scale: f32,
+    ) -> ((), (), Self::Sized)
+    {
+        let sized = GuiButtonBgBlockSized {
+            size: Extent2 { w, h },
+            scale,
+        };
+        ((), (), sized)
+    }
+}
+
+#[derive(Debug)]
+struct GuiButtonBgBlockSized {
+    size: Extent2<f32>,
+    scale: f32,
+}
+
+impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+    ) {
+        let highlight = visitor.ctx.cursor_pos
+            .map(|pos|
+                pos.x >= 0.0
+                && pos.y >= 0.0
+                && pos.x <= self.size.w
+                && pos.y <= self.size.h
+            )
+            .unwrap_or(false);
+        let images =
+            if highlight { &visitor.ctx.resources().menu_button_highlight }
+            else { &visitor.ctx.resources().menu_button };
+        let ((), (), inner_sized) = tile_9(
+            images,
+            [400.0, 40.0],
+            2.0 / 20.0,
+            3.0 / 20.0,
+            2.0 / 200.0,
+            2.0 / 200.0,
+        )
+            .size(&visitor.ctx.global, self.size.w, self.size.h, self.scale);
+        inner_sized.visit_nodes(visitor);
+    }
+}
+
+
 pub struct MainMenu {
     title: GuiTextBlock,
 	version_text: GuiTextBlock,
@@ -64,19 +122,20 @@ impl<'a> MenuButtonBuilder<'a> {
 impl MenuButton {
     pub fn gui<'a>(
         &'a mut self,
-        ctx: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext<'a>,
     ) -> impl GuiBlock<'a, DimParentSets, DimChildSets>
     {
         logical_height(40.0,
             layer((
-                tile_9(
+                /*tile_9(
                     &ctx.resources().menu_button,
                     [400.0, 40.0],
                     2.0 / 20.0,
                     3.0 / 20.0,
                     2.0 / 200.0,
                     2.0 / 200.0,
-                ),
+                ),*/
+                GuiButtonBgBlock,
                 &mut self.text,
             )),
         )
@@ -171,140 +230,14 @@ impl MainMenu {
                 ),
             ),
 		))
-		//tile_image(&ctx.spatial.global.resources.menu_bg, [508.0, 460.0])
-		/*
-	layer_gui_block((
-            modifier_gui_block(
-                Rgba::new(0.25, 0.25, 0.25, 1.0),
-                    tile_image_gui_block(
-                    &self.bg_image,
-                    [64.0; 2],
-                ),
-            ),
-            h_margin_gui_block(
-                4.0,
-                4.0,
-                v_margin_gui_block(
-                    4.0,
-                    4.0,
-                    layer_gui_block((
-                        &mut self.version_text,
-                        &mut self.copyright_text,
-                    )),
-                ),
-            ),
-            v_center_gui_block(
-                0.0,
-                v_stack_gui_block(
-                    0.0,
-                    (
-                        h_center_gui_block(
-                            0.5,
-                            h_stable_unscaled_dim_size_gui_block(
-                                500.0,
-                                v_stable_unscaled_dim_size_gui_block(
-                                    200.0,
-                                    &self.title_block,
-                                ),
-                            ),
-                        ),
-                        h_center_gui_block(
-                            0.5,
-                            h_stable_unscaled_dim_size_gui_block(
-                                400.0,
-                                v_stack_gui_block(
-                                    25.0 / 2.0,
-                                    (
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    match self.singleplayer_button_cursor_is_over_tracker.cursor_is_over {
-                                                        false => &self.button_images,
-                                                        true => &self.button_highlighted_images,
-                                                    },
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
-                                                ),
-                                                &mut self.singleplayer_button_text,
-                                                &mut self.singleplayer_button_cursor_is_over_tracker,
-                                            )),
-                                        ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    match self.multiplayer_button_cursor_is_over_tracker.cursor_is_over {
-                                                        false => &self.button_images,
-                                                        true => &self.button_highlighted_images,
-                                                    },
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
-                                                ),
-                                                &mut self.multiplayer_button_text,
-                                                &mut self.multiplayer_button_cursor_is_over_tracker,
-                                            )),
-                                        ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    match self.mods_button_cursor_is_over_tracker.cursor_is_over {
-                                                        false => &self.button_images,
-                                                        true => &self.button_highlighted_images,
-                                                    },
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
-                                                ),
-                                                &mut self.mods_button_text,
-                                                &mut self.mods_button_cursor_is_over_tracker,
-                                            )),
-                                        ),
-                                        v_stable_unscaled_dim_size_gui_block(
-                                            40.0,
-                                            layer_gui_block((
-                                                tile_9_gui_block(
-                                                    match self.options_button_cursor_is_over_tracker.cursor_is_over {
-                                                        false => &self.button_images,
-                                                        true => &self.button_highlighted_images,
-                                                    },
-                                                    Extent2::new(200.0, 20.0) * 2.0,
-                                                    2.0 / 20.0,
-                                                    3.0 / 20.0,
-                                                    2.0 / 200.0,
-                                                    2.0 / 200.0,
-                                                ),
-                                                &mut self.options_button_text,
-                                                &mut self.options_button_cursor_is_over_tracker,
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            &self.splash_text,
-        ))
-		*/
 	}
 }
 
 impl GuiStateFrame for MainMenu {
 	fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
         &'a mut self,
-        ctx: &'a GuiWindowContext,
-        mut visitor: GuiVisitor<T>,
+        ctx: &'a GuiWindowContext<'a>,
+        mut visitor: GuiVisitor<'a, '_, T>,
     ) {
 		let ((), (), sized) = self
 			.gui(ctx)
@@ -314,6 +247,6 @@ impl GuiStateFrame for MainMenu {
 				ctx.size.h as f32,
 				ctx.scale,
 			);
-		sized.visit_nodes(&mut visitor)
+		sized.visit_nodes(&mut visitor);
     }
 }

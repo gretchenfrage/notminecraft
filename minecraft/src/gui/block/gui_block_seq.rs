@@ -51,7 +51,7 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
         ScaleSeq: IntoIterator<Item=f32>,
     >(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w_in_seq: WInSeq,
         h_in_seq: HInSeq,
         scale_seq: ScaleSeq,
@@ -65,7 +65,11 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
 pub trait SizedGuiBlockSeq<'a>: Debug {
     /// Call `visit_nodes` on each item, in order, getting their GUI visitors
     /// by mapping `visitor` through `maperator`. 
-    fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<T>, maperator: M)
+    fn visit_items_nodes<T, M>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        maperator: M,
+    )
     where
         T: GuiVisitorTarget<'a>,
         M: GuiVisitorMaperator<'a>;
@@ -86,8 +90,8 @@ pub trait GuiVisitorMaperator<'a>: Debug {
     /// that.
     fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
-        visitor: &'b mut GuiVisitor<T>,
-    ) -> GuiVisitor<'b, T>;
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>;
 }
 
 
@@ -112,7 +116,7 @@ macro_rules! gui_seq_tuple {
                 ScaleSeq: IntoIterator<Item=f32>,
             >(
                 self,
-                _ctx: &GuiGlobalContext,
+                _ctx: &GuiGlobalContext<'a>,
                 w_in_seq: WInSeq,
                 h_in_seq: HInSeq,
                 scale_seq: ScaleSeq,
@@ -150,7 +154,7 @@ macro_rules! gui_seq_tuple {
         > SizedGuiBlockSeq<'a> for ( $( $A, )* ) {
             fn visit_items_nodes<T, M>(
                 self,
-                _visitor: &mut GuiVisitor<T>,
+                _visitor: &mut GuiVisitor<'a, '_, T>,
                 mut _maperator: M,
             )
             where

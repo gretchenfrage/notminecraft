@@ -34,7 +34,7 @@ impl<
 
     fn size(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w: f32,
         h: f32,
         scale: f32,
@@ -61,8 +61,8 @@ pub struct IdentityMaperator;
 impl<'a> GuiVisitorMaperator<'a> for IdentityMaperator {
     fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
-        visitor: &'b mut GuiVisitor<T>,
-    ) -> GuiVisitor<'b, T>
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>
     {
         visitor.reborrow()
             .debug_tag("layer item")

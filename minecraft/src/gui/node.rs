@@ -31,7 +31,7 @@ pub trait GuiNode<'a>: Sized + Debug {
     ///
     /// Handlers' `hits` arguments will also be passed as false if that
     /// position is clipped out for this node.
-    fn blocks_cursor(&self, ctx: GuiSpatialContext, pos: Vec2<f32>) -> bool;
+    fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>, pos: Vec2<f32>) -> bool;
 
     /// Called upon the cursor being moved to a new position, whether or not
     /// the window is focused.
@@ -115,7 +115,7 @@ pub trait GuiNode<'a>: Sized + Debug {
     /// Called to request that node draw to `canvas`. Canvas is relativized
     /// to this space.
     #[allow(unused_variables)]
-    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {}
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {}
 }
 
 
@@ -131,14 +131,14 @@ pub trait GuiVisitorTarget<'a> {
 /// Canvas-like visitor for GUI nodes nested within modifiers. Keeps a
 /// `GuiSpatialContext` updated as transforms are applied, which may be
 /// read.
-pub struct GuiVisitor<'b, T> {
+pub struct GuiVisitor<'a, 'b, T> {
     pub target: &'b mut T,
     pub stack_len: usize,
-    pub ctx: GuiSpatialContext<'b>,
+    pub ctx: GuiSpatialContext<'a>,
 }
 
-impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
-    pub fn new(target: &'b mut T, ctx: GuiSpatialContext<'b>) -> Self {
+impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'a, 'b, T> {
+    pub fn new(target: &'b mut T, ctx: GuiSpatialContext<'a>) -> Self {
         GuiVisitor {
             target,
             stack_len: 0,
@@ -146,7 +146,7 @@ impl<'a, 'b, T: GuiVisitorTarget<'a>> GuiVisitor<'b, T> {
         }
     }
 
-    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'b2, T> {
+    pub fn reborrow<'b2>(&'b2 mut self) -> GuiVisitor<'a, 'b2, T> {
         GuiVisitor {
             target: self.target,
             stack_len: self.stack_len,

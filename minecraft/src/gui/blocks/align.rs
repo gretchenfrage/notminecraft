@@ -49,7 +49,7 @@ struct HAlign<I> {
 impl<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>> GuiBlock<'a, DimParentSets, H> for HAlign<I> {
     type Sized = HAlignSized<I::Sized>;
 
-    fn size(self, ctx: &GuiGlobalContext, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
+    fn size(self, ctx: &GuiGlobalContext<'a>, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
         let (inner_w, h_out, inner_sized) = self.inner.size(ctx, (), h_in, scale);
         let sized = HAlignSized {
             x_translate: (w - inner_w) * self.frac,
@@ -67,7 +67,7 @@ struct HAlignSized<I> {
 }
 
 impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for HAlignSized<I> {
-    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: &mut GuiVisitor<'_, T>) {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(self, visitor: &mut GuiVisitor<'a, '_, T>) {
         self.inner.visit_nodes(&mut visitor.reborrow()
             .translate([self.x_translate, 0.0]));
     }

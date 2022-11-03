@@ -50,7 +50,7 @@ impl<
 
     fn size(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w_in: W::In,
         h_in: H::In,
         scale: f32,
@@ -66,7 +66,7 @@ impl<
 }
 
 impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for AxisSwap<I> {
-    fn visit_nodes<T>(self, visitor: &mut GuiVisitor<T>)
+    fn visit_nodes<T>(self, visitor: &mut GuiVisitor<'a, '_, T>)
     where
         T: GuiVisitorTarget<'a>,
     {
@@ -101,7 +101,7 @@ impl<
         ScaleSeq: IntoIterator<Item=f32>,
     >(
         self,
-        ctx: &GuiGlobalContext,
+        ctx: &GuiGlobalContext<'a>,
         w_in_seq: WInSeq,
         h_in_seq: HInSeq,
         scale_seq: ScaleSeq,
@@ -116,7 +116,7 @@ impl<
 }
 
 impl<'a, I: SizedGuiBlockSeq<'a>> SizedGuiBlockSeq<'a> for AxisSwap<I> {
-    fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<T>, maperator: M)
+    fn visit_items_nodes<T, M>(self, visitor: &mut GuiVisitor<'a, '_, T>, maperator: M)
     where
         T: GuiVisitorTarget<'a>,
         M: GuiVisitorMaperator<'a>,
@@ -129,8 +129,8 @@ impl<'a, I: SizedGuiBlockSeq<'a>> SizedGuiBlockSeq<'a> for AxisSwap<I> {
 impl<'a, I: GuiVisitorMaperator<'a>> GuiVisitorMaperator<'a> for AxisSwap<I> {
     fn next<'b, T: GuiVisitorTarget<'a>>(
         &'b mut self,
-        visitor: &'b mut GuiVisitor<T>,
-    ) -> GuiVisitor<'b, T>
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>
     {
         visitor.reborrow()
             .modify(Transform2(Mat3::new(
