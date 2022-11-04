@@ -781,14 +781,26 @@ impl Renderer {
             )
     }
 
+    /// Create an empty `GpuVec`.
+    pub fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
+        trace!("creating gpu vec");
+        MeshPipeline::create_gpu_vec()
+    }
+
     /// Create a `GpuVec` and initialize it with a slice of content.
-    pub fn create_gpu_vec_init<T: GpuVecElem>(
+    pub fn create_gpu_vec_init<T: GpuVecElem, I>(
         &self,
-        content: &[T],
-    ) -> GpuVec<T> {
+        content: I,
+    ) -> GpuVec<T>
+    where
+        T: GpuVecElem,
+        I: IntoIterator + Clone,
+        <I as IntoIterator>::Item: Borrow<T>,
+    {
         trace!("creating gpu vec with data");
         // TODO could be more optimized
         let mut gpu_vec = self.create_gpu_vec();
+        let len = content.clone().into_iter().count();
         self
             .set_gpu_vec_len(
                 &mut gpu_vec,
@@ -800,12 +812,6 @@ impl Renderer {
                 &[(0, content)],
             );
         gpu_vec
-    }
-
-    /// Create an empty `GpuVec`.
-    pub fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
-        trace!("creating gpu vec");
-        MeshPipeline::create_gpu_vec()
     }
 
     /// Set the size of a `GpuVec`, reallocating if necessary.
@@ -836,6 +842,25 @@ impl Renderer {
         gpu_vec: &mut GpuVec<T>,
         patches: &[(usize, &[T])],
     ) {
+        let patches = patches
+            .iter()
+            .map(|&(i, patch)| (
+                i,
+                patch.iter().copied(),
+            ));
+        self.patch_gpu_vec_iters(gpu_vec, patches);
+    }
+
+    pub fn patch_gpu_vec_iters<T, I1, I2>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        patches: I1,
+    )
+    where
+        T: GpuVecElem,
+        I1: IntoIterator<Item=(usize, I2)>,
+        I2: IntoIterator<Item=T>,
+    {
         trace!("patching gpu vec");
         MeshPipeline::patch_gpu_vec(
             &self.device,

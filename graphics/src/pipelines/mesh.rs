@@ -522,12 +522,16 @@ impl MeshPipeline {
         }
     }
 
-    pub fn patch_gpu_vec<T: GpuVecElem>(
+    pub fn patch_gpu_vec<T, I1, I2>(
         device: &Device,
         queue: &Queue,
         gpu_vec: &mut GpuVec<T>,
-        patches: &[(usize, &[T])],
+        patches: I1,
     )
+    where
+        T: GpuVecElem,
+        I1: IntoIterator<Item=(usize, I2)>,
+        I2: IntoIterator<Item=T>,
     {
         struct CopyRange {
             src_byte_offset: u64,
@@ -538,15 +542,26 @@ impl MeshPipeline {
         let mut src_byte_data = Vec::new();
         let mut copy_ranges = Vec::new();
 
-        for &(dst_elem_index, patch) in patches {
-            copy_ranges.push(CopyRange {
-                src_byte_offset: (src_byte_data.len()) as u64,
-                dst_byte_offset: (dst_elem_index * T::SIZE) as u64,
-                num_bytes: (patch.len() * T::SIZE) as u64,
-            });
-            for elem in patch {
+        #[cfg(debug_assertions)]
+        let mut dbg_to_set = Vec::new();
+
+        for (dst_elem_index, patch) in patches {
+            let src_byte_offset = (src_byte_data.len()) as u64;
+
+            let mut patch_len = 0;
+            for (_i, elem) in patch.into_iter().enumerate() {
                 elem.write(&mut src_byte_data);
+                patch_len += 1;
+
+                #[cfg(debug_assertions)]
+                dbg_to_set.push((dst_elem_index + _i, elem));
             }
+
+            copy_ranges.push(CopyRange {
+                src_byte_offset,
+                dst_byte_offset: (dst_elem_index * T::SIZE) as u64,
+                num_bytes: (patch_len * T::SIZE) as u64,
+            });
         }
 
         for copy_range in &copy_ranges {
@@ -587,12 +602,8 @@ impl MeshPipeline {
         queue.submit(once(encoder.finish()));
 
         #[cfg(debug_assertions)]
-        {
-            for &(i, patch) in patches {
-                for (j, &elem) in patch.iter().enumerate() {
-                    gpu_vec.dbg_content[i + j] = Some(elem);
-                }
-            }
+        for (i, elem) in dbg_to_set {
+            gpu_vec.dbg_content[i] = Some(elem);
         }
     }
 }
