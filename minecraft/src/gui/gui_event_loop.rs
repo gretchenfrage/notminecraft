@@ -232,7 +232,7 @@ impl GuiEventLoop {
 						state.size.w = winit_size.width;
 						state.size.h = winit_size.height;
 
-						state.renderer.borrow_mut().resize(state.size);
+						//state.renderer.borrow_mut().resize(state.size);
 					}
 					WindowEvent::CloseRequested => {
 						stack.0.clear();
@@ -420,7 +420,7 @@ impl GuiEventLoop {
 						let elapsed: Duration = curr_update_time - prev_update_time;
 						let elapsed = elapsed.as_secs_f32();
 
-						stack.top().update(ctx, elapsed);
+						stack.top().update(ctx, elapsed); // TODO: this is kinda weird
 					}
 
 					prev_update_time = Some(curr_update_time);
@@ -428,6 +428,10 @@ impl GuiEventLoop {
 					let mut frame_content = FrameContent::new();
 					stack.top().draw(ctx, &mut frame_content);
 					
+					if state.renderer.borrow().size() != state.size {
+						state.renderer.borrow_mut().resize(state.size);
+					}
+
 					ctx.spatial.global.renderer
 						.borrow_mut()
 						.draw_frame(&frame_content)
