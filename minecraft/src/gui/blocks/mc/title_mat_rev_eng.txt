@@ -1,0 +1,143 @@
+Our goal is to construct a matrix which maps from 3D space to 2D space.
+
+In the 3D space, the front of blocks are in the XY plane and they extend 1 unit
+back into the Z plane. The whole image is centered on the X and Y axis.
+
+In the output space, 1 unit is 1 pixel. We sample known (x,y,z) -> (x',y')
+mappings. The requirements for the z' coefficients is simply that z 0 through 1
+maps to z values between 0 and 1 in a way that increases with respect to z
+values.
+
+We also want this matrix to be symmetrical across the y/z plane. So,
+              |-1 0 0|
+M * <x,y,z> = | 0 1 0| * M * <-x,y,z>
+			  | 0 0 1|
+
+We base this on a screenshot. The source ranges from <0,0,0> (bottom-left
+corner) to <37,5,1> (top-right corner, back). The dst ranges from <0,0>
+(top-left corner) to <447,64> (bottom-right corner). We'll take some sample
+points without centering:
+
+< 0,0,0> -> <  0,63>
+< 0,5,0> -> < 21, 0>
+<37,5,0> -> <437, 0>
+<35,0,1> -> <428,64>
+
+< 1,0,1> -> < 19,64>
+< 1,5,1> -> < 38, 3>
+
+< 6,0,0> -> < 75,63>
+
+Now we'll center the input and output. We'll subtract <18.5,2.5,0> from the
+input and <223.5,32> from the output.
+
+<-18.5,-2.5,0> -> <-223.5, 31>
+<-18.5, 2.5,0> -> <-202.5,-32>
+< 18.5, 2.5,0> -> < 213.5,-32>
+< 16.5,-2.5,1> -> < 204.5, 32>
+
+<-17.5,-2.5,1> -> <-204.5, 32>
+<-17.5, 2.5,1> -> <-185.5,-29>
+
+<-12.5,-2.5,0> -> <-148.5,-31>
+
+---- new:
+
+if z=0:
+	j=dy+f
+
+	 31 = -2.5d+f,
+	-32 =  2.5d+f,
+
+	d=-12.6
+	f=-0.5
+
+	j = -12.6y + -0.5
+
+j = -12.6y + -0.5 + gz
+
+<-17.5, 2.5,1> -> <-185.5,-29>
+-29 = -12.6*2.5 + -0.5 + g*1
+g=3
+
+
+i = ax + by + cz
+
+if z=0
+	i = ax + by
+
+	-202.5 = a*-18.5 + b* 2.5,
+	-148.5 = a*-12.5 + b*-2.5,
+
+	a = 11.3226
+	b = 2.7871
+
+	i = 11.3226x + 2.7871y
+
+i = 11.3226x + 2.7871y + cz
+
+<-17.5,-2.5,1> -> <-204.5, 32>
+-204.5 = 11.3226*-17.5 + 2.7871*-2.5 + c
+c=0.61325
+
+so, the final matrix is:
+
+11.3226 2.7871 0.6132  0.0
+    0.0  -12.6      3 -0.5
+    0.0    0.0 0.0001  0.5
+    0.0    0.0    0.0    1
+
+---- old:
+
+Ok, so now we have two equations to solve from this:
+
+ax + by + cz + d = x'
+ex + fy + gz + h = y'
+
+We'll worry about achieving symmetry later. 8 variables, 4 data-points.
+
+Turn them into 2 systems of 4 4-variable linear equations.
+
+a*-18.5 + b*-2.5 + c*0 + d = -223.5,
+a*-18.5 + b* 2.5 + c*0 + d = -202.5,
+a* 18.5 + b* 2.5 + c*0 + d =  213.5,
+a* 16.5 + b*-2.5 + c*1 + d =  204.5
+
+e*-18.5 + f*-2.5 + g*0 + h =  31,
+e*-18.5 + f* 2.5 + g*0 + h = -32,
+e* 18.5 + f* 2.5 + g*0 + h = -32,
+e* 16.5 + f*-2.5 + g*1 + h =  32
+
+By plugging these into wolfram alpha we get:
+
+a=11.2432 b=4.2 c=34.4865 d=-5
+no solution for y???
+
+Why no solution?
+Ok so think... x should not effect y', ergo
+e = 0
+So the second one becomes:
+
+f*-2.5 + h =  31,
+f* 2.5 + h = -32,
+f*-2.5 + g + h =  32
+
+Lol and then it just becomes this!
+
+f=-12.6 g=1 h=-0.5
+
+Silly wolfram alpha, thinking it couldn't solve it.
+
+So then our total matrix is:
+
+a=11.2432 b=  4.2 c=34.4865 d=  -5
+e=      0 f=-12.6 g=      1 h=-0.5
+
+And let's just make our total matrix be:
+
+11.2432   4.2 34.4865     -5
+      0 -12.6       1   -0.5
+      0     0   0.001 0.4995
+      0     0       0      1
+
+Now let's test it:

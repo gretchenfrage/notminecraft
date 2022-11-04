@@ -321,7 +321,7 @@ impl MeshPipeline {
             }
         }
 
-        /*
+        
         use crate::modifier::Transform3;
         for &triangle in &mesh.mesh.triangles.dbg_content {
             let triangle = triangle.unwrap();
@@ -329,9 +329,9 @@ impl MeshPipeline {
                 .map(|i| mesh.mesh.vertices.dbg_content[i].unwrap())
                 .map(|v| v.pos)
                 .map(|p| Transform3(_dbg_transform).apply(p)); // TODO why are we convering back and forth like this
-            debug!(?transed_tri_pos);
+            dbg!(transed_tri_pos);
         }
-        */ 
+        
 
         if mesh.mesh.triangles.len > 0 {
             pass.set_pipeline(&self.mesh_pipeline);

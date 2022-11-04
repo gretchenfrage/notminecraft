@@ -286,13 +286,13 @@ impl MainMenu {
                                 self.mods_button.gui(ctx),
                                 self.options_button.gui(ctx),
                             )),
-                        ),
+                        ),/*
                         v_align(0.0,
                             logical_height(200.0,
                                 &mut self.splash_text,
                             ),
-                        )),
-                    ),
+                        ),*/
+                    )),
                 ),
             ),
             ScrollScaleChanger,

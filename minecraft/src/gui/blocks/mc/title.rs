@@ -32,6 +32,7 @@ impl GuiTitleBlock {
         let quads = [
             // front (-z)
             ([0, 0, 0], [0, 1, 0], [1, 0, 0]),
+            
             // left (-x)
             ([0, 0, 1], [0, 1, 0], [0, 0, -1]),
             // right (+x)
@@ -40,6 +41,7 @@ impl GuiTitleBlock {
             ([0, 1, 0], [0, 0, 1], [1, 0, 0]),
             // bottom (-y)
             ([0, 0, 1], [0, 0, -1], [1, 0, 0]),
+            
         ]
             .map(|(pos_start, pos_ext_1, pos_ext_2)| Quad {
                 pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
@@ -51,13 +53,14 @@ impl GuiTitleBlock {
                 tex_index: 0,
             });
         let pixel_mesh = QuadMesh::create_init(renderer, &quads);
+        dbg!(&pixel_mesh);
 
         let mut pixels = Vec::new();
 
         let image = image::load_from_memory(include_bytes!("title.png"))
             .unwrap()
             .into_luma8();
-        for x in 0..image.width() {
+        'outer: for x in 0..image.width() {
             for y in 0..image.height() {
                 if image[(x, y)].0[0] != 0 {
                     pixels.push(Vec3 {
@@ -65,6 +68,7 @@ impl GuiTitleBlock {
                         y: y as f32,
                         z: 0.0,
                     });
+                    //break 'outer;
                 }
             }
         }
@@ -75,6 +79,9 @@ impl GuiTitleBlock {
         }
     }
 }
+
+//const WIDTH: f32 = 447.0;
+//const HEIGHT: f32 = 64.0;
 
 impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for &'a GuiTitleBlock {
     type Sized = GuiTitleNode<'a>;
@@ -108,14 +115,20 @@ impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let mut canvas = canvas
             .reborrow()
+            .translate([223.5, 32.0])
             .scale(self.scale)
             .begin_3d(Mat4::new(
+                /*
                 11.243, 4.2, 34.486, 0.0,
                 0.0,    0.0,  -12.6, 1.0,
                 0.0,    0.0,    0.1, 0.5,
                 0.0,    0.0,    0.0, 1.0,
+                */
+                11.3226, 2.7871, 0.6132,  0.0,
+                    0.0,  -12.6,    3.0, -0.5,
+                    0.0,    0.0, 0.0001,  0.5,
+                    0.0,    0.0,    0.0,  1.0,
             ));
-        dbg!(&self.inner.pixels[0]);
         for &pixel in &self.inner.pixels {
             canvas.reborrow()
                 .translate(pixel)
