@@ -10,7 +10,21 @@ use crate::gui::{
     GuiGlobalContext,
 };
 use super::axis_swap;
+use vek::*;
 
+
+pub fn align<
+    'a,
+    A: Into<Vec2<f32>>,
+    I: GuiBlock<'a, DimChildSets, DimChildSets>,
+>(frac: A, inner: I) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+    let Vec2 { x, y } = frac.into();
+    h_align(x,
+        v_align(y,
+            inner,
+        )
+    )
+}
 
 /// Gui block that horizontally aligns its child.
 ///

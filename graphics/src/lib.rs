@@ -49,6 +49,7 @@ use std::{
     sync::Arc,
     borrow::Borrow,
     fmt::{self, Debug, Formatter},
+    iter::once,
 };
 use anyhow::Result;
 use tracing::*;
@@ -788,7 +789,7 @@ impl Renderer {
     }
 
     /// Create a `GpuVec` and initialize it with a slice of content.
-    pub fn create_gpu_vec_init<T: GpuVecElem, I>(
+    pub fn create_gpu_vec_init<T, I>(
         &self,
         content: I,
     ) -> GpuVec<T>
@@ -804,12 +805,17 @@ impl Renderer {
         self
             .set_gpu_vec_len(
                 &mut gpu_vec,
-                content.len(),
+                len,
             );
         self
-            .patch_gpu_vec(
+            .patch_gpu_vec_iters(
                 &mut gpu_vec,
-                &[(0, content)],
+                once((
+                    0,
+                    content
+                        .into_iter()
+                        .map(|e| *e.borrow()),
+                )),
             );
         gpu_vec
     }

@@ -18,6 +18,7 @@ use crate::gui::blocks::Tile9Parts;
 use graphics::frame_content::{
 	FontId,
 	GpuImage,
+    GpuImageArray,
 };
 
 
@@ -25,7 +26,7 @@ use graphics::frame_content::{
 pub struct ResourcePack {
 	pub font: FontId,
 
-	pub menu_title_block: GpuImage,
+	pub menu_title_pixel: GpuImageArray,
 	pub menu_button: Tile9Parts<GpuImage>,
 	pub menu_button_highlight: Tile9Parts<GpuImage>,
 	pub menu_bg: GpuImage,

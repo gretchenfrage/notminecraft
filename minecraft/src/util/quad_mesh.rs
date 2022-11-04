@@ -1,18 +1,29 @@
 
 use graphics::{
     Renderer,
-    frame_content::Mesh,
+    frame_content::{
+        Mesh,
+        Vertex,
+        Triangle,
+    },
 };
+use std::borrow::Borrow;
 use vek::*;
 
 
 /// Utility for meshes constituting planar quads.
 ///
 /// Provides an API similar to how a `GpuMesh<Quad>` would be. Converts each
-/// quad to 4 vertices and 6 indices. Since indices are much smaller than
-/// vertices, this ends up more efficient than naively using 6 vertices.
+/// quad to 4 vertices and 2 triangles. This ends up more efficient than
+/// naively using 6 vertices.
 #[derive(Debug)]
 pub struct QuadMesh(pub Mesh);
+
+impl Borrow<Mesh> for QuadMesh {
+    fn borrow(&self) -> &Mesh {
+        &self.0
+    }
+}
 
 /// Quad within a `QuadMesh`.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -30,10 +41,56 @@ pub struct Quad {
     pub tex_extent: Extent2<f32>,
 
     /// Colors of vertices, starting bottom-left and going clockwise
-    pub vert_colorss: [Rgba<f32>; 4],
+    pub vert_colors: [Rgba<f32>; 4],
 
     /// Texture index
     pub tex_index: usize,
+}
+
+const VERTS_PER_QUAD: usize = 4;
+const TRIS_PER_QUAD: usize = 2;
+
+fn to_verts(quad: &Quad) -> [Vertex; VERTS_PER_QUAD] {
+    [
+        // bottom-left
+        Vertex {
+            pos: quad.pos_start,
+            tex: quad.tex_start + Vec2::new(0.0, quad.tex_extent.h),
+            color: quad.vert_colors[0],
+            tex_index: quad.tex_index,
+        },
+        // top-left
+        Vertex {
+            pos: quad.pos_start + quad.pos_ext_1,
+            tex: quad.tex_start,
+            color: quad.vert_colors[1],
+            tex_index: quad.tex_index,
+        },
+        // top-right
+        Vertex {
+            pos: quad.pos_start + quad.pos_ext_1 + quad.pos_ext_2,
+            tex: quad.tex_start + Vec2::new(quad.tex_extent.w, 0.0),
+            color: quad.vert_colors[2],
+            tex_index: quad.tex_index,
+        },
+        // bottom-right
+        Vertex {
+            pos: quad.pos_start + quad.pos_ext_2,
+            tex: quad.tex_start + quad.tex_extent,
+            color: quad.vert_colors[3],
+            tex_index: quad.tex_index,
+        },
+    ]
+}
+
+fn to_triangles(quad_idx: usize) -> [Triangle; TRIS_PER_QUAD] {
+    [
+        // bottom-left triangle
+        Triangle([0, 1, 3]),
+        // top-right triangle
+        Triangle([3, 1, 2]),
+    ]
+        .map(|tri| tri.map(|k| quad_idx * TRIS_PER_QUAD * 2 + k))
 }
 
 
@@ -45,14 +102,49 @@ impl QuadMesh {
         })
     }
 
+    pub fn create_init<I>(renderer: &Renderer, content: I) -> Self
+    where
+        I: IntoIterator + Clone,
+        <I as IntoIterator>::IntoIter: Clone,
+        <I as IntoIterator>::Item: Borrow<Quad>,
+    {
+        QuadMesh(Mesh {
+            vertices: renderer.create_gpu_vec_init(
+                content
+                    .clone()
+                    .into_iter()
+                    .flat_map(|quad| to_verts(quad.borrow()))
+            ),
+            triangles: renderer.create_gpu_vec_init(
+                (0..content.into_iter().count())
+                    .flat_map(|quad_idx| to_triangles(quad_idx))
+            ),
+        })
+        // TODO efficiency
+    }
 
 
     pub fn set_len(&mut self, renderer: &Renderer, new_len: usize) {
-        renderer.set_gpu_vec_len(&mut self.0.vertices, new_len * 4);
-        renderer.set_gpu_vec_len(&mut self.0.triangles, new_len * 6);
+        renderer.set_gpu_vec_len(&mut self.0.vertices, new_len * VERTS_PER_QUAD);
+        renderer.set_gpu_vec_len(&mut self.0.triangles, new_len * TRIS_PER_QUAD);
     }
 
-    pub fn patch_gpu_vec()
+    pub fn patch(
+        &mut self,
+        renderer: &Renderer,
+        patches: &[(usize, &[Quad])],
+    ) {
+        self
+            .patch_iters(
+                renderer,
+                patches
+                    .iter()
+                    .map(|&(i, patch)| (
+                        i,
+                        patch.iter().copied(),
+                    )),
+            )
+    }
 
     pub fn patch_iters<I1, I2>(&mut self, renderer: &Renderer, patches: I1)
     where
@@ -66,62 +158,21 @@ impl QuadMesh {
                     .clone()
                     .into_iter()
                     .map(|(i, patch)| (
-                        i * 4,
+                        i * VERTS_PER_QUAD,
                         patch
                             .into_iter()
-                            .flat_map(|quad| [
-                                // bottom-left
-                                MeshVertex {
-                                    pos: quad.pos_start,
-                                    tex: quad.tex_start + Vec2::new(0.0, quad.tex_extent.y),
-                                    colors: quad.vert_colorss[0],
-                                    tex_index: quad.tex_index,
-                                },
-                                // top-left
-                                MeshVertex {
-                                    pos: quad.pos_start + quad.pos_ext_1,
-                                    tex: quad.tex_start,
-                                    colors: quad.vert_colorss[1],
-                                    tex_index: quad.tex_index,
-                                },
-                                // top-right
-                                MeshVertex {
-                                    pos: quad.pos_start + quad.pos_ext_1 + quad.pos_ext_2,
-                                    tex: quad.tex_start + Vec2::new(quad.tex_extent.x, 0.0),
-                                    colors: quad.vert_colorss[2],
-                                    tex_index: quad.tex_index,
-                                },
-                                // bottom-right
-                                MeshVertex {
-                                    pos: quad.pos_start + quad.pos_ext_2,
-                                    tex: quad.tex_start + quad.tex_extent,
-                                    colors: quad.vert_colorss[3],
-                                    tex_index: quad.tex_index,
-                                },
-                            ]),
+                            .flat_map(|quad| to_verts(&quad)),
                     )),
             );
         renderer
             .patch_gpu_vec_iters(
-                &mut self.0.indices,
+                &mut self.0.triangles,
                 patches
                     .into_iter()
                     .map(|(i, patch)| (
-                        i * 6,
+                        i * TRIS_PER_QUAD,
                         (0..patch.into_iter().count())
-                            .flat_map(|j|
-                                [
-                                    // bottom-left triangle
-                                    0,
-                                    1,
-                                    3,
-                                    // top-right triangle
-                                    3,
-                                    1,
-                                    2,
-                                ]
-                                .map(|k| (i + j) * 6 + k)
-                            ),
+                            .flat_map(move |j| to_triangles(i + j)),
                     )),
             );
     }

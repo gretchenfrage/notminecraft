@@ -14,6 +14,7 @@ use crate::{
 use graphics::Renderer;
 use image::DynamicImage;
 use anyhow::*;
+use vek::*;
 
 
 pub struct JarAssets {
@@ -104,14 +105,23 @@ impl JarAssets {
 	{
 		let font = renderer.load_font_437_raw(&self.font).unwrap();
 
-		let menu_title_block = renderer.load_image_raw(&self.block_stone);
+		let menu_title_pixel = renderer
+			.load_image_array_raw(
+				Extent2::new(
+					self.block_stone.width(),
+					self.block_stone.height(),
+				),
+				[
+					&self.block_stone,
+				],
+			);
 		let menu_button = self.menu_button.load(renderer);
 		let menu_button_highlight = self.menu_button_highlight.load(renderer);
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
 
 		let resources = ResourcePack {
 			font,
-			menu_title_block,
+			menu_title_pixel,
 			menu_button,
 			menu_button_highlight,
 			menu_bg,

@@ -10,7 +10,10 @@ use crate::{
     },
     view_proj::ViewProj,
 };
-use std::borrow::Cow;
+use std::borrow::{
+    Borrow,
+    Cow,
+};
 use vek::*;
 
 
@@ -541,10 +544,12 @@ impl<'a, 'b> Canvas3<'a, 'b> {
         self.draw(DrawObj3::Text(text.clone()))
     }
 
-    pub fn draw_mesh(self, mesh: &'a Mesh, textures: &GpuImageArray) -> Self
+    pub fn draw_mesh<M>(self, mesh: &'a M, textures: &GpuImageArray) -> Self
+    where
+        M: Borrow<Mesh>,
     {
         self.draw(DrawObj3::Mesh(DrawMesh {
-            mesh,
+            mesh: mesh.borrow(),
             textures: textures.clone(),
         }))
     }

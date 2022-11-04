@@ -137,7 +137,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<ScrollScaleChanger>
 
 #[derive(Debug)]
 pub struct MainMenu {
-    title: GuiTextBlock,
+    title: GuiTitleBlock,
 	version_text: GuiTextBlock,
     uncopyright_text: GuiTextBlock,
     singleplayer_button: MenuButton,
@@ -199,11 +199,12 @@ impl MenuButton {
 
 impl MainMenu {
 	pub fn new(
-		_renderer: &Renderer,
+		renderer: &Renderer,
 		resources: &ResourcePack,
 		lang: &Localization,
 	) -> Self
-	{
+	{  
+        /*
         let title = GuiTextBlock::new(&GuiTextBlockConfig {
             text: "minecraft lol",
             font: resources.font,
@@ -212,7 +213,8 @@ impl MainMenu {
             h_align: HAlign::Center,
             v_align: VAlign::Center,
             wrap: false,
-        });
+        });*/
+        let title = GuiTitleBlock::new(renderer);
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &lang.menu_version,
 			font: resources.font,
@@ -276,8 +278,8 @@ impl MainMenu {
                     layer((
                         v_align(0.0,
                             v_stack(8.0, (
-                                logical_height(200.0,
-                                    &mut self.title,
+                                h_align(0.5,
+                                    &self.title,
                                 ),
                                 self.singleplayer_button.gui(ctx),
                                 self.multiplayer_button.gui(ctx),

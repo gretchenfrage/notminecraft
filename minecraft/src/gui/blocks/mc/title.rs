@@ -1,29 +1,134 @@
 
+use crate::{
+    util::quad_mesh::{
+        QuadMesh,
+        Quad,
+    },
+    gui::{
+        GuiBlock,
+        GuiNode,
+        GuiGlobalContext,
+        GuiSpatialContext,
+        DimChildSets,
+    }
+};
+use graphics::{
+    Renderer,
+    frame_content::{
+        Canvas2,
+    },
+};
+use vek::*;
 
-fn title_matrix() -> Mat4<f32> {
-    Mat4::new(
-        11.243, 4.2, 34.486, 0.0,
-        0.0,    0.0,  -12.6, 1.0,
-        0.0,    0.0,    1.0, 0.0,
-        0.0,    0.0,    0.0, 1.0,
-    )
-}
 
-447, 64
-
+#[derive(Debug)]
 pub struct GuiTitleBlock {
-    pixel_mesh: Arc<Mesh>,
+    pixel_mesh: QuadMesh,
     pixels: Vec<Vec3<f32>>,
 }
 
 impl GuiTitleBlock {
     pub fn new(renderer: &Renderer) -> Self {
-        
+        let quads = [
+            // front (-z)
+            ([0, 0, 0], [0, 1, 0], [1, 0, 0]),
+            // left (-x)
+            ([0, 0, 1], [0, 1, 0], [0, 0, -1]),
+            // right (+x)
+            ([1, 0, 0], [0, 1, 0], [0, 0, 1]),
+            // top (+y)
+            ([0, 1, 0], [0, 0, 1], [1, 0, 0]),
+            // bottom (-y)
+            ([0, 0, 1], [0, 0, -1], [1, 0, 0]),
+        ]
+            .map(|(pos_start, pos_ext_1, pos_ext_2)| Quad {
+                pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
+                pos_ext_1: Extent3::from(pos_ext_1).map(|n: i32| n as f32),
+                pos_ext_2: Extent3::from(pos_ext_2).map(|n: i32| n as f32),
+                tex_start: 0.0.into(),
+                tex_extent: 1.0.into(),
+                vert_colors: [Rgba::white(); 4],
+                tex_index: 0,
+            });
+        let pixel_mesh = QuadMesh::create_init(renderer, &quads);
+
+        let mut pixels = Vec::new();
+
+        let image = image::load_from_memory(include_bytes!("title.png"))
+            .unwrap()
+            .into_luma8();
+        for x in 0..image.width() {
+            for y in 0..image.height() {
+                if image[(x, y)].0[0] != 0 {
+                    pixels.push(Vec3 {
+                        x: x as f32,
+                        y: y as f32,
+                        z: 0.0,
+                    });
+                }
+            }
+        }
+
+        GuiTitleBlock {
+            pixel_mesh,
+            pixels,
+        }
+    }
+}
+
+impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for &'a GuiTitleBlock {
+    type Sized = GuiTitleNode<'a>;
+
+    fn size(
+        self,
+        _: &GuiGlobalContext<'a>,
+        (): (),
+        (): (),
+        scale: f32,
+    ) -> (f32, f32, Self::Sized)
+    {
+        let sized = GuiTitleNode {
+            inner: self,
+            scale,
+        };
+        (447.0 * scale, 64.0 * scale, sized)
     }
 }
 
 
+#[derive(Debug)]
+pub struct GuiTitleNode<'a> {
+    inner: &'a GuiTitleBlock,
+    scale: f32,
+}
 
+impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
+    fn blocks_cursor(&self, _: GuiSpatialContext<'a>) -> bool { false }
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        let mut canvas = canvas
+            .reborrow()
+            .scale(self.scale)
+            .begin_3d(Mat4::new(
+                11.243, 4.2, 34.486, 0.0,
+                0.0,    0.0,  -12.6, 1.0,
+                0.0,    0.0,    0.1, 0.5,
+                0.0,    0.0,    0.0, 1.0,
+            ));
+        dbg!(&self.inner.pixels[0]);
+        for &pixel in &self.inner.pixels {
+            canvas.reborrow()
+                .translate(pixel)
+                .draw_mesh(
+                    &self.inner.pixel_mesh,
+                    &ctx.resources().menu_title_pixel,
+                );
+        }
+    }
+}
+
+
+/*
 use super::*;
 use graphics::{
     frame_content::{Mesh, GpuImageArray, Vertex, Triangle},
@@ -224,4 +329,4 @@ impl<'a> GuiNode<'a> for McTitleSizedGuiBlock<'a> {
                 .draw_mesh(&self.block.title_pixel_mesh, &self.block.title_pixel_texture);
         }
     }
-}
+}*/

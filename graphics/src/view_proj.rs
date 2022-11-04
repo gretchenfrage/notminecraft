@@ -12,6 +12,12 @@ use vek::*;
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ViewProj(pub Mat4<f32>);
 
+impl From<Mat4<f32>> for ViewProj {
+    fn from(mat: Mat4<f32>) -> Self {
+        ViewProj(mat)
+    }
+}
+
 impl ViewProj {
     /// Perspective camera at position `pos`, pointing in direction `dir`
     /// (rotated from "forward and pointing +z"), with the given field-of-view

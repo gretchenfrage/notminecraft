@@ -36,6 +36,7 @@ pub use self::{
         axis_swap_seq,
     },
     align::{
+        align,
         h_align,
         v_align,
     },
