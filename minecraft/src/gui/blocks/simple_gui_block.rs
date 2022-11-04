@@ -61,3 +61,12 @@ macro_rules! simple_blocks_cursor_impl {
 }
 
 pub(crate) use simple_blocks_cursor_impl;
+
+
+macro_rules! never_blocks_cursor_impl {
+    ()=>{
+        fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
+    };
+}
+
+pub(crate) use never_blocks_cursor_impl;

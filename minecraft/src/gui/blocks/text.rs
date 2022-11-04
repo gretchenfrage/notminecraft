@@ -146,7 +146,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
             scale: self.scale,
         };
 
-        self.inner.validate_cache(&ctx.global.renderer.try_read().unwrap(), cache_key);
+        self.inner.validate_cache(&ctx.global.renderer.borrow(), cache_key);
         let layed_out = self.inner.cache
             .as_ref()
             .map(|&(_, ref content)| content)

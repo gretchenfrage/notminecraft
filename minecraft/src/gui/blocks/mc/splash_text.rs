@@ -101,7 +101,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiSplashText> {
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         self.inner
             .validate_cache(
-                &ctx.global.renderer.try_read().unwrap(),
+                &ctx.global.renderer.borrow(),
                 &ctx.lang().menu_splash_text,
                 ctx.resources().font,
                 self.scale,

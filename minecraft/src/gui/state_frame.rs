@@ -12,6 +12,7 @@ use crate::gui::{
 		GuiVisitor,
 	},
 };
+use std::fmt::Debug;
 use vek::*;
 
 
@@ -19,7 +20,7 @@ use vek::*;
 
 
 /// Item within a stack of GUI states. Doesn't generally share the window.
-pub trait GuiStateFrame {
+pub trait GuiStateFrame: Debug {
     /// Size, position, and visit all GUI nodes. This will generally be
     /// followed by invoking some positional handler on the nodes.
     fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(

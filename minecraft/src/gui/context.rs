@@ -1,8 +1,11 @@
 //! State maintained by event loop between GUI events.
 
-use crate::asset::{
-    resource_pack::ResourcePack,
-    localization::Localization,
+use crate::{
+    asset::{
+        resource_pack::ResourcePack,
+        localization::Localization,
+    },
+    gui::gui_event_loop::EventLoopEffectQueue,
 };
 use graphics::{
     Renderer,
@@ -10,7 +13,7 @@ use graphics::{
 };
 use std::{
     collections::HashSet,
-    sync::RwLock,
+    cell::RefCell,
 };
 use vek::*;
 
@@ -26,7 +29,8 @@ pub use winit::event::{
 /// state frame and all nodes, unaffected by the layout process.
 #[derive(Debug, Copy, Clone)]
 pub struct GuiGlobalContext<'c> {
-    pub renderer: &'c RwLock<Renderer>, // TODO temporary hack
+    pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
+    pub renderer: &'c RefCell<Renderer>,
     pub resources: &'c ResourcePack,
     pub lang: &'c Localization,
     /// Window focus level.

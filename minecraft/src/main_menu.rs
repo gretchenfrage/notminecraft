@@ -9,7 +9,10 @@ use crate::{
 		blocks::{
             *,
             mc::*,
-            simple_gui_block::SimpleGuiBlock,
+            simple_gui_block::{
+                SimpleGuiBlock,
+                never_blocks_cursor_impl,
+            },
         },
 	},
 	util::hex_color::hex_color,
@@ -87,7 +90,7 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
 struct GuiPrintOnClickBlock<'s>(&'s str);
 
 impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
-    fn blocks_cursor(&self, _: GuiSpatialContext<'a>) -> bool { false }
+    never_blocks_cursor_impl!();
 
     fn on_cursor_click(
         self,
@@ -100,10 +103,39 @@ impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
         if button != MouseButton::Left { return }
 
         println!("{}", self.inner.0);
+
+        //ctx.global.event_loop.borrow_mut().pop_state_frame();
     }
 }
 
 
+#[derive(Debug)]
+pub struct ScrollScaleChanger;
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<ScrollScaleChanger>
+{
+    never_blocks_cursor_impl!();
+
+    fn on_cursor_scroll(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        amount: ScrolledAmount,
+    ) {
+        println!("on cursor scroll");
+
+        if !hits { return }
+        if !ctx.cursor_in_area(0.0, self.size) { return }
+
+        let amount = amount.to_pixels(16.0).y;
+        let scale = self.scale * f32::powf(1.01, amount);
+
+        ctx.global.event_loop.borrow_mut().set_scale(dbg!(scale));
+    }
+}
+
+
+#[derive(Debug)]
 pub struct MainMenu {
     title: GuiTextBlock,
 	version_text: GuiTextBlock,
@@ -115,6 +147,7 @@ pub struct MainMenu {
     splash_text: GuiSplashText,
 }
 
+#[derive(Debug)]
 pub struct MenuButton {
     text: GuiTextBlock,
     print_on_click: String,
@@ -242,7 +275,7 @@ impl MainMenu {
                 logical_width(400.0,
                     layer((
                         v_align(0.0,
-                            v_stack(25.0, (
+                            v_stack(8.0, (
                                 logical_height(200.0,
                                     &mut self.title,
                                 ),
@@ -260,6 +293,7 @@ impl MainMenu {
                     ),
                 ),
             ),
+            ScrollScaleChanger,
 		))
 	}
 }
