@@ -3,7 +3,7 @@ use crate::{
 	asset::{
 		localization::Localization,
 		resource_pack::ResourcePack,
-		jar_reader::JarReader,
+		jar_acquire::jar_acquire,
 	},
 	gui::blocks::{
 		Tile9CropConfig,
@@ -31,7 +31,7 @@ pub struct JarAssets {
 
 impl JarAssets {
 	pub async fn read() -> Result<Self> {
-		let jar = JarReader::new().await?;
+		let jar = jar_acquire().await?;
 
 		let font = jar.read_image("font/default.png").await?;
 		ensure!(font.width() == 128, "font/default.png wrong w size");
