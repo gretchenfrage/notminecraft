@@ -24,6 +24,7 @@ use graphics::{
 		VAlign,
 	},
 };
+use rand::thread_rng;
 use vek::*;
 
 
@@ -214,7 +215,7 @@ impl MainMenu {
             v_align: VAlign::Center,
             wrap: false,
         });*/
-        let title = GuiTitleBlock::new(renderer);
+        let title = GuiTitleBlock::new(renderer, &mut thread_rng());
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &lang.menu_version,
 			font: resources.font,
@@ -306,6 +307,7 @@ impl GuiStateFrame for MainMenu {
 	impl_visit_nodes!();
 
     fn update(&mut self, _ctx: &GuiWindowContext, elapsed: f32) {
+        self.title.update(elapsed);
         self.splash_text.update(elapsed);
     }
 }

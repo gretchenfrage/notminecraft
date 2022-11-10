@@ -183,7 +183,7 @@ impl Font for Font437 {
         } else if let Some(&cp) = ENCODE_TABLE.get(&c) {
             GlyphId(cp as u16)
         } else {
-            GlyphId(ENCODE_TABLE[&'♦'] as u16)
+            GlyphId(b'?' as u16)
         }
     }
 

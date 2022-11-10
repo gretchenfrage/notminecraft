@@ -18,6 +18,7 @@ use graphics::{
         Canvas2,
     },
 };
+use rand::Rng;
 use vek::*;
 
 
@@ -28,7 +29,7 @@ pub struct GuiTitleBlock {
 }
 
 impl GuiTitleBlock {
-    pub fn new(renderer: &Renderer) -> Self {
+    pub fn new<R: Rng>(renderer: &Renderer, rng: &mut R) -> Self {
         let quads = [
             // front (-z)
             ([0, 0, 0], [0, 1, 0], [1, 0, 0], 1.0),
@@ -65,7 +66,7 @@ impl GuiTitleBlock {
                     pixels.push(Vec3 {
                         x: x as f32 - image.width() as f32 / 2.0,
                         y: image.height() as f32 / 2.0 - (y + 1) as f32,
-                        z: 0.0,
+                        z: rng.gen_range(-75.0..=-40.0),
                     });
                 }
             }
@@ -74,6 +75,12 @@ impl GuiTitleBlock {
         GuiTitleBlock {
             pixel_mesh,
             pixels,
+        }
+    }
+
+    pub fn update(&mut self, elapsed: f32) {
+        for pixel in &mut self.pixels {
+            pixel.z = f32::min(0.0, pixel.z + 75.0 * elapsed);
         }
     }
 }
@@ -119,7 +126,7 @@ impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
             .begin_3d(Mat4::new(
                 356.6837, 0.0, 0.0, 0.0,
                 0.0, -386.4658, 66.59978, -98.00946,
-                0.0, 0.0, 1.0, 0.5,
+                0.0, 0.0, 0.001, 0.5,
                 0.0, 0.45333248, 1.0, 32.122105,
             ));
         for &pixel in &self.inner.pixels {
