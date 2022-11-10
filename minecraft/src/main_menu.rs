@@ -278,20 +278,22 @@ impl MainMenu {
                     layer((
                         v_align(0.0,
                             v_stack(8.0, (
-                                h_align(0.5,
-                                    &self.title,
+                                logical_height(200.0,
+                                    align(0.5,
+                                        &self.title,
+                                    ),
                                 ),
                                 self.singleplayer_button.gui(ctx),
                                 self.multiplayer_button.gui(ctx),
                                 self.mods_button.gui(ctx),
                                 self.options_button.gui(ctx),
                             )),
-                        ),/*
+                        ),
                         v_align(0.0,
                             logical_height(200.0,
                                 &mut self.splash_text,
                             ),
-                        ),*/
+                        ),
                     )),
                 ),
             ),

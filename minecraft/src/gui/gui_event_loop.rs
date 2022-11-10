@@ -47,6 +47,7 @@ use winit::{
 	    ElementState,
 	    MouseScrollDelta
 	},
+	dpi::LogicalSize,
 };
 use pollster::FutureExt;
 use vek::*;
@@ -190,6 +191,7 @@ impl GuiEventLoop {
 	pub fn new() -> Self {
 		let event_loop = EventLoop::new();
 		let window = WindowBuilder::new()
+			.with_inner_size(LogicalSize::new(854, 480))
 			.build(&event_loop)
 			.expect("failed to build window");
 		let window = Arc::new(window);
