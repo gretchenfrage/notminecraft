@@ -18,4 +18,5 @@ void main() {
     o_tex = i_tex;
     o_color = i_color * u_color;
     gl_Position = o_pos;
+    o_pos /= o_pos.w;
 }

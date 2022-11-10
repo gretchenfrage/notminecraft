@@ -329,7 +329,7 @@ impl MeshPipeline {
                 .map(|i| mesh.mesh.vertices.dbg_content[i].unwrap())
                 .map(|v| v.pos)
                 .map(|p| Transform3(_dbg_transform).apply(p)); // TODO why are we convering back and forth like this
-            dbg!(transed_tri_pos);
+            //dbg!(transed_tri_pos);
         }
         
 

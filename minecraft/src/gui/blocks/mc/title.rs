@@ -31,25 +31,25 @@ impl GuiTitleBlock {
     pub fn new(renderer: &Renderer) -> Self {
         let quads = [
             // front (-z)
-            ([0, 0, 0], [0, 1, 0], [1, 0, 0]),
+            ([0, 0, 0], [0, 1, 0], [1, 0, 0], 1.0),
             
             // left (-x)
-            ([0, 0, 1], [0, 1, 0], [0, 0, -1]),
+            ([0, 0, 1], [0, 1, 0], [0, 0, -1], 0.75),
             // right (+x)
-            ([1, 0, 0], [0, 1, 0], [0, 0, 1]),
+            ([1, 0, 0], [0, 1, 0], [0, 0, 1], 0.75),
             // top (+y)
-            ([0, 1, 0], [0, 0, 1], [1, 0, 0]),
+            ([0, 1, 0], [0, 0, 1], [1, 0, 0], 0.75),
             // bottom (-y)
-            ([0, 0, 1], [0, 0, -1], [1, 0, 0]),
+            ([0, 0, 1], [0, 0, -1], [1, 0, 0], 0.75),
             
         ]
-            .map(|(pos_start, pos_ext_1, pos_ext_2)| Quad {
+            .map(|(pos_start, pos_ext_1, pos_ext_2, col)| Quad {
                 pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
                 pos_ext_1: Extent3::from(pos_ext_1).map(|n: i32| n as f32),
                 pos_ext_2: Extent3::from(pos_ext_2).map(|n: i32| n as f32),
                 tex_start: 0.0.into(),
                 tex_extent: 1.0.into(),
-                vert_colors: [Rgba::white(); 4],
+                vert_colors: [Rgba::new(col, col, col, 1.0); 4],
                 tex_index: 0,
             });
         let pixel_mesh = QuadMesh::create_init(renderer, &quads);
@@ -64,8 +64,8 @@ impl GuiTitleBlock {
             for y in 0..image.height() {
                 if image[(x, y)].0[0] != 0 {
                     pixels.push(Vec3 {
-                        x: x as f32,
-                        y: y as f32,
+                        x: x as f32 - image.width() as f32 / 2.0,
+                        y: image.height() as f32 / 2.0 - (y + 1) as f32,
                         z: 0.0,
                     });
                     //break 'outer;
@@ -113,22 +113,78 @@ impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
     fn blocks_cursor(&self, _: GuiSpatialContext<'a>) -> bool { false }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        canvas.reborrow()
+            .color(Rgba::red())
+            .draw_solid([447.0 * self.scale, 64.0 * self.scale])
+            ;
         let mut canvas = canvas
             .reborrow()
-            .translate([223.5, 32.0])
+            .translate([223.5 * self.scale, 32.0 * self.scale])
             .scale(self.scale)
-            .begin_3d(Mat4::new(
+            .begin_3d(
+                
+                Mat4::new(
+                      356.6837,  0.0, 0.0, 0.0,
+                    0.0,  -386.4658,   66.59978, -98.00946,
+                           0.0,        0.0,     1.0,       0.5,
+                    0.0, 0.45333248,        1.0, 32.122105,
+                )
+                
+                /*
+                Mat4::new(
+                           1.0,        0.0,       0.0,   0.0,
+                    -786.36847, -170.07373, -9465.644, 242.0,
+                           0.0,        0.0,     0.001,   0.5,
+                           0.0,        0.4, 1.0867925, 195.0,
+                )*/
+            );
+            /*
+            .begin_3d(/*Mat4::new(
                 /*
                 11.243, 4.2, 34.486, 0.0,
                 0.0,    0.0,  -12.6, 1.0,
                 0.0,    0.0,    0.1, 0.5,
                 0.0,    0.0,    0.0, 1.0,
                 */
+                /*
                 11.3226, 2.7871, 0.6132,  0.0,
                     0.0,  -12.6,    3.0, -0.5,
                     0.0,    0.0, 0.0001,  0.5,
                     0.0,    0.0,    0.0,  1.0,
-            ));
+                    */
+
+                563.44, 19.38, 102.99, 227.18,
+                0.0,  -604.93,  77.84, -91.32,
+                0.0,      0.0, 0.0001,    0.5,
+                0.0,     0.86,    1.0,  47.98,
+            )*/Mat4 {
+    cols: Vec4 {
+        x: Vec4 {
+            x: 356.6837,
+            y: -2.5395966,
+            z: 0.0,
+            w: 0.07936245,
+        },
+        y: Vec4 {
+            x: 32.186558,
+            y: -386.4658,
+            z: 0.0,
+            w: 0.45333248,
+        },
+        z: Vec4 {
+            x: -16.522638,
+            y: 66.59978,
+            z: -0.001,
+            w: 1.0,
+        },
+        w: Vec4 {
+            x: 81.26757,
+            y: -98.00946,
+            z: 0.5,
+            w: 32.122105,
+        },
+    },
+});*/
         for &pixel in &self.inner.pixels {
             canvas.reborrow()
                 .translate(pixel)
