@@ -52,7 +52,7 @@ fn main() {
     // make panic messages and backtrace go through logging system
     panic::set_hook(Box::new(|info| {
         error!("{}", info);
-        if env::var("RUST_BACKTRACE").map(|val| val == "1").unwrap_or(false) {
+        if env::var("RUST_BACKTRACE").map(|val| val == "1").unwrap_or(true) {
             error!("{:?}", Backtrace::new());
         }
     }));

@@ -103,7 +103,7 @@ impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
         if !ctx.cursor_in_area(0.0, self.size) { return }
         if button != MouseButton::Left { return }
 
-        println!("{}", self.inner.0);
+        info!("{}", self.inner.0);
 
         //ctx.global.event_loop.borrow_mut().pop_state_frame();
     }
@@ -123,7 +123,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<ScrollScaleChanger>
         hits: bool,
         amount: ScrolledAmount,
     ) {
-        println!("on cursor scroll");
+        trace!("on cursor scroll");
 
         if !hits { return }
         if !ctx.cursor_in_area(0.0, self.size) { return }
@@ -131,7 +131,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<ScrollScaleChanger>
         let amount = amount.to_pixels(16.0).y;
         let scale = self.scale * f32::powf(1.01, amount);
 
-        ctx.global.event_loop.borrow_mut().set_scale(dbg!(scale));
+        ctx.global.event_loop.borrow_mut().set_scale(scale);
     }
 }
 

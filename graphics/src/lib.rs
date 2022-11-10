@@ -161,7 +161,9 @@ impl Renderer {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or_else(|| anyhow::Error::msg("failed to find an appropriate adapter"))?;
+            .ok_or_else(|| anyhow::Error::msg(
+                "failed to find an appropriate adapter"
+            ))?;
 
         // create the device and queue
         trace!("creating device and queue");
