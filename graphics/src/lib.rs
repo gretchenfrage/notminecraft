@@ -270,6 +270,7 @@ impl Renderer {
             width: size.w,
             height: size.h,
             present_mode: PresentMode::Mailbox,
+            alpha_mode: CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &config);
 
@@ -492,14 +493,14 @@ impl Renderer {
                         .begin_render_pass(&RenderPassDescriptor {
                             label: Some("draw render pass"),
                             color_attachments: &[
-                                RenderPassColorAttachment {
+                                Some(RenderPassColorAttachment {
                                     view: &color_texture,
                                     resolve_target: None,
                                     ops: Operations {
                                         load: LoadOp::Load,
                                         store: true,
                                     },
-                                },
+                                }),
                             ],
                             depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                                 view: &depth_texture,

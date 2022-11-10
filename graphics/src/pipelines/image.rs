@@ -79,9 +79,9 @@ impl ImagePipeline {
     ) -> Result<Self>
     {
         let image_vs_module = device
-            .create_shader_module(&load_shader!("image.vert").await?);
+            .create_shader_module(load_shader!("image.vert").await?);
         let image_fs_module = device
-            .create_shader_module(&load_shader!("image.frag").await?);
+            .create_shader_module(load_shader!("image.frag").await?);
         let image_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("image uniform bind group layout"),
@@ -147,11 +147,11 @@ impl ImagePipeline {
                     module: &image_fs_module,
                     entry_point: "main",
                     targets: &[
-                        ColorTargetState {
+                        Some(ColorTargetState {
                             format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
-                        },
+                        }),
                     ],
                 }),
                 primitive: PrimitiveState::default(),

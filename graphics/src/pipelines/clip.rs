@@ -170,9 +170,9 @@ impl ClipPipeline {
             });
 
         let clip_edit_vs_module = device
-            .create_shader_module(&load_shader!("clip_edit.vert").await?);
+            .create_shader_module(load_shader!("clip_edit.vert").await?);
         let clip_edit_fs_module = device
-            .create_shader_module(&load_shader!("clip_edit.frag").await?);
+            .create_shader_module(load_shader!("clip_edit.frag").await?);
         let clip_edit_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("clip edit pipeline layout"),
@@ -195,11 +195,11 @@ impl ClipPipeline {
                     module: &clip_edit_fs_module,
                     entry_point: "main",
                     targets: &[
-                        ColorTargetState {
+                        Some(ColorTargetState {
                             format: CLIP_FORMAT,
                             blend: None, // TODO ???
                             write_mask: ColorWrites::ALL,
-                        },
+                        }),
                     ],
                 }),
                 primitive: PrimitiveState::default(),
@@ -295,14 +295,14 @@ impl ClipPipeline {
             .begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &[
-                    RenderPassColorAttachment {
+                    Some(RenderPassColorAttachment {
                         view: &self.extra_clip_texture.view,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
                             store: true,
                         },
-                    },
+                    }),
                 ],
                 depth_stencil_attachment: None,
             });

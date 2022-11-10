@@ -19,9 +19,9 @@ impl SolidPipeline {
     ) -> Result<Self> 
     {
         let solid_vs_module = device
-            .create_shader_module(&load_shader!("solid.vert").await?);
+            .create_shader_module(load_shader!("solid.vert").await?);
         let solid_fs_module = device
-            .create_shader_module(&load_shader!("solid.frag").await?);
+            .create_shader_module(load_shader!("solid.frag").await?);
         let solid_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("solid pipeline layout"),
@@ -45,11 +45,11 @@ impl SolidPipeline {
                     module: &solid_fs_module,
                     entry_point: "main",
                     targets: &[
-                        ColorTargetState {
+                        Some(ColorTargetState {
                             format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
-                        },
+                        }),
                     ],
                 }),
                 primitive: PrimitiveState::default(),

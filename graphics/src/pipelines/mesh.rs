@@ -187,9 +187,9 @@ impl MeshPipeline {
     ) -> Result<Self>
     {
         let mesh_vs_module = device
-            .create_shader_module(&load_shader!("mesh.vert").await?);
+            .create_shader_module(load_shader!("mesh.vert").await?);
         let mesh_fs_module = device
-            .create_shader_module(&load_shader!("mesh.frag").await?);
+            .create_shader_module(load_shader!("mesh.frag").await?);
         let mesh_texture_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("mesh texture bind group layout"),
@@ -244,11 +244,11 @@ impl MeshPipeline {
                     module: &mesh_fs_module,
                     entry_point: "main",
                     targets: &[
-                        ColorTargetState {
+                        Some(ColorTargetState {
                             format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
-                        }
+                        }),
                     ],
                 }),
                 primitive: PrimitiveState::default(),

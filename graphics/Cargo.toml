@@ -12,8 +12,8 @@ tracing = "0.1"
 vek = "0.15"
 image = "0.24"
 backtrace = "0.3"
-glyph_brush = "0.7"
-winit = "0.26"
+glyph_brush = "0.7.5"
+winit = "0.27"
 
 [dependencies.tracing-subscriber]
 version = "0.3"
@@ -24,7 +24,7 @@ version = "1"
 features = ["backtrace"]
 
 [dependencies.wgpu]
-version = "0.12"
+version = "0.14"
 features = ["spirv"]
 
 [dependencies.tokio]

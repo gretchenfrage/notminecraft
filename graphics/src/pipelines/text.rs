@@ -278,9 +278,9 @@ impl TextPipeline {
     ) -> Result<Self>
     {
         let text_vs_module = device
-            .create_shader_module(&load_shader!("text.vert").await?);
+            .create_shader_module(load_shader!("text.vert").await?);
         let text_fs_module = device
-            .create_shader_module(&load_shader!("text.frag").await?);
+            .create_shader_module(load_shader!("text.frag").await?);
         let glyph_cache_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("glyph cache bind group layout"),
@@ -335,11 +335,11 @@ impl TextPipeline {
                     module: &text_fs_module,
                     entry_point: "main",
                     targets: &[
-                        ColorTargetState {
+                        Some(ColorTargetState {
                             format: SWAPCHAIN_FORMAT,
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::all(),
-                        },
+                        }),
                     ],
                 }),
                 primitive: PrimitiveState::default(),

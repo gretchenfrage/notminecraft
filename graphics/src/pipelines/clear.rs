@@ -17,9 +17,9 @@ pub struct ClearPipeline {
 impl ClearPipelineCreator {
     pub(crate) async fn new(device: &Device) -> Result<Self> {
         let clear_vs_module = device
-            .create_shader_module(&load_shader!("clear.vert").await?);
+            .create_shader_module(load_shader!("clear.vert").await?);
         let clear_fs_module = device
-            .create_shader_module(&load_shader!("clear.frag").await?);
+            .create_shader_module(load_shader!("clear.frag").await?);
         let clear_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("clear pipeline layout"),
@@ -50,7 +50,7 @@ impl ClearPipelineCreator {
                 fragment: Some(FragmentState {
                     module: &self.clear_fs_module,
                     entry_point: "main",
-                    targets: &[format.into()],
+                    targets: &[Some(format.into())],
                 }),
                 primitive: PrimitiveState::default(),
                 depth_stencil: None,
@@ -72,14 +72,14 @@ impl ClearPipeline {
             .begin_render_pass(&RenderPassDescriptor {
                 label: Some("clear pass"), // TODO label
                 color_attachments: &[
-                    RenderPassColorAttachment {
+                    Some(RenderPassColorAttachment {
                         view,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(color),
                             store: true,
-                        }
-                    }
+                        },
+                    }),
                 ],
                 depth_stencil_attachment: None,
             });
