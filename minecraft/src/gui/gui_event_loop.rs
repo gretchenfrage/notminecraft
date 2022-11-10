@@ -13,6 +13,7 @@ use crate::{
 		},
 		event::ScrolledAmount,
 		state_frame_obj::GuiStateFrameObj,
+		fps_overlay::FpsOverlay,
 	},
 };
 use graphics::{
@@ -20,7 +21,10 @@ use graphics::{
 	frame_content::FrameContent,
 };
 use std::{
-	collections::HashSet,
+	collections::{
+		HashSet,
+		VecDeque,
+	},
 	sync::Arc,
 	cell::RefCell,
 	time::{
@@ -222,6 +226,7 @@ impl GuiEventLoop {
 		);
 
 		let mut prev_update_time = None;
+		let mut fps_queue = VecDeque::new();
 
 		self.event_loop.run(move |event, _target, control_flow| {
 			if *control_flow == ControlFlow::Exit {
@@ -427,8 +432,63 @@ impl GuiEventLoop {
 
 					prev_update_time = Some(curr_update_time);
 
+					fps_queue.push_back(curr_update_time);
+
+					while fps_queue
+						.front()
+						.map(|&update_time|
+							curr_update_time - update_time
+							> Duration::from_secs(1)
+						)
+						.unwrap_or(false)
+					{
+						fps_queue.pop_front().unwrap();
+					}
+					let fps = fps_queue.len();
+					//info!(%fps);
+
 					let mut frame_content = FrameContent::new();
 					stack.top().draw(ctx, &mut frame_content);
+
+					let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.resources());
+					fps_overlay.draw(ctx, &mut frame_content);
+					/*
+					{
+						use crate::{
+							gui::blocks::{
+								GuiText,
+								GuiTextBlockConfig,
+								margin,
+							},
+							util::hex_color::hex_color,
+						};
+						use graphics::frame_content::{
+							HAlign,
+							VAlign,
+						};
+
+						let mut fps_text = GuiTextBlock::new(&GuiTextBlockConfig {
+							text: &format!("{} fps", fps),
+							font: ctx.resources().font,
+							logical_font_size: 16.0,
+							color: hex_color(0x505050FF),
+							h_align: HAlign::Right,
+							v_align: VAlign::Top,
+							wrap: false,
+						});
+						let fps_gui = margin(4.0, 4.0, 4.0, 4.0,
+							&mut fps_text,
+						);
+						let ((), (), fps_gui_sized) = fps_gui
+			                .size(
+			                    ctx.spatial.global,
+			                    ctx.size.w as f32,
+			                    ctx.size.h as f32,
+			                    ctx.scale,
+			                );
+			            fps_gui_sized.visit_nodes(&mut visitor, forward);
+					}
+					*/
 					
 					if state.renderer.borrow().size() != state.size {
 						state.renderer.borrow_mut().resize(state.size);

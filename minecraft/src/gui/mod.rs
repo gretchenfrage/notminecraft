@@ -37,6 +37,7 @@ mod state_frame_obj;
 mod node;
 mod block;
 mod gui_event_loop;
+mod fps_overlay;
 
 pub mod blocks;
 

@@ -65,12 +65,14 @@ use tokio::runtime::Runtime;
 use tracing_subscriber::{
     prelude::*,
     Registry,
+    EnvFilter,
 };
 
 
 fn main() {
     // initialize and install logging system
     let stdout_log = tracing_subscriber::fmt::layer()
+        //.with_filter(EnvFilter::from_default_env())
         .pretty();
 
     let log_file = File::create("log")
@@ -80,6 +82,7 @@ fn main() {
         .with_writer(Arc::new(log_file));
 
     let subscriber = Registry::default()
+        .with(EnvFilter::from_default_env())
         .with(stdout_log)
         .with(log_file_log);
     //let subscriber = FmtSubscriber::builder()
