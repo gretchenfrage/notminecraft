@@ -13,6 +13,7 @@ vek = "0.15"
 image = "0.24"
 backtrace = "0.3"
 glyph_brush = "0.7"
+winit = "0.26"
 
 [dependencies.tracing-subscriber]
 version = "0.3"
@@ -21,9 +22,6 @@ features = ["env-filter"]
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]
-
-[dependencies.winit-main]
-path = "../winit-main"
 
 [dependencies.wgpu]
 version = "0.12"

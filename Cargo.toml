@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "graphics",
-    "winit-main",
     "minecraft",
     "opentype437",
 ]

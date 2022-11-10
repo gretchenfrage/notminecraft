@@ -53,7 +53,7 @@ use std::{
 };
 use anyhow::Result;
 use tracing::*;
-use winit_main::reexports::window::Window;
+use winit::window::Window;
 use wgpu::*;
 use vek::*;
 use tokio::fs;
