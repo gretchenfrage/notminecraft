@@ -7,7 +7,7 @@ pub mod asset;
 pub mod gui;
 pub mod util;
 pub mod main_menu;
-pub mod chunk;
+//pub mod chunk;
 
 
 use crate::{
@@ -33,7 +33,6 @@ use tracing_subscriber::{
 fn main() {
     // initialize and install logging system
     let stdout_log = tracing_subscriber::fmt::layer()
-        //.with_filter(EnvFilter::from_default_env())
         .pretty();
 
     let log_file = File::create("log")

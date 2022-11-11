@@ -271,7 +271,7 @@ impl Renderer {
             format: SWAPCHAIN_FORMAT,
             width: size.w,
             height: size.h,
-            present_mode: PresentMode::Mailbox,
+            present_mode: PresentMode::AutoVsync,
             alpha_mode: CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &config);
