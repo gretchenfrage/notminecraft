@@ -68,4 +68,6 @@
 //! after that chunk is unloaded.
 
 
-pub mod ltc;
+pub mod coord;
+pub mod per_tile;
+pub mod block;
