@@ -3,7 +3,6 @@ members = [
     "graphics",
     "minecraft",
     "opentype437",
-    "coords",
 ]
 resolver = "2"
 
