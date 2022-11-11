@@ -6,8 +6,8 @@ mod chunk;
 
 pub use crate::{
     local::{
-        Lbc,
-        lbc,
+        Ltc,
+        ltc,
     },
     global::{
         Gbc,
@@ -21,12 +21,12 @@ pub use crate::{
 
 
 #[test]
-fn test_block_coord_packing() {
+fn test_tile_coord_packing() {
     for i in 0..=0xffff {
-        let c = Lbc(i);
+        let c = Ltc(i);
         assert_eq!(
             i,
-            lbc(c.x(), c.y(), c.z()).0,
+            ltc(c.x(), c.y(), c.z()).0,
         );
     }
 }

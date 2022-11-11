@@ -1,4 +1,4 @@
-//! Local block coords.
+//! Local tile coords.
 
 use std::{
     fmt,
@@ -6,25 +6,25 @@ use std::{
 };
 
 
-/// Local block coord.
+/// Local tile coord.
 ///
 /// Panics if coords are out of bounds. 
-pub fn lbc<X, Y, Z>(x: X, y: Y, z: Z) -> Lbc
+pub fn ltc<X, Y, Z>(x: X, y: Y, z: Z) -> Ltc
 where
     X: TryInto<u16>,
     Y: TryInto<u16>,
     Z: TryInto<u16>,
 {
-    Lbc::new(
+    Ltc::new(
         x.try_into().ok().unwrap(),
         y.try_into().ok().unwrap(),
         z.try_into().ok().unwrap(),
     )
 }
 
-/// Local block coord.
+/// Local tile coord.
 ///
-/// Coordinate of a block within a chunk.
+/// Coordinate of a tile within a chunk.
 ///
 /// Represented as a `u16` bitfield, but has the semantics of a structure of
 /// [x, y, z] coordinates. This has the very useful property that there is a
@@ -35,7 +35,7 @@ where
 ///   length of `0x10000`.
 /// - Iterating through the indices of this array with a u16 can be done with
 ///   the range `0..=0xffff`.
-/// - Converting between an array index and a `Lbc` is a no-op,
+/// - Converting between an array index and a `Ltc` is a no-op,
 ///   done by wrapping / unwrapping the `u16` index.
 ///
 /// The layout of the bit field is as such:
@@ -50,21 +50,21 @@ where
 /// which are stored in different parts.
 ///
 /// The purpose of this admittedly strange layout is that, when using the
-/// inner `u16` as an array index, blocks which are nearby in 3D space are
+/// inner `u16` as an array index, tiles which are nearby in 3D space are
 /// nearby in the array, thus facilitating spatial locality. 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Lbc(pub u16);
+pub struct Ltc(pub u16);
 
-impl Lbc {
+impl Ltc {
     /// Construct from <X, Y, Z> coords.
     ///
     /// Panics if coords are out of range.
     pub fn new(x: u16, y: u16, z: u16) -> Self {
-        assert!(x <= 0xf, "Lbc x={} is too high", x);
-        assert!(y <= 0xff, "Lbc y={} is too high", y);
-        assert!(z <= 0xf, "Lbc z={} is too high", z);
+        assert!(x <= 0xf, "Ltc x={} is too high", x);
+        assert!(y <= 0xff, "Ltc y={} is too high", y);
+        assert!(z <= 0xf, "Ltc z={} is too high", z);
         
-        Lbc(
+        Ltc(
             ((y & 0xf0) >> 4)
             | (x << 4)
             | ((y & 0x0f) << 8)
@@ -91,7 +91,7 @@ impl Lbc {
     ///
     /// Panics if coord is out of range.
     pub fn set_x(&mut self, x: u16) {
-        assert!(x <= 0xf, "Lbc x={} is too high", x);
+        assert!(x <= 0xf, "Ltc x={} is too high", x);
         self.0 &= 0xff0f;
         self.0 |= x << 4;
     }
@@ -100,7 +100,7 @@ impl Lbc {
     /// 
     /// Panics if coord is out of range.
     pub fn set_y(&mut self, y: u16) {
-        assert!(y <= 0xff, "Lbc y={} is too high", y);
+        assert!(y <= 0xff, "Ltc y={} is too high", y);
         self.0 &= 0xf0f0;
         self.0 |= (y & 0xf0) >> 4;
         self.0 |= (y & 0x0f) << 8;
@@ -110,20 +110,15 @@ impl Lbc {
     ///
     /// Panics if coord is out of range.
     pub fn set_z(&mut self, z: u16) {
-        assert!(z <= 0xf, "Lbc z={} is too high", z);
+        assert!(z <= 0xf, "Ltc z={} is too high", z);
         self.0 &= 0x0fff;
         self.0 |= z << 12;
     }
-
-    /// Get the <X, Y, Z> coords as an array.
-    pub fn xyz(&self) -> [u16; 3] {
-        [self.x(), self.y(), self.z()]
-    }
 }
 
-macro_rules! impl_fmt_local_block_coord {
+macro_rules! impl_fmt_local_tile_coord {
     ($t:ident, $fstr:literal)=>{
-        impl fmt::$t for Lbc {
+        impl fmt::$t for Ltc {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(
                     f, $fstr, 
@@ -133,7 +128,7 @@ macro_rules! impl_fmt_local_block_coord {
         }
     };
 }
-impl_fmt_local_block_coord!(Debug, "<{:0>2},{:0>3},{:0>2}>");
-impl_fmt_local_block_coord!(Display, "<{:0>2},{:0>3},{:0>2}>");
-impl_fmt_local_block_coord!(LowerHex, "<{:0>1x},{:0>2x},{:0>1x}>");
-impl_fmt_local_block_coord!(UpperHex, "<{:0>1X},{:0>2X},{:0>1X}>");
+impl_fmt_local_tile_coord!(Debug, "<{:0>2}, {:0>3}, {:0>2}>");
+impl_fmt_local_tile_coord!(Display, "<{:0>2}, {:0>3}, {:0>2}>");
+impl_fmt_local_tile_coord!(LowerHex, "<{:0>1x}, {:0>2x}, {:0>1x}>");
+impl_fmt_local_tile_coord!(UpperHex, "<{:0>1X}, {:0>2X}, {:0>1X}>");

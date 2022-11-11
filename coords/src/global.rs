@@ -1,7 +1,7 @@
-//! Global block coords.
+//! Global tile coords.
 
 use crate::{
-    local::Lbc,
+    local::Ltc,
     chunk::Chc,
 };
 use std::{
@@ -10,7 +10,7 @@ use std::{
 };
 
 
-/// Global block coord. 
+/// Global tile coord. 
 pub fn gbc<X, Y, Z>(x: X, y: Y, z: Z) -> Gbc
 where
     X: TryInto<i32>,
@@ -25,9 +25,9 @@ where
 }
 
 
-/// Global block coord. 
+/// Global tile coord. 
 ///
-/// Coordinate of a block anywhere in the world.
+/// Coordinate of a tile anywhere in the world.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Gbc {
     pub x: i32,
@@ -41,9 +41,9 @@ impl Gbc {
         Gbc { x, y, z }
     }
 
-    /// Get the chunk-local part of this block coordinate. 
-    pub fn to_local(&self) -> Lbc {
-        Lbc(
+    /// Get the chunk-local part of this tile coordinate. 
+    pub fn to_local(&self) -> Ltc {
+        Ltc(
             ((self.y as u16 & 0xf0) >> 4)
             | (((self.x & 0x0000000f) as u16) << 4)
             | ((self.y as u16 & 0x0f) << 8)
@@ -51,14 +51,14 @@ impl Gbc {
         )
     }
     
-    /// Get the coord of the chunk this block coordinate is in. 
+    /// Get the coord of the chunk this tile coordinate is in. 
     pub fn to_chunk(&self) -> Chc {
         Chc::new((self.x & !0xf) / 16, (self.z & !0xf) / 16)
     }
 
-    /// Construct from a coordinate of a chunk and a coordinate of a block
+    /// Construct from a coordinate of a chunk and a coordinate of a tile
     /// relative to that chunk. 
-    pub fn from_parts(chunk: Chc, local: Lbc) -> Self {
+    pub fn from_parts(chunk: Chc, local: Ltc) -> Self {
         let x_chunk_part = chunk.x
             .checked_mul(16)
             .unwrap_or_else(|| panic!("Chc x={} out of range", chunk.x));
@@ -72,16 +72,16 @@ impl Gbc {
         )
     }
 
-    /// Split this block coordinate into the coordinate of the chunk it's in
-    /// and the coordinate of the block relative to that chunk.
-    pub fn to_parts(&self) -> (Chc, Lbc) {
+    /// Split this tile coordinate into the coordinate of the chunk it's in
+    /// and the coordinate of the tile relative to that chunk.
+    pub fn to_parts(&self) -> (Chc, Ltc) {
         (self.to_chunk(), self.to_local())
     }
 }
 
 
 
-macro_rules! impl_fmt_global_block_coord {
+macro_rules! impl_fmt_global_tile_coord {
     ($t:ident, $fstr:literal)=>{
         impl fmt::$t for Gbc {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -93,7 +93,7 @@ macro_rules! impl_fmt_global_block_coord {
         }
     };
 }
-impl_fmt_global_block_coord!(Debug, "<{},{},{}>");
-impl_fmt_global_block_coord!(Display, "<{},{},{}>");
-impl_fmt_global_block_coord!(LowerHex, "<{:x},{:x},{:x}>");
-impl_fmt_global_block_coord!(UpperHex, "<{:X},{:X},{:X}>");
+impl_fmt_global_tile_coord!(Debug, "<{},{},{}>");
+impl_fmt_global_tile_coord!(Display, "<{},{},{}>");
+impl_fmt_global_tile_coord!(LowerHex, "<{:x},{:x},{:x}>");
+impl_fmt_global_tile_coord!(UpperHex, "<{:X},{:X},{:X}>");
