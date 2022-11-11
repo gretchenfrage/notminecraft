@@ -104,8 +104,6 @@ impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
         if button != MouseButton::Left { return }
 
         info!("{}", self.inner.0);
-
-        //ctx.global.event_loop.borrow_mut().pop_state_frame();
     }
 }
 
@@ -204,17 +202,7 @@ impl MainMenu {
 		resources: &ResourcePack,
 		lang: &Localization,
 	) -> Self
-	{  
-        /*
-        let title = GuiTextBlock::new(&GuiTextBlockConfig {
-            text: "minecraft lol",
-            font: resources.font,
-            logical_font_size: 64.0,
-            color: Rgba::white(),
-            h_align: HAlign::Center,
-            v_align: VAlign::Center,
-            wrap: false,
-        });*/
+	{
         let title = GuiTitleBlock::new(renderer, &mut thread_rng());
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &lang.menu_version,
