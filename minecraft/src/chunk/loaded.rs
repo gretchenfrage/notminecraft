@@ -111,6 +111,7 @@ const NIDX_REV: [usize; NUM_NEIGHBORS] =
     ];
 
 
+#[derive(Debug, Clone)]
 pub struct LoadedChunks {
     hmap: HashMap<Vec3<i64>, u32>,
     slab: Slab<[u32; NUM_NEIGHBORS]>,
@@ -197,6 +198,8 @@ impl LoadedChunks {
     */
 }
 
+
+#[derive(Debug, Clone)]
 pub struct Getter<'a> {
     chunks: &'a LoadedChunks,
     cache: Cell<Option<(Vec3<i64>, u32)>>,

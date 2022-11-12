@@ -72,3 +72,4 @@ pub mod coord;
 pub mod per_tile;
 pub mod block;
 pub mod loaded;
+pub mod per_tile_sparse;
