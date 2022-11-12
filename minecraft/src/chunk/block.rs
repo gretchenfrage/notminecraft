@@ -33,7 +33,6 @@ use std::{
         resume_unwind,
         AssertUnwindSafe,
     },
-    ops::Index,
 };
 
 
@@ -243,7 +242,7 @@ impl ChunkBlocks {
         self.bids[lti]
     }
 
-    /// Validate and return whether in place.
+    /// Validate and return whether in-place.
     fn meta_pre_get<M>(&self, lti: u16) -> bool
     where
         M: 'static,
@@ -489,14 +488,6 @@ impl ChunkBlocks {
                 _p: PhantomData,
             }
         }
-    }
-}
-
-impl Index<u16> for ChunkBlocks {
-    type Output = BlockId;
-
-    fn index(&self, lti: u16) -> &BlockId {
-        &self.bids[lti]
     }
 }
 

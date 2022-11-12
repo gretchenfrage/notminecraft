@@ -1,5 +1,8 @@
 
 use crate::chunk::{
+    CiGet,
+    LtiGet,
+    LtiSet,
     block::{
         ChunkBlocks,
         BlockId,
@@ -18,10 +21,7 @@ use std::{
         HashMap,
     },
     cell::Cell,
-    ops::{
-        Index,
-        IndexMut,
-    },
+    convert::identity,
 };
 use slab::Slab;
 use vek::*;
@@ -261,7 +261,73 @@ impl<'a> Getter<'a> {
     }
 
     // convenience
-    
+
+    pub fn gtc_get<T>(
+        &self,
+        gtc: Vec3<i64>,
+        per_chunk: T,
+    ) -> Option<<<T as CiGet>::Output as LtiGet>::Output>
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiGet,
+    {
+        self.get(gtc_get_cc(gtc))
+            .map(|ci| per_chunk
+                .get(ci)
+                .get(gtc_get_lti(gtc)))
+    }
+
+    pub fn gtc_flat_get<T, I>(
+        &self,
+        gtc: Vec3<i64>,
+        per_chunk: T,
+    ) -> Option<I>
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiGet<Output = Option<I>>,
+    {
+        self.gtc_get(gtc, per_chunk)
+            .and_then(identity)
+    }
+
+    pub fn gtc_set<T>(
+        &self,
+        gtc: Vec3<i64>,
+        val: <<T as CiGet>::Output as LtiSet>::Input,
+        per_chunk: T,
+    )
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiSet,
+    {
+        let ci = self
+            .get(gtc_get_cc(gtc))
+            .expect("tile not loaded");
+        per_chunk
+            .get(ci)
+            .set(gtc_get_lti(gtc), val)
+    }
+
+    pub fn gtc_try_set<T>(
+        &self,
+        gtc: Vec3<i64>,
+        val: <<T as CiGet>::Output as LtiSet>::Input,
+        per_chunk: T,
+    ) -> bool
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiSet,
+    {
+        if let Some(ci) = self.get(gtc_get_cc(gtc)) {
+            per_chunk
+                .get(ci)
+                .set(gtc_get_lti(gtc), val);
+            true
+        } else {
+            false
+        }
+    }
+    /*
     pub fn gtc_get<'c, C>(
         &self,
         gtc: Vec3<i64>,
@@ -305,7 +371,7 @@ impl<'a> Getter<'a> {
             .expect("tile not loaded");
         *ptr = val;
     }
-
+    
     pub fn gtc_set_block<M>(
         &self,
         gtc: Vec3<i64>,
@@ -322,21 +388,6 @@ impl<'a> Getter<'a> {
         blocks[ci].set(gtc_get_lti(gtc), bid, meta);
     }
 
-    pub fn gtc_ty_set_block<M>(
-        &self,
-        gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
-        meta: M,
-        blocks: &mut Slab<ChunkBlocks>,
-    )
-    where
-        M: 'static,
-    {
-        let ci = self
-            .get(gtc_get_cc(gtc))
-            .expect("tile not loaded");
-        blocks[ci].ty_set(gtc_get_lti(gtc), bid, meta);
-    }
 
     pub fn gtc_meta<'c, M>(
         &self,
@@ -364,6 +415,22 @@ impl<'a> Getter<'a> {
             .map(|ci| blocks
                 [ci]
                 .meta_mut(gtc_get_lti(gtc)))
+    }
+
+    pub fn gtc_ty_set_block<M>(
+        &self,
+        gtc: Vec3<i64>,
+        bid: TyBlockId<M>,
+        meta: M,
+        blocks: &mut Slab<ChunkBlocks>,
+    )
+    where
+        M: 'static,
+    {
+        let ci = self
+            .get(gtc_get_cc(gtc))
+            .expect("tile not loaded");
+        blocks[ci].ty_set(gtc_get_lti(gtc), bid, meta);
     }
 
     pub fn gtc_ty_meta<'c, M>(
@@ -437,7 +504,7 @@ impl<'a> Getter<'a> {
                 [ci]
                 .meta_debug(gtc_get_lti(gtc)))
     }
-
+    /*
     pub fn gtc_get_sparse<'c, T>(
         &self,
         gtc: Vec3<i64>,
@@ -492,5 +559,5 @@ impl<'a> Getter<'a> {
         if let Some(ci) = self.get(gtc_get_cc(gtc)) {
             per_chunk[ci].set_none(gtc_get_lti(gtc));
         }
-    }
+    }*/*/
 }

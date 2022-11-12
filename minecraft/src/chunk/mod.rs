@@ -74,3 +74,152 @@ pub mod block;
 pub mod loaded;
 pub mod per_tile_sparse;
 pub mod per_tile_packed;
+
+
+use self::{
+    block::{
+        ChunkBlocks,
+        BlockId,
+    },
+    per_tile::PerTile,
+    per_tile_sparse::PerTileSparse,
+    per_tile_packed::PerTilePacked,
+};
+use std::marker::PhantomData;
+use slab::Slab;
+
+
+pub trait CiGet {
+    type Output;
+
+    fn get(self, ci: usize) -> Self::Output;
+}
+
+impl<'a, T> CiGet for &'a Slab<T> {
+    type Output = &'a T;
+
+    fn get(self, ci: usize) -> Self::Output {
+        &self[ci]
+    }
+}
+
+impl<'a, T> CiGet for &'a mut Slab<T> {
+    type Output = &'a mut T;
+
+    fn get(self, ci: usize) -> Self::Output {
+        &mut self[ci]
+    }
+}
+
+
+pub trait LtiGet {
+    type Output;
+
+    fn get(self, lti: u16) -> Self::Output;
+}
+
+pub trait LtiSet {
+    type Input;
+
+    fn set(self, lti: u16, val: Self::Input);
+}
+
+impl<'a, T: 'a, C: LtiGet<Output=&'a mut T>> LtiSet for C {
+    type Input = T;
+
+    fn set(self, lti: u16, val: Self::Input) {
+        *self.get(lti) = val;
+    }
+}
+
+impl<'a> LtiGet for &'a ChunkBlocks {
+    type Output = BlockId;
+
+    fn get(self, lti: u16) -> Self::Output {
+        ChunkBlocks::get(self, lti)
+    }
+}
+
+impl<'a, T> LtiGet for &'a PerTile<T> {
+    type Output = &'a T;
+
+    fn get(self, lti: u16) -> Self::Output {
+        &self[lti]
+    }
+}
+
+impl<'a, T> LtiGet for &'a mut PerTile<T> {
+    type Output = &'a mut T;
+
+    fn get(self, lti: u16) -> Self::Output {
+        &mut self[lti]
+    }
+}
+
+impl<'a, T> LtiGet for &'a PerTileSparse<T> {
+    type Output = Option<&'a T>;
+
+    fn get(self, lti: u16) -> Self::Output {
+        PerTileSparse::get(self, lti)
+    }
+}
+
+impl<'a, T> LtiSet for &'a mut PerTileSparse<T> {
+    type Input = Option<T>;
+
+    fn set(self, lti: u16, val: Self::Input) {
+        PerTileSparse::set(self, lti, val)
+    }
+}
+
+impl<
+    'a,
+    const BYTES: usize,
+    const MASK: u8,
+> LtiGet for &'a PerTilePacked<BYTES, MASK> {
+    type Output = u8;
+
+    fn get(self, lti: u16) -> Self::Output {
+        PerTilePacked::get(self, lti)
+    }
+}
+
+impl<
+    'a,
+    const BYTES: usize,
+    const MASK: u8,
+> LtiSet for &'a mut PerTilePacked<BYTES, MASK> {
+    type Input = u8;
+
+    fn set(self, lti: u16, val: Self::Input) {
+        PerTilePacked::set(self, lti, val)
+    }
+}
+
+/*
+pub struct Meta<M, T> {
+    _p: PhantomData<M>,
+    per_chunk: T,
+}
+
+impl<M, T> Meta<M, T> {
+    pub fn new(per_chunk: T) -> Self {
+        Meta {
+            _p: PhantomData,
+            per_chunk,
+        }
+    }
+}
+
+impl<'a, M, T> LtiGet for Meta<M, T>
+where
+    M: 'static,
+    T: CiGet<Output=&'a ChunkBlocks>,
+{
+    type Output = &'a M;
+
+    fn get(self, lti: u16) -> Self::Output {
+        self.
+    }
+}
+*/
