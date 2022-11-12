@@ -36,55 +36,55 @@ use std::{
 };
 
 
-pub const AIR: TyBlockId<()> = TyBlockId::new(BlockId(0));
+pub const AIR: BlockId<()> = BlockId::new(RawBlockId(0));
 
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct BlockId(pub u16);
+pub struct RawBlockId(pub u16);
 
 
-pub struct TyBlockId<M> {
-    pub bid: BlockId,
+pub struct BlockId<M> {
+    pub bid: RawBlockId,
     _p: PhantomData<M>,
 }
 
-impl<M> TyBlockId<M> {
-    pub const fn new(bid: BlockId) -> Self {
-        TyBlockId {
+impl<M> BlockId<M> {
+    pub const fn new(bid: RawBlockId) -> Self {
+        BlockId {
             bid,
             _p: PhantomData,
         }
     }
 }
 
-impl<M> Copy for TyBlockId<M> {}
+impl<M> Copy for BlockId<M> {}
 
-impl<M> Clone for TyBlockId<M> {
+impl<M> Clone for BlockId<M> {
     fn clone(&self) -> Self {
-        TyBlockId {
+        BlockId {
             bid: self.bid,
             _p: PhantomData,
         }   
     }
 }
 
-impl<M> Debug for TyBlockId<M> {
+impl<M> Debug for BlockId<M> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f
-            .debug_tuple("TyBlockId")
+            .debug_tuple("BlockId")
             .field(&self.bid.0)
             .finish()
     }
 }
 
-impl<M> PartialEq<BlockId> for TyBlockId<M> {
-    fn eq(&self, rhs: &BlockId) -> bool {
+impl<M> PartialEq<RawBlockId> for BlockId<M> {
+    fn eq(&self, rhs: &RawBlockId) -> bool {
         self.bid == *rhs
     }
 }
 
-impl<M> PartialEq<TyBlockId<M>> for BlockId {
-    fn eq(&self, rhs: &TyBlockId<M>) -> bool {
+impl<M> PartialEq<BlockId<M>> for RawBlockId {
+    fn eq(&self, rhs: &BlockId<M>) -> bool {
         *self == rhs.bid
     }
 }
@@ -146,7 +146,7 @@ impl BlockRegistry {
         blocks
     }
 
-    pub fn register<M>(&mut self) -> TyBlockId<M>
+    pub fn register<M>(&mut self) -> BlockId<M>
     where
         M: Debug + Send + Sync + 'static,
     {
@@ -191,7 +191,7 @@ impl BlockRegistry {
             debug_fmt_meta: cast_debug_fmt_meta::<M>,
         });
 
-        TyBlockId::new(BlockId(bid))
+        BlockId::new(RawBlockId(bid))
     }
 
     pub fn freeze(self) -> Arc<Self> {
@@ -203,7 +203,7 @@ impl BlockRegistry {
 pub struct ChunkBlocks {
     registry: Arc<BlockRegistry>,
 
-    bids: PerTile<BlockId>,
+    bids: PerTile<RawBlockId>,
     in_place: PerTile<MaybeUninit<u16>>,
     out_of_place: Vec<OutOfPlaceElem>,
 }
@@ -238,7 +238,7 @@ impl ChunkBlocks {
         }
     }
 
-    pub fn get(&self, lti: u16) -> BlockId {
+    pub fn get(&self, lti: u16) -> RawBlockId {
         self.bids[lti]
     }
 
@@ -258,7 +258,7 @@ impl ChunkBlocks {
         matches!(registered.meta_layout, MetaLayout::InPlace { .. })
     }
 
-    pub fn meta<M>(&self, lti: u16) -> &M
+    pub fn raw_meta<M>(&self, lti: u16) -> &M
     where
         M: 'static,
     {
@@ -278,7 +278,7 @@ impl ChunkBlocks {
         }
     }
 
-    pub fn meta_mut<M>(&mut self, lti: u16) -> &mut M
+    pub fn raw_meta_mut<M>(&mut self, lti: u16) -> &mut M
     where
         M: 'static,
     {
@@ -298,43 +298,43 @@ impl ChunkBlocks {
         }
     }
 
-    pub fn ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> &M
+    pub fn meta<M>(&self, bid: BlockId<M>, lti: u16) -> &M
     where
         M: 'static,
     {
         assert_eq!(self.get(lti), bid);
-        self.meta(lti)
+        self.raw_meta(lti)
     }
 
-    pub fn ty_meta_mut<M>(&mut self, bid: TyBlockId<M>, lti: u16) -> &mut M
+    pub fn meta_mut<M>(&mut self, bid: BlockId<M>, lti: u16) -> &mut M
     where
         M: 'static,
     {
         assert_eq!(self.get(lti), bid);
-        self.meta_mut(lti)
+        self.raw_meta_mut(lti)
     }
 
-    pub fn try_ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> Option<&M>
+    pub fn try_meta<M>(&self, bid: BlockId<M>, lti: u16) -> Option<&M>
     where
         M: 'static,
     {
         if self.get(lti) == bid {
-            Some(self.meta(lti))
+            Some(self.raw_meta(lti))
         } else {
             None
         }
     }
 
-    pub fn try_ty_meta_mut<M>(
+    pub fn try_meta_mut<M>(
         &mut self,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         lti: u16,
     ) -> Option<&mut M>
     where
         M: 'static,
     {
         if self.get(lti) == bid {
-            Some(self.meta_mut(lti))
+            Some(self.raw_meta_mut(lti))
         } else {
             None
         }
@@ -407,7 +407,7 @@ impl ChunkBlocks {
         }
     }
 
-    pub fn set<M>(&mut self, lti: u16, bid: BlockId, meta: M)
+    pub fn raw_set<M>(&mut self, lti: u16, bid: RawBlockId, meta: M)
     where
         M: 'static,
     {
@@ -455,11 +455,11 @@ impl ChunkBlocks {
         }
     }
 
-    pub fn ty_set<M>(&mut self, lti: u16, bid: TyBlockId<M>, meta: M)
+    pub fn set<M>(&mut self, lti: u16, bid: BlockId<M>, meta: M)
     where
         M: 'static,
     {
-        self.set(lti, bid.bid, meta);
+        self.raw_set(lti, bid.bid, meta);
     }
 
     // replace could be implemented, but seems unnecessary

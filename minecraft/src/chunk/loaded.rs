@@ -5,8 +5,8 @@ use crate::chunk::{
     LtiSet,
     block::{
         ChunkBlocks,
+        RawBlockId,
         BlockId,
-        TyBlockId,
     },
     coord::{
         gtc_get_cc,
@@ -375,7 +375,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_set_block<M>(
         &self,
         gtc: Vec3<i64>,
-        bid: BlockId,
+        bid: RawBlockId,
         meta: M,
         blocks: &mut Slab<ChunkBlocks>,
     )
@@ -420,7 +420,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_ty_set_block<M>(
         &self,
         gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         meta: M,
         blocks: &mut Slab<ChunkBlocks>,
     )
@@ -436,7 +436,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_ty_meta<'c, M>(
         &self,
         gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         blocks: &'c Slab<ChunkBlocks>,
     ) -> Option<&'c M>
     where
@@ -451,7 +451,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_ty_meta_mut<'c, M>(
         &self,
         gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         blocks: &'c mut Slab<ChunkBlocks>,
     ) -> Option<&'c mut M>
     where
@@ -466,7 +466,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_try_ty_meta<'c, M>(
         &self,
         gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         blocks: &'c Slab<ChunkBlocks>,
     ) -> Option<&'c M>
     where
@@ -481,7 +481,7 @@ impl<'a> Getter<'a> {
     pub fn gtc_try_ty_meta_mut<'c, M>(
         &self,
         gtc: Vec3<i64>,
-        bid: TyBlockId<M>,
+        bid: BlockId<M>,
         blocks: &'c mut Slab<ChunkBlocks>,
     ) -> Option<&'c mut M>
     where

@@ -79,8 +79,8 @@ pub mod per_tile_packed;
 use self::{
     block::{
         ChunkBlocks,
+        RawBlockId,
         BlockId,
-        TyBlockId,
     },
     per_tile::PerTile,
     per_tile_sparse::PerTileSparse,
@@ -153,7 +153,7 @@ impl<'a, T: 'a, C: LtiGet<Output=&'a mut T>> LtiSet for C {
 }
 /*
 impl<'a> LtiGet for &'a ChunkBlocks {
-    type Output = BlockId;
+    type Output = RawBlockId;
 
     fn get(self, lti: u16) -> Self::Output {
         ChunkBlocks::get(self, lti)
@@ -215,142 +215,113 @@ impl<
         PerTilePacked::set(self, lti, val)
     }
 }
-/*
+
 impl<'a> LtiGet for &'a ChunkBlocks {
-    type Output = TileBlock<'a>;
+    type Output = TileBlockRead<'a>;
 
     fn get(self, lti: u16) -> Self::Output {
-        TileBlock { chunk: self, lti }
+        TileBlockRead { chunk: self, lti }
     }
 }
 
 impl<'a> LtiGet for &'a mut ChunkBlocks {
-    type Output = TileBlockMut<'a>;
+    type Output = TileBlockWrite<'a>;
 
     fn get(self, lti: u16) -> Self::Output {
-        TileBlockMut { chunk: self, lti }
+        TileBlockWrite { chunk: self, lti }
     }
 }
 
-pub struct TileBlock<'a> {
+#[derive(Copy, Clone, Debug)]
+pub struct TileBlockRead<'a> {
     pub chunk: &'a ChunkBlocks,
     pub lti: u16,
 }
 
-impl<'a> TileBlock<'a> {
-    pub fn get(self) -> BlockId {
+impl<'a> TileBlockRead<'a> {
+    pub fn get(self) -> RawBlockId {
         self.chunk.get(self.lti)
     }
 
-    pub fn meta<M>(self) -> &'a M
+    pub fn raw_meta<M>(self) -> &'a M
     where
         M: 'static,
     {
-        self.chunk.meta::<M>(self.lti)
+        self.chunk.raw_meta::<M>(self.lti)
     }
 
-    // TODO: rename TyBlockId->BlockId and BlockId->RawBlockId
-    // TODO: make "ty" assumed in terms of naming convention
-
-    pub fn ty_meta<M>(self, bid: TyBlockId<M>) -> &'a M
+    pub fn meta<M>(self, bid: BlockId<M>) -> &'a M
     where
         M: 'static,
     {
-        self.chunk.ty_meta::<M>(bid, self.lti)
+        self.chunk.meta(bid, self.lti)
     }
 
-    pub fn try_ty_meta<M>(self, bid: TyBlockId<M>) -> Option<&'a M>
+    pub fn try_meta<M>(self, bid: BlockId<M>) -> Option<&'a M>
     where
         M: 'static,
     {
-        self.chunk.try_ty_meta(bid, self.lti)
+        self.chunk.try_meta(bid, self.lti)
     }
 
     pub fn meta_debug(self) -> impl Debug + 'a {
         self.chunk.meta_debug(self.lti)
     }
-
-    /*pub fn meta_mut<M>(self) -> &'a mut M
-    where
-        M: 'static,
-    {
-        self.chunk.meta_mut::<M>(self.lti)
-    }*/
 }
 
-pub struct TileBlockMut<'a> {
+#[derive(Debug)]
+pub struct TileBlockWrite<'a> {
     pub chunk: &'a mut ChunkBlocks,
     pub lti: u16,
 }
 
-impl<'a> TileBlockMut<'a> {
-    pub fn 
-}
-*/
+impl<'a> TileBlockWrite<'a> {
+    pub fn reborrow<'a2>(&'a2 mut self) -> TileBlockWrite<'a2> {
+        TileBlockWrite {
+            chunk: self.chunk,
+            lti: self.lti,
+        }
+    }
 
-/*
-world.chunks.gtc_get(gtc, meta!(Color, &mut world.blocks))
-    let curr_color = world
-        .chunks
-        .gtc_get(gtc, ty_meta(self.wool, &mut world.blocks))
-        .unwrap()
+    pub fn read(self) -> TileBlockRead<'a> {
+        TileBlockRead {
+            chunk: self.chunk,
+            lti: self.lti,
+        }
+    }
+
+    pub fn raw_set<M>(&mut self, bid: RawBlockId, meta: M)
+    where
+        M: 'static,
     {
-
+        self.chunk.raw_set(self.lti, bid, meta);
     }
 
+    pub fn set<M>(&mut self, bid: BlockId<M>, meta: M)
+    where
+        M: 'static,
+    {
+        self.chunk.set(self.lti, bid, meta);
+    }
 
-pub struct Meta<I, M> {
-    inner: I,
-    bid: Option<BlockId>,
-    _p: PhantomData<M>,
-}
+    pub fn raw_meta<M>(self) -> &'a mut M
+    where
+        M: 'static,
+    {
+        self.chunk.raw_meta_mut::<M>(self.lti)
+    }
 
-impl<I, M> Meta<I, M> {
-    pub fn new(inner: I, bid: Option<BlockId>) -> Self {
-        Meta {
-            inner,
-            bid,
-            _p: PhantomData,
-        }
+    pub fn meta<M>(self, bid: BlockId<M>) -> &'a mut M
+    where
+        M: 'static,
+    {
+        self.chunk.meta_mut(bid, self.lti)
+    }
+
+    pub fn try_meta<M>(self, bid: BlockId<M>) -> Option<&'a mut M>
+    where
+        M: 'static,
+    {
+        self.chunk.try_meta_mut(bid, self.lti)
     }
 }
-
-impl<'a, I, M> CiGet for Meta<I, M>
-where
-    I: CiGet,
-{
-    type Output = Meta<<I as CiGet>::Output, M>;
-
-    fn get(self, ci: usize) -> Self::Output {
-        Meta::new(self.inner.get(ci), self.bid)
-    }
-}
-
-impl<'a, M> LtiGet for Meta<&'a ChunkBlocks, M>
-where
-    M: 'static,
-{
-    type Output = &'a M;
-
-    fn get(self, lti: u16) -> Self::Output {
-        if let Some(bid) = self.bid {
-            assert_eq!(self.inner.get(lti), bid);
-        }
-        self.inner.meta(lti)
-    }
-}
-
-impl<'a, M> LtiGet for Meta<&'a mut ChunkBlocks, M>
-where
-    M: 'static,
-{
-    type Output = &'a mut M;
-
-    fn get(self, lti: u16) -> Self::Output {
-        if let Some(bid) = self.bid {
-            assert_eq!(self.inner.get(lti), bid);
-        }
-        self.inner.meta_mut(lti)
-    }
-}
-*/
