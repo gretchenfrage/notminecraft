@@ -89,25 +89,6 @@ use self::{
 use std::fmt::Debug;
 use slab::Slab;
 
-/*
-pub trait CiLtiGet {
-    type Output;
-
-    fn get(self, ci: usize, lti: u16) -> Self::Output;
-}
-
-impl<C> CiLtiGet for C
-where
-    C: CiGet,
-    <C as CiGet>::Output: LtiGet,
-{
-    type Output = <<C as CiGet>::Output as LtiGet>::Output;
-
-    fn get(self, ci: usize, lti: u16) -> Self::Output {
-
-    }
-}
-*/
 
 pub trait CiGet {
     type Output;
@@ -151,15 +132,7 @@ impl<'a, T: 'a, C: LtiGet<Output=&'a mut T>> LtiSet for C {
         *self.get(lti) = val;
     }
 }
-/*
-impl<'a> LtiGet for &'a ChunkBlocks {
-    type Output = RawBlockId;
 
-    fn get(self, lti: u16) -> Self::Output {
-        ChunkBlocks::get(self, lti)
-    }
-}
-*/
 impl<'a, T> LtiGet for &'a PerTile<T> {
     type Output = &'a T;
 
