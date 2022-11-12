@@ -8,6 +8,54 @@ use crate::chunk::{
 };
 
 
+/// Sparse per-tile storage.
+///
+/// A chunk contains 2^16 tiles, and so a normal `PerTile<T>` stores a `T` for
+/// every tile, in an array.
+///
+/// A `PerTileSparse<T>` gives the abstraction of storing an `Option<T>` for
+/// each tile, but does so sparsely, using a vector that can grow and shrink
+/// based on the number of `Some` elements, and storing a static table of `u16`
+/// indexes.
+///
+/// A `PerTile<T>` always uses 2^16 * `size_of::<T>()` bytes. A
+/// `PerTileSparse<T>` has a constant overhead of 2^16 * 2 bytes, and then
+/// consumes `size_of::<T>() + 2` bytes per `Some` element.
+///
+/// For example, a `PerTile<u64>` would consume 512 KiB, whereas a
+/// `PerTileSparse<u64>` would consume (128 + 640f) KiB, wherein f is the
+/// fraction of the tiles that are `Some`. This means that, so long as fewer
+/// than 60% of the tiles are `Some`, memory has been saved.
+///
+/// Generally, where M = `size_of::<T>()`, it is worth it to use
+/// `PerTileSparse` if the fraction of tiles that are `Some` is less than
+/// (M - 2) / (M + 2).
+///
+/// Here's a table where,for various sizes of per-tile data, up to that percent
+/// of tiles could be `Some` and `PerTileSparse` would still save memory:
+///
+/// | size | percent |
+/// |------|---------|
+/// | 0    | -100%   |
+/// | 1    | -33%    |
+/// | 2    | 0%      |
+/// | 3    | 20%     |
+/// | 4    | 33%     |
+/// | 5    | 43%     |
+/// | 6    | 50%     |
+/// | 7    | 55%     |
+/// | 8    | 60%     |
+/// | 9    | 64%     |
+/// | 10   | 67%     |
+/// | 11   | 69%     |
+/// | 12   | 71%     |
+/// | 13   | 73%     |
+/// | 14   | 75%     |
+/// | 15   | 76%     |
+/// | 16   | 78%     |
+/// | 32   | 89%     |
+/// | 64   | 94%     |
+/// | 128  | 97%     |
 #[derive(Debug, Clone)]
 pub struct PerTileSparse<T> {
     // an idx MAX_LTI denotes None

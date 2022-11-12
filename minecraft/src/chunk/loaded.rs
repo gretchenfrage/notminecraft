@@ -9,6 +9,7 @@ use crate::chunk::{
         gtc_get_cc,
         gtc_get_lti,
     },
+    per_tile_sparse::PerTileSparse,
 };
 use std::{
     fmt::Debug,
@@ -435,5 +436,61 @@ impl<'a> Getter<'a> {
             .map(|ci| blocks
                 [ci]
                 .meta_debug(gtc_get_lti(gtc)))
+    }
+
+    pub fn gtc_get_sparse<'c, T>(
+        &self,
+        gtc: Vec3<i64>,
+        per_chunk: &'c Slab<PerTileSparse<T>>,
+    ) -> Option<&'c T>
+    {
+        self.get(gtc_get_cc(gtc))
+            .and_then(|ci| per_chunk
+                [ci]
+                .get(gtc_get_lti(gtc)))
+    }
+
+    pub fn gtc_get_sparse_mut<'c, T>(
+        &self,
+        gtc: Vec3<i64>,
+        per_chunk: &'c mut Slab<PerTileSparse<T>>,
+    ) -> Option<&'c mut T>
+    {
+        self.get(gtc_get_cc(gtc))
+            .and_then(|ci| per_chunk
+                [ci]
+                .get_mut(gtc_get_lti(gtc)))
+    }
+
+    pub fn gtc_set_sparse<T>(
+        &self,
+        gtc: Vec3<i64>,
+        val: Option<T>,
+        per_chunk: &mut Slab<PerTileSparse<T>>,
+    ) {
+        if let Some(ci) = self.get(gtc_get_cc(gtc)) {
+            per_chunk[ci].set(gtc_get_lti(gtc), val);
+        }
+    }
+
+    pub fn gtc_set_sparse_some<T>(
+        &self,
+        gtc: Vec3<i64>,
+        val: T,
+        per_chunk: &mut Slab<PerTileSparse<T>>,
+    ) {
+        if let Some(ci) = self.get(gtc_get_cc(gtc)) {
+            per_chunk[ci].set_some(gtc_get_lti(gtc), val);
+        }
+    }
+
+    pub fn gtc_set_sparse_none<T>(
+        &self,
+        gtc: Vec3<i64>,
+        per_chunk: &mut Slab<PerTileSparse<T>>,
+    ) {
+        if let Some(ci) = self.get(gtc_get_cc(gtc)) {
+            per_chunk[ci].set_none(gtc_get_lti(gtc));
+        }
     }
 }
