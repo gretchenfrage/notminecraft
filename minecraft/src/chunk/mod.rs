@@ -138,7 +138,7 @@ pub trait LtiGet {
     fn get(self, lti: u16) -> Self::Output;
 }
 
-pub trait LtiSet { // TODO remove trait
+pub trait LtiSet {
     type Input;
 
     fn set(self, lti: u16, val: Self::Input);

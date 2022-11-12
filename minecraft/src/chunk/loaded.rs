@@ -433,7 +433,7 @@ impl<'a> Getter<'a> {
         blocks[ci].ty_set(gtc_get_lti(gtc), bid, meta);
     }
 
-    pub fn gtc_ty_meta<'c, M>(
+    pub fn gtc_meta<'c, M>(
         &self,
         gtc: Vec3<i64>,
         bid: BlockId<M>,
@@ -445,10 +445,10 @@ impl<'a> Getter<'a> {
         self.get(gtc_get_cc(gtc))
             .map(|ci| blocks
                 [ci]
-                .ty_meta(bid, gtc_get_lti(gtc)))
+                .meta(bid, gtc_get_lti(gtc)))
     }
 
-    pub fn gtc_ty_meta_mut<'c, M>(
+    pub fn gtc_meta_mut<'c, M>(
         &self,
         gtc: Vec3<i64>,
         bid: BlockId<M>,
@@ -460,10 +460,10 @@ impl<'a> Getter<'a> {
         self.get(gtc_get_cc(gtc))
             .map(|ci| blocks
                 [ci]
-                .ty_meta_mut(bid, gtc_get_lti(gtc)))
+                .meta_mut(bid, gtc_get_lti(gtc)))
     }
 
-    pub fn gtc_try_ty_meta<'c, M>(
+    pub fn gtc_try_meta<'c, M>(
         &self,
         gtc: Vec3<i64>,
         bid: BlockId<M>,
@@ -475,10 +475,10 @@ impl<'a> Getter<'a> {
         self.get(gtc_get_cc(gtc))
             .and_then(|ci| blocks
                 [ci]
-                .try_ty_meta(bid, gtc_get_lti(gtc)))
+                .try_meta(bid, gtc_get_lti(gtc)))
     }
 
-    pub fn gtc_try_ty_meta_mut<'c, M>(
+    pub fn gtc_try_meta_mut<'c, M>(
         &self,
         gtc: Vec3<i64>,
         bid: BlockId<M>,
@@ -490,7 +490,7 @@ impl<'a> Getter<'a> {
         self.get(gtc_get_cc(gtc))
             .and_then(|ci| blocks
                 [ci]
-                .try_ty_meta_mut(bid, gtc_get_lti(gtc)))
+                .try_meta_mut(bid, gtc_get_lti(gtc)))
     }
 
     pub fn gtc_meta_debug<'c>(
