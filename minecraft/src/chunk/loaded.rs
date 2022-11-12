@@ -193,10 +193,33 @@ impl LoadedChunks {
         idx as usize
     }
 
-    /*
+    pub fn iter<'c>(&'c self) -> impl Iterator<Item=(Vec3<i64>, usize)> + 'c {
+        self.hmap
+            .iter()
+            .map(|(&cc, &idx)| (
+                cc,
+                idx as usize,
+            ))
+    }
 
-    pub fn iter<'c>(&'c self) -> impl Iterator<Item=(Vec3<i64>, usize)> {}
-    */
+    pub fn iter_with_getters<'c>(
+        &'c self,
+    ) -> impl Iterator<Item=(Vec3<i64>, usize, Getter<'c>)> + 'c
+    {
+        self.hmap
+            .iter()
+            .map(|(&cc, &idx)| (
+                cc,
+                idx as usize,
+                Getter {
+                    chunks: self,
+                    cache: Cell::new(Some((
+                        cc,
+                        idx,
+                    )))
+                }
+            ))
+    }
 }
 
 
