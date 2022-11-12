@@ -33,6 +33,7 @@ use std::{
         resume_unwind,
         AssertUnwindSafe,
     },
+    ops::Index,
 };
 
 
@@ -88,11 +89,6 @@ impl<M> PartialEq<TyBlockId<M>> for BlockId {
         *self == rhs.bid
     }
 }
-
-
-pub trait BlockMeta: Send + Sync + Debug + 'static {}
-
-impl<T: Send + Sync + Debug + 'static> BlockMeta for T {}
 
 
 #[derive(Debug, Clone)]
@@ -153,7 +149,7 @@ impl BlockRegistry {
 
     pub fn register<M>(&mut self) -> TyBlockId<M>
     where
-        M: BlockMeta,
+        M: Debug + Send + Sync + 'static,
     {
         assert!(self.items.len() <= u16::MAX as usize, "too many blocks");
         let bid = self.items.len() as u16;
@@ -265,7 +261,7 @@ impl ChunkBlocks {
 
     pub fn meta<M>(&self, lti: u16) -> &M
     where
-        M: BlockMeta,
+        M: 'static,
     {
         unsafe {
             let ptr =
@@ -280,25 +276,6 @@ impl ChunkBlocks {
                         as *const M
                 };
             &*ptr
-        }
-    }
-
-    pub fn ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> &M
-    where
-        M: BlockMeta,
-    {
-        assert_eq!(self.get(lti), bid);
-        self.meta(lti)
-    }
-
-    pub fn try_ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> Option<&M>
-    where
-        M: BlockMeta,
-    {
-        if self.get(lti) == bid {
-            Some(self.meta(lti))
-        } else {
-            None
         }
     }
 
@@ -322,12 +299,31 @@ impl ChunkBlocks {
         }
     }
 
+    pub fn ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> &M
+    where
+        M: 'static,
+    {
+        assert_eq!(self.get(lti), bid);
+        self.meta(lti)
+    }
+
     pub fn ty_meta_mut<M>(&mut self, bid: TyBlockId<M>, lti: u16) -> &mut M
     where
-        M: BlockMeta,
+        M: 'static,
     {
         assert_eq!(self.get(lti), bid);
         self.meta_mut(lti)
+    }
+
+    pub fn try_ty_meta<M>(&self, bid: TyBlockId<M>, lti: u16) -> Option<&M>
+    where
+        M: 'static,
+    {
+        if self.get(lti) == bid {
+            Some(self.meta(lti))
+        } else {
+            None
+        }
     }
 
     pub fn try_ty_meta_mut<M>(
@@ -336,7 +332,7 @@ impl ChunkBlocks {
         lti: u16,
     ) -> Option<&mut M>
     where
-        M: BlockMeta,
+        M: 'static,
     {
         if self.get(lti) == bid {
             Some(self.meta_mut(lti))
@@ -493,6 +489,14 @@ impl ChunkBlocks {
                 _p: PhantomData,
             }
         }
+    }
+}
+
+impl Index<u16> for ChunkBlocks {
+    type Output = BlockId;
+
+    fn index(&self, lti: u16) -> &BlockId {
+        &self.bids[lti]
     }
 }
 

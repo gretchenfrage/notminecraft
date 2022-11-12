@@ -1375,6 +1375,7 @@ dependencies = [
  "rand",
  "rand_pcg",
  "reqwest",
+ "slab",
  "tokio",
  "tracing",
  "tracing-subscriber",

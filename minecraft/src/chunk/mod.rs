@@ -71,4 +71,4 @@
 pub mod coord;
 pub mod per_tile;
 pub mod block;
-pub mod hash_map_3d;
+pub mod loaded;
