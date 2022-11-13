@@ -291,6 +291,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chunk_data"
+version = "0.1.0"
+dependencies = [
+ "slab",
+ "vek",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1375,7 +1383,6 @@ dependencies = [
  "rand",
  "rand_pcg",
  "reqwest",
- "slab",
  "tokio",
  "tracing",
  "tracing-subscriber",

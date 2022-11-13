@@ -1,5 +1,5 @@
 
-use crate::chunk::CiGet;
+use crate::CiGet;
 use slab::Slab;
 use vek::*;
 

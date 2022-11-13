@@ -1,5 +1,5 @@
 
-use crate::chunk::{
+use crate::{
     coord::{
         MAX_LTI,
         NUM_LTIS,

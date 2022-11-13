@@ -1,0 +1,9 @@
+[package]
+name = "chunk_data"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+vek = "0.15"
+slab = "0.4"

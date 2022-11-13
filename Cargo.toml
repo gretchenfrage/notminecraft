@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "graphics",
+    "chunk_data",
     "minecraft",
     "opentype437",
 ]

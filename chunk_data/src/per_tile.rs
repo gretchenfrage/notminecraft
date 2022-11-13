@@ -1,5 +1,5 @@
 
-use crate::chunk::coord::NUM_LTIS;
+use crate::coord::NUM_LTIS;
 use std::{
     ops::{
         Index,
