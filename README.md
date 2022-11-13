@@ -1,20 +1,3 @@
-## Running
-
-1. Download jar:
-   
-   ```
-   wget -O minecraft-b1.0.2.jar https://launcher.mojang.com/v1/objects/76d35cb452e739bd4780e835d17faf0785d755f9/client.jar
-   ```
-2. Point to jar:
-   
-   ```
-   export MINECRAFT_JAR="${PWD}/minecraft-b1.0.2.jar"
-   ```
-3. Run:
-   
-   ```
-   cargo +nightly run --bin minecraft
-   ```
 
 ## Packages
 
