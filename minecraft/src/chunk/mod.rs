@@ -72,6 +72,7 @@ pub mod coord;
 pub mod per_tile;
 pub mod block;
 pub mod loaded;
+pub mod per_chunk;
 pub mod per_tile_sparse;
 pub mod per_tile_packed;
 
@@ -87,13 +88,17 @@ use self::{
     per_tile_packed::PerTilePacked,
 };
 use std::fmt::Debug;
-use slab::Slab;
+use vek::*;
 
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct CiLti(pub usize, pub u16);
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct TileKey {
+    pub cc: Vec3<i64>,
+    pub ci: usize,
+    pub lti: u16,
+}
 
-impl CiLti {
+impl TileKey {
     pub fn get<T>(
         self,
         per_chunk: T,
@@ -102,7 +107,7 @@ impl CiLti {
         T: CiGet,
         <T as CiGet>::Output: LtiGet,
     {
-        per_chunk.get(self.0).get(self.1)
+        per_chunk.get(self.cc, self.ci).get(self.lti)
     }
 
     pub fn set<T>(
@@ -114,7 +119,7 @@ impl CiLti {
         T: CiGet,
         <T as CiGet>::Output: LtiSet,
     {
-        per_chunk.get(self.0).set(self.1, val);
+        per_chunk.get(self.cc, self.ci).set(self.lti, val);
     }
 }
 
@@ -122,25 +127,8 @@ impl CiLti {
 pub trait CiGet {
     type Output;
 
-    fn get(self, ci: usize) -> Self::Output;
+    fn get(self, cc: Vec3<i64>, ci: usize) -> Self::Output;
 }
-
-impl<'a, T> CiGet for &'a Slab<T> {
-    type Output = &'a T;
-
-    fn get(self, ci: usize) -> Self::Output {
-        &self[ci]
-    }
-}
-
-impl<'a, T> CiGet for &'a mut Slab<T> {
-    type Output = &'a mut T;
-
-    fn get(self, ci: usize) -> Self::Output {
-        &mut self[ci]
-    }
-}
-
 
 pub trait LtiGet {
     type Output;

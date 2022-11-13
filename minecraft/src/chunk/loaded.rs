@@ -1,6 +1,6 @@
 
 use crate::chunk::{
-    CiLti,
+    TileKey,
     coord::{
         gtc_get_cc,
         gtc_get_lti,
@@ -275,8 +275,13 @@ impl<'a> Getter<'a> {
         }
     }
 
-    pub fn gtc_get(&self, gtc: Vec3<i64>) -> Option<CiLti> {
-        self.get(gtc_get_cc(gtc))
-            .map(|ci| CiLti(ci, gtc_get_lti(gtc)))
+    pub fn gtc_get(&self, gtc: Vec3<i64>) -> Option<TileKey> {
+        let cc = gtc_get_cc(gtc);
+        self.get(cc)
+            .map(|ci| TileKey {
+                cc,
+                ci,
+                lti: gtc_get_lti(gtc),
+            })
     }
 }
