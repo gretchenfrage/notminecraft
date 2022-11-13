@@ -90,6 +90,35 @@ use std::fmt::Debug;
 use slab::Slab;
 
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct CiLti(pub usize, pub u16);
+
+impl CiLti {
+    pub fn get<T>(
+        self,
+        per_chunk: T,
+    ) -> <<T as CiGet>::Output as LtiGet>::Output
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiGet,
+    {
+        per_chunk.get(self.0).get(self.1)
+    }
+
+    pub fn set<T>(
+        self,
+        val: <<T as CiGet>::Output as LtiSet>::Input,
+        per_chunk: T,
+    )
+    where
+        T: CiGet,
+        <T as CiGet>::Output: LtiSet,
+    {
+        per_chunk.get(self.0).set(self.1, val);
+    }
+}
+
+
 pub trait CiGet {
     type Output;
 
@@ -204,6 +233,7 @@ impl<'a> LtiGet for &'a mut ChunkBlocks {
         TileBlockWrite { chunk: self, lti }
     }
 }
+
 
 #[derive(Copy, Clone, Debug)]
 pub struct TileBlockRead<'a> {

@@ -1,8 +1,6 @@
 
 use crate::chunk::{
-    CiGet,
-    LtiGet,
-    LtiSet,
+    CiLti,
     coord::{
         gtc_get_cc,
         gtc_get_lti,
@@ -15,10 +13,10 @@ use std::{
         HashMap,
     },
     cell::Cell,
-    convert::identity,
 };
 use slab::Slab;
 use vek::*;
+
 
 
 const NULL_IDX: u32 = !0;
@@ -277,71 +275,8 @@ impl<'a> Getter<'a> {
         }
     }
 
-    // convenience
-
-    pub fn gtc_get<T>(
-        &self,
-        gtc: Vec3<i64>,
-        per_chunk: T,
-    ) -> Option<<<T as CiGet>::Output as LtiGet>::Output>
-    where
-        T: CiGet,
-        <T as CiGet>::Output: LtiGet,
-    {
+    pub fn gtc_get(&self, gtc: Vec3<i64>) -> Option<CiLti> {
         self.get(gtc_get_cc(gtc))
-            .map(|ci| per_chunk
-                .get(ci)
-                .get(gtc_get_lti(gtc)))
-    }
-
-    pub fn gtc_flat_get<T, I>(
-        &self,
-        gtc: Vec3<i64>,
-        per_chunk: T,
-    ) -> Option<I>
-    where
-        T: CiGet,
-        <T as CiGet>::Output: LtiGet<Output = Option<I>>,
-    {
-        self.gtc_get(gtc, per_chunk)
-            .and_then(identity)
-    }
-
-    pub fn gtc_set<T>(
-        &self,
-        gtc: Vec3<i64>,
-        val: <<T as CiGet>::Output as LtiSet>::Input,
-        per_chunk: T,
-    )
-    where
-        T: CiGet,
-        <T as CiGet>::Output: LtiSet,
-    {
-        let ci = self
-            .get(gtc_get_cc(gtc))
-            .expect("tile not loaded");
-        per_chunk
-            .get(ci)
-            .set(gtc_get_lti(gtc), val)
-    }
-
-    pub fn gtc_try_set<T>(
-        &self,
-        gtc: Vec3<i64>,
-        val: <<T as CiGet>::Output as LtiSet>::Input,
-        per_chunk: T,
-    ) -> bool
-    where
-        T: CiGet,
-        <T as CiGet>::Output: LtiSet,
-    {
-        if let Some(ci) = self.get(gtc_get_cc(gtc)) {
-            per_chunk
-                .get(ci)
-                .set(gtc_get_lti(gtc), val);
-            true
-        } else {
-            false
-        }
+            .map(|ci| CiLti(ci, gtc_get_lti(gtc)))
     }
 }
