@@ -3,19 +3,19 @@
 use vek::*;
 
 
-/// Max local tile index.
+/// Max local tile index (2^16 - 1).
 pub const MAX_LTI: u16 = 0xffff;
 
-/// Number of local tile indices.
+/// Number of local tile indices (2^16).
 pub const NUM_LTIS: usize = 0x10000;
 
-/// Max local tile coordinate x component.
+/// Max local tile coordinate x component (31).
 pub const MAX_LTC_X: u16 = XZ_MAX;
 
-/// Max local tile coordinate y component.
+/// Max local tile coordinate y component (63).
 pub const MAX_LTC_Y: u16 = Y_MAX;
 
-/// Max local tile coordinate z component.
+/// Max local tile coordinate z component (31).
 pub const MAX_LTC_Z: u16 = XZ_MAX;
 
 

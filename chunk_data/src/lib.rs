@@ -1,5 +1,64 @@
 //! Data structures for efficient storage of chunk data in memory.
-
+//!
+//! Basic example:
+//!
+//! ```
+//! use chunk_data::{
+//!     BlockRegistry,
+//!     BlockId,
+//!     LoadedChunks,
+//!     PerChunk,
+//!     ChunkBlocks,
+//!     PerTile,
+//! };
+//! use vek::*;
+//!
+//! // initialize game data
+//! let mut blocks = BlockRegistry::new();
+//! 
+//! let bid_stone: BlockId<()> = blocks.register();
+//! let bid_switch: BlockId<bool> = blocks.register();
+//! let bid_label: BlockId<String> = blocks.register();
+//!
+//! let blocks = blocks.finalize();
+//!
+//! // initialize world data
+//! let mut chunks = LoadedChunks::new();
+//! 
+//! let mut tile_blocks: PerChunk<ChunkBlocks> = PerChunk::new();
+//! let mut tile_niceness: PerChunk<PerTile<f32>> = PerChunk::new();
+//!
+//! // load a chunk
+//! let cc = Vec3::new(1, 0, 0);
+//!
+//! {
+//!     let ci = chunks.add(cc);
+//!     
+//!     tile_blocks.add(cc, ci, ChunkBlocks::new(&blocks));
+//!     tile_niceness.add(cc, ci, PerTile::default());
+//! }
+//!
+//! // read and write stuff in that chunk a bit
+//! let getter = chunks.getter();
+//! getter.gtc_get([47, 14, 20]).unwrap().get(&mut tile_blocks).set(bid_stone, ());
+//! if let Some(tile) = getter.gtc_get([47, 15, 20]) {
+//!     tile.get(&mut tile_blocks).set(bid_switch, true);
+//!     tile.set(&mut tile_niceness, 5.0);
+//!     *tile.get(&mut tile_niceness) *= 2.0;
+//! }
+//! getter.gtc_get([47, 16, 20]).unwrap().get(&mut tile_blocks)
+//!     .set(
+//!         bid_label,
+//!         String::from("hello world!"),
+//!     );
+//! assert_eq!(
+//!     format!(
+//!         "{:?}",
+//!         getter.gtc_get([47, 16, 20]).map(|tile| tile.get(&tile_blocks).meta_debug()),
+//!     ),
+//!     r#"Some("hello world!")"#,
+//! );
+//! ```
 
 // ## tiles, global tile coordinates
 //

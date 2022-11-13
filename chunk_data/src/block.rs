@@ -36,13 +36,24 @@ use std::{
 };
 
 
+/// The "air" block, which is hard-guaranteed to be registered.
+///
+/// When `BlockRegistry` is constructed is automatically self-registers this
+/// block, with block ID 0 and meta type `()`. Code can and does rely on this
+/// for soundness. The reason for this is that it makes `ChunkBlocks`
+/// construction nicer and easier.
 pub const AIR: BlockId<()> = BlockId::new(RawBlockId(0));
 
-
+/// Block ID, dissociated from metadata type.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct RawBlockId(pub u16);
 
-
+/// Block ID, with phantom type parameter `M` denoting its metadata type.
+///
+/// Just a wrapper around a `RawBlockId` and a `PhantomData<M>`. Associating
+/// the metadata type is just to help avoid accidental logic errors, it is
+/// unrelated to soundness guarantees, which are acheived with runtime
+/// assertions.
 pub struct BlockId<M> {
     pub bid: RawBlockId,
     _p: PhantomData<M>,
@@ -90,6 +101,7 @@ impl<M> PartialEq<BlockId<M>> for RawBlockId {
 }
 
 
+/// Registry of block IDs and their meta types.
 #[derive(Debug, Clone)]
 pub struct BlockRegistry {
     items: Vec<RegisteredBlock>,
@@ -137,6 +149,7 @@ impl Debug for MetaLayout {
 }
 
 impl BlockRegistry {
+    /// Construct a new block registry with nothing but `AIR` registered.
     pub fn new() -> Self {
         let mut blocks = BlockRegistry {
             items: Vec::new(),
@@ -146,6 +159,8 @@ impl BlockRegistry {
         blocks
     }
 
+    /// Register a new block with the given meta type, and return its assigned
+    /// block ID.
     pub fn register<M>(&mut self) -> BlockId<M>
     where
         M: Debug + Send + Sync + 'static,
@@ -194,12 +209,18 @@ impl BlockRegistry {
         BlockId::new(RawBlockId(bid))
     }
 
-    pub fn freeze(self) -> Arc<Self> {
+    /// Finalize the block registry by wrapping it in an `Arc`.
+    ///
+    /// This allows all `ChunkBlocks` instances to efficiently share the block
+    /// registry and rely on it to not change.
+    pub fn finalize(self) -> Arc<Self> {
         Arc::new(self)
     }
 }
 
 
+/// Optimized storage for block ID and block metadata for every tile in a
+/// chunk.
 pub struct ChunkBlocks {
     registry: Arc<BlockRegistry>,
 
@@ -215,6 +236,7 @@ struct OutOfPlaceElem {
 }
 
 impl ChunkBlocks {
+    /// Construct a new `ChunkBlocks` filled with `AIR`.
     pub fn new(registry: &Arc<BlockRegistry>) -> Self {
         let registry = Arc::clone(&registry);
 
@@ -238,6 +260,7 @@ impl ChunkBlocks {
         }
     }
 
+    /// Get the block ID at the given tile.
     pub fn get(&self, lti: u16) -> RawBlockId {
         self.bids[lti]
     }
@@ -258,6 +281,9 @@ impl ChunkBlocks {
         matches!(registered.meta_layout, MetaLayout::InPlace { .. })
     }
 
+    /// Get the block metadata at the given tile, without checking block ID.
+    ///
+    /// Panics if `M` is not the meta type for the block at that tile.
     pub fn raw_meta<M>(&self, lti: u16) -> &M
     where
         M: 'static,
@@ -278,6 +304,10 @@ impl ChunkBlocks {
         }
     }
 
+    /// Get the block metadata at the given tile, mutably, without checking
+    /// block ID.
+    ///
+    /// Panics if `M` is not the meta type for the block at that tile.
     pub fn raw_meta_mut<M>(&mut self, lti: u16) -> &mut M
     where
         M: 'static,
@@ -298,6 +328,11 @@ impl ChunkBlocks {
         }
     }
 
+    /// Get the block metadata at the given tile.
+    ///
+    /// Panics if:
+    /// - `bid` is not the block ID at that tile.
+    /// - `M` is not the meta type for `bid` (unlikely to occur accidentally).
     pub fn meta<M>(&self, bid: BlockId<M>, lti: u16) -> &M
     where
         M: 'static,
@@ -306,6 +341,11 @@ impl ChunkBlocks {
         self.raw_meta(lti)
     }
 
+    /// Get the block metadata at the given tile, mutably.
+    ///
+    /// Panics if:
+    /// - `bid` is not the block at that tile.
+    /// - `M` is not the meta type for `bid` (unlikely to occur accidentally).
     pub fn meta_mut<M>(&mut self, bid: BlockId<M>, lti: u16) -> &mut M
     where
         M: 'static,
@@ -314,6 +354,10 @@ impl ChunkBlocks {
         self.raw_meta_mut(lti)
     }
 
+    /// If the block at that tile is `bid`, get its metadata.
+    ///
+    /// If `bid` is the block at that tile, panics if `M` is not the meta type
+    /// for `bid` (unlikely to occur accidentally).
     pub fn try_meta<M>(&self, bid: BlockId<M>, lti: u16) -> Option<&M>
     where
         M: 'static,
@@ -325,6 +369,10 @@ impl ChunkBlocks {
         }
     }
 
+    /// If the block at that tile is `bid`, get its metadata, mutably.
+    ///
+    /// If `bid` is the block at that tile, panics if `M` is not the meta type
+    /// for `bid` (unlikely to occur accidentally).
     pub fn try_meta_mut<M>(
         &mut self,
         bid: BlockId<M>,
@@ -407,6 +455,9 @@ impl ChunkBlocks {
         }
     }
 
+    /// Set the block ID and metadata at the given tile, by `RawBlockId`.
+    ///
+    /// Panics if `M` is not the meta type for `bid`.
     pub fn raw_set<M>(&mut self, lti: u16, bid: RawBlockId, meta: M)
     where
         M: 'static,
@@ -455,6 +506,10 @@ impl ChunkBlocks {
         }
     }
 
+    /// Set the block ID and metadata at the given tile.
+    ///
+    /// Panics if `M` is not the meta type for `bid` (unlikely to occur
+    /// accidentally).
     pub fn set<M>(&mut self, lti: u16, bid: BlockId<M>, meta: M)
     where
         M: 'static,
@@ -464,6 +519,8 @@ impl ChunkBlocks {
 
     // replace could be implemented, but seems unnecessary
 
+    /// Way of debug-formatting the block metadata at the given tile without
+    /// knowing its type.
     pub fn meta_debug<'s>(&'s self, lti: u16) -> impl Debug + 's {
         unsafe {
             let bid = self.bids[lti];

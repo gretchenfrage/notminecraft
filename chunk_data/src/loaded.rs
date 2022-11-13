@@ -104,6 +104,17 @@ const NIDX_REV: [usize; NUM_NEIGHBORS] =
     ];
 
 
+/// Set of loaded chunks.
+///
+/// Serves 3 purposes:
+///
+/// - Tracks the set of chunks which are currently loaded.
+/// - Assigns each loaded chunk a chunk index (ci), which may be reused if the
+///   chunk is unloaded. Guaranteed to assign indexes with precisely the
+///   behavior of a `slab::Slab`.
+/// - Provides an efficient lookup from chunk coordinate (cc) to chunk index
+///   (ci) based on a 3-dimensionally linked hashmap which is exploited for
+///   caching, which makes linear access patterns extremely fast. 
 #[derive(Debug, Clone)]
 pub struct LoadedChunks {
     hmap: HashMap<Vec3<i64>, u32>,
@@ -111,6 +122,7 @@ pub struct LoadedChunks {
 }
 
 impl LoadedChunks {
+    /// Construct a new empty set of loaded chunks.
     pub fn new() -> Self {
         LoadedChunks {
             hmap: HashMap::new(),
@@ -118,6 +130,18 @@ impl LoadedChunks {
         }
     }
 
+    /// Produce a getter, for lookups, which does caching and link-traversal.
+    ///
+    /// This means that:
+    /// - Sequential accesses of the same chunk are cached.
+    /// - Sequential accesses of adjacent chunks (including face, edge, and
+    ///   corner adjacency) are done with link traversal rather than a full
+    ///   hashmap lookup.
+    ///
+    /// `Getter` implements `Clone`, which can be exploited to improve
+    /// performance if one is performing two interleaved access patterns which
+    /// individually exhibit locality but which would switch back and forth if
+    /// combined.
     pub fn getter(&self) -> Getter {
         Getter {
             chunks: self,
@@ -125,6 +149,14 @@ impl LoadedChunks {
         }
     }
 
+    /// Add a new chunk to the set of loaded chunks, and get its assigned chunk
+    /// index (ci).
+    ///
+    /// Panics if already present.
+    ///
+    /// This should be followed by a corresponding add operation to all
+    /// per-chunk world data, with all the generation or loading logic that may
+    /// require.
     pub fn add(&mut self, cc: Vec3<i64>) -> usize {
         // validate and anticipate idx
         let hmap_entry =
@@ -163,6 +195,14 @@ impl LoadedChunks {
         idx as usize
     }
 
+    /// Remove a chunk from the set of loaded chunks. Its chunk index may be
+    /// reused for following `add` transactions.
+    ///
+    /// Panics if not present.
+    ///
+    /// This should be followed by a corresponding remove operation to all
+    /// per-chunk world data, with all the cleanup and saving logic that may
+    /// require.
     pub fn remove(&mut self, cc: Vec3<i64>) -> usize {
         // remove idx from hmap
         let idx = self.hmap
@@ -185,6 +225,7 @@ impl LoadedChunks {
         idx as usize
     }
 
+    /// Iterate through the cc and ci of all loaded chunks.
     pub fn iter<'c>(&'c self) -> impl Iterator<Item=(Vec3<i64>, usize)> + 'c {
         self.hmap
             .iter()
@@ -194,6 +235,8 @@ impl LoadedChunks {
             ))
     }
 
+    /// Iterate through the cc and ci of all loaded chunks, along with
+    /// corresponding `Getter`s which have those chunks pre-cached.
     pub fn iter_with_getters<'c>(
         &'c self,
     ) -> impl Iterator<Item=(Vec3<i64>, usize, Getter<'c>)> + 'c
@@ -215,6 +258,7 @@ impl LoadedChunks {
 }
 
 
+/// See `LoadedChunks::getter`.
 #[derive(Debug, Clone)]
 pub struct Getter<'a> {
     chunks: &'a LoadedChunks,
@@ -222,7 +266,13 @@ pub struct Getter<'a> {
 }
 
 impl<'a> Getter<'a> {
-    pub fn get(&self, cc: Vec3<i64>) -> Option<usize> {
+    /// Perform a cc -> ci lookup.
+    pub fn get<V>(&self, cc: V) -> Option<usize>
+    where
+        V: Into<Vec3<i64>>,
+    {
+        let cc = cc.into();
+
         if let Some((cache_cc, cache_idx)) = self.cache.get() {
             // case 1: is cached
             // 
@@ -275,7 +325,15 @@ impl<'a> Getter<'a> {
         }
     }
 
-    pub fn gtc_get(&self, gtc: Vec3<i64>) -> Option<TileKey> {
+    /// Given a global tile coordinate (gtc), look up the chunk it's in, and
+    /// pack everything into a nice `TileKey`. This is part of the nice
+    /// chainable API.
+    pub fn gtc_get<V>(&self, gtc: V) -> Option<TileKey>
+    where
+        V: Into<Vec3<i64>>,
+    {
+        let gtc = gtc.into();
+
         let cc = gtc_get_cc(gtc);
         self.get(cc)
             .map(|ci| TileKey {

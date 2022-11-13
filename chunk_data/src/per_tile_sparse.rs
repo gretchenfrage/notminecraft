@@ -8,7 +8,7 @@ use crate::{
 };
 
 
-/// Sparse per-tile storage.
+/// Per-tile (within a chunk) sparse-optimized storage of `Option<T>`.
 ///
 /// A chunk contains 2^16 tiles, and so a normal `PerTile<T>` stores a `T` for
 /// every tile, in an array.
@@ -98,12 +98,14 @@ impl<T> PerTileSparse<T> {
             .map(|idx| &mut self.vec[idx].val)
     }
 
+    /// Iterate through all `Some` values, with their ltis.
     pub fn iter_some<'s>(&'s self) -> impl Iterator<Item=(u16, &'s T)> + 's {
         self.vec
             .iter()
             .map(|item| (item.lti, &item.val))
     }
 
+    /// Iterate through all `Some` values, mutably, with their ltis.
     pub fn iter_some_mut<'s>(&'s mut self) -> impl Iterator<Item=(u16, &'s mut T)> + 's {
         self.vec
             .iter_mut()
@@ -118,6 +120,7 @@ impl<T> PerTileSparse<T> {
         }
     }
 
+    /// Set the value at `lti` to `Some(val)`.
     pub fn set_some(&mut self, lti: u16, val: T) {
         if let Some(idx) = self.get_idx(lti) {
             self.vec[idx].val = val;
@@ -128,6 +131,7 @@ impl<T> PerTileSparse<T> {
         }
     }
 
+    /// Set the value at `lti` to `None`.
     pub fn set_none(&mut self, lti: u16) {
         if let Some(idx) = self.get_idx(lti) {            
             // swap-remove and update idx of element we replace with

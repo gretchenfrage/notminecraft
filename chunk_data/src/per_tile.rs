@@ -22,13 +22,14 @@ use std::{
 };
 
 
-/// Utility for storing a `T` for every tile in a chunk, indexed by lti.
+/// Per-tile (within a chunk) storage of `T` via an array.
 ///
-/// Implements `FromIterator`.
+/// Implements `FromIterator`, as well as `Index`/`IndexMut<u16>`.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PerTile<T>(pub Box<[T; NUM_LTIS]>);
 
 impl<T> PerTile<T> {
+    /// Construct with 2^16 clones of `val`.
     pub fn repeat(val: T) -> Self
     where
         T: Clone,

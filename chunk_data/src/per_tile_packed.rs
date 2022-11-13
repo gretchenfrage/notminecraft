@@ -6,8 +6,7 @@ use std::alloc::{
 };
 
 
-/// Bit-packed array of sub-byte uints for every tile in a chunk, indexed by
-/// lti.
+/// Per-tile (within a chunk) bit-packed storage of sub-byte u-ints.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PerTilePacked<
     const BYTES: usize,
@@ -60,11 +59,17 @@ impl<
 }
 
 
-/// Bit-packed array of u4 for every tile in a chunk, indexed by lti.
+/// Per-tile (within a chunk) bit-packed storage of `u4`.
+///
+/// Consumes 2^15 bytes = 32 KiB.
 pub type PerTileU4 = PerTilePacked<{NUM_LTIS / 2}, 0b1111>;
 
-/// Bit-packed array of u2 for every tile in a chunk, indexed by lti.
+/// Per-tile (within a chunk) bit-packed storage of `u2`.
+///
+/// Consumes 2^14 bytes = 16 KiB.
 pub type PerTileU2 = PerTilePacked<{NUM_LTIS / 4}, 0b11>;
 
-/// Bit-packed array of u1 for every tile in a chunk, indexed by lti.
+/// Per-tile (within a chunk) bit-packed storage of `u1`.
+///
+/// Consumes 2^13 bytes = 8 KiB.
 pub type PerTileU1 = PerTilePacked<{NUM_LTIS / 8}, 0b1>;
