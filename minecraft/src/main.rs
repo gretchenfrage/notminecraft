@@ -8,6 +8,7 @@ pub mod gui;
 pub mod util;
 pub mod main_menu;
 pub mod chunk;
+pub mod systems;
 
 
 use crate::{
