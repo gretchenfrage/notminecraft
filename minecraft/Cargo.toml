@@ -18,6 +18,9 @@ futures-util = "0.3"
 [dependencies.graphics]
 path = "../graphics"
 
+[dependencies.chunk_data]
+path = "../chunk_data"
+
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]

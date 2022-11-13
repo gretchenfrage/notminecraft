@@ -48,6 +48,12 @@ pub const AIR: BlockId<()> = BlockId::new(RawBlockId(0));
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct RawBlockId(pub u16);
 
+impl<M> From<BlockId<M>> for RawBlockId {
+    fn from(bid: BlockId<M>) -> Self {
+        bid.bid
+    }
+}
+
 /// Block ID, with phantom type parameter `M` denoting its metadata type.
 ///
 /// Just a wrapper around a `RawBlockId` and a `PhantomData<M>`. Associating

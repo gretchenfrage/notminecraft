@@ -1376,6 +1376,7 @@ dependencies = [
  "anyhow",
  "async_zip",
  "backtrace",
+ "chunk_data",
  "futures-util",
  "graphics",
  "image",
