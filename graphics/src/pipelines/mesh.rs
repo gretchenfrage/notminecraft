@@ -120,13 +120,13 @@ pub struct Mesh {
     /// Vertices within the mesh. Are grouped together into triangles by the
     /// `indices` field.
     pub vertices: GpuVec<Vertex>,
-    /// Groups of 3 vertices which form triangles. Each `VertexIdx` is an
+    /// Groups of 3 vertices which form triangles. Each vertex index is an
     /// index into the `vertices` array. The `indices` array's length must be
-    /// a multiple of 3 for it to be valid, and each consecutive group of 3
-    /// indices forms a triangle. 
+    /// a multiple of 3 for the mesh to be valid, and each consecutive group of
+    /// 3 vertex indices forms a triangle. 
     ///
     /// TODO: do they need to be clockwise or counter-clockwise?
-    pub indices: GpuVec<VertexIdx>,
+    pub indices: GpuVec<usize>,
 }
 
 /// Vertex within a `Mesh`.
@@ -143,10 +143,6 @@ pub struct Vertex {
     /// `tex_index` must be the same between all vertices within each triangle.
     pub tex_index: usize,
 }
-
-/// Vertex index within a `Mesh`.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct VertexIdx(usize);
 
 
 // ==== pipeline ====
@@ -298,8 +294,7 @@ impl MeshPipeline {
                 }
 
                 let vert_idx = vert_idx
-                    .expect("attempt to render mesh with uninitialized index element")
-                    .0;
+                    .expect("attempt to render mesh with uninitialized index element");
                 assert!(
                     vert_idx < mesh.mesh.vertices.len,
                     "attempt to render mesh with vertex index beyond end of vertex gpu vec",
@@ -626,11 +621,11 @@ impl GpuVecElem for Vertex {
     }
 }
 
-impl GpuVecElem for VertexIdx {
+impl GpuVecElem for usize {
     const USAGES: BufferUsages = BufferUsages::INDEX;
     const SIZE: usize = size_of::<u32>();
 
     fn write(&self, dst: &mut Vec<u8>) {
-        dst.extend(u32::to_le_bytes(self.0 as u32));
+        dst.extend(u32::to_le_bytes(*self as u32));
     }
 }
