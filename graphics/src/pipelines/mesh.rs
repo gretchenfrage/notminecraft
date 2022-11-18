@@ -35,7 +35,6 @@ use tracing::*;
 
 
 const INDEX_FORMAT: IndexFormat = IndexFormat::Uint32;
-const INDICES_PER_TRIANGLE: usize = 3;
 
 
 // ==== gpu vec ====
@@ -45,6 +44,7 @@ const INDICES_PER_TRIANGLE: usize = 3;
 #[derive(Debug)]
 pub struct GpuVec<T> {
     buffer: Option<Buffer>,
+    // NOTE: length is in elements, but capacity is in bytes
     len: usize,
     capacity: usize,
     _p: PhantomData<T>,
@@ -118,13 +118,15 @@ impl GpuImageArray {
 #[derive(Debug)]
 pub struct Mesh {
     /// Vertices within the mesh. Are grouped together into triangles by the
-    /// `triangles` field.
+    /// `indices` field.
     pub vertices: GpuVec<Vertex>,
-    /// Groups of 3 vertices which form triangles. Each `Triangle` is an array
-    /// of 3 indices of the `vertices` array.
+    /// Groups of 3 vertices which form triangles. Each `VertexIdx` is an
+    /// index into the `vertices` array. The `indices` array's length must be
+    /// a multiple of 3 for it to be valid, and each consecutive group of 3
+    /// indices forms a triangle. 
     ///
     /// TODO: do they need to be clockwise or counter-clockwise?
-    pub triangles: GpuVec<Triangle>,
+    pub indices: GpuVec<VertexIdx>,
 }
 
 /// Vertex within a `Mesh`.
@@ -142,15 +144,9 @@ pub struct Vertex {
     pub tex_index: usize,
 }
 
-/// Triangle within a `Mesh`.
+/// Vertex index within a `Mesh`.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Triangle(pub [usize; 3]);
-
-impl Triangle {
-    pub fn map<F: FnMut(usize) -> usize>(self, f: F) -> Self {
-        Triangle(self.0.map(f))
-    } 
-}
+pub struct VertexIdx(usize);
 
 
 // ==== pipeline ====
@@ -284,40 +280,45 @@ impl MeshPipeline {
         _dbg_transform: Mat4<f32>,
     )
     {
+        assert!(
+            mesh.mesh.indices.len % 3 == 0,
+            "attempt to render mesh with non-multiple of 3 number of indices",
+        );
+
         #[cfg(debug_assertions)]
         {
-            for triangle in &mesh.mesh.triangles.dbg_content {
-                assert!(
-                    triangle.is_some(),
-                    "attempt to render mesh with uninitialized triangle element",
-                );
-                let triangle = triangle.unwrap();
-                let mut tex_index = None;
-                for i in triangle.0 {
-                    assert!(
-                        i < mesh.mesh.vertices.len,
-                        "attempt to render mesh with triangle vertex index beyond end of vertex gpu vec",
-                    );
-                    assert!(
-                        mesh.mesh.vertices.dbg_content[i].is_some(),
-                        "attempt to render mesh with triangle vertex index referencing uninitialized vertex element",
-                    );
-
-                    let vertex = mesh.mesh.vertices.dbg_content[i].unwrap();
-
-                    assert!(
-                        vertex.tex_index < mesh.textures.0.len,
-                        "attempt to render mesh with (non-unused) texture index beyond end of gpu image array",
-                    );
-
-                    if let Some(tex_index) = tex_index {
-                        assert!(
-                            vertex.tex_index == tex_index,
-                            "attempt to render mesh with different texture indices within same triangle",
-                        );
-                    }
-                    tex_index = Some(vertex.tex_index);
+            let mut tex_index = None;
+            for (
+                vert_idx_idx,
+                vert_idx,
+            ) in mesh.mesh.indices.dbg_content.iter().copied().enumerate()
+            {
+                if vert_idx_idx % 3 == 0 {
+                    tex_index = None;
                 }
+
+                let vert_idx = vert_idx
+                    .expect("attempt to render mesh with uninitialized index element")
+                    .0;
+                assert!(
+                    vert_idx < mesh.mesh.vertices.len,
+                    "attempt to render mesh with vertex index beyond end of vertex gpu vec",
+                );
+                let vertex = mesh.mesh.vertices.dbg_content[vert_idx]
+                    .expect("attempt to render mesh with vertex index referencing uninitialized vertex element");
+
+                assert!(
+                    vertex.tex_index < mesh.textures.0.len,
+                    "attempt to render mesh with (non-unused) texture index beyond end of gpu image array",
+                );
+
+                if let Some(tex_index) = tex_index {
+                    assert!(
+                        vertex.tex_index == tex_index,
+                        "attempt to render mesh with different texture indices within same triangle",
+                    );
+                }
+                tex_index = Some(vertex.tex_index);
             }
         }
 
@@ -333,7 +334,7 @@ impl MeshPipeline {
         }*/
         
 
-        if mesh.mesh.triangles.len > 0 {
+        if mesh.mesh.indices.len > 0 {
             pass.set_pipeline(&self.mesh_pipeline);
             pass
                 .set_bind_group(
@@ -348,12 +349,12 @@ impl MeshPipeline {
                 );
             pass
                 .set_index_buffer(
-                    mesh.mesh.triangles.buffer.as_ref().unwrap().slice(..),
+                    mesh.mesh.indices.buffer.as_ref().unwrap().slice(..),
                     INDEX_FORMAT,
                 );
             pass
                 .draw_indexed(
-                    0..(mesh.mesh.triangles.len * INDICES_PER_TRIANGLE) as u32,
+                    0..mesh.mesh.indices.len as u32,
                     0,
                     0..1,
                 );
@@ -625,13 +626,11 @@ impl GpuVecElem for Vertex {
     }
 }
 
-impl GpuVecElem for Triangle {
+impl GpuVecElem for VertexIdx {
     const USAGES: BufferUsages = BufferUsages::INDEX;
-    const SIZE: usize = size_of::<u32>() * INDICES_PER_TRIANGLE;
+    const SIZE: usize = size_of::<u32>();
 
     fn write(&self, dst: &mut Vec<u8>) {
-        for index in self.0 {
-            dst.extend(u32::to_le_bytes(index as u32));
-        }
+        dst.extend(u32::to_le_bytes(self.0 as u32));
     }
 }

@@ -36,7 +36,6 @@ pub use crate::pipelines::{
         GpuImageArray,
         Mesh,
         Vertex,
-        Triangle,
         DrawMesh,
     },
 };
@@ -232,11 +231,12 @@ impl<'a> FrameContent<'a> {
                     }
                     DrawObj3::Mesh(m) => {
                         if cfg!(debug_assertions) {
+                            /*
                             buf.push_str("<mesh>\n");
                             tag_stack.push("mesh");
 
                             let vertices = m.mesh.vertices.dbg_content().unwrap();
-                            for triangle in m.mesh.triangles.dbg_content().unwrap() {
+                            for index in m.mesh.triangles.dbg_content().unwrap() {
                                 for _ in 0..tag_stack.len() {
                                     buf.push_str(INDENT);
                                 }
@@ -298,6 +298,9 @@ impl<'a> FrameContent<'a> {
                                 }
                                 writeln!(&mut buf, "</{}>", tag);
                             }
+                            */
+                            let _ = m;
+                            unimplemented!()
                         }
                     }
                 }
