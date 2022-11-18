@@ -1,7 +1,7 @@
 
 mod differ;
 
-
+/*
 use self::differ::{
 	MeshDiffer,
 	MeshPatcher,
@@ -21,3 +21,4 @@ pub struct ChunkMesh {
 	differ: MeshDiffer,
 	keys: PerTileSparse<usize>,
 }
+*/
