@@ -23,6 +23,23 @@ use rand::Rng;
 use vek::*;
 
 
+const WIDTH: f32 = 447.0;
+const HEIGHT: f32 = 64.0;
+const CAM_POS: [f32; 3] = [0.0, 0.0, -40.0];
+const CAM_FOV: f32 = PI * 0.0835;
+const SCALE: [f32; 3] = [1.0, 1.15, 1.0];
+const PINCH: [f32; 16] = [
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0175, 0.0, 1.0,
+];
+const Z_START_MIN: f32 = -75.0;
+const Z_START_MAX: f32 = -40.0;
+const SIDE_COLOR: [f32; 3] = [0.75; 3];
+const VEL: f32 = 110.0;
+
+
 #[derive(Debug)]
 pub struct GuiTitleBlock {
     pixel_mesh: Mesh,
@@ -36,13 +53,13 @@ impl GuiTitleBlock {
             // front (-z)
             ([0, 0, 0], [0, 1, 0], [1, 0, 0], [1.0; 3]),
             // left (-x)
-            ([0, 0, 1], [0, 1, 0], [0, 0, -1], [0.75; 3]),
+            ([0, 0, 1], [0, 1, 0], [0, 0, -1], SIDE_COLOR),
             // right (+x)
-            ([1, 0, 0], [0, 1, 0], [0, 0, 1], [0.75; 3]),
+            ([1, 0, 0], [0, 1, 0], [0, 0, 1], SIDE_COLOR),
             // top (+y)
-            ([0, 1, 0], [0, 0, 1], [1, 0, 0], [0.75; 3]),
+            ([0, 1, 0], [0, 0, 1], [1, 0, 0], SIDE_COLOR),
             // bottom (-y)
-            ([0, 0, 1], [0, 0, -1], [1, 0, 0], [0.75; 3]),   
+            ([0, 0, 1], [0, 0, -1], [1, 0, 0], SIDE_COLOR),   
         ] {
             pixle_mesh.add_quad(&Quad {
                 pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
@@ -66,7 +83,7 @@ impl GuiTitleBlock {
                     pixels.push(Vec3 {
                         x: x as f32 - image.width() as f32 / 2.0,
                         y: image.height() as f32 - (y + 1) as f32,
-                        z: rng.gen_range(-75.0..=-40.0),
+                        z: rng.gen_range(Z_START_MIN..=Z_START_MAX),
                     });
                 }
             }
@@ -80,13 +97,10 @@ impl GuiTitleBlock {
 
     pub fn update(&mut self, elapsed: f32) {
         for pixel in &mut self.pixels {
-            pixel.z = f32::min(0.0, pixel.z + 110.0 * elapsed);
+            pixel.z = f32::min(0.0, pixel.z + VEL * elapsed);
         }
     }
 }
-
-//const WIDTH: f32 = 447.0;
-//const HEIGHT: f32 = 64.0;
 
 impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for &'a GuiTitleBlock {
     type Sized = GuiTitleNode<'a>;
@@ -103,7 +117,7 @@ impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for &'a GuiTitleBlock {
             inner: self,
             scale,
         };
-        (447.0 * scale, 64.0 * scale, sized)
+        (WIDTH * scale, HEIGHT * scale, sized)
     }
 }
 
@@ -120,24 +134,19 @@ impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         //canvas.reborrow()
         //    .color([1.0, 0.0, 0.0, 1.0])
-        //    .draw_solid([447.0 * self.scale, 64.0 * self.scale]);
+        //    .draw_solid([WIDTH * self.scale, HEIGHT * self.scale]);
         let mut canvas = canvas
             .reborrow()
             .scale(self.scale)
-            .translate([0.0, 32.0])
+            .translate([0.0, HEIGHT / 2.0])
             .begin_3d_perspective(
-                [447.0, 64.0],
-                [0.0, 0.0, -40.0],
+                [WIDTH, HEIGHT],
+                CAM_POS,
                 Quaternion::identity(),
-                PI * 0.0835
+                CAM_FOV,
             )
-            .scale([1.0, 1.15, 1.0])
-            .modify(Transform3(Mat4::new(
-                1.0, 0.0, 0.0, 0.0,
-                0.0, 1.0, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0175, 0.0, 1.0,
-            )));
+            .scale(SCALE)
+            .modify(Transform3(Mat4::from_row_array(PINCH)));
         for &pixel in &self.inner.pixels {
             canvas.reborrow()
                 .translate(pixel)
