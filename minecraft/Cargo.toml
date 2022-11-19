@@ -22,6 +22,9 @@ path = "../graphics"
 [dependencies.chunk_data]
 path = "../chunk_data"
 
+[dependencies.mesh_data]
+path = "../mesh_data"
+
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]

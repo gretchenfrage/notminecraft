@@ -1,9 +1,10 @@
 [workspace]
 members = [
+    "opentype437",
     "graphics",
     "chunk_data",
+    "mesh_data",
     "minecraft",
-    "opentype437",
 ]
 resolver = "2"
 

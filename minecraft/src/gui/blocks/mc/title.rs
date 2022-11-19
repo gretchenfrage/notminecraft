@@ -1,23 +1,22 @@
 
-use crate::{
-    util::quad_mesh::{
-        QuadMesh,
-        Quad,
-    },
-    gui::{
-        GuiBlock,
-        GuiNode,
-        GuiGlobalContext,
-        GuiSpatialContext,
-        DimChildSets,
-    }
+use crate::gui::{
+    GuiBlock,
+    GuiNode,
+    GuiGlobalContext,
+    GuiSpatialContext,
+    DimChildSets,
 };
 use graphics::{
     Renderer,
     modifier::Transform3,
     frame_content::{
         Canvas2,
+        Mesh,
     },
+};
+use mesh_data::{
+    MeshData,
+    Quad,
 };
 use std::f32::consts::PI;
 use rand::Rng;
@@ -26,16 +25,16 @@ use vek::*;
 
 #[derive(Debug)]
 pub struct GuiTitleBlock {
-    pixel_mesh: QuadMesh,
+    pixel_mesh: Mesh,
     pixels: Vec<Vec3<f32>>,
 }
 
 impl GuiTitleBlock {
     pub fn new<R: Rng>(renderer: &Renderer, rng: &mut R) -> Self {
-        let quads = [
+        let mut pixle_mesh = MeshData::new();
+        for (pos_start, pos_ext_1, pos_ext_2, [r, g, b]) in [
             // front (-z)
             ([0, 0, 0], [0, 1, 0], [1, 0, 0], [1.0; 3]),
-            
             // left (-x)
             ([0, 0, 1], [0, 1, 0], [0, 0, -1], [0.75; 3]),
             // right (+x)
@@ -43,10 +42,9 @@ impl GuiTitleBlock {
             // top (+y)
             ([0, 1, 0], [0, 0, 1], [1, 0, 0], [0.75; 3]),
             // bottom (-y)
-            ([0, 0, 1], [0, 0, -1], [1, 0, 0], [0.75; 3]),
-            
-        ]
-            .map(|(pos_start, pos_ext_1, pos_ext_2, [r, g, b])| Quad {
+            ([0, 0, 1], [0, 0, -1], [1, 0, 0], [0.75; 3]),   
+        ] {
+            pixle_mesh.add_quad(&Quad {
                 pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
                 pos_ext_1: Extent3::from(pos_ext_1).map(|n: i32| n as f32),
                 pos_ext_2: Extent3::from(pos_ext_2).map(|n: i32| n as f32),
@@ -55,10 +53,10 @@ impl GuiTitleBlock {
                 vert_colors: [Rgba::new(r, g, b, 1.0); 4],
                 tex_index: 0,
             });
-        let pixel_mesh = QuadMesh::create_init(renderer, &quads);
+        }
+        let pixel_mesh = pixle_mesh.upload(&renderer);
 
         let mut pixels = Vec::new();
-
         let image = image::load_from_memory(include_bytes!("title.png"))
             .unwrap()
             .into_luma8();
