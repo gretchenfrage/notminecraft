@@ -1,0 +1,11 @@
+[package]
+name = "mesh_data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slab = "0.4"
+vek = "0.15"
+
+[dependencies.graphics]
+path = "../graphics"
