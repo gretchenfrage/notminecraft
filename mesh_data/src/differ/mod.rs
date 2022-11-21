@@ -7,7 +7,14 @@ use self::packed_idx::{
     PackedIdxRepr,
 };
 use crate::MeshData;
-use graphics::frame_content::Vertex;
+use graphics::{
+    Renderer,
+    frame_content::{
+        Vertex,
+        GpuVec,
+        GpuVecElem,
+    },
+};
 use std::collections::VecDeque;
 use slab::Slab;
 
@@ -412,5 +419,56 @@ impl MeshDiffer {
         };
 
         (vertices_diff, indices_diff)
+    }
+}
+
+
+impl<T: GpuVecElem, I: Iterator<Item=(usize, T)>> GpuVecDiff<I> {
+    pub fn patch(self, gpu_vec: &mut GpuVec<T>, renderer: &Renderer) {
+        // TODO: this is wasteful
+
+        renderer.set_gpu_vec_len(gpu_vec, self.new_len);
+
+        struct RangeStart {
+            src_start: usize,
+            dst_start: usize,
+        }
+
+        let mut range_starts: Vec<RangeStart> = Vec::new();
+        let mut values: Vec<T> = Vec::new();
+
+        let mut last_dst: Option<usize> = None;
+
+        for (src, (dst, value)) in self.writes.enumerate() {
+            if !last_dst.map(|last_dst| dst == last_dst + 1).unwrap_or(false) {
+                range_starts.push(RangeStart {
+                    src_start: src,
+                    dst_start: dst,
+                });
+            }
+
+            last_dst = Some(dst);
+
+            values.push(value);
+        }
+
+        let mut patches: Vec<(usize, &[T])> = Vec::new();
+
+        for (i, range_start) in range_starts.iter().enumerate() {
+            let slice = match range_starts.get(i + 1) {
+                Some(next_range_start) => {
+                    &values[range_start.src_start..next_range_start.src_start]
+                }
+                None => {
+                    &values[range_start.src_start..]
+                }
+            };
+            patches.push((
+                range_start.dst_start,
+                slice,
+            ));
+        }
+
+        renderer.patch_gpu_vec(gpu_vec, &patches);
     }
 }

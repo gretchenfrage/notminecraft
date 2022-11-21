@@ -133,8 +133,9 @@ mod loaded;
 mod per_chunk;
 mod block;
 mod per_tile;
-mod per_tile_sparse;
 mod per_tile_packed;
+mod per_tile_sparse;
+mod per_tile_option;
 mod nice_api;
 
 
@@ -171,13 +172,14 @@ pub use self::{
         ChunkBlocks,
     },
     per_tile::PerTile,
-    per_tile_sparse::PerTileSparse,
     per_tile_packed::{
         PerTilePacked,
         PerTileU4,
         PerTileU2,
         PerTileU1,
     },
+    per_tile_sparse::PerTileSparse,
+    per_tile_option::PerTileOption,
     nice_api::{
         TileKey,
         CiGet,

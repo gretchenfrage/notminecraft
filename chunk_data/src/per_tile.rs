@@ -19,6 +19,7 @@ use std::{
         AssertUnwindSafe,
     },
     ptr::drop_in_place,
+    mem::MaybeUninit,
 };
 
 
@@ -98,5 +99,16 @@ impl<T> Index<u16> for PerTile<T> {
 impl<T> IndexMut<u16> for PerTile<T> {
     fn index_mut(&mut self, i: u16) -> &mut T {
         &mut self.0[i as usize]
+    }
+}
+
+impl<T> PerTile<MaybeUninit<T>> {
+    pub fn new_uninit() -> Self {
+        unsafe {
+            let layout = Layout::array::<MaybeUninit<T>>(NUM_LTIS).unwrap();
+            let ptr = alloc(layout) as *mut [MaybeUninit<T>; NUM_LTIS];
+            let array = Box::from_raw(ptr);
+            PerTile(array)
+        }
     }
 }

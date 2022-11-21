@@ -7,7 +7,7 @@ pub mod asset;
 pub mod gui;
 pub mod util;
 pub mod main_menu;
-//pub mod chunk_mesh;
+pub mod chunk_mesh;
 pub mod game_data;
 
 
