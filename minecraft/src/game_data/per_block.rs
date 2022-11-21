@@ -1,11 +1,19 @@
 
 use chunk_data::RawBlockId;
+use std::ops::Index;
 
 
+/// Association of `Option<T>` for each block.
+///
+/// (Not to be confused with each tile).
 #[derive(Debug, Clone)]
 pub struct PerBlock<T>(Vec<Option<T>>);
 
 impl<T> PerBlock<T> {
+    pub fn new() -> Self {
+        PerBlock(Vec::new())
+    }
+
     pub fn get<B: Into<RawBlockId>>(&self, bid: B) -> Option<&T> {
         self.0
             .get(bid.into().0 as usize)

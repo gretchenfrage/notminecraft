@@ -122,6 +122,7 @@ impl JarAssets {
 		let menu_button_highlight = self.menu_button_highlight.load(renderer);
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
 
+		/*
 		let mut blocks = Vec::new();
 
 		let block_stone = blocks.len();
@@ -131,6 +132,15 @@ impl JarAssets {
 		blocks.push(self.block_dirt);
 		
 		let blocks = renderer.load_image_array_raw(16.into(), blocks);
+		*/
+		let blocks = renderer
+			.load_image_array_raw(
+				16.into(),
+				[
+					self.block_stone,
+					self.block_dirt,
+				],
+			);
 
 		let resources = ResourcePack {
 			font,
@@ -139,8 +149,8 @@ impl JarAssets {
 			menu_button_highlight,
 			menu_bg,
 			blocks,
-			block_stone,
-			block_dirt,
+			//block_stone,
+			//block_dirt,
 		};
 
 		(resources, self.lang)
