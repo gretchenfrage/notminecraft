@@ -21,6 +21,7 @@ pub struct JarAssets {
 	font: DynamicImage,
 
 	block_stone: DynamicImage,
+	block_dirt: DynamicImage,
 
 	menu_button: Tile9Parts<DynamicImage>,
 	menu_button_highlight: Tile9Parts<DynamicImage>,
@@ -42,6 +43,7 @@ impl JarAssets {
 		ensure!(terrain.height() == 256, "terrain.png wrong h size");
 
 		let block_stone = terrain.crop_imm(16, 0, 16, 16);
+		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
 
 		let gui = jar.read_image("gui/gui.png").await?;
 
@@ -97,6 +99,7 @@ impl JarAssets {
 			menu_button_highlight,
 			menu_bg,
 			block_stone,
+			block_dirt,
 			lang,
 		})
 	}
@@ -119,12 +122,25 @@ impl JarAssets {
 		let menu_button_highlight = self.menu_button_highlight.load(renderer);
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
 
+		let mut blocks = Vec::new();
+
+		let block_stone = blocks.len();
+		blocks.push(self.block_stone);
+
+		let block_dirt = blocks.len();
+		blocks.push(self.block_dirt);
+		
+		let blocks = renderer.load_image_array_raw(16.into(), blocks);
+
 		let resources = ResourcePack {
 			font,
 			menu_title_pixel,
 			menu_button,
 			menu_button_highlight,
 			menu_bg,
+			blocks,
+			block_stone,
+			block_dirt,
 		};
 
 		(resources, self.lang)

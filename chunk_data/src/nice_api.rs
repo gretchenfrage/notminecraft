@@ -35,14 +35,14 @@ impl TileKey {
         per_chunk.get(self.cc, self.ci).get(self.lti)
     }
 
-    pub fn set<T>(
+    pub fn set<T, V>(
         self,
         per_chunk: T,
-        val: <<T as CiGet>::Output as LtiSet>::Input,
+        val: V,
     )
     where
         T: CiGet,
-        <T as CiGet>::Output: LtiSet,
+        <T as CiGet>::Output: LtiSet<V>,
     {
         per_chunk.get(self.cc, self.ci).set(self.lti, val);
     }
@@ -63,16 +63,12 @@ pub trait LtiGet {
 }
 
 /// Something settable per-local tile, for nice chainable API.
-pub trait LtiSet {
-    type Input;
-
-    fn set(self, lti: u16, val: Self::Input);
+pub trait LtiSet<T> {
+    fn set(self, lti: u16, val: T);
 }
 
-impl<'a, T: 'a, C: LtiGet<Output=&'a mut T>> LtiSet for C {
-    type Input = T;
-
-    fn set(self, lti: u16, val: Self::Input) {
+impl<'a, T: 'a, C: LtiGet<Output=&'a mut T>> LtiSet<T> for C {
+    fn set(self, lti: u16, val: T) {
         *self.get(lti) = val;
     }
 }
@@ -101,10 +97,8 @@ impl<'a, T> LtiGet for &'a PerTileSparse<T> {
     }
 }
 
-impl<'a, T> LtiSet for &'a mut PerTileSparse<T> {
-    type Input = Option<T>;
-
-    fn set(self, lti: u16, val: Self::Input) {
+impl<'a, T> LtiSet<Option<T>> for &'a mut PerTileSparse<T> {
+    fn set(self, lti: u16, val: Option<T>) {
         PerTileSparse::set(self, lti, val)
     }
 }
@@ -125,10 +119,8 @@ impl<
     'a,
     const BYTES: usize,
     const MASK: u8,
-> LtiSet for &'a mut PerTilePacked<BYTES, MASK> {
-    type Input = u8;
-
-    fn set(self, lti: u16, val: Self::Input) {
+> LtiSet<u8> for &'a mut PerTilePacked<BYTES, MASK> {
+    fn set(self, lti: u16, val: u8) {
         PerTilePacked::set(self, lti, val)
     }
 }

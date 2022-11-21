@@ -68,3 +68,9 @@ impl ChunkMesh {
         &self.mesh
     }
 }
+
+impl<'a, 'b> LtiSet<&'a MeshData> for &'b mut ChunkMesh {
+    fn set(self, lti: u16, val: &'a MeshData) {
+        self.set_tile_submesh(lti, val);
+    }
+}
