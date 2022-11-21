@@ -1,10 +1,15 @@
 
 use crate::{
-    TileKey,
     coord::{
         gtc_get_cc,
         gtc_get_lti,
     },
+    axis::{
+        FACES_EDGES_CORNERS,
+        FaceEdgeCorner,
+        PerFaceEdgeCorner,
+    },
+    nice_api::TileKey,
 };
 use std::{
     fmt::Debug,
@@ -18,90 +23,7 @@ use slab::Slab;
 use vek::*;
 
 
-
 const NULL_IDX: u32 = !0;
-
-const NUM_NEIGHBORS: usize = 26;
-
-const NIDX_TO_DIFF: [[i64; 3]; NUM_NEIGHBORS] = [
-    [ 1, 0, 0], //  0
-    [-1, 0, 0], //  1
-    [ 0, 1, 0], //  2
-    [ 0,-1, 0], //  3
-    [ 0, 0, 1], //  4
-    [ 0, 0,-1], //  5
-
-    [ 0, 1, 1], //  6
-    [ 0,-1,-1], //  7
-    [ 1, 0, 1], //  8
-    [-1, 0,-1], //  9
-    [ 1, 1, 0], // 10
-    [-1,-1, 0], // 11
-    [ 0,-1, 1], // 12
-    [ 0, 1,-1], // 13
-    [-1, 0, 1], // 14
-    [ 1, 0,-1], // 15
-    [-1, 1, 0], // 16
-    [ 1,-1, 0], // 17
-
-    [ 1, 1, 1], // 18
-    [-1,-1,-1], // 19
-    [-1, 1, 1], // 20
-    [ 1,-1,-1], // 21
-    [ 1,-1, 1], // 22
-    [-1, 1,-1], // 23
-    [ 1, 1,-1], // 24
-    [-1,-1, 1], // 25
-];
-
-const DIFF_TO_NIDX: [[[usize; 3]; 3]; 3] =
-    [
-        [
-            [19,11,25],
-            [ 9, 1,14],
-            [23,16,20],
-        ],
-        [
-            [ 7, 3,12],
-            [ 5,!0, 4],
-            [13, 2, 6],
-        ],
-        [
-            [21,17,22],
-            [15, 0, 8],
-            [24,10,18],
-        ],
-    ];
-
-const NIDX_REV: [usize; NUM_NEIGHBORS] = 
-    [
-        1,
-        0,
-        3,
-        2,
-        5,
-        4,
-        7,
-        6,
-        9,
-        8,
-        11,
-        10,
-        13,
-        12,
-        15,
-        14,
-        17,
-        16,
-        19,
-        18,
-        21,
-        20,
-        23,
-        22,
-        25,
-        24,
-    ];
 
 
 /// Set of loaded chunks.
@@ -118,7 +40,7 @@ const NIDX_REV: [usize; NUM_NEIGHBORS] =
 #[derive(Debug, Clone)]
 pub struct LoadedChunks {
     hmap: HashMap<Vec3<i64>, u32>,
-    slab: Slab<[u32; NUM_NEIGHBORS]>,
+    slab: Slab<PerFaceEdgeCorner<u32>>,
 }
 
 impl LoadedChunks {
@@ -175,16 +97,11 @@ impl LoadedChunks {
         hmap_entry.insert(idx);
 
         // link neighbors both ways
-        let mut neighbors = [NULL_IDX; NUM_NEIGHBORS];
-        for nidx in 0..NUM_NEIGHBORS {
-            let diff = Vec3::from(NIDX_TO_DIFF[nidx]);
-
-            if let Some(idx2) = self.hmap.get(&(cc + diff)).copied() {
-                let nidx2 = NIDX_REV[nidx];
-
-                // link both ways
-                neighbors[nidx] = idx2;
-                self.slab[idx2 as usize][nidx2] = idx;
+        let mut neighbors = PerFaceEdgeCorner::repeat(NULL_IDX);
+        for fec in FACES_EDGES_CORNERS {
+            if let Some(idx2) = self.hmap.get(&(cc + fec.to_vec())).copied() {
+                neighbors[fec] = idx2;
+                self.slab[idx2 as usize][-fec] = idx;
             }
         }
 
@@ -213,11 +130,10 @@ impl LoadedChunks {
         let neighbors = self.slab.remove(idx as usize);
 
         // nullify neighbors' pointers to self
-        for nidx in 0..NUM_NEIGHBORS {
-            let idx2 = neighbors[nidx];
+        for fec in FACES_EDGES_CORNERS {
+            let idx2 = neighbors[fec];
             if idx2 != NULL_IDX {
-                let nidx2 = NIDX_REV[nidx];
-                self.slab[idx2 as usize][nidx2] = NULL_IDX;
+                self.slab[idx2 as usize][-fec] = NULL_IDX;
             }
         }
 
@@ -285,21 +201,8 @@ impl<'a> Getter<'a> {
             //
             // traverse link, cache if Some, return
             let diff = cc - cache_cc;
-            if diff.x >= -1
-                && diff.y >= -1
-                && diff.z >= -1
-                && diff.x <= 1
-                && diff.y <= 1
-                && diff.z <= 1
-            {
-                let neighbor_idx = DIFF_TO_NIDX
-                    [(diff.x + 1) as usize]
-                    [(diff.y + 1) as usize]
-                    [(diff.z + 1) as usize];
-
-                let idx = self.chunks.slab
-                    [cache_idx as usize]
-                    [neighbor_idx];
+            if let Some(fec) = FaceEdgeCorner::from_vec(diff) {
+                let idx = self.chunks.slab[cache_idx as usize][fec];
 
                 return
                     if idx == NULL_IDX { None }

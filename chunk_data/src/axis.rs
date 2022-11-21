@@ -105,15 +105,90 @@ macro_rules! axis_enum {
                 )*}
             }
         }
+
+        impl<T: Clone> $per_name<T> {
+            pub fn repeat(val: T) -> Self {
+                $per_name([$(
+                    #[allow(non_snake_case)]
+                    {
+                        let $pos = ();
+                        let _ = $pos;
+                        val.clone()
+                    },
+                    val.clone(),
+                )*])
+            }
+        }
+
+        impl<T> IntoIterator for $per_name<T> {
+            type Item = T;
+            type IntoIter = <[T; $num_constant] as IntoIterator>::IntoIter;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.0.into_iter()
+            }
+        }
     };
 }
 
-axis_enum!(
-    Face,
-    NUM_FACES = 6,
-    PerFace,
-    FACES,
+macro_rules! fec_system {
     (
+        faces = ($(
+            $face:ident = [$($face_vec:tt)*],
+        )*),
+        edges = ($(
+            $edge:ident = [$($edge_vec:tt)*],
+        )*),
+        corners = ($(
+            $corner:ident = [$($corner_vec:tt)*],
+        )*),
+    )=>{
+        axis_enum!(
+            Face,
+            NUM_FACES = 6,
+            PerFace,
+            FACES,
+            ($(
+                $face = [$($face_vec)*],
+            )*),
+        );
+
+        axis_enum!(
+            Edge,
+            NUM_EDGES = 12,
+            PerEdge,
+            EDGES,
+            ($(
+                $edge = [$($edge_vec)*],
+            )*),
+        );
+
+        axis_enum!(
+            Corner,
+            NUM_CORNERS = 8,
+            PerCorner,
+            CORNERS,
+            ($(
+                $corner = [$($corner_vec)*],
+            )*),
+        );
+
+        axis_enum!(
+            FaceEdgeCorner,
+            NUM_FACES_EDGES_CORNERS = 26,
+            PerFaceEdgeCorner,
+            FACES_EDGES_CORNERS,
+            (
+                $( $face = [$($face_vec)*], )*
+                $( $edge = [$($edge_vec)*], )*
+                $( $corner = [$($corner_vec)*], )*
+            ),
+        );
+    };
+}
+
+fec_system!(
+    faces = (
         PosX = [ 1,  0,  0],
         NegX = [-1,  0,  0],
 
@@ -123,14 +198,7 @@ axis_enum!(
         PosZ = [ 0,  0,  1],
         NegZ = [ 0,  0, -1],
     ),
-);
-
-axis_enum!(
-    Edge,
-    NUM_EDGES = 12,
-    PerEdge,
-    EDGES,
-    (
+    edges = (
         PosXPosY = [  1,  1,  0],
         NegXNegY = [ -1, -1,  0],
 
@@ -147,73 +215,19 @@ axis_enum!(
         NegXNegZ = [ -1,  0, -1],
 
         PosXNegZ = [  1,  0, -1],
-        NegXPosZ = [ -1,  0,  1],
+        NegXPosZ = [ -1,  0,  1],      
     ),
-);
+    corners = (
+        PosXPosYPosZ = [  1,  1,  1],
+        NegXNegYNegZ = [ -1, -1, -1],
 
-axis_enum!(
-    Corner,
-    NUM_CORNERS = 8,
-    PerCorner,
-    CORNERS,
-    (
-        PosPosPos = [  1,  1,  1],
-        NegNegNeg = [ -1, -1, -1],
+        NegXPosYPosZ = [ -1,  1,  1],
+        PosXNegYNegZ = [  1, -1, -1],
 
-        NegPosPos = [ -1,  1,  1],
-        PosNegNeg = [  1, -1, -1],
+        PosXNegYPosZ = [  1, -1,  1],
+        NegXPosYNegZ = [ -1,  1, -1],
 
-        PosNegPos = [  1, -1,  1],
-        NegPosNeg = [ -1,  1, -1],
-
-        PosPosNeg = [  1,  1, -1],
-        NegNegPos = [ -1, -1,  1],
-    ),
-);
-
-axis_enum!(
-    Neighbor,
-    NUM_NEIGHBORS = 26,
-    PerNeighbor,
-    NEIGHBORS,
-    (
-        PosX = [ 1,  0,  0],
-        NegX = [-1,  0,  0],
-
-        PosY = [ 0,  1,  0],
-        NegY = [ 0, -1,  0],
-
-        PosZ = [ 0,  0,  1],
-        NegZ = [ 0,  0, -1],
-
-        PosXPosY = [  1,  1,  0],
-        NegXNegY = [ -1, -1,  0],
-
-        PosXNegY = [  1, -1,  0],
-        NegXPosY = [ -1,  1,  0],
-
-        PosYPosZ = [  0,  1,  1],
-        NegYNegZ = [  0, -1, -1],
-
-        PosYNegZ = [  0,  1, -1],
-        NegYPosZ = [  0, -1,  1],
-
-        PosXPosZ = [  1,  0,  1],
-        NegXNegZ = [ -1,  0, -1],
-
-        PosXNegZ = [  1,  0, -1],
-        NegXPosZ = [ -1,  0,  1],
-
-        PosPosPos = [  1,  1,  1],
-        NegNegNeg = [ -1, -1, -1],
-
-        NegPosPos = [ -1,  1,  1],
-        PosNegNeg = [  1, -1, -1],
-
-        PosNegPos = [  1, -1,  1],
-        NegPosNeg = [ -1,  1, -1],
-
-        PosPosNeg = [  1,  1, -1],
-        NegNegPos = [ -1, -1,  1],
+        PosXPosYNegZ = [  1,  1, -1],
+        NegXNegYPosZ = [ -1, -1,  1],
     ),
 );
