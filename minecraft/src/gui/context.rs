@@ -5,6 +5,7 @@ use crate::{
         resource_pack::ResourcePack,
         localization::Localization,
     },
+    game_data::GameData,
     gui::gui_event_loop::EventLoopEffectQueue,
 };
 use graphics::{
@@ -33,6 +34,7 @@ pub struct GuiGlobalContext<'c> {
     pub renderer: &'c RefCell<Renderer>,
     pub resources: &'c ResourcePack,
     pub lang: &'c Localization,
+    pub game: &'c GameData,
     /// Window focus level.
     pub focus_level: FocusLevel,
     /// Set of pressed virtual key codes, if the window is focused. Empty set
@@ -82,6 +84,10 @@ impl<'c> GuiSpatialContext<'c> {
         &self.global.lang
     }
 
+    pub fn game(&self) -> &'c GameData {
+        &self.global.game
+    }
+
     pub fn cursor_in_area<A, B>(&self, min: A, max: B) -> bool
     where
         A: Into<Vec2<f32>>,
@@ -123,6 +129,10 @@ impl<'c> GuiWindowContext<'c> {
 
     pub fn lang(&self) -> &'c Localization {
         &self.spatial.global.lang
+    }
+
+    pub fn game(&self) -> &'c GameData {
+        &self.spatial.global.game
     }
 }
 

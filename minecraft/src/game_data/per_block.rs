@@ -1,6 +1,5 @@
 
 use chunk_data::RawBlockId;
-use std::ops::Index;
 
 
 /// Association of `Option<T>` for each block.

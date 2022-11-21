@@ -46,7 +46,7 @@ impl GameData {
 
         let bid_stone = blocks.register();
         block_obscures.set(bid_stone, PerFace::repeat(true));
-        block_mesh_logic.set(bid_dirt, BlockMeshLogic::Simple(0));
+        block_mesh_logic.set(bid_stone, BlockMeshLogic::Simple(0));
 
         let bid_dirt = blocks.register();
         block_obscures.set(bid_dirt, PerFace::repeat(true));

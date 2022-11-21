@@ -9,10 +9,12 @@ pub mod util;
 pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
+pub mod basic_demo;
 
 
 use crate::{
     asset::jar_assets::JarAssets,
+    game_data::GameData,
     gui::GuiEventLoop,
     main_menu::MainMenu,
 };
@@ -70,6 +72,7 @@ fn main() {
         .block_on(JarAssets::read())
         .expect("failure to load jar assets")
         .load(&mut event_loop.renderer);
+    let game = GameData::new();
 
     let gui_state = MainMenu::new(
         &event_loop.renderer,
@@ -78,5 +81,5 @@ fn main() {
     );
 
     // enter window event loop
-    event_loop.run(Box::new(gui_state), resources, lang);
+    event_loop.run(Box::new(gui_state), resources, lang, game);
 }

@@ -4,6 +4,7 @@ use crate::{
 		resource_pack::ResourcePack,
 		localization::Localization,
 	},
+	game_data::GameData,
 	gui::{
 		context::{
 			GuiGlobalContext,
@@ -90,6 +91,7 @@ struct State {
     renderer: RefCell<Renderer>,
     resources: ResourcePack,
     lang: Localization,
+    game: GameData,
     focus_level: FocusLevel,
 	pressed_keys_semantic: HashSet<VirtualKeyCode>,
     pressed_keys_physical: HashSet<ScanCode>,
@@ -112,6 +114,7 @@ impl State {
 		renderer: Renderer,
 		resources: ResourcePack,
 		lang: Localization,
+		game: GameData,
 	) -> Self
 	{
 		let winit_size = window.inner_size();
@@ -120,6 +123,7 @@ impl State {
 			renderer: RefCell::new(renderer),
 			resources,
 			lang,
+			game,
 			focus_level: FocusLevel::Focused,
 			pressed_keys_semantic: HashSet::new(),
 			pressed_keys_physical: HashSet::new(),
@@ -149,6 +153,7 @@ impl State {
 					renderer: &self.renderer,
 					resources: &self.resources,
 					lang: &self.lang,
+					game: &self.game,
 					focus_level: self.focus_level,
 					pressed_keys_semantic:
 						if self.focus_level >= FocusLevel::Focused {
@@ -217,6 +222,7 @@ impl GuiEventLoop {
 		state_frame: Box<dyn GuiStateFrameObj>,
 		resources: ResourcePack,
 		lang: Localization,
+		game: GameData,
 	) -> ! {
 		let mut stack = Stack::new(state_frame);
 		let mut state = State::new(
@@ -224,6 +230,7 @@ impl GuiEventLoop {
 			self.renderer,
 			resources,
 			lang,
+			game,
 		);
 
 		let mut prev_update_time = None;
