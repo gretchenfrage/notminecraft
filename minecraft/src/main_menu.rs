@@ -16,6 +16,7 @@ use crate::{
         },
 	},
 	util::hex_color::hex_color,
+    basic_demo::BasicDemo,
 };
 use graphics::{
 	Renderer,
@@ -23,6 +24,10 @@ use graphics::{
 		HAlign,
 		VAlign,
 	},
+};
+use std::{
+    fmt::{self, Formatter, Debug},
+    any::type_name,
 };
 use rand::thread_rng;
 use vek::*;
@@ -86,7 +91,7 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
     }
 }
 
-
+/*
 #[derive(Debug)]
 struct GuiPrintOnClickBlock<'s>(&'s str);
 
@@ -105,8 +110,40 @@ impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
 
         info!("{}", self.inner.0);
     }
+}*/
+
+
+struct GuiRunOnClickBlock<F>(F);
+
+impl<
+    'a,
+    F: for<'r, 's> FnOnce(&'r GuiGlobalContext<'s>),
+> GuiNode<'a> for SimpleGuiBlock<GuiRunOnClickBlock<F>>
+{
+    never_blocks_cursor_impl!();
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        button: MouseButton,
+    ) {
+        if !hits { return }
+        if !ctx.cursor_in_area(0.0, self.size) { return }
+        if button != MouseButton::Left { return }
+
+        (self.inner.0)(ctx.global)
+    }
 }
 
+impl<F> Debug for GuiRunOnClickBlock<F> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(&format!(
+            "GuiRunOnClickBlock<{}>(..)",
+            type_name::<F>(),
+        ))
+    }
+}
 
 #[derive(Debug)]
 pub struct ScrollScaleChanger;
@@ -139,17 +176,21 @@ pub struct MainMenu {
     title: GuiTitleBlock,
 	version_text: GuiTextBlock,
     uncopyright_text: GuiTextBlock,
+
+    /*
     singleplayer_button: MenuButton,
     multiplayer_button: MenuButton,
     mods_button: MenuButton,
     options_button: MenuButton,
+    */
+    basic_demo_button: MenuButton,
+    
     splash_text: GuiSplashText,
 }
 
 #[derive(Debug)]
 pub struct MenuButton {
     text: GuiTextBlock,
-    print_on_click: String,
 }
 
 pub struct MenuButtonBuilder<'a> {
@@ -175,22 +216,25 @@ impl<'a> MenuButtonBuilder<'a> {
         });
         MenuButton {
             text,
-            print_on_click: self.text.to_owned(),
         }
     }
 }
 
+
+
 impl MenuButton {
-    pub fn gui<'a>(
+    pub fn gui<'a, F>(
         &'a mut self,
-        _ctx: &'a GuiWindowContext<'a>,
+        on_click: F,
     ) -> impl GuiBlock<'a, DimParentSets, DimChildSets>
+    where
+        F: for<'r, 's> FnOnce(&'r GuiGlobalContext<'s>),
     {
         logical_height(40.0,
             layer((
                 GuiButtonBgBlock,
                 &mut self.text,
-                GuiPrintOnClickBlock(&self.print_on_click),
+                GuiRunOnClickBlock(on_click),
             )),
         )
     }
@@ -222,6 +266,7 @@ impl MainMenu {
 			v_align: VAlign::Bottom,
 			wrap: true,
 		});
+        /*
         let singleplayer_button = MenuButtonBuilder
             ::new(&lang.menu_singleplayer)
             .build(resources);
@@ -234,15 +279,22 @@ impl MainMenu {
         let options_button = MenuButtonBuilder
             ::new(&lang.menu_options)
             .build(resources);
+        */
+        let basic_demo_button = MenuButtonBuilder
+            ::new("Basic Demo")
+            .build(resources);
         let splash_text = GuiSplashText::new();
 		MainMenu {
             title,
 			version_text,
 			uncopyright_text,
+            /*
             singleplayer_button,
             multiplayer_button,
             mods_button,
             options_button,
+            */
+            basic_demo_button,
             splash_text,
 		}
 	}
@@ -272,10 +324,13 @@ impl MainMenu {
                                         &self.title,
                                     ),
                                 ),
+                                /*
                                 self.singleplayer_button.gui(ctx),
                                 self.multiplayer_button.gui(ctx),
                                 self.mods_button.gui(ctx),
                                 self.options_button.gui(ctx),
+                                */
+                                self.basic_demo_button.gui(on_basic_demo_click),
                             )),
                         ),
                         v_align(0.0,
@@ -289,6 +344,10 @@ impl MainMenu {
             ScrollScaleChanger,
 		))
 	}
+}
+
+fn on_basic_demo_click(ctx: &GuiGlobalContext) {
+    ctx.push_state_frame(BasicDemo::new());
 }
 
 impl GuiStateFrame for MainMenu {

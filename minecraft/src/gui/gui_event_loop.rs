@@ -13,6 +13,7 @@ use crate::{
 			FocusLevel,
 		},
 		event::ScrolledAmount,
+		state_frame::GuiStateFrame,
 		state_frame_obj::GuiStateFrameObj,
 		fps_overlay::FpsOverlay,
 	},
@@ -73,7 +74,14 @@ impl EventLoopEffectQueue {
 		self.0.push(EventLoopEffect::PopStateFrame);
 	}
 
-	pub fn push_state_frame(
+	pub fn push_state_frame<T>(&mut self, state_frame: T)
+	where
+		T: GuiStateFrame + 'static,
+	{
+		self.push_state_frame_obj(Box::new(state_frame))
+	}
+
+	pub fn push_state_frame_obj(
 		&mut self,
 		state_frame: Box<dyn GuiStateFrameObj>,
 	) {

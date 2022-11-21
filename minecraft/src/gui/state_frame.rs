@@ -81,6 +81,15 @@ pub trait GuiStateFrame: Debug {
     );
     */
 
+    /// Called upon a key being pressed, if window focused.
+    ///
+    /// The context's `pressed_keys` sets are empty when the window is
+    /// unfocused, but "virtual" `on_key_press` calls will _not_ be made when
+    /// the window comes into focus. This is usually not a problem.
+    ///
+    /// Context guarantees:
+    /// - `pressed_keys_semantic` will contain `key`.
+    /// - `focus_level` >= `Focused`.
     #[allow(unused_variables)]
     fn on_key_press_semantic(
         &mut self,
@@ -88,6 +97,17 @@ pub trait GuiStateFrame: Debug {
         key: VirtualKeyCode,
     ) {}
 
+    /// Called upon a key being released, if window focused.
+    ///
+    /// The context's `pressed_keys` sets are empty when the window is
+    /// unfocused, but "virtual" `on_key_release` calls will _not_ be made when
+    /// the window goes out of focus. **This means that, when one is putting
+    /// logic in `on_key_release`, they often should also put logic in
+    /// `on_focus_change` to handle "cancellations."**
+    ///
+    /// Context guarantees:
+    /// - `pressed_keys_semantic` will not contain `key`.
+    /// - `focus_level` >= `Focused`.
     #[allow(unused_variables)]
     fn on_key_release_semantic(
         &mut self,
@@ -95,6 +115,15 @@ pub trait GuiStateFrame: Debug {
         key: VirtualKeyCode,
     ) {}
 
+    /// Called upon a key being pressed, if window focused.
+    ///
+    /// The context's `pressed_keys` sets are empty when the window is
+    /// unfocused, but "virtual" `on_key_press` calls will _not_ be made when
+    /// the window comes into focus. This is usually not a problem.
+    ///
+    /// Context guarantees:
+    /// - `pressed_keys_physical` will contain `key`
+    /// - `focus_level` >= `Focused`.
     #[allow(unused_variables)]
     fn on_key_press_physical(
         &mut self,
@@ -102,6 +131,17 @@ pub trait GuiStateFrame: Debug {
         key: ScanCode,
     ) {}
 
+    /// Called upon a key being released, if window focused.
+    ///
+    /// The context's `pressed_keys` sets are empty when the window is
+    /// unfocused, but "virtual" `on_key_release` calls will _not_ be made when
+    /// the window goes out of focus. **This means that, when one is putting
+    /// logic in `on_key_release`, they often should also put logic in
+    /// `on_focus_change` to handle "cancellations."**
+    ///
+    /// Context guarantees:
+    /// - `pressed_keys_physical` will not contain `key`.
+    /// - `focus_level` >= `Focused`.
     #[allow(unused_variables)]
     fn on_key_release_physical(
         &mut self,

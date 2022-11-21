@@ -6,7 +6,11 @@ use crate::{
         localization::Localization,
     },
     game_data::GameData,
-    gui::gui_event_loop::EventLoopEffectQueue,
+    gui::{
+        gui_event_loop::EventLoopEffectQueue,
+        state_frame::GuiStateFrame,
+        state_frame_obj::GuiStateFrameObj,
+    },
 };
 use graphics::{
     Renderer,
@@ -60,6 +64,30 @@ pub struct GuiSpatialContext<'c> {
     ///
     /// Guaranteed to be `None` if `focus_level` == `MouseCaptured`.
     pub cursor_pos: Option<Vec2<f32>>,
+}
+
+impl<'c> GuiGlobalContext<'c> {
+    pub fn pop_state_frame(&self) {
+        self.event_loop.borrow_mut().pop_state_frame();
+    }
+
+    pub fn push_state_frame<T>(&self, state_frame: T)
+    where
+        T: GuiStateFrame + 'static,
+    {
+        self.event_loop.borrow_mut().push_state_frame(state_frame);
+    }
+
+    pub fn push_state_frame_obj(
+        &self,
+        state_frame: Box<dyn GuiStateFrameObj>,
+    ) {
+        self.event_loop.borrow_mut().push_state_frame_obj(state_frame);
+    }
+
+    pub fn set_scale(&self, scale: f32) {
+        self.event_loop.borrow_mut().set_scale(scale);
+    }
 }
 
 impl<'c> GuiSpatialContext<'c> {
