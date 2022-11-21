@@ -63,4 +63,3 @@ pub const QUAD_INDICES: [usize; 6] = [
     0, 1, 3,
     3, 1, 2,
 ];
-

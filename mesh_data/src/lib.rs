@@ -1,13 +1,6 @@
 
 mod quad;
-
-
-pub use crate::{
-    quad::{
-        Quad,
-        QUAD_INDICES,
-    },
-};
+mod differ;
 
 
 use graphics::{
@@ -15,6 +8,17 @@ use graphics::{
     frame_content::{
         Vertex,
         Mesh,
+    },
+};
+
+pub use crate::{
+    quad::{
+        Quad,
+        QUAD_INDICES,
+    },
+    differ::{
+        MeshDiffer,
+        GpuVecDiff,
     },
 };
 
@@ -68,5 +72,19 @@ impl MeshData {
             vertices: renderer.create_gpu_vec_init(&self.vertices),
             indices: renderer.create_gpu_vec_init(&self.indices),
         }
+    }
+
+    pub fn validate_indices(&self) {
+        assert!(self.indices.len() % 3 == 0);
+        for &index in &self.indices {
+            assert!(index < self.vertices.len());
+        }
+    }
+
+    pub fn triangles<'s>(&'s self) -> impl Iterator<Item=[usize; 3]> + 's
+    {
+        self.indices
+            .chunks(3)
+            .map(|chunk| [chunk[0], chunk[1], chunk[2]])
     }
 }
