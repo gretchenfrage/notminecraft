@@ -129,6 +129,7 @@
 
 
 mod coord;
+mod axis;
 mod loaded;
 mod per_chunk;
 mod block;
@@ -158,6 +159,24 @@ pub use self::{
         gtc_get_ltc,
         gtc_get_lti,
         cc_ltc_to_gtc,
+    },
+    axis::{
+        NUM_FACES,
+        FACES,
+        Face,
+        PerFace,
+        NUM_EDGES,
+        EDGES,
+        Edge,
+        PerEdge,
+        NUM_CORNERS,
+        CORNERS,
+        Corner,
+        PerCorner,
+        NUM_NEIGHBORS,
+        NEIGHBORS,
+        Neighbor,
+        PerNeighbor,
     },
     loaded::{
         LoadedChunks,
