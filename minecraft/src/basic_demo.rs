@@ -29,8 +29,43 @@ use vek::*;
 use rand::prelude::*;
 
 
+#[derive(Debug, Clone)]
+struct KeyBindings {
+    move_forward: VirtualKeyCode,
+    move_backward: VirtualKeyCode,
+    move_left: VirtualKeyCode,
+    move_right: VirtualKeyCode,
+    move_up: VirtualKeyCode,
+    move_down: VirtualKeyCode,
+}
+
+impl Default for KeyBindings {
+    fn default() -> Self {
+        KeyBindings {
+            move_forward: VirtualKeyCode::W,
+            move_backward: VirtualKeyCode::S,
+            move_left: VirtualKeyCode::A,
+            move_right: VirtualKeyCode::D,
+            move_up: VirtualKeyCode::Space,
+            move_down: VirtualKeyCode::LShift,
+        }
+    }
+}
+
+
+fn pitch_yaw(pitch: f32, yaw: f32) -> Quaternion<f32> {
+    Quaternion::rotation_x(pitch) * Quaternion::rotation_y(yaw)
+}
+
+
 #[derive(Debug)]
 pub struct BasicDemo {
+    bindings: KeyBindings,
+
+    cam_pos: Vec3<f32>,
+    cam_pitch: f32,
+    cam_yaw: f32,
+
     chunks: LoadedChunks,
 
     tile_blocks: PerChunk<ChunkBlocks>,
@@ -44,25 +79,25 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut BasicDemo> {
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
     {
-        let world = self.inner;
+        let demo = self.inner;
 
         let mut canvas = canvas.reborrow()
             .begin_3d_perspective(
                 self.size,
-                [5.0, 5.0, -20.0],
-                Quaternion::identity(),
+                demo.cam_pos,
+                pitch_yaw(demo.cam_pitch, demo.cam_yaw),
                 f32::to_radians(90.0),
             );
-        for (cc, ci) in world.chunks.iter() {
+        for (cc, ci) in demo.chunks.iter() {
             canvas.reborrow()
                 .translate((cc * CHUNK_EXTENT).map(|n| n as f32))
                 .draw_mesh(
-                    world.chunk_meshes.get(cc, ci).mesh(),
+                    demo.chunk_meshes.get(cc, ci).mesh(),
                     &ctx.resources().blocks,
                 );
         }
 
-        if replace(&mut world.xml_dump_requested, false) {
+        if replace(&mut demo.xml_dump_requested, false) {
             info!("initiating xml dump of frame to framedump.xml...");
             fs::write("framedump.xml", canvas.target.to_pseudo_xml())
                 .expect("xml dump failed");
@@ -189,6 +224,12 @@ impl BasicDemo {
         }
 
         BasicDemo {
+            bindings: KeyBindings::default(),
+
+            cam_pos: 0.0.into(),
+            cam_pitch: 0.0,
+            cam_yaw: 0.0,
+
             chunks,
 
             tile_blocks,
@@ -210,7 +251,47 @@ impl BasicDemo {
 impl GuiStateFrame for BasicDemo {
     impl_visit_nodes!();
 
-    fn update(&mut self, ctx: &GuiWindowContext, _elapsed: f32) {
+    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+        debug!(pitch=%self.cam_pitch, yaw=%self.cam_yaw);
+
+        if ctx.global().focus_level == FocusLevel::MouseCaptured {
+            let walk_speed = 4.0;
+            let fly_speed = walk_speed;
+            
+            let mut walk = Vec3::from(0.0);
+            let pressed = ctx.global().pressed_keys_semantic;
+            if pressed.contains(&self.bindings.move_forward) {
+                walk += Vec3::new(0.0, 0.0, 1.0);
+            }
+            if pressed.contains(&self.bindings.move_backward) {
+                walk += Vec3::new(0.0, 0.0, -1.0);
+            }
+            if pressed.contains(&self.bindings.move_left) {
+                walk += Vec3::new(-1.0, 0.0, 0.0);
+            }
+            if pressed.contains(&self.bindings.move_right) {
+                walk += Vec3::new(1.0, 0.0, 0.0);
+            }
+            if walk != Vec3::from(0.0) {
+                walk.normalize();
+            }
+            walk = Quaternion::rotation_y(-self.cam_yaw) * walk;
+            // TODO: I, do not, understand, handedness
+            //debug!(?walk);
+            walk *= walk_speed * elapsed;
+            self.cam_pos += walk;
+
+            let mut fly = Vec3::from(0.0);
+            if pressed.contains(&self.bindings.move_up) {
+                fly += Vec3::new(0.0, 1.0, 0.0);
+            }
+            if pressed.contains(&self.bindings.move_down) {
+                fly += Vec3::new(0.0, -1.0, 0.0);
+            }
+            fly *= fly_speed * elapsed;
+            self.cam_pos += fly;
+        }
+
         for (cc, ci) in self.chunks.iter() {
             self.chunk_meshes
                 .get_mut(cc, ci)
@@ -228,5 +309,16 @@ impl GuiStateFrame for BasicDemo {
         } else if key == VirtualKeyCode::X {
             self.xml_dump_requested = true;
         }
+    }
+
+    fn on_captured_mouse_move(
+        &mut self,
+        _ctx: &GuiWindowContext,
+        amount: Vec2<f32>,
+    ) {
+        //debug!(?amount);
+        let sensitivity = 1.0 / 1600.0;
+        self.cam_pitch += -amount.y * sensitivity;
+        self.cam_yaw += -amount.x * sensitivity;
     }
 }
