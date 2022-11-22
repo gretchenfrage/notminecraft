@@ -42,6 +42,7 @@ use winit::{
     window::{
     	Window,
     	WindowBuilder,
+    	CursorGrabMode,
     },
     event::{
     	Event,
@@ -53,7 +54,11 @@ use winit::{
 	    ElementState,
 	    MouseScrollDelta
 	},
-	dpi::LogicalSize,
+	dpi::{
+		LogicalSize,
+		PhysicalSize,
+		PhysicalPosition,
+	},
 };
 use pollster::FutureExt;
 use vek::*;
@@ -67,6 +72,8 @@ enum EventLoopEffect {
 	PopStateFrame,
 	PushStateFrame(Box<dyn GuiStateFrameObj>),
 	SetScale(f32),
+	CaptureMouse,
+	UncaptureMouse,
 }
 
 impl EventLoopEffectQueue {
@@ -90,6 +97,14 @@ impl EventLoopEffectQueue {
 
 	pub fn set_scale(&mut self, scale: f32) {
 		self.0.push(EventLoopEffect::SetScale(scale));
+	}
+
+	pub fn capture_mouse(&mut self) {
+		self.0.push(EventLoopEffect::CaptureMouse);
+	}
+
+	pub fn uncapture_mouse(&mut self) {
+		self.0.push(EventLoopEffect::UncaptureMouse);
 	}
 }
 
@@ -271,6 +286,10 @@ impl GuiEventLoop {
 							.on_character_input(ctx, c));
 					}
 					WindowEvent::Focused(focused) => {
+						if state.focus_level == FocusLevel::MouseCaptured {
+							try_uncapture_mouse(&self.window);
+						}
+
 						state.focus_level =
 							if focused { FocusLevel::Focused }
 							else { FocusLevel::Unfocused };
@@ -289,7 +308,18 @@ impl GuiEventLoop {
 									let changed = state
 										.pressed_keys_semantic
 										.insert(key);
-									if changed && focused {
+									if
+										key == VirtualKeyCode::Escape
+										&& state.focus_level
+										== FocusLevel::MouseCaptured
+									{
+										try_center_cursor(&self.window);
+										try_uncapture_mouse(&self.window);
+										state.focus_level = FocusLevel::Focused;
+										state
+											.with_ctx(|ctx|
+												stack.top().on_focus_change(ctx));
+									} else if changed && focused {
 										state.with_ctx(|ctx| stack
 											.top()
 											.on_key_press_semantic(ctx, key));
@@ -316,7 +346,7 @@ impl GuiEventLoop {
 									if changed && focused {
 										state.with_ctx(|ctx| stack
 											.top()
-											.on_key_press_semantic(ctx, key));
+											.on_key_release_semantic(ctx, key));
 									}
 								}
 
@@ -328,7 +358,7 @@ impl GuiEventLoop {
 								if changed && focused {
 									state.with_ctx(|ctx| stack
 										.top()
-										.on_key_press_physical(ctx, key));
+										.on_key_release_physical(ctx, key));
 								}
 							}
 						}
@@ -468,43 +498,6 @@ impl GuiEventLoop {
 
 					let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.resources());
 					fps_overlay.draw(ctx, &mut frame_content);
-					/*
-					{
-						use crate::{
-							gui::blocks::{
-								GuiText,
-								GuiTextBlockConfig,
-								margin,
-							},
-							util::hex_color::hex_color,
-						};
-						use graphics::frame_content::{
-							HAlign,
-							VAlign,
-						};
-
-						let mut fps_text = GuiTextBlock::new(&GuiTextBlockConfig {
-							text: &format!("{} fps", fps),
-							font: ctx.resources().font,
-							logical_font_size: 16.0,
-							color: hex_color(0x505050FF),
-							h_align: HAlign::Right,
-							v_align: VAlign::Top,
-							wrap: false,
-						});
-						let fps_gui = margin(4.0, 4.0, 4.0, 4.0,
-							&mut fps_text,
-						);
-						let ((), (), fps_gui_sized) = fps_gui
-			                .size(
-			                    ctx.spatial.global,
-			                    ctx.size.w as f32,
-			                    ctx.size.h as f32,
-			                    ctx.scale,
-			                );
-			            fps_gui_sized.visit_nodes(&mut visitor, forward);
-					}
-					*/
 					
 					if state.renderer.borrow().size() != state.size {
 						state.renderer.borrow_mut().resize(state.size);
@@ -547,8 +540,75 @@ impl GuiEventLoop {
 					EventLoopEffect::SetScale(scale) => {
 						state.app_scale = scale / state.os_scale;
 					}
+					EventLoopEffect::CaptureMouse => {
+						if state.focus_level < FocusLevel::MouseCaptured {
+							if try_capture_mouse(&self.window) {
+								state.focus_level = FocusLevel::MouseCaptured;
+							}
+						}
+					}
+					EventLoopEffect::UncaptureMouse => {
+						if state.focus_level == FocusLevel::MouseCaptured {
+							try_center_cursor(&self.window);
+							state.focus_level = FocusLevel::Focused;
+						}
+						try_uncapture_mouse(&self.window);
+					}
 				}
 			}
 		});
+	}
+}
+
+fn try_center_cursor(window: &Window) {
+	let PhysicalSize { width, height } = window.outer_size();
+	let center = PhysicalPosition::new(width / 2, height / 2);
+
+	match window.set_cursor_position(center) {
+		Ok(()) => (),
+		Err(e) => {
+			error!("error centering cursor: {}", e);
+		}
+	}
+}
+
+fn try_capture_mouse(window: &Window) -> bool {
+	let success =
+		[
+			CursorGrabMode::Locked,
+			CursorGrabMode::Confined,
+		]
+		.into_iter()
+		.enumerate()
+		.find(|&(i, mode)| match window.set_cursor_grab(mode) {
+			Ok(()) => {
+				if i > 0 {
+					trace!(
+						"success on fallback Window::set_cursor_grab({:?})",
+						mode,
+					);
+				}
+				window.set_cursor_visible(false);
+				true
+			}
+			Err(e) => {
+				warn!("error on Window::set_cursor_grab({:?}): {}", mode, e);
+				false
+			}
+		})
+		.is_some();
+	if !success {
+		error!("failed to capture mouse");
+	}
+	success
+}
+
+fn try_uncapture_mouse(window: &Window) {
+	window.set_cursor_visible(true);
+	match window.set_cursor_grab(CursorGrabMode::None) {
+		Ok(()) => (),
+		Err(e) => {
+			error!("error on Window::set_cursor_grab(None): {}", e);
+		}
 	}
 }

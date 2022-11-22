@@ -88,6 +88,14 @@ impl<'c> GuiGlobalContext<'c> {
     pub fn set_scale(&self, scale: f32) {
         self.event_loop.borrow_mut().set_scale(scale);
     }
+
+    pub fn capture_mouse(&self) {
+        self.event_loop.borrow_mut().capture_mouse();
+    }
+
+    pub fn uncapture_mouse(&self) {
+        self.event_loop.borrow_mut().uncapture_mouse();
+    }
 }
 
 impl<'c> GuiSpatialContext<'c> {

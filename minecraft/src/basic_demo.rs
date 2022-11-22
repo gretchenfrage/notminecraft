@@ -39,15 +39,12 @@ pub struct BasicDemo {
     xml_dump_requested: bool,
 }
 
-#[derive(Debug)]
-struct WorldGuiBlock<'a>(&'a mut BasicDemo);
-
-impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
+impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut BasicDemo> {
     simple_blocks_cursor_impl!();
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
     {
-        let world = self.inner.0;
+        let world = self.inner;
 
         let mut canvas = canvas.reborrow()
             .begin_3d_perspective(
@@ -71,6 +68,17 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 .expect("xml dump failed");
             info!("...completed");
         }
+    }
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        _button: MouseButton,
+    ) {
+        if !hits { return };
+
+        ctx.global.capture_mouse();
     }
 }
 
@@ -195,7 +203,7 @@ impl BasicDemo {
         _: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
     {
-        WorldGuiBlock(self)
+        self
     }
 }
 
