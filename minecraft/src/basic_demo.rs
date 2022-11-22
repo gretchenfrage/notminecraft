@@ -22,6 +22,7 @@ use mesh_data::{
 use std::{
     mem::replace,
     fs,
+    f32::consts::PI,
 };
 //use rand::seq::SliceRandom;
 use rand_chacha::ChaCha20Rng;
@@ -130,9 +131,9 @@ impl BasicDemo {
         let mut tile_blocks = PerChunk::new();
         let mut chunk_meshes = PerChunk::new();
 
-        for x in -1..=0 {
-            for y in -1..=0 {
-                for z in -1..=0 {
+        for x in -0..=0 {
+            for y in -0..=0 {
+                for z in -0..=0 {
                     let cc = Vec3 { x, y, z };
                     let ci = chunks.add(cc);
 
@@ -255,7 +256,7 @@ impl GuiStateFrame for BasicDemo {
         debug!(pitch=%self.cam_pitch, yaw=%self.cam_yaw);
 
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
-            let walk_speed = 4.0;
+            let walk_speed = 8.0;
             let fly_speed = walk_speed;
             
             let mut walk = Vec3::from(0.0);
@@ -318,7 +319,12 @@ impl GuiStateFrame for BasicDemo {
     ) {
         //debug!(?amount);
         let sensitivity = 1.0 / 1600.0;
+
         self.cam_pitch += -amount.y * sensitivity;
+        self.cam_pitch = f32::max(-PI / 2.0, self.cam_pitch);
+        self.cam_pitch = f32::min(PI / 2.0, self.cam_pitch);
+
         self.cam_yaw += -amount.x * sensitivity;
+        self.cam_yaw %= PI * 2.0;
     }
 }
