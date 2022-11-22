@@ -23,11 +23,10 @@ use std::{
     mem::replace,
     fs,
 };
-use rand::{
-    thread_rng,
-    seq::SliceRandom,
-};
+//use rand::seq::SliceRandom;
+use rand_chacha::ChaCha20Rng;
 use vek::*;
+use rand::prelude::*;
 
 
 #[derive(Debug)]
@@ -53,7 +52,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         let mut canvas = canvas.reborrow()
             .begin_3d_perspective(
                 self.size,
-                0.0,
+                [5.0, 5.0, -20.0],
                 Quaternion::identity(),
                 f32::to_radians(90.0),
             );
@@ -80,7 +79,8 @@ impl BasicDemo {
         game: &GameData,
         renderer: &Renderer,
     ) -> Self {
-        let mut rng = thread_rng();
+        //let mut rng = thread_rng();
+        //let mut rng = ChaCha20Rng::from_seed([0; 32]);
 
         let mut chunks = LoadedChunks::new();
 
@@ -95,6 +95,7 @@ impl BasicDemo {
 
                     let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
                     for lti in 0..=MAX_LTI {
+                        /*
                         let bid =
                             [
                                 AIR,
@@ -104,6 +105,8 @@ impl BasicDemo {
                             .choose(&mut rng)
                             .copied()
                             .unwrap();
+                            */
+                        let bid = game.bid_stone;
                         chunk_tile_blocks.set(lti, bid, ());
                     }
 
@@ -134,8 +137,9 @@ impl BasicDemo {
                 match mesh_logic {
                     &BlockMeshLogic::Invisible => (),
                     &BlockMeshLogic::Simple(tex_index) => {
-                        for face in FACES {
+                        'faces: for face in FACES {
                             let gtc2 = gtc + face.to_vec();
+                            /*
                             let obscured = getter
                                 .gtc_get(gtc2)
                                 .and_then(|tile| {
@@ -144,6 +148,8 @@ impl BasicDemo {
                                 })
                                 .map(|obscures| obscures[-face])
                                 .unwrap_or(false);
+                            */
+                            let obscured = false;
                             if !obscured {
                                 let (
                                     rel_pos_start,
@@ -168,13 +174,19 @@ impl BasicDemo {
                                         tex_index,
                                     });
                             }
+                            break 'faces; // TODO
                         }
                     }
                 }
 
                 if count > 735 && !did_it && bid != AIR.bid {
-                    debug!("\n{:#?}", mesh_buf);
+                    //debug!("\n{:#?}", mesh_buf);
                     did_it = true;
+                }
+                if count < 3 {
+                    debug!("chunk_mesh.differ:\n{:#?}", &chunk_mesh.differ.alt_debug_2());
+                } else {
+                    //panic!("bye lol");
                 }
                 count += 1;
 

@@ -15,7 +15,10 @@ use graphics::{
         GpuVecElem,
     },
 };
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    fmt::{self, Formatter, Debug},
+};
 use slab::Slab;
 
 
@@ -172,8 +175,9 @@ impl MeshDiffer {
 
             let curr =
                 if let Some(hole) = self.vertices_holes.pop_front() {
+                    todo!()/*
                     self.vertices[VertexIdx::get(hole)] = vertex_elem;
-                    hole
+                    hole*/
                 } else {
                     let curr = VertexIdx(self.vertices.len());
                     self.vertices.push(vertex_elem);
@@ -204,9 +208,9 @@ impl MeshDiffer {
                 .map(|rem| {
                     let submesh_index = submesh_triangle[rem];
                     let vertices_writes_queue_index =
-                        submesh.vertices.len()
-                        - submesh_index
-                        - 1;
+                        self.vertices_writes.len()
+                        - 1
+                        - submesh_index;
                     self.vertices_writes[vertices_writes_queue_index]
                 });
             let triangle_elem = mesh_triangle
@@ -224,8 +228,9 @@ impl MeshDiffer {
             
             let curr =
                 if let Some(hole) = self.triangles_holes.pop_front() {
+                    todo!()/*
                     self.triangles[TriangleIdx::get(hole)] = triangle_elem;
-                    hole
+                    hole*/
                 } else {
                     let curr = TriangleIdx(self.triangles.len());
                     self.triangles.push(triangle_elem);
@@ -260,6 +265,7 @@ impl MeshDiffer {
     }
 
     pub fn remove_submesh(&mut self, key: usize) {
+        todo!()/*
         let outer_idx = OuterIdx(key);
 
         let mut curr_vertex_idx = self
@@ -292,7 +298,7 @@ impl MeshDiffer {
                 .vertices[VertexIdx::get(vertex_idx)]
                 .next
                 .unpack();
-        }
+        }*/
     }
 
     pub fn diff<'s>(&'s mut self) -> (
@@ -300,6 +306,7 @@ impl MeshDiffer {
         GpuVecDiff<impl Iterator<Item=(usize, usize)> + 's>,
     ) {
         while let Some(hole) = self.vertices_holes.pop_front() {
+            todo!()/*
             if VertexIdx::get(hole) + 1 == self.vertices.len() {
                 self.vertices.pop().unwrap();
             } else {
@@ -343,10 +350,11 @@ impl MeshDiffer {
                         .next
                         .unpack();
                 }
-            }
+            }*/
         }
 
         while let Some(hole) = self.triangles_holes.pop_front() {
+            todo!()/*
             if TriangleIdx::get(hole) + 1 == self.triangles.len() {
                 self.triangles.pop().unwrap();
             } else {
@@ -392,7 +400,7 @@ impl MeshDiffer {
                             = curr;
                     }
                 }
-            }
+            }*/
         }
 
         let vertices_diff_writes = self
@@ -430,6 +438,259 @@ impl MeshDiffer {
         };
 
         (vertices_diff, indices_diff)
+    }
+
+    pub fn alt_debug_1<'s>(&'s self) -> impl Debug + 's {
+        AltDebug1(self)
+    }
+
+    pub fn alt_debug_2<'s>(&'s self) -> impl Debug + 's {
+        AltDebug2(self)
+    }
+}
+
+
+struct AltDebug1<'a>(&'a MeshDiffer);
+
+impl<'a> Debug for AltDebug1<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_map();
+        for (key, first_vertex_idx) in self.0.outer.iter() {
+            let first_vertex_idx = first_vertex_idx.unpack();
+
+            if let Some(first_vertex_idx) = first_vertex_idx {
+                assert_eq!(
+                    self.0.vertices[VertexIdx::get(first_vertex_idx)].prev.unpack(),
+                    VertexOrOuterIdx::Outer(OuterIdx(key)),
+                );
+            }
+
+            f.entry(
+                &key,
+                &AltDebug1Submesh {
+                    differ: self.0,
+                    first_vertex_idx,
+                },
+            );
+        }
+        f.finish()
+    }
+}
+
+struct AltDebug1Submesh<'a> {
+    differ: &'a MeshDiffer,
+    first_vertex_idx: Option<VertexIdx>,
+}
+
+impl<'a> Debug for AltDebug1Submesh<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_list();
+
+        let mut curr_vertex_idx = self.first_vertex_idx;
+
+        while let Some(vertex_idx) = curr_vertex_idx {
+            let mut curr_index_idx = self.differ.vertices[VertexIdx::get(vertex_idx)].first_index.unpack();
+
+            if let Some(first_index_idx) = curr_index_idx {
+                let (first_triangle_idx, first_rem) = IndexIdx::unflatten(first_index_idx);
+
+                assert_eq!(
+                    self.differ.triangles[TriangleIdx::get(first_triangle_idx)][first_rem].prev.unpack(),
+                    None,
+                );
+            }
+
+            while let Some(index_idx) = curr_index_idx {
+                let (curr_triangle_idx, curr_rem) = IndexIdx::unflatten(index_idx);
+
+                if curr_rem == 0 {
+                    f.entry(&AltDebug1Triangle {
+                        differ: self.differ,
+                        triangle_idx: curr_triangle_idx,
+                    });
+                }
+
+                let next_index_idx = self.differ.triangles[TriangleIdx::get(curr_triangle_idx)][curr_rem].next.unpack();
+
+                if let Some(next_index_idx) = next_index_idx {
+                    let (next_triangle_idx, next_rem) = IndexIdx::unflatten(next_index_idx);
+
+                    assert_eq!(
+                        self.differ.triangles[TriangleIdx::get(next_triangle_idx)][next_rem].prev.unpack(),
+                        Some(index_idx),
+                    );
+                }
+
+                curr_index_idx = next_index_idx;
+            }
+
+            let next_vertex_idx = self.differ.vertices[VertexIdx::get(vertex_idx)].next.unpack();
+
+            if let Some(next_vertex_idx) = next_vertex_idx {
+                assert_eq!(
+                    self.differ.vertices[VertexIdx::get(next_vertex_idx)].prev.unpack(),
+                    VertexOrOuterIdx::Vertex(vertex_idx),
+                );
+            }
+
+            curr_vertex_idx = next_vertex_idx;
+        }
+
+        f.finish()
+    }
+}
+
+struct AltDebug1Triangle<'a> {
+    differ: &'a MeshDiffer,
+    triangle_idx: TriangleIdx,
+}
+
+impl<'a> Debug for AltDebug1Triangle<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_list();
+
+        for rem in 0..3 {
+            let vertex_idx = self.differ.triangles[TriangleIdx::get(self.triangle_idx)][rem].val;
+            let vertex = self.differ.vertices[VertexIdx::get(vertex_idx)].val;
+            f.entry(&AltDebug1Vertex(vertex));
+        }
+
+        f.finish()
+    }
+}
+
+struct AltDebug1Vertex(Vertex);
+
+impl Debug for AltDebug1Vertex {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(&format!(
+            "Vertex {{ pos: <{}, {}, {}>, .. }}",
+            self.0.pos.x,
+            self.0.pos.y,
+            self.0.pos.z,
+        ))
+    }
+}
+
+
+struct AltDebug2<'a>(&'a MeshDiffer);
+
+impl<'a> Debug for AltDebug2<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f
+            .debug_struct("MeshDiffer")
+            .field("outer", &AltDebug2Outer(self.0))
+            .field("vertices", &AltDebug2Vertices(self.0))
+            .field("triangles", &AltDebug2Triangles(self.0))
+            .field("vertices_holes", &AltDebug2Queue(&self.0.vertices_holes))
+            .field("vertices_writes", &AltDebug2Queue(&self.0.vertices_writes))
+            .field("triangles_holes", &AltDebug2Queue(&self.0.triangles_holes))
+            .field("indices_writes", &AltDebug2Queue(&self.0.indices_writes))
+            .finish()
+    } 
+}
+
+struct AltDebug2Outer<'a>(&'a MeshDiffer);
+
+impl<'a> Debug for AltDebug2Outer<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_map();
+        for (key, vertex_idx) in self.0.outer.iter() {
+            f.entry(
+                &DebugOneLine(OuterIdx(key)),
+                &DebugOneLine(vertex_idx.unpack()),
+            );
+        }
+        f.finish()
+    }
+}
+
+struct AltDebug2Vertices<'a>(&'a MeshDiffer);
+
+impl<'a> Debug for AltDebug2Vertices<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_map();
+        for (i, vertex) in self.0.vertices.iter().enumerate() {
+            f.entry(
+                &DebugOneLine(VertexIdx(i)),
+                &AltDebug2VertexElem(vertex),
+            );
+        }
+        f.finish()
+    }
+}
+
+struct AltDebug2VertexElem<'a>(&'a VertexElem);
+
+impl<'a> Debug for AltDebug2VertexElem<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f
+            .debug_struct("VertexElem")
+            .field("prev", &DebugOneLine(self.0.prev.unpack()))
+            .field("next", &DebugOneLine(self.0.next.unpack()))
+            .field("first_index", &DebugOneLine(self.0.first_index.unpack()))
+            .field("val", &AltDebug1Vertex(self.0.val))
+            .finish()
+    }
+}
+
+struct AltDebug2Triangles<'a>(&'a MeshDiffer);
+
+impl<'a> Debug for AltDebug2Triangles<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_map();
+        for (i, triangle) in self.0.triangles.iter().enumerate() {
+            f.entry(
+                &DebugOneLine(TriangleIdx(i)),
+                &AltDebug2TriangleElem(triangle),
+            );
+        }
+        f.finish()
+    }
+}
+
+struct AltDebug2TriangleElem<'a>(&'a [IndexElem; 3]);
+
+impl<'a> Debug for AltDebug2TriangleElem<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_list();
+        for rem in 0..3 {
+            f.entry(&AltDebug2IndexElem(rem, &self.0[rem]));
+        }
+        f.finish()
+    }
+}
+
+struct AltDebug2IndexElem<'a>(usize, &'a IndexElem);
+
+impl<'a> Debug for AltDebug2IndexElem<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f
+            .debug_struct(&format!("IndexElem @ {:?}", IndexIdx(self.0)))
+            .field("prev", &DebugOneLine(self.1.prev.unpack()))
+            .field("next", &DebugOneLine(self.1.next.unpack()))
+            .field("val", &DebugOneLine(self.1.val))
+            .finish()
+    }
+}
+
+struct AltDebug2Queue<'a, T>(&'a VecDeque<T>);
+
+impl<'a, T: Debug> Debug for AltDebug2Queue<'a, T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut f = f.debug_list();
+        for item in self.0.iter() {
+            f.entry(&DebugOneLine(item));
+        }
+        f.finish()
+    }
+}
+
+struct DebugOneLine<T>(T);
+
+impl<T: Debug> Debug for DebugOneLine<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(&format!("{:?}", self.0))
     }
 }
 

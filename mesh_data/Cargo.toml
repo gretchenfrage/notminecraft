@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tracing = "0.1"
 slab = "0.4"
 vek = "0.15"
 

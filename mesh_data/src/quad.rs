@@ -3,6 +3,10 @@ use graphics::frame_content::Vertex;
 use vek::*;
 
 
+pub const VERTICES_PER_QUAD: usize = /* TODO 4 */ 3;
+pub const INDICES_PER_QUAD: usize = /* TODO 6 */ 3;
+
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Quad {
     /// Pos of bottom-left corner
@@ -25,7 +29,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    pub fn to_vertices(&self) -> [Vertex; 4] {
+    pub fn to_vertices(&self) -> [Vertex; VERTICES_PER_QUAD] {
         [
             // bottom-left
             Vertex {
@@ -41,13 +45,14 @@ impl Quad {
                 color: self.vert_colors[1],
                 tex_index: self.tex_index,
             },
+            /*
             // top-right
             Vertex {
                 pos: self.pos_start + self.pos_ext_1 + self.pos_ext_2,
                 tex: self.tex_start + Vec2::new(self.tex_extent.w, 0.0),
                 color: self.vert_colors[2],
                 tex_index: self.tex_index,
-            },
+            },*/ // TODO
             // bottom-right
             Vertex {
                 pos: self.pos_start + self.pos_ext_2,
@@ -59,7 +64,8 @@ impl Quad {
     }
 }
 
-pub const QUAD_INDICES: [usize; 6] = [
-    0, 1, 3,
-    3, 1, 2,
+pub const QUAD_INDICES: [usize; INDICES_PER_QUAD] = [
+    // 0, 1, 3,
+    // TODO 3, 1, 2,
+    0, 1, 2,
 ];

@@ -1355,6 +1355,7 @@ version = "0.1.0"
 dependencies = [
  "graphics",
  "slab",
+ "tracing",
  "vek",
 ]
 
@@ -1392,6 +1393,7 @@ dependencies = [
  "mesh_data",
  "pollster",
  "rand",
+ "rand_chacha",
  "rand_pcg",
  "reqwest",
  "slab",
