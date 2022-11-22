@@ -271,16 +271,16 @@ pub struct PreppedDrawText(usize);
 
 
 impl TextPipeline {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self>
     {
         let text_vs_module = device
-            .create_shader_module(load_shader!("text.vert").await?);
+            .create_shader_module(load_shader!("text.vert")?);
         let text_fs_module = device
-            .create_shader_module(load_shader!("text.frag").await?);
+            .create_shader_module(load_shader!("text.frag")?);
         let glyph_cache_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("glyph cache bind group layout"),

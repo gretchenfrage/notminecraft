@@ -96,7 +96,7 @@ fn create_clip_texture(
 }
 
 impl ClipPipeline {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         device: &Device,
         size: Extent2<u32>,
     ) -> Result<Self> {
@@ -170,9 +170,9 @@ impl ClipPipeline {
             });
 
         let clip_edit_vs_module = device
-            .create_shader_module(load_shader!("clip_edit.vert").await?);
+            .create_shader_module(load_shader!("clip_edit.vert")?);
         let clip_edit_fs_module = device
-            .create_shader_module(load_shader!("clip_edit.frag").await?);
+            .create_shader_module(load_shader!("clip_edit.frag")?);
         let clip_edit_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("clip edit pipeline layout"),

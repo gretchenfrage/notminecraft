@@ -966,7 +966,6 @@ dependencies = [
  "image",
  "opentype437",
  "shaderc",
- "tokio",
  "tracing",
  "tracing-subscriber",
  "vek",

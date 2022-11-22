@@ -16,7 +16,13 @@ layout(location=2) in vec4 i_color;
 layout(location=0) out vec4 o_color;
 
 void main() {
-    vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), i_tex);
+    // texture index rounding fix
+    vec3 tex = i_tex;
+    if (mod(tex.z, 1) > 0.5) {
+        tex.z += 0.5;
+    }
+
+    vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
     o_color = tex_color * i_color;
 
     vec2 clip_uv = vec2(

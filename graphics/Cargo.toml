@@ -27,10 +27,6 @@ features = ["backtrace"]
 version = "0.14"
 features = ["spirv"]
 
-[dependencies.tokio]
-version = "1"
-features = ["fs"]
-
 [dependencies.shaderc]
 version = "0.7"
 optional = true

@@ -17,11 +17,11 @@ pub struct ClearDepthPipeline {
 }
 
 impl ClearDepthPipeline {
-    pub(crate) async fn new(device: &Device) -> Result<Self> {
+    pub(crate) fn new(device: &Device) -> Result<Self> {
         let clear_depth_vs_module = device
-            .create_shader_module(load_shader!("clear_depth.vert").await?);
+            .create_shader_module(load_shader!("clear_depth.vert")?);
         let clear_depth_fs_module = device
-            .create_shader_module(load_shader!("clear_depth.frag").await?);
+            .create_shader_module(load_shader!("clear_depth.frag")?);
         let clear_depth_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("clear depth pipeline layout"),

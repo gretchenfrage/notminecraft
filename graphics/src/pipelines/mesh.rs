@@ -172,16 +172,16 @@ vertex_struct!(MeshVertex {
 });
 
 impl MeshPipeline {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self>
     {
         let mesh_vs_module = device
-            .create_shader_module(load_shader!("mesh.vert").await?);
+            .create_shader_module(load_shader!("mesh.vert")?);
         let mesh_fs_module = device
-            .create_shader_module(load_shader!("mesh.frag").await?);
+            .create_shader_module(load_shader!("mesh.frag")?);
         let mesh_texture_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("mesh texture bind group layout"),

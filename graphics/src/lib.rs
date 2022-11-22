@@ -45,7 +45,6 @@ use crate::{
     uniform_buffer::UniformBuffer,
 };
 use std::{
-    path::Path,
     sync::Arc,
     borrow::Borrow,
     fmt::{self, Debug, Formatter},
@@ -56,7 +55,6 @@ use tracing::*;
 use winit::window::Window;
 use wgpu::*;
 use vek::*;
-use tokio::fs;
 use image::DynamicImage;
 use glyph_brush::ab_glyph::FontArc;
 use opentype437::Font437;
@@ -217,7 +215,7 @@ impl Renderer {
 
         // create the clear pipeline
         trace!("creating clear pipelines");
-        let clear_pipeline_creator = ClearPipelineCreator::new(&device).await?;
+        let clear_pipeline_creator = ClearPipelineCreator::new(&device)?;
         let clear_color_pipeline = clear_pipeline_creator
             .create(&device, SWAPCHAIN_FORMAT);
         let clear_clip_pipeline = clear_pipeline_creator
@@ -225,11 +223,11 @@ impl Renderer {
 
         // create the clear depth pipeline
         trace!("creating clear depth pipeline");
-        let clear_depth_pipeline = ClearDepthPipeline::new(&device).await?;
+        let clear_depth_pipeline = ClearDepthPipeline::new(&device)?;
 
         // create the clip pipeline
         trace!("creating clip pipeline");
-        let clip_pipeline = ClipPipeline::new(&device, size).await?;
+        let clip_pipeline = ClipPipeline::new(&device, size)?;
 
         // create the solid pipeline
         trace!("creating solid pipeline");
@@ -237,7 +235,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
-        ).await?;
+        )?;
 
         
         // create the image pipeline
@@ -246,7 +244,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
-        ).await?;
+        )?;
         
         // create the text pipeline
         trace!("creating text pipeline");
@@ -254,7 +252,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
-        ).await?;
+        )?;
         
         // create the mesh pipeline
         trace!("creating mesh pipeline");
@@ -262,7 +260,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
-        ).await?;
+        )?;
 
         // set up the swapchain
         trace!("configuring swapchain");
@@ -610,15 +608,6 @@ impl Renderer {
         frame.present();
         Ok(())
     }
-    
-    /// Read a PNG / JPG / etc image from a file and load it onto the GPU.
-    ///
-    /// Just reads the file with tokio then passes it to `self.load_image`.
-    pub async fn load_image_file(&self, path: impl AsRef<Path>) -> Result<GpuImage> {
-        trace!("reading image file");
-        let file_data = fs::read(path).await?;
-        self.load_image(&file_data)
-    }
 
     /// Load an image onto the GPU from PNG / JPG / etc file data.
     pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
@@ -633,13 +622,6 @@ impl Renderer {
         self.image_pipeline
             .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
-    
-    /// Read an OTF / TTF / etc font from a file and load it onto the renderer.
-    pub async fn load_font_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
-        trace!("reading font file");
-        let file_data = fs::read(path).await?;
-        self.load_font(&file_data)
-    }
 
     /// Load a font onto the renderer from OTF / TTF / etc file data.
     ///
@@ -649,17 +631,6 @@ impl Renderer {
         trace!("loading font");
         let font = FontArc::try_from_vec(file_data.as_ref().into())?;
         Ok(self.text_pipeline.load_font(font))
-    }
-
-    /// Read a PNG / JPG / etc code point 437 glyph atlas from a file and load
-    /// it as a font onto the renderer.
-    ///
-    /// Be mindful that there is currently no way to un-load a font from the
-    /// renderer.
-    pub async fn load_font_437_file(&mut self, path: impl AsRef<Path>) -> Result<FontId> {
-        trace!("loading font 437 image file");
-        let file_data = fs::read(path).await?;
-        self.load_font_437(file_data)
     }
 
     /// Load a font onto the renderer from a code point 437 glyph atlas PNG /
@@ -688,39 +659,6 @@ impl Renderer {
     pub fn lay_out_text(&self, text_block: &TextBlock) -> LayedOutTextBlock {
         trace!("laying out text block"); // TODO spans?
         self.text_pipeline.lay_out_text(text_block)
-    }
-
-    /// Read an array of PNG / JPG / etc images from files and load them onto
-    /// the GPU.
-    ///
-    /// Just reads the files with tokio then passes them to
-    /// `self.load_image_array`.
-    ///
-    /// If `size` is None, automatically chooses dimensions as the maximum
-    /// between all images, or 1 if no images are given. If any images are a
-    /// different size than chosen, automatically resizes them with
-    /// nearest-neighbor filtering.
-    ///
-    /// Panics if `size` has 0 components.
-    pub async fn load_image_array_files<I>(
-        &self,
-        size: Option<Extent2<u32>>,
-        paths: I,
-    ) -> Result<GpuImageArray>
-    where
-        I: IntoIterator,
-        <I as IntoIterator>::Item: AsRef<Path>,
-    {
-        trace!("reading image array files");
-        let mut images = Vec::new();
-        for path in paths {
-            images.push(fs::read(path).await?);
-        }
-        self
-            .load_image_array(
-                size,
-                images,
-            )
     }
 
     /// Load an array of images onto the GPU from PNG / JPG / etc file data.

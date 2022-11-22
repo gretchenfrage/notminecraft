@@ -12,16 +12,16 @@ pub struct SolidPipeline {
 }
 
 impl SolidPipeline {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self> 
     {
         let solid_vs_module = device
-            .create_shader_module(load_shader!("solid.vert").await?);
+            .create_shader_module(load_shader!("solid.vert")?);
         let solid_fs_module = device
-            .create_shader_module(load_shader!("solid.frag").await?);
+            .create_shader_module(load_shader!("solid.frag")?);
         let solid_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("solid pipeline layout"),

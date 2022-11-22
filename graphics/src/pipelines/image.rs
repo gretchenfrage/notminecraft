@@ -72,16 +72,16 @@ pub struct PreppedDrawImage<'a> {
 }
 
 impl ImagePipeline {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
     ) -> Result<Self>
     {
         let image_vs_module = device
-            .create_shader_module(load_shader!("image.vert").await?);
+            .create_shader_module(load_shader!("image.vert")?);
         let image_fs_module = device
-            .create_shader_module(load_shader!("image.frag").await?);
+            .create_shader_module(load_shader!("image.frag")?);
         let image_uniform_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("image uniform bind group layout"),

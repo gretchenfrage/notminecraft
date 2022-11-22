@@ -19,9 +19,11 @@ pub(crate) use mod_impl::load_shader;
 #[cfg(feature = "shaderc")]
 #[doc(hidden)]
 pub mod mod_impl {
-    use std::path::Path;
+    use std::{
+        path::Path,
+        fs,
+    };
     use anyhow::Result;
-    use tokio::fs;
     use wgpu::*;
     use shaderc::{
         Compiler,
@@ -36,9 +38,9 @@ pub mod mod_impl {
 
     pub(crate) use load_shader;
 
-    pub async fn load_shader_impl(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
-        let path = Path::new("src/shaders").join(name);
-        let glsl = fs::read(&path).await?;
+    pub fn load_shader_impl(name: &'static str) -> Result<ShaderModuleDescriptor<'static>> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/shaders").join(name);
+        let glsl = fs::read(&path)?;
         let glsl = String::from_utf8(glsl)
             .map_err(|_| anyhow::Error::msg("shader not utf-8"))?;
 
@@ -92,7 +94,7 @@ pub mod mod_impl {
 
     pub(crate) use load_shader;
 
-    pub async fn load_shader_impl(
+    pub fn load_shader_impl(
         name: &'static str,
         data: &'static [u8],
     ) -> Result<ShaderModuleDescriptor<'static>> {
