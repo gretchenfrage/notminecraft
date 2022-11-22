@@ -80,7 +80,7 @@ impl BasicDemo {
         renderer: &Renderer,
     ) -> Self {
         //let mut rng = thread_rng();
-        //let mut rng = ChaCha20Rng::from_seed([0; 32]);
+        let mut rng = ChaCha20Rng::from_seed([0; 32]);
 
         let mut chunks = LoadedChunks::new();
 
@@ -95,18 +95,21 @@ impl BasicDemo {
 
                     let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
                     for lti in 0..=MAX_LTI {
-                        /*
                         let bid =
                             [
                                 AIR,
+                                AIR,
+                                AIR,
+                                AIR,
+                                AIR,
+                                AIR,
                                 game.bid_stone,
                                 game.bid_dirt,
+                                game.bid_brick,
                             ]
                             .choose(&mut rng)
                             .copied()
-                            .unwrap();
-                            */
-                        let bid = game.bid_stone;
+                            .unwrap();    
                         chunk_tile_blocks.set(lti, bid, ());
                     }
 
@@ -118,9 +121,6 @@ impl BasicDemo {
 
 
         let mut mesh_buf = MeshData::new();
-
-        let mut count = 0;
-        let mut did_it = false;
 
         for (cc, ci, getter) in chunks.iter_with_getters() {
             let chunk_mesh = chunk_meshes.get_mut(cc, ci);
@@ -137,9 +137,8 @@ impl BasicDemo {
                 match mesh_logic {
                     &BlockMeshLogic::Invisible => (),
                     &BlockMeshLogic::Simple(tex_index) => {
-                        'faces: for face in FACES {
+                        for face in FACES {
                             let gtc2 = gtc + face.to_vec();
-                            /*
                             let obscured = getter
                                 .gtc_get(gtc2)
                                 .and_then(|tile| {
@@ -148,8 +147,6 @@ impl BasicDemo {
                                 })
                                 .map(|obscures| obscures[-face])
                                 .unwrap_or(false);
-                            */
-                            let obscured = false;
                             if !obscured {
                                 let (
                                     rel_pos_start,
@@ -174,21 +171,9 @@ impl BasicDemo {
                                         tex_index,
                                     });
                             }
-                            break 'faces; // TODO
                         }
                     }
                 }
-
-                if count > 735 && !did_it && bid != AIR.bid {
-                    //debug!("\n{:#?}", mesh_buf);
-                    did_it = true;
-                }
-                if count < 3 {
-                    debug!("chunk_mesh.differ:\n{:#?}", &chunk_mesh.differ.alt_debug_2());
-                } else {
-                    //panic!("bye lol");
-                }
-                count += 1;
 
                 chunk_mesh.set_tile_submesh(lti, &mesh_buf);
                 mesh_buf.clear();

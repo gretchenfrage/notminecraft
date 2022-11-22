@@ -175,9 +175,8 @@ impl MeshDiffer {
 
             let curr =
                 if let Some(hole) = self.vertices_holes.pop_front() {
-                    todo!()/*
                     self.vertices[VertexIdx::get(hole)] = vertex_elem;
-                    hole*/
+                    hole
                 } else {
                     let curr = VertexIdx(self.vertices.len());
                     self.vertices.push(vertex_elem);
@@ -228,9 +227,8 @@ impl MeshDiffer {
             
             let curr =
                 if let Some(hole) = self.triangles_holes.pop_front() {
-                    todo!()/*
                     self.triangles[TriangleIdx::get(hole)] = triangle_elem;
-                    hole*/
+                    hole
                 } else {
                     let curr = TriangleIdx(self.triangles.len());
                     self.triangles.push(triangle_elem);
@@ -265,7 +263,6 @@ impl MeshDiffer {
     }
 
     pub fn remove_submesh(&mut self, key: usize) {
-        todo!()/*
         let outer_idx = OuterIdx(key);
 
         let mut curr_vertex_idx = self
@@ -298,7 +295,7 @@ impl MeshDiffer {
                 .vertices[VertexIdx::get(vertex_idx)]
                 .next
                 .unpack();
-        }*/
+        }
     }
 
     pub fn diff<'s>(&'s mut self) -> (
@@ -306,7 +303,6 @@ impl MeshDiffer {
         GpuVecDiff<impl Iterator<Item=(usize, usize)> + 's>,
     ) {
         while let Some(hole) = self.vertices_holes.pop_front() {
-            todo!()/*
             if VertexIdx::get(hole) + 1 == self.vertices.len() {
                 self.vertices.pop().unwrap();
             } else {
@@ -350,11 +346,10 @@ impl MeshDiffer {
                         .next
                         .unpack();
                 }
-            }*/
+            }
         }
 
         while let Some(hole) = self.triangles_holes.pop_front() {
-            todo!()/*
             if TriangleIdx::get(hole) + 1 == self.triangles.len() {
                 self.triangles.pop().unwrap();
             } else {
@@ -400,7 +395,7 @@ impl MeshDiffer {
                             = curr;
                     }
                 }
-            }*/
+            }
         }
 
         let vertices_diff_writes = self

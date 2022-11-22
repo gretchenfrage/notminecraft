@@ -16,7 +16,7 @@ use chunk_data::{
 #[derive(Debug)]
 pub struct ChunkMesh {
     mesh: Mesh,
-    /*TODO*/ pub differ: MeshDiffer,
+    differ: MeshDiffer,
     keys: PerTileOption<u16>,
     clean: bool,
 }

@@ -10,3 +10,9 @@ resolver = "2"
 
 [patch.crates-io]
 ab_glyph = { path = "ab_glyph" }
+
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 3
+debug = true
+debug-assertions = true

@@ -21,6 +21,7 @@ pub struct GameData {
 
     pub bid_stone: BlockId<()>,
     pub bid_dirt: BlockId<()>,
+    pub bid_brick: BlockId<()>,
 }
 
 #[derive(Debug)]
@@ -52,6 +53,10 @@ impl GameData {
         block_obscures.set(bid_dirt, PerFace::repeat(true));
         block_mesh_logics.set(bid_dirt, BlockMeshLogic::Simple(1));
 
+        let bid_brick = blocks.register();
+        block_obscures.set(bid_brick, PerFace::repeat(true));
+        block_mesh_logics.set(bid_brick, BlockMeshLogic::Simple(2));
+
         GameData {
             blocks: blocks.finalize(),
 
@@ -60,6 +65,7 @@ impl GameData {
 
             bid_stone,
             bid_dirt,
+            bid_brick,
         }
     }
 }

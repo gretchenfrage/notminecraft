@@ -22,6 +22,7 @@ pub struct JarAssets {
 
 	block_stone: DynamicImage,
 	block_dirt: DynamicImage,
+	block_brick: DynamicImage,
 
 	menu_button: Tile9Parts<DynamicImage>,
 	menu_button_highlight: Tile9Parts<DynamicImage>,
@@ -44,6 +45,7 @@ impl JarAssets {
 
 		let block_stone = terrain.crop_imm(16, 0, 16, 16);
 		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
+		let block_brick = terrain.crop_imm(7 * 16, 0, 16, 16);
 
 		let gui = jar.read_image("gui/gui.png").await?;
 
@@ -100,6 +102,7 @@ impl JarAssets {
 			menu_bg,
 			block_stone,
 			block_dirt,
+			block_brick,
 			lang,
 		})
 	}
@@ -139,6 +142,7 @@ impl JarAssets {
 				[
 					self.block_stone,
 					self.block_dirt,
+					self.block_brick,
 				],
 			);
 
