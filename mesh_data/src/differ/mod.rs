@@ -238,6 +238,17 @@ impl MeshDiffer {
             for rem in 0..3 {
                 let index = mesh_triangle[rem];
                 let index_idx = index_idx_triangle[rem];
+                let next = self
+                    .vertices[VertexIdx::get(index)]
+                    .first_index
+                    .unpack();
+                if let Some(next) = next {
+                    let (next_triangle, next_rem) = IndexIdx::unflatten(next);
+                    self
+                        .triangles[TriangleIdx::get(next_triangle)][next_rem]
+                        .prev
+                        = Some(index_idx).into();
+                }
                 self
                     .vertices[VertexIdx::get(index)]
                     .first_index

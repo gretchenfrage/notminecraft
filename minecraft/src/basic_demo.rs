@@ -116,6 +116,9 @@ impl BasicDemo {
 
         let mut mesh_buf = MeshData::new();
 
+        let mut count = 0;
+        let mut did_it = false;
+
         for (cc, ci, getter) in chunks.iter_with_getters() {
             let chunk_mesh = chunk_meshes.get_mut(cc, ci);
 
@@ -168,6 +171,12 @@ impl BasicDemo {
                         }
                     }
                 }
+
+                if count > 735 && !did_it && bid != AIR.bid {
+                    debug!("\n{:#?}", mesh_buf);
+                    did_it = true;
+                }
+                count += 1;
 
                 chunk_mesh.set_tile_submesh(lti, &mesh_buf);
                 mesh_buf.clear();
