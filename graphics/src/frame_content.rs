@@ -231,33 +231,32 @@ impl<'a> FrameContent<'a> {
                     }
                     DrawObj3::Mesh(m) => {
                         if cfg!(debug_assertions) {
-                            /*
                             buf.push_str("<mesh>\n");
                             tag_stack.push("mesh");
 
                             let vertices = m.mesh.vertices.dbg_content().unwrap();
-                            for index in m.mesh.triangles.dbg_content().unwrap() {
+                            for index in m.mesh.indices.dbg_content().unwrap() {
                                 for _ in 0..tag_stack.len() {
                                     buf.push_str(INDENT);
                                 }
 
-                                let triangle =
-                                    if let Some(triangle) = triangle { triangle }
+                                let index =
+                                    if let &Some(index) = index { index }
                                     else {
-                                        buf.push_str("<garbage>\n");
+                                        buf.push_str("<garbage index/>\n");
                                         continue
                                     };
 
 
-                                buf.push_str("<triangle>\n");
-                                tag_stack.push("triangle");
+                                //buf.push_str("<triangle>\n");
+                                //tag_stack.push("triangle");
 
-                                for i in triangle.0 {
-                                    for _ in 0..tag_stack.len() {
-                                        buf.push_str(INDENT);
-                                    }
+                                //for i in triangle.0 {
+                                    //for _ in 0..tag_stack.len() {
+                                    //    buf.push_str(INDENT);
+                                    //}
 
-                                    let vertex = vertices[i];
+                                    let vertex = vertices[index];
                                     if let Some(v) = vertex {
                                         buf.push_str("<vertex>\n");
                                         tag_stack.push("vertex");
@@ -288,19 +287,16 @@ impl<'a> FrameContent<'a> {
                                         }
                                         writeln!(&mut buf, "</{}>", tag);
                                     } else {
-                                        buf.push_str("<garbage/>\n");
+                                        buf.push_str("<garbage vertex/>\n");
                                     }
-                                }
+                                //}
 
-                                let tag = tag_stack.pop().unwrap();
-                                for _ in 0..tag_stack.len() {
-                                    buf.push_str(INDENT);
-                                }
-                                writeln!(&mut buf, "</{}>", tag);
+                                //let tag = tag_stack.pop().unwrap();
+                                //for _ in 0..tag_stack.len() {
+                                //    buf.push_str(INDENT);
+                                //}
+                                //writeln!(&mut buf, "</{}>", tag);
                             }
-                            */
-                            let _ = m;
-                            unimplemented!()
                         }
                     }
                 }

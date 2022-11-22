@@ -18,6 +18,13 @@ pub const MAX_LTC_Y: u16 = Y_MAX;
 /// Max local tile coordinate z component (31).
 pub const MAX_LTC_Z: u16 = XZ_MAX;
 
+/// Size of a chunk in tiles.
+pub const CHUNK_EXTENT: Vec3<i64> = Vec3 {
+    x: 0b100000,
+    y: 0b1000000,
+    z: 0b100000,
+};
+
 
 const XZ_MAX: u16 =          0b11111;
 const XZ_HI_PACK_MASK: u16 = 0b10000;

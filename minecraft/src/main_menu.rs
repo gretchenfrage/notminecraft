@@ -347,7 +347,10 @@ impl MainMenu {
 }
 
 fn on_basic_demo_click(ctx: &GuiGlobalContext) {
-    ctx.push_state_frame(BasicDemo::new());
+    ctx.push_state_frame(BasicDemo::new(
+        ctx.game,
+        &ctx.renderer.borrow(),
+    ));
 }
 
 impl GuiStateFrame for MainMenu {

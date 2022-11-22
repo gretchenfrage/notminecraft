@@ -17,7 +17,7 @@ pub struct GameData {
     pub blocks: Arc<BlockRegistry>,
 
     pub block_obscures: PerBlock<PerFace<bool>>,
-    pub block_mesh_logic: PerBlock<BlockMeshLogic>,
+    pub block_mesh_logics: PerBlock<BlockMeshLogic>,
 
     pub bid_stone: BlockId<()>,
     pub bid_dirt: BlockId<()>,
@@ -39,24 +39,24 @@ impl GameData {
         let mut blocks = BlockRegistry::new();
 
         let mut block_obscures = PerBlock::new();
-        let mut block_mesh_logic = PerBlock::new();
+        let mut block_mesh_logics = PerBlock::new();
 
         block_obscures.set(AIR, PerFace::repeat(false));
-        block_mesh_logic.set(AIR, BlockMeshLogic::Invisible);
+        block_mesh_logics.set(AIR, BlockMeshLogic::Invisible);
 
         let bid_stone = blocks.register();
         block_obscures.set(bid_stone, PerFace::repeat(true));
-        block_mesh_logic.set(bid_stone, BlockMeshLogic::Simple(0));
+        block_mesh_logics.set(bid_stone, BlockMeshLogic::Simple(0));
 
         let bid_dirt = blocks.register();
         block_obscures.set(bid_dirt, PerFace::repeat(true));
-        block_mesh_logic.set(bid_dirt, BlockMeshLogic::Simple(1));
+        block_mesh_logics.set(bid_dirt, BlockMeshLogic::Simple(1));
 
         GameData {
             blocks: blocks.finalize(),
 
             block_obscures,
-            block_mesh_logic,
+            block_mesh_logics,
 
             bid_stone,
             bid_dirt,

@@ -147,6 +147,7 @@ pub use self::{
         MAX_LTC_X,
         MAX_LTC_Y,
         MAX_LTC_Z,
+        CHUNK_EXTENT,
         ltc_to_lti,
         lti_get_x,
         lti_get_y,
