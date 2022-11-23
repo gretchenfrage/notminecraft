@@ -10,6 +10,7 @@ pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
 pub mod basic_demo;
+pub mod singleplayer;
 
 
 use crate::{
@@ -73,6 +74,7 @@ fn main() {
         .expect("failure to load jar assets")
         .load(&mut event_loop.renderer);
     let game = GameData::new();
+    let game = Arc::new(game);
 
     let gui_state = MainMenu::new(
         &event_loop.renderer,

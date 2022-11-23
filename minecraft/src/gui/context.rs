@@ -19,6 +19,7 @@ use graphics::{
 use std::{
     collections::HashSet,
     cell::RefCell,
+    sync::Arc,
 };
 use vek::*;
 
@@ -38,7 +39,7 @@ pub struct GuiGlobalContext<'c> {
     pub renderer: &'c RefCell<Renderer>,
     pub resources: &'c ResourcePack,
     pub lang: &'c Localization,
-    pub game: &'c GameData,
+    pub game: &'c Arc<GameData>,
     /// Window focus level.
     pub focus_level: FocusLevel,
     /// Set of pressed virtual key codes, if the window is focused. Empty set
@@ -120,7 +121,7 @@ impl<'c> GuiSpatialContext<'c> {
         &self.global.lang
     }
 
-    pub fn game(&self) -> &'c GameData {
+    pub fn game(&self) -> &'c Arc<GameData> {
         &self.global.game
     }
 
@@ -167,7 +168,7 @@ impl<'c> GuiWindowContext<'c> {
         &self.spatial.global.lang
     }
 
-    pub fn game(&self) -> &'c GameData {
+    pub fn game(&self) -> &'c Arc<GameData> {
         &self.spatial.global.game
     }
 }

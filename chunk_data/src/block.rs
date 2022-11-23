@@ -241,6 +241,9 @@ struct OutOfPlaceElem {
     lti: u16,
 }
 
+unsafe impl Send for OutOfPlaceElem {}
+unsafe impl Sync for OutOfPlaceElem {}
+
 impl ChunkBlocks {
     /// Construct a new `ChunkBlocks` filled with `AIR`.
     pub fn new(registry: &Arc<BlockRegistry>) -> Self {

@@ -69,6 +69,7 @@ pub struct BasicDemo {
 
     chunks: LoadedChunks,
 
+    #[allow(dead_code)]
     tile_blocks: PerChunk<ChunkBlocks>,
     chunk_meshes: PerChunk<ChunkMesh>,
 
@@ -131,9 +132,9 @@ impl BasicDemo {
         let mut tile_blocks = PerChunk::new();
         let mut chunk_meshes = PerChunk::new();
 
-        for x in -0..=0 {
-            for y in -0..=0 {
-                for z in -0..=0 {
+        for x in -1..=0 {
+            for y in -1..=0 {
+                for z in -1..=0 {
                     let cc = Vec3 { x, y, z };
                     let ci = chunks.add(cc);
 

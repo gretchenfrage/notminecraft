@@ -16,6 +16,8 @@ pollster = "0.2"
 futures-util = "0.3"
 slab = "0.4"
 rand_chacha = "0.3"
+num_cpus = "1"
+crossbeam-channel = "0.5"
 
 [dependencies.graphics]
 path = "../graphics"

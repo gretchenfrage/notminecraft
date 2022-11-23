@@ -17,6 +17,7 @@ use crate::{
 	},
 	util::hex_color::hex_color,
     basic_demo::BasicDemo,
+    singleplayer::Singleplayer,
 };
 use graphics::{
 	Renderer,
@@ -184,6 +185,7 @@ pub struct MainMenu {
     options_button: MenuButton,
     */
     basic_demo_button: MenuButton,
+    singleplayer_button: MenuButton,
     
     splash_text: GuiSplashText,
 }
@@ -283,18 +285,21 @@ impl MainMenu {
         let basic_demo_button = MenuButtonBuilder
             ::new("Basic Demo")
             .build(resources);
+        let singleplayer_button = MenuButtonBuilder
+            ::new(&lang.menu_singleplayer)
+            .build(resources);
         let splash_text = GuiSplashText::new();
 		MainMenu {
             title,
 			version_text,
 			uncopyright_text,
             /*
-            singleplayer_button,
             multiplayer_button,
             mods_button,
             options_button,
             */
             basic_demo_button,
+            singleplayer_button,
             splash_text,
 		}
 	}
@@ -331,6 +336,7 @@ impl MainMenu {
                                 self.options_button.gui(ctx),
                                 */
                                 self.basic_demo_button.gui(on_basic_demo_click),
+                                self.singleplayer_button.gui(on_singleplayer_click),
                             )),
                         ),
                         v_align(0.0,
@@ -350,6 +356,12 @@ fn on_basic_demo_click(ctx: &GuiGlobalContext) {
     ctx.push_state_frame(BasicDemo::new(
         ctx.game,
         &ctx.renderer.borrow(),
+    ));
+}
+
+fn on_singleplayer_click(ctx: &GuiGlobalContext) {
+    ctx.push_state_frame(Singleplayer::new(
+        ctx.game,
     ));
 }
 
