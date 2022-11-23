@@ -34,6 +34,7 @@ use crate::{
         SizedGuiBlock,
         GuiNode,
         MouseButton,
+        VirtualKeyCode,
         impl_visit_nodes,
     },
 };
@@ -238,6 +239,16 @@ impl GuiStateFrame for Singleplayer {
 
         // do movement stuff
         self.movement.update(ctx.global(), &self.bindings, elapsed);
+    }
+
+    fn on_key_press_semantic(
+        &mut self,
+        ctx: &GuiWindowContext,
+        key: VirtualKeyCode,
+    ) {
+        if key == VirtualKeyCode::Escape {
+            ctx.global().pop_state_frame();
+        }
     }
 
     fn on_captured_mouse_move(

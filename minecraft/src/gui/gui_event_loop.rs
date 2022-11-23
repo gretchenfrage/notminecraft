@@ -33,6 +33,10 @@ use std::{
 		Instant,
 		Duration,
 	},
+	panic::{
+		catch_unwind,
+		AssertUnwindSafe,
+	},
 };
 use winit::{
     event_loop::{
@@ -474,7 +478,20 @@ impl GuiEventLoop {
 						let elapsed: Duration = curr_update_time - prev_update_time;
 						let elapsed = elapsed.as_secs_f32();
 
-						stack.top().update(ctx, elapsed); // TODO: this is kinda weird
+						// TODO: tacked on
+						let update_result =
+							catch_unwind(AssertUnwindSafe(||
+								stack.top().update(ctx, elapsed)
+							));
+						if update_result.is_err() {
+							stack.0.pop().unwrap();
+
+							if stack.0.is_empty() {
+								stack.0.clear();stack.0.clear();
+								*control_flow = ControlFlow::Exit;
+								return;
+							}
+						}
 					}
 
 					prev_update_time = Some(curr_update_time);

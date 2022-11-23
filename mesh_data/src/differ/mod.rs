@@ -334,7 +334,6 @@ impl MeshDiffer {
             }
 
             self.vertices_holes.push_back(vertex_idx);
-            //assert!(VertexIdx::get(vertex_idx) < self.vertices.len()); // TODO
 
             #[cfg(debug_assertions)]
             {
@@ -369,16 +368,10 @@ impl MeshDiffer {
             if VertexIdx::get(hole) + 1 == virtual_vertices_len {
                 virtual_vertices_len -= 1;
             } else {
-                //self.vertices.swap_remove(VertexIdx::get(hole));
                 
                 self.vertices[VertexIdx::get(hole)] = self.vertices[virtual_vertices_len - 1];
                 self.vertices[virtual_vertices_len - 1].next = Some(hole).into();
                 virtual_vertices_len -= 1;
-
-                // TODO
-                //for &hole in &self.vertices_holes {
-                //    assert!(VertexIdx::get(hole) < self.vertices.len());
-                //}
 
                 let moved_from = VertexIdx(self.vertices.len());
                 
@@ -395,15 +388,6 @@ impl MeshDiffer {
                             assert!(garbage);
                             continue 'fill_hole
                         }
-                        /*
-                        match self.vertices.get_mut(VertexIdx::get(prev)) {
-                            Some(prev_elem) => &mut prev_elem.next,
-                            None => {
-                                #[cfg(debug_assertions)]
-                                assert!(garbage);
-                                continue 'fill_hole
-                            }
-                        }*/
                     } // hahahhahahahahhahahahhahah
                     VertexOrOuterIdx::Outer(prev) => {
                         match self.outer.get_mut(OuterIdx::get(prev)) {
@@ -438,15 +422,6 @@ impl MeshDiffer {
                             assert!(garbage);
                             continue 'fill_hole
                         };
-                    /*
-                        match self.vertices.get_mut(VertexIdx::get(next)) {
-                            Some(next_elem) => &mut next_elem.prev,
-                            None => {
-                                #[cfg(debug_assertions)]
-                                assert!(garbage);
-                                continue 'fill_hole
-                            }
-                        };*/
                     if next_prev.unpack() == old_next_prev {
                         *next_prev = new_next_prev.into();
                     } else {
@@ -500,7 +475,7 @@ impl MeshDiffer {
             self.vertices.pop().unwrap();
         }
 
-        let mut virtual_triangles_len = 0;
+        let mut virtual_triangles_len = self.triangles.len();
 
         'fill_hole: while let Some(hole) = self.triangles_holes.pop_front() {
 
@@ -515,11 +490,8 @@ impl MeshDiffer {
             let hole = hole;
 
             if TriangleIdx::get(hole) + 1 == virtual_triangles_len {
-                //self.triangles.pop().unwrap();
                 virtual_triangles_len -= 1;
             } else {
-                //self.triangles.swap_remove(TriangleIdx::get(hole));
-
                 self.triangles[TriangleIdx::get(hole)] = self.triangles[virtual_triangles_len - 1];
                 self.triangles[virtual_triangles_len - 1][0].next = Some(IndexIdx(TriangleIdx::get(hole))).into();
                 virtual_triangles_len -= 1;
@@ -566,20 +538,6 @@ impl MeshDiffer {
                                 assert!(garbage);
                                 continue 'fill_hole
                             };
-                        /*
-                            match self
-                                .triangles
-                                .get_mut(TriangleIdx::get(prev_triangle_idx))
-                            {
-                                Some(prev_triangle_elem) => {
-                                    &mut prev_triangle_elem[prev_rem].next
-                                }
-                                None => {
-                                    #[cfg(debug_assertions)]
-                                    assert!(garbage);
-                                    continue 'fill_hole
-                                }
-                            };*/
                         if prev_next.unpack() == old {
                             *prev_next = new.into();
                         } else {
@@ -633,20 +591,6 @@ impl MeshDiffer {
                                 assert!(garbage);
                                 continue 'fill_hole
                             };
-                        /*
-                            match self
-                                .triangles
-                                .get_mut(TriangleIdx::get(next_triangle_idx))
-                            {
-                                Some(next_triangle_elem) => {
-                                    &mut next_triangle_elem[next_rem].prev
-                                }
-                                None => {
-                                    #[cfg(debug_assertions)]
-                                    assert!(garbage);
-                                    continue 'fill_hole
-                                }
-                            };*/
                         if next_prev.unpack() == old {
                             *next_prev = new.into();
                         } else {
@@ -701,187 +645,6 @@ impl MeshDiffer {
     }
 
     // ==== TODO all code after this point is rough around the edges ====
-
-    pub fn integrity_check(&self) {
-        // types of elements:
-        //  - outer elements
-        //  - vertex elements
-        //  - index elements
-        //
-        // definition: an element's hole count is the number of times its index
-        //             appears in its holes queue
-        // definition: an element is not a hole if its hole count is 0
-        // definition: a link is valid if it's an in-range index, it references
-        //             a non-hole element, and the referenced element's
-        //             backlink is reciprocal
-        //
-        // integrity checks:
-        // - no element has a hole count over 1
-        // - all links are valid
-        // - a vertex element is reciprocal with _all_ the values in its
-        //   referenced index array
-        // - all elements have a next link count of 1
-        // - no elements have a prev link count of less than 1
-
-
-
-        /*
-        // all vertex holes should be an in-range vertex index
-        // no vertex should be marked as a hole more than once simultaneously
-        let mut vertices_hole_reference_count = vec![0; self.vertices.len()];
-
-        for &hole in &self.vertices_holes {
-            assert!(VertexIdx::get(hole) < self.vertices.len());
-            vertices_hole_reference_count[VertexIdx::get(hole)] += 1;
-            assert!(vertices_hole_reference_count[VertexIdx::get(hole)] <= 1);
-        }
-
-        /*
-        // all outer array elements should be a reference to an in-range
-        // non-hole vertex index
-        for (_i, vertex_idx) in self.outer.iter() {
-            if let Some(vertex_idx) = vertex_idx.unpack() {
-                assert!(VertexIdx::get(vertex_idx) < self.vertices.len());
-                assert_eq!(
-                    vertices_hole_reference_count[VertexIdx::get(vertex_idx)],
-                    0,
-                );
-            }
-        }*/
-
-        // all non-hole vertices should be referenced by the outer array xor by
-        // non-hole vertices' next link exactly once
-        let mut vertices_next_reference_count = vec![0; self.vertices.len()];
-        
-        for (_i, vertex_idx) in self.outer.iter() {
-            if let Some(vertex_idx) = vertex_idx.unpack() {
-                assert!(VertexIdx::get(vertex_idx) < self.vertices.len());
-                assert_eq!(
-                    vertices_hole_reference_count[VertexIdx::get(vertex_idx)],
-                    0,
-                );
-                vertices_next_reference_count[VertexIdx::get(vertex_idx)] += 1;
-                assert!(vertices_next_reference_count[VertexIdx::get(vertex_idx)] <= 1);
-            }
-        }
-
-        for (i, vertex_elem) in self.vertices.iter().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                if let Some(vertex_idx) = vertex_elem.next.unpack() {
-                    assert!(VertexIdx::get(vertex_idx) < self.vertices.len());
-                    assert_eq!(
-                        vertices_hole_reference_count[VertexIdx::get(vertex_idx)],
-                        0,
-                    );
-                    vertices_next_reference_count[VertexIdx::get(vertex_idx)] += 1;
-                    assert!(vertices_next_reference_count[VertexIdx::get(vertex_idx)] <= 1);
-                }
-            }
-        }
-
-        for (i, reference_count) in vertices_next_reference_count.iter().copied().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                assert_eq!(reference_count, 1);
-            }
-        }
-
-        // no non-hole vertex should be referenced by non-hole vertices' prev
-        // links more than once
-        let mut vertices_prev_reference_count = vec![0; self.vertices.len()];
-
-        for (i, vertex_elem) in self.vertices.iter().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                if let Some(vertex_idx) = vertex_elem.prev.unpack() {
-                    assert!(VertexIdx::get(vertex_idx) < self.vertices.len());
-                    assert_eq!(
-                        vertices_hole_reference_count[VertexIdx::get(vertex_idx)],
-                        0,
-                    );
-                    vertices_prev_reference_count[VertexIdx::get(vertex_idx)] += 1;
-                    assert!(vertices_prev_reference_count[VertexIdx::get(vertex_idx)] <= 1);
-                }
-            }
-        }
-
-        for (i, reference_count) in vertices_prev_reference_count.iter().copied().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                assert_eq!(reference_count, 1);
-            }
-        }
-
-        // all outer links should be backlinked
-        for (i, vertex_idx) in self.outer.iter() {
-            if let Some(vertex_idx) = vertex_idx.unpack() {
-                assert_eq!(
-                    self.vertices[VertexIdx::get(vertex_idx)].prev.unpack(),
-                    VertexOrOuterIdx::Outer(OuterIdx(i)),
-                );
-            }
-        }
-
-        // all non-hole vertices' prev links should be backlinked
-        for (i, vertex_elem) in self.vertices.iter().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                match vertex_elem.prev.unpack() {
-                    VertexOrOuterIdx::Vertex(prev) => {
-                        assert_eq!(
-                            self.vertices[Vertexidx::get(prev)].next.unpack(),
-                            Some(VertexIdx(i)),
-                        );
-                    }
-                    VertexOrOuterIdx::Outer(prev) => {
-                        assert!(self.outer.get(OuterIdx::get(prev)).is_some());
-                        assert_eq!(
-                            self.outer[OuterIdx::get(prev)].unpack(),
-                            Some(VertexIdx(i)),
-                        );
-                    }
-                }
-            }
-        }
-
-        // all non-hole vertices' next links, if existent, should be backlinked
-        // and, if not existent, no non-hole vertices' prev link should
-        // reference it
-        for (i, vertex_elem) in self.vertices.iter().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                if let Some(next) = vertex_elem.next.unpack() {
-                    assert_eq!(
-                        self.vertices[VertexIdx::get(next)].prev.unpack(),
-                        VertexOrOuterIdx::Vertex(VertexIdx(i)),
-                    );
-                } else {
-                    assert_eq!(
-                        vertices_prev_reference_count[i],
-                        0,
-                    );
-                }
-            }
-        }
-
-        // all triangle holes should be an in-range triangle index
-        // no triangle should be marked as a hole more than once simultaneously
-        let mut triangles_hole_reference_count = vec![0; self.triangles.len()];
-
-        for &hole in &self.triangles_holes {
-            assert!(TriangleIdx::get(hole) < self.triangles.len());
-            triangles_hole_reference_count[TriangleIdx::get(hole)] += 1;
-            assert!(triangles_hole_reference_count[TriangleIdx::get(hole)] <= 1);
-        }
-
-        // all non-hole indices should be referenced by non-hole vertices'
-        // first_index link xor non-hole indices next link exactly once
-        let mut index_next_reference_count = vec![0; self.triangles.len() * 3];
-
-        for (i, vertex_elem) in self.vertices.iter().enumerate() {
-            if vertices_hole_reference_count[i] == 0 {
-                if let Some(index_idx) = vertex_elem.first_index.unpack() {
-                    self.index_next_reference_count[IndexIdx::get(index_idx)] += 1;
-                    assert!(self.index_next_reference_count[IndexIdx::get(index_idx)] <= 1);
-                }
-            }
-        }*/
-    }
 
     pub fn alt_debug_1<'s>(&'s self) -> impl Debug + 's {
         AltDebug1(self)

@@ -254,8 +254,6 @@ impl GuiStateFrame for BasicDemo {
     impl_visit_nodes!();
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
-        debug!(pitch=%self.cam_pitch, yaw=%self.cam_yaw);
-
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
             let walk_speed = 8.0;
             let fly_speed = walk_speed;
