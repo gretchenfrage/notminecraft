@@ -33,10 +33,6 @@ use std::{
 		Instant,
 		Duration,
 	},
-	panic::{
-		catch_unwind,
-		AssertUnwindSafe,
-	},
 };
 use winit::{
     event_loop::{

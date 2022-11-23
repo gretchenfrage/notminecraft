@@ -352,15 +352,29 @@ impl MeshDiffer {
         GpuVecDiff<impl Iterator<Item=(usize, Vertex)> + 's>,
         GpuVecDiff<impl Iterator<Item=(usize, usize)> + 's>,
     ) {
+        let mut virtual_vertices_len = self.vertices.len();
+
         'fill_hole: while let Some(hole) = self.vertices_holes.pop_front() {
-            if VertexIdx::get(hole) + 1 == self.vertices.len() {
-                self.vertices.pop().unwrap();
-                // TODO
-                for &hole in &self.vertices_holes {
-                    assert!(VertexIdx::get(hole) < self.vertices.len());
-                }
-            } else if VertexIdx::get(hole) + 1 < self.vertices.len() {
-                self.vertices.swap_remove(VertexIdx::get(hole));
+
+            let mut hole = hole;
+            while VertexIdx::get(hole) + 1 > virtual_vertices_len {
+                hole = self
+                    .vertices[VertexIdx::get(hole)]
+                    .next
+                    .unpack()
+                    .unwrap();
+            }
+            let hole = hole;
+
+            if VertexIdx::get(hole) + 1 == virtual_vertices_len {
+                virtual_vertices_len -= 1;
+            } else {
+                //self.vertices.swap_remove(VertexIdx::get(hole));
+                
+                self.vertices[VertexIdx::get(hole)] = self.vertices[virtual_vertices_len - 1];
+                self.vertices[virtual_vertices_len - 1].next = Some(hole).into();
+                virtual_vertices_len -= 1;
+
                 // TODO
                 //for &hole in &self.vertices_holes {
                 //    assert!(VertexIdx::get(hole) < self.vertices.len());
@@ -466,11 +480,33 @@ impl MeshDiffer {
             }
         }
 
+        while self.vertices.len() > virtual_vertices_len {
+            self.vertices.pop().unwrap();
+        }
+
+        let mut virtual_triangles_len = 0;
+
         'fill_hole: while let Some(hole) = self.triangles_holes.pop_front() {
-            if TriangleIdx::get(hole) + 1 == self.triangles.len() {
-                self.triangles.pop().unwrap();
-            } else if TriangleIdx::get(hole) + 1 < self.triangles.len() {
-                self.triangles.swap_remove(TriangleIdx::get(hole));
+
+            let mut hole = hole;
+            while TriangleIdx::get(hole) + 1 > virtual_triangles_len {
+                hole = TriangleIdx(IndexIdx::get(self
+                    .triangles[TriangleIdx::get(hole)][0]
+                    .next
+                    .unpack()
+                    .unwrap()));
+            }
+            let hole = hole;
+
+            if TriangleIdx::get(hole) + 1 == virtual_triangles_len {
+                //self.triangles.pop().unwrap();
+                virtual_triangles_len -= 1;
+            } else {
+                //self.triangles.swap_remove(TriangleIdx::get(hole));
+
+                self.triangles[TriangleIdx::get(hole)] = self.triangles[virtual_triangles_len - 1];
+                self.triangles[virtual_triangles_len - 1][0].next = Some(IndexIdx(TriangleIdx::get(hole))).into();
+                virtual_triangles_len -= 1;
 
                 let moved_from_triangle =
                     TriangleIdx::flatten(TriangleIdx(self.triangles.len()));
@@ -555,6 +591,10 @@ impl MeshDiffer {
                     }
                 }
             }
+        }
+
+        while self.triangles.len() > virtual_triangles_len {
+            self.triangles.pop().unwrap();
         }
 
         let vertices_diff_writes = self
