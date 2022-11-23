@@ -89,6 +89,8 @@ fn insert_chunk(
         chunk_tile_blocks,
     } = chunk;
 
+    info!(?cc, "inserting chunk");
+
     // prepare additional things
     let chunk_tile_meshes = ChunkMesh::new(renderer);
 
@@ -138,6 +140,7 @@ fn do_block_update(
     game: &GameData,
     mesh_buf: &mut MeshData,
 ) {
+    // re-mesh
     mesh_buf.clear();
 
     mesh_tile(
@@ -151,6 +154,16 @@ fn do_block_update(
     let rel_to = lti_to_ltc(tile.lti).map(|n| n as f32);
     for vertex in &mut mesh_buf.vertices {
         vertex.pos += rel_to;
+
+        // TODO
+        assert!(
+            vertex.pos.x > -100.0
+            && vertex.pos.x < 100.0
+            && vertex.pos.y > -100.0
+            && vertex.pos.y < 100.0
+            && vertex.pos.z > -100.0
+            && vertex.pos.z < 100.0
+        );
     }
 
     tile.set(tile_meshes, mesh_buf);
@@ -160,8 +173,10 @@ impl Singleplayer {
     pub fn new(game: &Arc<GameData>) -> Self {
         let chunk_loader = ChunkLoader::new(game);
 
-        for x in -1..=0 {
-            for z in -1..=0 {
+        let view_dist = 10;
+
+        for x in -view_dist..view_dist {
+            for z in -view_dist..view_dist {
                 chunk_loader.request(Vec3::new(x, 0, z));
             }
         }
@@ -195,7 +210,7 @@ impl GuiStateFrame for Singleplayer {
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         // insert chunks that are ready to be loaded
         // this may generate block updates
-        while let Some(chunk) = self.chunk_loader.poll_ready() {
+        /*while*/ if let Some(chunk) = self.chunk_loader.poll_ready() {
             insert_chunk(
                 chunk,
                 &mut self.chunks,
@@ -242,6 +257,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
         let state = self.inner;
 
         let mut canvas = canvas.reborrow()
+            .scale(self.size)
             .begin_3d(state.movement.view_proj(self.size));
 
         // patch all tile meshes

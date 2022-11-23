@@ -56,8 +56,8 @@ impl Default for MovementController {
             fly_speed: move_speed,
             mouse_sensitivity: 1.0 / 1600.0,
 
-            cam_pos: Vec3::new(0.0, 64.0, 0.0),
-            cam_pitch: 0.0,
+            cam_pos: [0.0, 80.0, 0.0].into(),
+            cam_pitch: f32::to_radians(-30.0),
             cam_yaw: 0.0,
             cam_fov: f32::to_radians(90.0),
         }
@@ -65,12 +65,7 @@ impl Default for MovementController {
 }
 
 impl MovementController {
-    pub fn view_proj<E>(&self, size: E) -> ViewProj
-    where
-        E: Into<Extent2<f32>>,
-    {
-        let size = size.into();
-
+    pub fn view_proj(&self, size: Extent2<f32>) -> ViewProj {
         let cam_dir =
             Quaternion::rotation_x(self.cam_pitch)
             * Quaternion::rotation_y(self.cam_yaw);
