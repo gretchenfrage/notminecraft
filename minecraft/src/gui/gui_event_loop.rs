@@ -33,6 +33,10 @@ use std::{
 		Instant,
 		Duration,
 	},
+	panic::{
+		catch_unwind,
+		AssertUnwindSafe,
+	},
 };
 use winit::{
     event_loop::{
@@ -259,6 +263,7 @@ impl GuiEventLoop {
 		let mut prev_update_time = None;
 		let mut fps_queue = VecDeque::new();
 
+		
 		self.event_loop.run(move |event, _target, control_flow| {
 			if *control_flow == ControlFlow::Exit {
 				return;
