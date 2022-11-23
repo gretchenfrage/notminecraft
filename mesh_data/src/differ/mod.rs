@@ -388,6 +388,14 @@ impl MeshDiffer {
                 let prev = self.vertices[VertexIdx::get(hole)].prev.unpack();
                 let prev_next = match prev {
                     VertexOrOuterIdx::Vertex(prev) => {
+                        if VertexIdx::get(prev) + 1 < virtual_vertices_len {
+                            &mut self.vertices[VertexIdx::get(prev)].next
+                        } else {
+                            #[cfg(debug_assertions)]
+                            assert!(garbage);
+                            continue 'fill_hole
+                        }
+                        /*
                         match self.vertices.get_mut(VertexIdx::get(prev)) {
                             Some(prev_elem) => &mut prev_elem.next,
                             None => {
@@ -395,8 +403,8 @@ impl MeshDiffer {
                                 assert!(garbage);
                                 continue 'fill_hole
                             }
-                        }
-                    }
+                        }*/
+                    } // hahahhahahahahhahahahhahah
                     VertexOrOuterIdx::Outer(prev) => {
                         match self.outer.get_mut(OuterIdx::get(prev)) {
                             Some(prev_elem) => prev_elem,
@@ -423,6 +431,14 @@ impl MeshDiffer {
                     let old_next_prev = VertexOrOuterIdx::Vertex(moved_from);
                     let new_next_prev = VertexOrOuterIdx::Vertex(hole);
                     let next_prev =
+                        if VertexIdx::get(next) + 1 < self.vertices.len() {
+                            &mut self.vertices[VertexIdx::get(next)].prev
+                        } else {
+                            #[cfg(debug_assertions)]
+                            assert!(garbage);
+                            continue 'fill_hole
+                        };
+                    /*
                         match self.vertices.get_mut(VertexIdx::get(next)) {
                             Some(next_elem) => &mut next_elem.prev,
                             None => {
@@ -430,7 +446,7 @@ impl MeshDiffer {
                                 assert!(garbage);
                                 continue 'fill_hole
                             }
-                        };
+                        };*/
                     if next_prev.unpack() == old_next_prev {
                         *next_prev = new_next_prev.into();
                     } else {
@@ -536,6 +552,21 @@ impl MeshDiffer {
                             prev_rem,
                         ) = IndexIdx::unflatten(prev);
                         let prev_next =
+                            if
+                                TriangleIdx::get(prev_triangle_idx) + 1
+                                < virtual_triangles_len
+                            {
+                                &mut self
+                                    .triangles
+                                    [TriangleIdx::get(prev_triangle_idx)]
+                                    [prev_rem]
+                                    .next
+                            } else {
+                                #[cfg(debug_assertions)]
+                                assert!(garbage);
+                                continue 'fill_hole
+                            };
+                        /*
                             match self
                                 .triangles
                                 .get_mut(TriangleIdx::get(prev_triangle_idx))
@@ -548,13 +579,33 @@ impl MeshDiffer {
                                     assert!(garbage);
                                     continue 'fill_hole
                                 }
-                            };
+                            };*/
                         if prev_next.unpack() == old {
                             *prev_next = new.into();
                         } else {
                             #[cfg(debug_assertions)]
                             assert!(garbage);
                             continue 'fill_hole;
+                        }
+                    } else {
+                        let vertex_idx = self
+                            .triangles[TriangleIdx::get(hole)][rem]
+                            .val;
+                        let vertex_first_index =
+                            if 
+                                VertexIdx::get(vertex_idx) + 1
+                                < virtual_triangles_len
+                            {
+                                &mut self
+                                    .vertices[VertexIdx::get(vertex_idx)]
+                                    .first_index
+                            } else {
+                                #[cfg(debug_assertions)]
+                                assert!(garbage);
+                                continue 'fill_hole
+                            };
+                        if vertex_first_index.unpack() == old {
+                            *vertex_first_index = new.into();
                         }
                     }
 
@@ -568,6 +619,21 @@ impl MeshDiffer {
                             next_rem,
                         ) = IndexIdx::unflatten(next);
                         let next_prev =
+                            if
+                                TriangleIdx::get(next_triangle_idx) + 1
+                                < virtual_triangles_len
+                            {
+                                &mut self
+                                    .triangles
+                                    [TriangleIdx::get(next_triangle_idx)]
+                                    [next_rem]
+                                    .prev
+                            } else {
+                                #[cfg(debug_assertions)]
+                                assert!(garbage);
+                                continue 'fill_hole
+                            };
+                        /*
                             match self
                                 .triangles
                                 .get_mut(TriangleIdx::get(next_triangle_idx))
@@ -580,7 +646,7 @@ impl MeshDiffer {
                                     assert!(garbage);
                                     continue 'fill_hole
                                 }
-                            };
+                            };*/
                         if next_prev.unpack() == old {
                             *next_prev = new.into();
                         } else {
