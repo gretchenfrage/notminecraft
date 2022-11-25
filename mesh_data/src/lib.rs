@@ -39,6 +39,10 @@ impl MeshData {
         MeshData::default()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.vertices.is_empty() && self.indices.is_empty()
+    }
+
     pub fn clear(&mut self) {
         self.vertices.clear();
         self.indices.clear();

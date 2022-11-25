@@ -27,6 +27,8 @@ pub fn mesh_tile(
     tile_blocks: &PerChunk<ChunkBlocks>,
     game: &GameData,
 ) {
+    debug_assert!(mesh_buf.is_empty());
+
     let gtc = cc_ltc_to_gtc(tile.cc, lti_to_ltc(tile.lti));
     let bid = tile.get(tile_blocks).get();
     let mesh_logic = game.block_mesh_logics

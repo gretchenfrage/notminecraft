@@ -1,10 +1,20 @@
 
-use crate::game_data::GameData;
+use super::tile_meshing::mesh_tile;
+use crate::{
+    game_data::GameData,
+    chunk_mesh::ChunkMesh,
+};
 use chunk_data::{
     AIR,
     MAX_LTI,
+    CHUNK_EXTENT,
     ChunkBlocks,
+    LoadedChunks,
+    PerChunk,
+    TileKey,
+    ltc_to_lti,
 };
+use mesh_data::MeshData;
 use std::{
     thread,
     any::Any,
@@ -36,6 +46,7 @@ pub struct ChunkLoader {
 pub struct ReadyChunk {
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
+    pub chunk_tile_meshes: ChunkMesh,
 }
 
 
@@ -186,9 +197,48 @@ fn get_chunk_ready(cc: Vec3<i64>, game: &GameData) -> ReadyChunk {
             .unwrap();    
         chunk_tile_blocks.set(lti, bid, ());
     }
+
+    let mut chunk_tile_meshes = ChunkMesh::new();
     
+    let mut chunks = LoadedChunks::new();
+    let mut tile_blocks = PerChunk::new();
+    let ci = chunks.add(cc);
+    tile_blocks.add(cc, ci, chunk_tile_blocks);
+    let getter = chunks.getter();
+
+    let mut mesh_buf = MeshData::new();
+    for z in 1..CHUNK_EXTENT.z - 1 {
+        for y in 1..CHUNK_EXTENT.y - 1 {
+            for x in 1..CHUNK_EXTENT.x - 1 {
+                let ltc = Vec3 { x, y, z };
+                let lti = ltc_to_lti(ltc);
+                let tile = TileKey { cc, ci, lti };
+
+                mesh_buf.clear();
+
+                mesh_tile(
+                    &mut mesh_buf,
+                    tile,
+                    &getter,
+                    &tile_blocks,
+                    game,
+                );
+
+                for vertex in &mut mesh_buf.vertices {
+                    vertex.pos += ltc.map(|n| n as f32);
+                }
+
+                chunk_tile_meshes.set_tile_submesh(lti, &mesh_buf);
+            }
+        }
+    }
+
+    let chunk_tile_blocks = tile_blocks.remove(cc, ci);
+    
+
     ReadyChunk {
         cc,
         chunk_tile_blocks,
+        chunk_tile_meshes,
     }
 }

@@ -41,6 +41,7 @@ use crate::{
 use chunk_data::{
     MAX_LTI,
     FACES,
+    FACES_EDGES_CORNERS,
     CHUNK_EXTENT,
     LoadedChunks,
     PerChunk,
@@ -88,12 +89,10 @@ fn insert_chunk(
     let ReadyChunk {
         cc,
         chunk_tile_blocks,
+        chunk_tile_meshes,
     } = chunk;
 
     info!(?cc, "inserting chunk");
-
-    // prepare additional things
-    let chunk_tile_meshes = ChunkMesh::new(renderer);
 
     // insert
     let ci = chunks.add(cc);
@@ -105,10 +104,31 @@ fn insert_chunk(
 
     // enqueue updates for all involved tiles
     let getter = chunks.getter();
-
+    /*
     for lti in 0..=MAX_LTI {
         let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
         block_updates.enqueue(gtc, &getter);
+    }
+    */
+    for fec in FACES_EDGES_CORNERS {
+        let ranges: Vec3<Range<i64>> = fec
+            .to_vec()
+            .zip(CHUNK_EXTENT)
+            .map(|(sign, extent)| match sign {
+                -1 => 0..1,
+                0 => 0..extent,
+                1 => extent - 1..extent,
+                _ => unreachable!(),
+            });
+
+        for x in ranges.x {
+            for y in ranges.y.clone() {
+                for z in ranges.z.clone() {
+                    let gtc = cc * CHUNK_EXTENT + Vec3 { x, y, z };
+                    block_updates.enqueue(gtc, &getter);
+                }
+            }
+        }
     }
 
     for face in FACES {

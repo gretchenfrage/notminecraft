@@ -15,22 +15,19 @@ use chunk_data::{
 
 #[derive(Debug)]
 pub struct ChunkMesh {
-    mesh: Mesh,
+    mesh: Option<Mesh>,
     differ: MeshDiffer,
     keys: PerTileOption<u16>,
     clean: bool,
 }
 
 impl ChunkMesh {
-    pub fn new(renderer: &Renderer) -> Self {
+    pub fn new() -> Self {
         ChunkMesh {
-            mesh: Mesh {
-                vertices: renderer.create_gpu_vec(),
-                indices: renderer.create_gpu_vec(),
-            },
+            mesh: None,
             differ: MeshDiffer::new(),
             keys: PerTileOption::new(),
-            clean: true,
+            clean: false,
         }
     }
 
@@ -57,15 +54,23 @@ impl ChunkMesh {
     pub fn patch(&mut self, renderer: &Renderer) {
         let (vertices_diff, indices_diff) = self.differ.diff();
 
-        vertices_diff.patch(&mut self.mesh.vertices, renderer);
-        indices_diff.patch(&mut self.mesh.indices, renderer);
+        if self.mesh.is_none() {
+            self.mesh = Some(Mesh {
+                vertices: renderer.create_gpu_vec(),
+                indices: renderer.create_gpu_vec(),
+            });
+        }
+        let mesh = self.mesh.as_mut().unwrap();
+
+        vertices_diff.patch(&mut mesh.vertices, renderer);
+        indices_diff.patch(&mut mesh.indices, renderer);
 
         self.clean = true;
     }
 
     pub fn mesh(&self) -> &Mesh {
         assert!(self.clean);
-        &self.mesh
+        self.mesh.as_ref().unwrap()
     }
 }
 

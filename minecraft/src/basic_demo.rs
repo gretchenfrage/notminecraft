@@ -159,7 +159,7 @@ impl BasicDemo {
                     }
 
                     tile_blocks.add(cc, ci, chunk_tile_blocks);
-                    chunk_meshes.add(cc, ci, ChunkMesh::new(renderer));
+                    chunk_meshes.add(cc, ci, ChunkMesh::new());
                 }
             }
         }
