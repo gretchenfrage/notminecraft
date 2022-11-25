@@ -104,12 +104,7 @@ fn insert_chunk(
 
     // enqueue updates for all involved tiles
     let getter = chunks.getter();
-    /*
-    for lti in 0..=MAX_LTI {
-        let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
-        block_updates.enqueue(gtc, &getter);
-    }
-    */
+
     for fec in FACES_EDGES_CORNERS {
         let ranges: Vec3<Range<i64>> = fec
             .to_vec()
@@ -191,10 +186,10 @@ fn do_block_update(
 }
 
 impl Singleplayer {
-    pub fn new(game: &Arc<GameData>) -> Self {
-        let chunk_loader = ChunkLoader::new(game);
+    pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
+        let chunk_loader = ChunkLoader::new(game, renderer);
 
-        let view_dist = 2;
+        let view_dist = 10;
 
         for x in -view_dist..view_dist {
             for z in -view_dist..view_dist {
@@ -300,7 +295,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
             state
                 .tile_meshes
                 .get_mut(cc, ci)
-                .patch(&ctx.global.renderer.borrow());
+                .patch(&*ctx.global.renderer.borrow());
         }
 
         // render all tile meshes

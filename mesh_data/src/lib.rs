@@ -10,6 +10,7 @@ mod differ;
 
 use graphics::{
     Renderer,
+    GpuVecContext,
     frame_content::{
         Vertex,
         Mesh,

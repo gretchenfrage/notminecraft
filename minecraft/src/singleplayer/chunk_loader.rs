@@ -4,6 +4,10 @@ use crate::{
     game_data::GameData,
     chunk_mesh::ChunkMesh,
 };
+use graphics::{
+    Renderer,
+    AsyncGpuVecContext,
+};
 use chunk_data::{
     AIR,
     MAX_LTI,
@@ -19,6 +23,7 @@ use std::{
     thread,
     any::Any,
     panic::{
+        AssertUnwindSafe,
         catch_unwind,
         resume_unwind,
     },
@@ -29,6 +34,7 @@ use crossbeam_channel::{
     Receiver,
     TryRecvError,
 };
+use std_semaphore::Semaphore;
 use rand_chacha::ChaCha20Rng;
 use vek::*;
 use rand::prelude::*;
@@ -64,7 +70,7 @@ enum TaskResult {
 
 
 impl ChunkLoader {
-    pub fn new(game: &Arc<GameData>) -> Self {
+    pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
         let (send_task, recv_task) = crossbeam_channel::unbounded();
         let (
             send_task_result,
@@ -72,15 +78,24 @@ impl ChunkLoader {
         ) = crossbeam_channel::unbounded();
 
         let num_threads = num_cpus::get();
+        let gpu_upload_concurrency = 10000;
+
+        let gpu_upload_limiter =
+            Arc::new(Semaphore::new(gpu_upload_concurrency));
+
         for _ in 0..num_threads {
             let recv_task = Receiver::clone(&recv_task);
             let send_task_result = Sender::clone(&send_task_result);
             let game = Arc::clone(&game);
+            let gpu_vec_context = renderer.create_async_gpu_vec_context();
+            let gpu_upload_limiter = Arc::clone(&gpu_upload_limiter);
 
             thread::spawn(move || worker_thread_body(
                 recv_task,
                 send_task_result,
                 game,
+                gpu_vec_context,
+                gpu_upload_limiter,
             ));
         }
 
@@ -119,11 +134,18 @@ fn worker_thread_body(
     recv_task: Receiver<Task>,
     send_task_result: Sender<TaskResult>,
     game: Arc<GameData>,
+    gpu_vec_context: AsyncGpuVecContext,
+    gpu_upload_limiter: Arc<Semaphore>,
 ) {
     let loop_result =
-        catch_unwind(|| {
+        catch_unwind(AssertUnwindSafe(|| {
             while let Ok(task) = recv_task.recv() {
-                let task_result = do_task(task, &game);
+                let task_result = do_task(
+                    task,
+                    &game,
+                    &gpu_vec_context,
+                    &gpu_upload_limiter,
+                );
                 let send_result = send_task_result.send(task_result);
                 if send_result.is_err() {
                     trace!(
@@ -137,7 +159,7 @@ fn worker_thread_body(
                 "chunk loader task receiver disconnected, terminating \
                 worker"
             );
-        });
+        }));
     if let Err(panic) = loop_result {
         error!("chunk loader worker panicked, sending panic to main loop");
         let send_result = send_task_result.send(TaskResult::Panicked(panic));
@@ -156,15 +178,30 @@ fn worker_thread_body(
     }
 }
 
-fn do_task(task: Task, game: &GameData) -> TaskResult {
+fn do_task(
+    task: Task,
+    game: &GameData,
+    gpu_vec_context: &AsyncGpuVecContext,
+    gpu_upload_limiter: &Semaphore,
+) -> TaskResult {
     match task {
         Task::GetChunkReady {
             cc
-        } => TaskResult::ChunkReady(get_chunk_ready(cc, game)),
+        } => TaskResult::ChunkReady(get_chunk_ready(
+            cc,
+            game,
+            gpu_vec_context,
+            gpu_upload_limiter,
+        )),
     }
 }
 
-fn get_chunk_ready(cc: Vec3<i64>, game: &GameData) -> ReadyChunk {
+fn get_chunk_ready(
+    cc: Vec3<i64>,
+    game: &GameData,
+    gpu_vec_context: &AsyncGpuVecContext,
+    gpu_upload_limiter: &Semaphore,
+) -> ReadyChunk {
     let mut seed = [0; 32];
     {
         let mut target = &mut seed[..];
@@ -235,6 +272,11 @@ fn get_chunk_ready(cc: Vec3<i64>, game: &GameData) -> ReadyChunk {
 
     let chunk_tile_blocks = tile_blocks.remove(cc, ci);
     
+    {
+        let guard = gpu_upload_limiter.access();
+        chunk_tile_meshes.patch(gpu_vec_context);
+        drop(guard);
+    }
 
     ReadyChunk {
         cc,

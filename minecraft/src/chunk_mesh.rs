@@ -1,6 +1,7 @@
 
 use graphics::{
     Renderer,
+    GpuVecContext,
     frame_content::Mesh,
 };
 use mesh_data::{
@@ -51,19 +52,22 @@ impl ChunkMesh {
         }
     }
 
-    pub fn patch(&mut self, renderer: &Renderer) {
+    pub fn patch<T>(&mut self, gpu_vec_context: &T)
+    where
+        T: GpuVecContext,
+    {
         let (vertices_diff, indices_diff) = self.differ.diff();
 
         if self.mesh.is_none() {
             self.mesh = Some(Mesh {
-                vertices: renderer.create_gpu_vec(),
-                indices: renderer.create_gpu_vec(),
+                vertices: gpu_vec_context.create_gpu_vec(),
+                indices: gpu_vec_context.create_gpu_vec(),
             });
         }
         let mesh = self.mesh.as_mut().unwrap();
 
-        vertices_diff.patch(&mut mesh.vertices, renderer);
-        indices_diff.patch(&mut mesh.indices, renderer);
+        vertices_diff.patch(&mut mesh.vertices, gpu_vec_context);
+        indices_diff.patch(&mut mesh.indices, gpu_vec_context);
 
         self.clean = true;
     }

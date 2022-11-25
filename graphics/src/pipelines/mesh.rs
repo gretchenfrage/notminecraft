@@ -467,44 +467,51 @@ impl MeshPipeline {
         queue: &Queue,
         gpu_vec: &mut GpuVec<T>,
         new_len: usize,
-    )
+    ) -> Option<SubmissionIndex>
     {
-        if new_len * T::SIZE > gpu_vec.capacity  {
-            while new_len * T::SIZE > gpu_vec.capacity {
-                if gpu_vec.capacity == 0 {
-                    const GPU_VEC_STARTING_CAPACITY: usize = 512;
-                    gpu_vec.capacity = GPU_VEC_STARTING_CAPACITY;
-                } else {
-                    gpu_vec.capacity *= 2;
+        let submission_index =
+            if new_len * T::SIZE > gpu_vec.capacity  {
+                while new_len * T::SIZE > gpu_vec.capacity {
+                    if gpu_vec.capacity == 0 {
+                        const GPU_VEC_STARTING_CAPACITY: usize = 512;
+                        gpu_vec.capacity = GPU_VEC_STARTING_CAPACITY;
+                    } else {
+                        gpu_vec.capacity *= 2;
+                    }
                 }
-            }
-            trace!("increasing gpu vec capacity");
-            let new_buffer = device
-                .create_buffer(&BufferDescriptor {
-                    label: Some("mesh buffer"),
-                    size: gpu_vec.capacity as u64,
-                    usage: BufferUsages::COPY_SRC
-                        | BufferUsages::COPY_DST
-                        | T::USAGES,
-                    mapped_at_creation: false,
-                });
-            if gpu_vec.len != 0 {
-                let mut encoder = device
-                    .create_command_encoder(&CommandEncoderDescriptor {
-                        label: Some("upsize GpuVec command encoder"),
+                trace!("increasing gpu vec capacity");
+                let new_buffer = device
+                    .create_buffer(&BufferDescriptor {
+                        label: Some("mesh buffer"),
+                        size: gpu_vec.capacity as u64,
+                        usage: BufferUsages::COPY_SRC
+                            | BufferUsages::COPY_DST
+                            | T::USAGES,
+                        mapped_at_creation: false,
                     });
-                encoder
-                    .copy_buffer_to_buffer(
-                        gpu_vec.buffer.as_ref().unwrap(),
-                        0,
-                        &new_buffer,
-                        0,
-                        (gpu_vec.len * T::SIZE) as u64,
-                    );
-                queue.submit(once(encoder.finish()));
-            }
-            gpu_vec.buffer = Some(new_buffer);
-        }
+                let submission_index =
+                    if gpu_vec.len != 0 {
+                        let mut encoder = device
+                            .create_command_encoder(&CommandEncoderDescriptor {
+                                label: Some("upsize GpuVec command encoder"),
+                            });
+                        encoder
+                            .copy_buffer_to_buffer(
+                                gpu_vec.buffer.as_ref().unwrap(),
+                                0,
+                                &new_buffer,
+                                0,
+                                (gpu_vec.len * T::SIZE) as u64,
+                            );
+                        Some(queue.submit(once(encoder.finish())))
+                    } else {
+                        None
+                    };
+                gpu_vec.buffer = Some(new_buffer);
+                submission_index
+            } else {
+                None
+            };
         gpu_vec.len = new_len;
 
         #[cfg(debug_assertions)]
@@ -516,18 +523,18 @@ impl MeshPipeline {
                 gpu_vec.dbg_content.push(None);
             }
         }
+
+        submission_index
     }
 
-    pub fn patch_gpu_vec<T, I1, I2>(
+    pub fn patch_gpu_vec<T>(
         device: &Device,
         queue: &Queue,
         gpu_vec: &mut GpuVec<T>,
-        patches: I1,
-    )
+        patches: &[(usize, &[T])],
+    ) -> Option<SubmissionIndex>
     where
         T: GpuVecElem,
-        I1: IntoIterator<Item=(usize, I2)>,
-        I2: IntoIterator<Item=T>,
     {
         struct CopyRange {
             src_byte_offset: u64,
@@ -541,11 +548,11 @@ impl MeshPipeline {
         #[cfg(debug_assertions)]
         let mut dbg_to_set = Vec::new();
 
-        for (dst_elem_index, patch) in patches {
+        for &(dst_elem_index, patch) in patches {
             let src_byte_offset = (src_byte_data.len()) as u64;
 
             let mut patch_len = 0;
-            for (_i, elem) in patch.into_iter().enumerate() {
+            for (_i, &elem) in patch.into_iter().enumerate() {
                 elem.write(&mut src_byte_data);
                 patch_len += 1;
 
@@ -569,7 +576,7 @@ impl MeshPipeline {
         }
 
         if copy_ranges.is_empty() {
-            return;
+            return None;
         }
 
         let src_buffer = device
@@ -595,12 +602,14 @@ impl MeshPipeline {
                     copy_range.num_bytes,
                 );
         }
-        queue.submit(once(encoder.finish()));
+        let submission_index = queue.submit(once(encoder.finish()));
 
         #[cfg(debug_assertions)]
         for (i, elem) in dbg_to_set {
             gpu_vec.dbg_content[i] = Some(elem);
         }
+
+        Some(submission_index)
     }
 }
 

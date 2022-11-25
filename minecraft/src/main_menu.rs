@@ -371,6 +371,7 @@ fn on_basic_demo_click(ctx: &GuiGlobalContext) {
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
     ctx.push_state_frame(Singleplayer::new(
         ctx.game,
+        &ctx.renderer.borrow(),
     ));
 }
 

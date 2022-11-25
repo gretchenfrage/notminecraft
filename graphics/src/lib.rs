@@ -48,7 +48,6 @@ use std::{
     sync::Arc,
     borrow::Borrow,
     fmt::{self, Debug, Formatter},
-    iter::once,
 };
 use anyhow::Result;
 use tracing::*;
@@ -79,8 +78,8 @@ const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
     surface: Surface,
-    device: Device,
-    queue: Queue,
+    device: Arc<Device>,
+    queue: Arc<Queue>,
     depth_texture: Texture,
     config: SurfaceConfiguration,
     uniform_buffer: UniformBuffer,
@@ -178,6 +177,8 @@ impl Renderer {
                 None,
             )
             .await?;
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
 
         // create the uniform buffer
         // TODO rename to uniform manager or something?
@@ -723,24 +724,27 @@ impl Renderer {
             )
     }
 
-    /// Create an empty `GpuVec`.
-    pub fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
-        trace!("creating gpu vec");
-        MeshPipeline::create_gpu_vec()
+    pub fn create_async_gpu_vec_context(&self) -> AsyncGpuVecContext {
+        AsyncGpuVecContext {
+            device: Arc::clone(&self.device),
+            queue: Arc::clone(&self.queue),
+        }
     }
+}
+
+pub trait GpuVecContext: Sized {
+    /// Create an empty `GpuVec`.
+    fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T>;
 
     /// Create a `GpuVec` and initialize it with a slice of content.
-    pub fn create_gpu_vec_init<T, I>(
+    fn create_gpu_vec_init<T>(
         &self,
-        content: I,
+        content: &[T],
     ) -> GpuVec<T>
     where
         T: GpuVecElem,
-        I: IntoIterator + Clone,
-        <I as IntoIterator>::Item: Borrow<T>,
     {
-        trace!("creating gpu vec with data");
-        // TODO could be more optimized
+        trace!("async creating gpu vec with data");
         let mut gpu_vec = self.create_gpu_vec();
         let len = content.clone().into_iter().count();
         self
@@ -749,14 +753,12 @@ impl Renderer {
                 len,
             );
         self
-            .patch_gpu_vec_iters(
+            .patch_gpu_vec(
                 &mut gpu_vec,
-                once((
+                &[(
                     0,
-                    content
-                        .into_iter()
-                        .map(|e| *e.borrow()),
-                )),
+                    content,
+                )],
             );
         gpu_vec
     }
@@ -765,7 +767,31 @@ impl Renderer {
     ///
     /// If this increases the size, all slots after the previous size are
     /// considered to be filled with garbage data.
-    pub fn set_gpu_vec_len<T: GpuVecElem>(
+    fn set_gpu_vec_len<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        new_len: usize,
+    );
+
+    /// Patch some ranges of a `GpuVec`, overwriting existing data.
+    ///
+    /// Each patch comprises a destination `GpuVec` patch start index to copy
+    /// to, and a slice of elements to copy to the `GpuVec` starting at that
+    /// index.
+    fn patch_gpu_vec<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        patches: &[(usize, &[T])],
+    );
+}
+
+impl GpuVecContext for Renderer {
+    fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
+        trace!("creating gpu vec");
+        MeshPipeline::create_gpu_vec()
+    }
+
+    fn set_gpu_vec_len<T: GpuVecElem>(
         &self,
         gpu_vec: &mut GpuVec<T>,
         new_len: usize,
@@ -776,44 +802,71 @@ impl Renderer {
             &self.queue,
             gpu_vec,
             new_len,
-        )
+        );
     }
 
-    /// Patch some ranges of a `GpuVec`, overwriting existing data.
-    ///
-    /// Each patch comprises a destination `GpuVec` patch start index to copy
-    /// to, and a slice of elements to copy to the `GpuVec` starting at that
-    /// index.
-    pub fn patch_gpu_vec<T: GpuVecElem>(
+    fn patch_gpu_vec<T: GpuVecElem>(
         &self,
         gpu_vec: &mut GpuVec<T>,
         patches: &[(usize, &[T])],
     ) {
-        let patches = patches
-            .iter()
-            .map(|&(i, patch)| (
-                i,
-                patch.iter().copied(),
-            ));
-        self.patch_gpu_vec_iters(gpu_vec, patches);
-    }
-
-    pub fn patch_gpu_vec_iters<T, I1, I2>(
-        &self,
-        gpu_vec: &mut GpuVec<T>,
-        patches: I1,
-    )
-    where
-        T: GpuVecElem,
-        I1: IntoIterator<Item=(usize, I2)>,
-        I2: IntoIterator<Item=T>,
-    {
         trace!("patching gpu vec");
         MeshPipeline::patch_gpu_vec(
             &self.device,
             &self.queue,
             gpu_vec,
             patches,
-        )
+        );
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AsyncGpuVecContext {
+    device: Arc<Device>,
+    queue: Arc<Queue>,
+}
+
+impl GpuVecContext for AsyncGpuVecContext {
+    fn create_gpu_vec<T: GpuVecElem>(&self) -> GpuVec<T> {
+        trace!("async creating gpu vec");
+        MeshPipeline::create_gpu_vec()
+    }
+
+    fn set_gpu_vec_len<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        new_len: usize,
+    ) {
+        trace!("async setting gpu vec len");
+        let submission_index =
+            MeshPipeline::set_gpu_vec_len(
+                &self.device,
+                &self.queue,
+                gpu_vec,
+                new_len,
+            );
+        if let Some(submission_index) = submission_index {
+            self.device
+                .poll(Maintain::WaitForSubmissionIndex(submission_index));
+        }
+    }
+
+    fn patch_gpu_vec<T: GpuVecElem>(
+        &self,
+        gpu_vec: &mut GpuVec<T>,
+        patches: &[(usize, &[T])],
+    ) {
+        trace!("async patching gpu vec");
+        let submission_index =
+            MeshPipeline::patch_gpu_vec(
+                &self.device,
+                &self.queue,
+                gpu_vec,
+                patches,
+            );
+        if let Some(submission_index) = submission_index {
+            self.device
+                .poll(Maintain::WaitForSubmissionIndex(submission_index));
+        }
     }
 }

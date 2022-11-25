@@ -295,7 +295,7 @@ impl GuiStateFrame for BasicDemo {
         for (cc, ci) in self.chunks.iter() {
             self.chunk_meshes
                 .get_mut(cc, ci)
-                .patch(&ctx.global().renderer.borrow());
+                .patch(&*ctx.global().renderer.borrow());
         }
     }
 
