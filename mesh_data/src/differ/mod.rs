@@ -356,7 +356,7 @@ impl MeshDiffer {
         'fill_hole: while let Some(hole) = self.vertices_holes.pop_front() {
 
             let mut hole = hole;
-            while VertexIdx::get(hole) + 1 > virtual_vertices_len {
+            while VertexIdx::get(hole) >= virtual_vertices_len {
                 hole = self
                     .vertices[VertexIdx::get(hole)]
                     .next
@@ -373,7 +373,7 @@ impl MeshDiffer {
                 self.vertices[virtual_vertices_len - 1].next = Some(hole).into();
                 virtual_vertices_len -= 1;
 
-                let moved_from = VertexIdx(self.vertices.len());
+                let moved_from = VertexIdx(virtual_vertices_len);
                 
                 #[cfg(debug_assertions)]
                 let garbage = self.vertices[VertexIdx::get(hole)].garbage;
@@ -381,9 +381,10 @@ impl MeshDiffer {
                 let prev = self.vertices[VertexIdx::get(hole)].prev.unpack();
                 let prev_next = match prev {
                     VertexOrOuterIdx::Vertex(prev) => {
-                        if VertexIdx::get(prev) + 1 < virtual_vertices_len {
+                        if VertexIdx::get(prev) < virtual_vertices_len {
                             &mut self.vertices[VertexIdx::get(prev)].next
                         } else {
+                            //debug!(?prev, %virtual_vertices_len);
                             #[cfg(debug_assertions)]
                             assert!(garbage);
                             continue 'fill_hole
@@ -405,6 +406,7 @@ impl MeshDiffer {
                 if prev_next.unpack() == old_prev_next {
                     *prev_next = new_prev_next.into();
                 } else {
+                    //debug!(prev_next=?prev_next, ?old_prev_next, ?new_prev_next);
                     #[cfg(debug_assertions)]
                     assert!(garbage);
                     continue 'fill_hole;
@@ -415,7 +417,7 @@ impl MeshDiffer {
                     let old_next_prev = VertexOrOuterIdx::Vertex(moved_from);
                     let new_next_prev = VertexOrOuterIdx::Vertex(hole);
                     let next_prev =
-                        if VertexIdx::get(next) + 1 < self.vertices.len() {
+                        if VertexIdx::get(next) < virtual_vertices_len {
                             &mut self.vertices[VertexIdx::get(next)].prev
                         } else {
                             #[cfg(debug_assertions)]
@@ -480,7 +482,7 @@ impl MeshDiffer {
         'fill_hole: while let Some(hole) = self.triangles_holes.pop_front() {
 
             let mut hole = hole;
-            while TriangleIdx::get(hole) + 1 > virtual_triangles_len {
+            while TriangleIdx::get(hole) >= virtual_triangles_len {
                 hole = TriangleIdx(IndexIdx::get(self
                     .triangles[TriangleIdx::get(hole)][0]
                     .next
@@ -497,7 +499,7 @@ impl MeshDiffer {
                 virtual_triangles_len -= 1;
 
                 let moved_from_triangle =
-                    TriangleIdx::flatten(TriangleIdx(self.triangles.len()));
+                    TriangleIdx::flatten(TriangleIdx(virtual_triangles_len));
                 let moved_to_triangle =
                     TriangleIdx::flatten(hole);
                 
@@ -525,7 +527,7 @@ impl MeshDiffer {
                         ) = IndexIdx::unflatten(prev);
                         let prev_next =
                             if
-                                TriangleIdx::get(prev_triangle_idx) + 1
+                                TriangleIdx::get(prev_triangle_idx)
                                 < virtual_triangles_len
                             {
                                 &mut self
@@ -551,8 +553,8 @@ impl MeshDiffer {
                             .val;
                         let vertex_first_index =
                             if 
-                                VertexIdx::get(vertex_idx) + 1
-                                < virtual_triangles_len
+                                VertexIdx::get(vertex_idx)
+                                < self.vertices.len()
                             {
                                 &mut self
                                     .vertices[VertexIdx::get(vertex_idx)]
@@ -564,6 +566,10 @@ impl MeshDiffer {
                             };
                         if vertex_first_index.unpack() == old {
                             *vertex_first_index = new.into();
+                        } else {
+                            #[cfg(debug_assertions)]
+                            assert!(garbage);
+                            continue 'fill_hole;
                         }
                     }
 
@@ -578,7 +584,7 @@ impl MeshDiffer {
                         ) = IndexIdx::unflatten(next);
                         let next_prev =
                             if
-                                TriangleIdx::get(next_triangle_idx) + 1
+                                TriangleIdx::get(next_triangle_idx)
                                 < virtual_triangles_len
                             {
                                 &mut self
