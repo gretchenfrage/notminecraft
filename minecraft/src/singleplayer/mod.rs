@@ -174,7 +174,7 @@ impl Singleplayer {
     pub fn new(game: &Arc<GameData>) -> Self {
         let chunk_loader = ChunkLoader::new(game);
 
-        let view_dist = 10;
+        let view_dist = 2;
 
         for x in -view_dist..view_dist {
             for z in -view_dist..view_dist {
@@ -266,6 +266,10 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
     {
         let state = self.inner;
+
+        canvas.reborrow()
+            .color(ctx.resources().sky_day)
+            .draw_solid(self.size);
 
         let mut canvas = canvas.reborrow()
             .scale(self.size)

@@ -282,7 +282,7 @@ impl MeshPipeline {
         );
 
         #[cfg(debug_assertions)]
-        {
+        if false { // TODO: come up with a better way to enable or disable
             let mut tex_index = None;
             for (
                 vert_idx_idx,

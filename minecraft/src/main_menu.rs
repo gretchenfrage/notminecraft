@@ -186,6 +186,7 @@ pub struct MainMenu {
     */
     basic_demo_button: MenuButton,
     singleplayer_button: MenuButton,
+    exit_game_button: MenuButton,
     
     splash_text: GuiSplashText,
 }
@@ -288,6 +289,9 @@ impl MainMenu {
         let singleplayer_button = MenuButtonBuilder
             ::new(&lang.menu_singleplayer)
             .build(resources);
+        let exit_game_button = MenuButtonBuilder
+            ::new("Quit")
+            .build(resources);
         let splash_text = GuiSplashText::new();
 		MainMenu {
             title,
@@ -300,6 +304,7 @@ impl MainMenu {
             */
             basic_demo_button,
             singleplayer_button,
+            exit_game_button,
             splash_text,
 		}
 	}
@@ -335,8 +340,12 @@ impl MainMenu {
                                 self.mods_button.gui(ctx),
                                 self.options_button.gui(ctx),
                                 */
-                                self.basic_demo_button.gui(on_basic_demo_click),
-                                self.singleplayer_button.gui(on_singleplayer_click),
+                                self.basic_demo_button
+                                    .gui(on_basic_demo_click),
+                                self.singleplayer_button
+                                    .gui(on_singleplayer_click),
+                                self.exit_game_button
+                                    .gui(on_exit_game_click),
                             )),
                         ),
                         v_align(0.0,
@@ -363,6 +372,10 @@ fn on_singleplayer_click(ctx: &GuiGlobalContext) {
     ctx.push_state_frame(Singleplayer::new(
         ctx.game,
     ));
+}
+
+fn on_exit_game_click(ctx: &GuiGlobalContext) {
+    ctx.pop_state_frame();
 }
 
 impl GuiStateFrame for MainMenu {

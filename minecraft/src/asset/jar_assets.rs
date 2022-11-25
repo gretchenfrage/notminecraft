@@ -125,17 +125,16 @@ impl JarAssets {
 		let menu_button_highlight = self.menu_button_highlight.load(renderer);
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
 
-		/*
-		let mut blocks = Vec::new();
+		let sky_day = [0.45, 0.62, 1.00].into();
+		let sky_night = [0.00, 0.02, 0.05].into();
+		let sky_day_rain = [0.24, 0.26, 0.32].into();
+		let sky_night_rain = [0.00, 0.01, 0.01].into();
+		let fog_day = [0.70, 0.82, 1.00].into();
+		let fog_night = [0.02, 0.05, 0.13].into();
+		let fog_day_rain = [0.48, 0.52, 0.60].into();
+		let fog_night_rain = [0.02, 0.04, 0.07].into();
+		let sky_sunset = [1.00, 0.35, 0.10].into();
 
-		let block_stone = blocks.len();
-		blocks.push(self.block_stone);
-
-		let block_dirt = blocks.len();
-		blocks.push(self.block_dirt);
-		
-		let blocks = renderer.load_image_array_raw(16.into(), blocks);
-		*/
 		let blocks = renderer
 			.load_image_array_raw(
 				16.into(),
@@ -152,9 +151,16 @@ impl JarAssets {
 			menu_button,
 			menu_button_highlight,
 			menu_bg,
+			sky_day,
+			sky_night,
+			sky_day_rain,
+			sky_night_rain,
+			fog_day,
+			fog_night,
+			fog_day_rain,
+			fog_night_rain,
+			sky_sunset,
 			blocks,
-			//block_stone,
-			//block_dirt,
 		};
 
 		(resources, self.lang)

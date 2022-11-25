@@ -5,6 +5,7 @@ use graphics::frame_content::{
 	GpuImage,
     GpuImageArray,
 };
+use vek::*;
 
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,25 @@ pub struct ResourcePack {
 	pub menu_button: Tile9Parts<GpuImage>,
 	pub menu_button_highlight: Tile9Parts<GpuImage>,
 	pub menu_bg: GpuImage,
+
+    /// Baseline sky color at no-rain daytime.
+    pub sky_day: Rgb<f32>,
+    /// Baseline sky color at no-rain nighttime.
+    pub sky_night: Rgb<f32>,
+    /// Baseline sky color at rainy daytime.
+    pub sky_day_rain: Rgb<f32>,
+    /// Baseline sky color at rainy nighttime.
+    pub sky_night_rain: Rgb<f32>,
+    /// Baseline fog color at no-rain daytime.
+    pub fog_day: Rgb<f32>,
+    /// Baseline fog color at no-rain nighttime.
+    pub fog_night: Rgb<f32>,
+    /// Baseline fog color at rainy daytime.
+    pub fog_day_rain: Rgb<f32>,
+    /// Baseline fog color at rainy nighttime.
+    pub fog_night_rain: Rgb<f32>,
+    /// Baseline color of sunset fog (fog with sun behind it during sunset).
+    pub sky_sunset: Rgb<f32>,
 
     pub blocks: GpuImageArray,
 
