@@ -39,7 +39,6 @@ use crate::{
     },
 };
 use chunk_data::{
-    MAX_LTI,
     FACES,
     FACES_EDGES_CORNERS,
     CHUNK_EXTENT,
@@ -48,7 +47,6 @@ use chunk_data::{
     TileKey,
     ChunkBlocks,
     Getter,
-    cc_ltc_to_gtc,
     lti_to_ltc,
 };
 use mesh_data::MeshData;
@@ -83,7 +81,6 @@ fn insert_chunk(
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     tile_meshes: &mut PerChunk<ChunkMesh>,
     block_updates: &mut BlockUpdateQueue,
-    renderer: &Renderer,
 ) {
     // deconstruct
     let ReadyChunk {
@@ -233,7 +230,6 @@ impl GuiStateFrame for Singleplayer {
                 &mut self.tile_blocks,
                 &mut self.tile_meshes,
                 &mut self.block_updates,
-                &ctx.global().renderer.borrow(),
             );
         }
 

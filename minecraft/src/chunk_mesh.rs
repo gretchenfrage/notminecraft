@@ -1,6 +1,5 @@
 
 use graphics::{
-    Renderer,
     GpuVecContext,
     frame_content::Mesh,
 };

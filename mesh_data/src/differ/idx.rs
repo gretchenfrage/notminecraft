@@ -5,34 +5,37 @@ use std::{
 };
 
 
+type BaseType = u32;
+
+
 /// Index type.
 ///
 /// Abstracts over the system's pointer size versus the index size we're using.
 /// We may use a smaller size to save memory. 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
-pub struct Idx(usize);
+pub struct Idx(BaseType);
 
 impl Idx {
     pub fn new(idx: usize) -> Self {
-        Idx(idx)
+        Idx(BaseType::try_from(idx).expect("idx too large"))
     }
 
     pub fn usize(self) -> usize {
-        self.0
+        self.0 as usize
     }
 }
 
 
-const PACKED_IDX_HI_BIT: usize = 1_usize.rotate_right(1);
+const PACKED_IDX_HI_BIT: BaseType = BaseType::rotate_right(1, 1);
 
 /// Bit-packed (1-bit bool, (size - 1)-bit idx) tuple.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct PackedIdx(usize);
+pub struct PackedIdx(BaseType);
 
 impl PackedIdx {
     pub fn new(hi_bit: bool, idx: Idx) -> Self {
-        assert!((idx.usize() & PACKED_IDX_HI_BIT) == 0, "idx too large");
-        PackedIdx((hi_bit as usize).rotate_right(1) | idx.usize())
+        assert!((idx.0 & PACKED_IDX_HI_BIT) == 0, "idx too large");
+        PackedIdx((hi_bit as BaseType).rotate_right(1) | idx.0)
     }
 
     pub fn hi_bit(self) -> bool {

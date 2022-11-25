@@ -120,6 +120,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut BasicDemo> {
 }
 
 impl BasicDemo {
+    #[allow(unused_variables)]
     pub fn new(
         game: &GameData,
         renderer: &Renderer,
