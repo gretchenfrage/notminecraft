@@ -110,14 +110,25 @@ fn apply_friction_f32(
 }
 
 impl MovementController {
-    pub fn view_proj(&self, size: Extent2<f32>) -> ViewProj {
-        let cam_dir =
-            Quaternion::rotation_x(self.cam_pitch)
-            * Quaternion::rotation_y(self.cam_yaw);
-        
+    pub fn cam_rot(&self) -> Quaternion<f32> {
+        Quaternion::rotation_x(self.cam_pitch)
+            * Quaternion::rotation_y(self.cam_yaw)
+    }
+
+    pub fn cam_dir(&self) -> Vec3<f32> {
+        let dir =
+            Quaternion::rotation_y(-self.cam_yaw)
+            * Quaternion::rotation_x(-self.cam_pitch)
+            * Vec3::new(0.0, 0.0, 1.0);
+        //debug!(magnitude=%dir.magnitude());
+        dir
+        //quat_mult_lh(self.cam_rot(), Vec3::new(0.0, 0.0, 1.0))
+    }
+
+    pub fn view_proj(&self, size: Extent2<f32>) -> ViewProj {      
         ViewProj::perspective(
             self.cam_pos,
-            cam_dir,
+            self.cam_rot(),
             self.cam_fov,
             size.w / size.h,
         )

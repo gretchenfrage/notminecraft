@@ -3,6 +3,7 @@ mod block_update_queue;
 mod chunk_loader;
 mod movement;
 mod tile_meshing;
+mod looking_at;
 
 use self::{
     block_update_queue::BlockUpdateQueue,
@@ -15,6 +16,7 @@ use self::{
         MovementController,
     },
     tile_meshing::mesh_tile,
+    looking_at::compute_looking_at,
 };
 use crate::{
     game_data::GameData,
@@ -42,17 +44,26 @@ use chunk_data::{
     FACES,
     FACES_EDGES_CORNERS,
     CHUNK_EXTENT,
+    AIR,
     LoadedChunks,
     PerChunk,
     TileKey,
     ChunkBlocks,
     Getter,
+    BlockId,
     lti_to_ltc,
+    cc_ltc_to_gtc,
 };
-use mesh_data::MeshData;
+use mesh_data::{
+    MeshData,
+    Quad,
+};
 use graphics::{
     Renderer,
-    frame_content::Canvas2,
+    frame_content::{
+        Canvas2,
+        Mesh,
+    },
 };
 use std::{
     ops::Range,
@@ -73,6 +84,8 @@ pub struct Singleplayer {
     
     block_updates: BlockUpdateQueue,
     chunk_loader: ChunkLoader,
+
+    _debug_cube_mesh: Mesh,
 }
 
 fn insert_chunk(
@@ -89,7 +102,7 @@ fn insert_chunk(
         chunk_tile_meshes,
     } = chunk;
 
-    info!(?cc, "inserting chunk");
+    trace!(?cc, "inserting chunk");
 
     // insert
     let ci = chunks.add(cc);
@@ -167,32 +180,67 @@ fn do_block_update(
     let rel_to = lti_to_ltc(tile.lti).map(|n| n as f32);
     for vertex in &mut mesh_buf.vertices {
         vertex.pos += rel_to;
-
-        // TODO
-        assert!(
-            vertex.pos.x > -100.0
-            && vertex.pos.x < 100.0
-            && vertex.pos.y > -100.0
-            && vertex.pos.y < 100.0
-            && vertex.pos.z > -100.0
-            && vertex.pos.z < 100.0
-        );
     }
 
     tile.set(tile_meshes, mesh_buf);
+}
+
+fn put_block<M: 'static>(
+    tile: TileKey,
+    getter: &Getter,
+    bid: BlockId<M>,
+    meta: M,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    block_updates: &mut BlockUpdateQueue,
+) {
+    tile.get(tile_blocks).set(bid, meta);
+    let gtc = cc_ltc_to_gtc(tile.cc, lti_to_ltc(tile.lti));
+    block_updates.enqueue(gtc, getter);
+    for face in FACES {
+        block_updates.enqueue(gtc + face.to_vec(), getter);
+    }
 }
 
 impl Singleplayer {
     pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
         let chunk_loader = ChunkLoader::new(game, renderer);
 
-        let view_dist = 10;
+        let view_dist = 4;
 
         for x in -view_dist..view_dist {
-            for z in -view_dist..view_dist {
-                chunk_loader.request(Vec3::new(x, 0, z));
+            for y in 0..2 {
+                for z in -view_dist..view_dist {
+                    chunk_loader.request(Vec3::new(x, y, z));
+                }
             }
         }
+
+        let mut debug_cube_mesh = MeshData::new();
+        for (pos_start, pos_ext_1, pos_ext_2) in [
+            // front (-z)
+            ([0, 0, 0], [0, 1, 0], [1, 0, 0]),
+            // back (+z)
+            ([1, 0, 1], [0, 1, 0], [-1, 0, 0]),
+            // left (-x)
+            ([0, 0, 1], [0, 1, 0], [0, 0, -1]),
+            // right (+x)
+            ([1, 0, 0], [0, 1, 0], [0, 0, 1]),
+            // top (+y)
+            ([0, 1, 0], [0, 0, 1], [1, 0, 0]),
+            // bottom (-y)
+            ([0, 0, 1], [0, 0, -1], [1, 0, 0]),   
+        ] {
+            debug_cube_mesh.add_quad(&Quad {
+                pos_start: Vec3::from(pos_start).map(|n: i32| n as f32),
+                pos_ext_1: Extent3::from(pos_ext_1).map(|n: i32| n as f32),
+                pos_ext_2: Extent3::from(pos_ext_2).map(|n: i32| n as f32),
+                tex_start: 0.0.into(),
+                tex_extent: 1.0.into(),
+                vert_colors: [Rgba::white(); 4],
+                tex_index: 0,
+            });
+        }
+        let debug_cube_mesh = debug_cube_mesh.upload(renderer);
 
         Singleplayer {
             bindings: KeyBindings::default(),
@@ -205,6 +253,8 @@ impl Singleplayer {
 
             block_updates: BlockUpdateQueue::new(),
             chunk_loader,
+
+            _debug_cube_mesh: debug_cube_mesh,
         }
     }
 
@@ -269,6 +319,52 @@ impl GuiStateFrame for Singleplayer {
     ) {
         self.movement.on_captured_mouse_move(amount);
     }
+
+    fn on_captured_mouse_click(
+        &mut self,
+        ctx: &GuiWindowContext,
+        button: MouseButton,
+    ) {
+        let getter = self.chunks.getter();
+        let looking_at = compute_looking_at(
+            self.movement.cam_pos,
+            self.movement.cam_dir(),
+            100.0,
+            &getter,
+            &self.tile_blocks,
+            ctx.game(),
+        );
+        if let Some(looking_at) = looking_at {
+            match button {
+                MouseButton::Left => put_block(
+                    looking_at.tile,
+                    &getter,
+                    AIR,
+                    (),
+                    &mut self.tile_blocks,
+                    &mut self.block_updates,
+                ),
+                MouseButton::Right => {
+                    let tile1 = looking_at.tile;
+                    let gtc1 = cc_ltc_to_gtc(tile1.cc, lti_to_ltc(tile1.lti));
+                    if let Some(tile2) = looking_at
+                        .face
+                        .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
+                    {
+                        put_block(
+                            tile2,
+                            &getter,
+                            ctx.game().bid_brick,
+                            (),
+                            &mut self.tile_blocks,
+                            &mut self.block_updates,
+                        );
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
@@ -282,30 +378,38 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
             .color(ctx.resources().sky_day)
             .draw_solid(self.size);
 
-        let mut canvas = canvas.reborrow()
-            .scale(self.size)
-            .begin_3d(state.movement.view_proj(self.size));
+        {
+            let mut canvas = canvas.reborrow()
+                .scale(self.size)
+                .begin_3d(state.movement.view_proj(self.size));
 
-        // patch all tile meshes
-        for (cc, ci) in state.chunks.iter() {
-            state
-                .tile_meshes
-                .get_mut(cc, ci)
-                .patch(&*ctx.global.renderer.borrow());
+            // patch all tile meshes
+            for (cc, ci) in state.chunks.iter() {
+                state
+                    .tile_meshes
+                    .get_mut(cc, ci)
+                    .patch(&*ctx.global.renderer.borrow());
+            }
+
+            // render all tile meshes
+            for (cc, ci) in state.chunks.iter() {
+                let rel_to = (cc * CHUNK_EXTENT).map(|n| n as f32);
+                let mesh = state
+                    .tile_meshes
+                    .get(cc, ci)
+                    .mesh();
+
+                canvas.reborrow()
+                    .translate(rel_to)
+                    .draw_mesh(mesh, &ctx.resources().blocks);
+            }
         }
 
-        // render all tile meshes
-        for (cc, ci) in state.chunks.iter() {
-            let rel_to = (cc * CHUNK_EXTENT).map(|n| n as f32);
-            let mesh = state
-                .tile_meshes
-                .get(cc, ci)
-                .mesh();
-
-            canvas.reborrow()
-                .translate(rel_to)
-                .draw_mesh(mesh, &ctx.resources().blocks);
-        }
+        let crosshair_size = 30.0 * self.scale;
+        canvas.reborrow()
+            .translate(-crosshair_size / 2.0)
+            .translate(self.size / 2.0)
+            .draw_image(&ctx.resources().hud_crosshair, crosshair_size);
     }
 
     fn on_cursor_click(

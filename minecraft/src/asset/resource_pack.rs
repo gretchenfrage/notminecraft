@@ -17,6 +17,8 @@ pub struct ResourcePack {
 	pub menu_button_highlight: Tile9Parts<GpuImage>,
 	pub menu_bg: GpuImage,
 
+    pub hud_crosshair: GpuImage,
+
     /// Baseline sky color at no-rain daytime.
     pub sky_day: Rgb<f32>,
     /// Baseline sky color at no-rain nighttime.

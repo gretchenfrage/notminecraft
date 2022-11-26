@@ -216,23 +216,25 @@ fn get_chunk_ready(
 
     let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
 
-    for lti in 0..=MAX_LTI {
-        let bid =
-            [
-                AIR,
-                AIR,
-                AIR,
-                AIR,
-                AIR,
-                AIR,
-                game.bid_stone,
-                game.bid_dirt,
-                game.bid_brick,
-            ]
-            .choose(&mut rng)
-            .copied()
-            .unwrap();    
-        chunk_tile_blocks.set(lti, bid, ());
+    if cc.y <= 0 {
+        for lti in 0..=MAX_LTI {
+            let bid =
+                [
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    game.bid_stone,
+                    game.bid_dirt,
+                    game.bid_brick,
+                ]
+                .choose(&mut rng)
+                .copied()
+                .unwrap();    
+            chunk_tile_blocks.set(lti, bid, ());
+        }
     }
 
     let mut chunk_tile_meshes = ChunkMesh::new();

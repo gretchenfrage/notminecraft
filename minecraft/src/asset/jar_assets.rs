@@ -20,13 +20,15 @@ use vek::*;
 pub struct JarAssets {
 	font: DynamicImage,
 
-	block_stone: DynamicImage,
-	block_dirt: DynamicImage,
-	block_brick: DynamicImage,
-
 	menu_button: Tile9Parts<DynamicImage>,
 	menu_button_highlight: Tile9Parts<DynamicImage>,
 	menu_bg: DynamicImage,
+
+	hud_crosshair: DynamicImage,
+
+	block_stone: DynamicImage,
+	block_dirt: DynamicImage,
+	block_brick: DynamicImage,
 	
 	lang: Localization,
 }
@@ -43,12 +45,7 @@ impl JarAssets {
 		ensure!(terrain.width() == 256, "terrain.png wrong w size");
 		ensure!(terrain.height() == 256, "terrain.png wrong h size");
 
-		let block_stone = terrain.crop_imm(16, 0, 16, 16);
-		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
-		let block_brick = terrain.crop_imm(7 * 16, 0, 16, 16);
-
 		let gui = jar.read_image("gui/gui.png").await?;
-
 		let menu_button = tile_9_crop(&Tile9CropConfig {
 			base: &gui,
 
@@ -71,6 +68,13 @@ impl JarAssets {
 			left: 2,
 			right: 2,
 		})?;
+
+		let icons = jar.read_image("gui/icons.png").await?;
+		let hud_crosshair = icons.crop_imm(0, 0, 15, 15);
+
+		let block_stone = terrain.crop_imm(16, 0, 16, 16);
+		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
+		let block_brick = terrain.crop_imm(7 * 16, 0, 16, 16);
 
 		let menu_bg = jar.read_image("gui/background.png").await?;
 
@@ -97,12 +101,17 @@ impl JarAssets {
 
 		Ok(JarAssets {
 			font,
+
 			menu_button,
 			menu_button_highlight,
 			menu_bg,
+
+			hud_crosshair,
+
 			block_stone,
 			block_dirt,
 			block_brick,
+
 			lang,
 		})
 	}
@@ -124,6 +133,8 @@ impl JarAssets {
 		let menu_button = self.menu_button.load(renderer);
 		let menu_button_highlight = self.menu_button_highlight.load(renderer);
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
+
+		let hud_crosshair = renderer.load_image_raw(&self.hud_crosshair);
 
 		let sky_day = [0.45, 0.62, 1.00].into();
 		let sky_night = [0.00, 0.02, 0.05].into();
@@ -147,10 +158,14 @@ impl JarAssets {
 
 		let resources = ResourcePack {
 			font,
+
 			menu_title_pixel,
 			menu_button,
 			menu_button_highlight,
 			menu_bg,
+
+			hud_crosshair,
+
 			sky_day,
 			sky_night,
 			sky_day_rain,
@@ -160,6 +175,7 @@ impl JarAssets {
 			fog_day_rain,
 			fog_night_rain,
 			sky_sunset,
+
 			blocks,
 		};
 
