@@ -88,6 +88,7 @@ pub struct Singleplayer {
     chunk_loader: ChunkLoader,
 
     _debug_cube_mesh: Mesh,
+    //_human_mesh: Mesh,
 }
 
 fn insert_chunk(
@@ -407,6 +408,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
                     .draw_mesh(mesh, &ctx.resources().blocks);
             }
 
+            // render the outline for the block being looked at
             let getter = state.chunks.getter();
             let cam_dir = state.movement.cam_dir();
             let looking_at = compute_looking_at(
@@ -450,6 +452,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
             }
         }
 
+        // render the crosshair
         let crosshair_size = 30.0 * self.scale;
         canvas.reborrow()
             .translate(-crosshair_size / 2.0)

@@ -36,6 +36,7 @@ use crossbeam_channel::{
 };
 use std_semaphore::Semaphore;
 use rand_chacha::ChaCha20Rng;
+use bracket_noise::prelude::FastNoise;
 use vek::*;
 use rand::prelude::*;
 
@@ -212,30 +213,10 @@ fn get_chunk_ready(
             }
         }
     }
-    let mut rng = ChaCha20Rng::from_seed(seed);
 
     let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
 
-    if cc.y <= 0 {
-        for lti in 0..=MAX_LTI {
-            let bid =
-                [
-                    AIR,
-                    AIR,
-                    AIR,
-                    AIR,
-                    AIR,
-                    AIR,
-                    game.bid_stone,
-                    game.bid_dirt,
-                    game.bid_brick,
-                ]
-                .choose(&mut rng)
-                .copied()
-                .unwrap();    
-            chunk_tile_blocks.set(lti, bid, ());
-        }
-    }
+    generate_chunk_blocks(cc, &mut chunk_tile_blocks, game);
 
     let mut chunk_tile_meshes = ChunkMesh::new();
     
@@ -284,5 +265,59 @@ fn get_chunk_ready(
         cc,
         chunk_tile_blocks,
         chunk_tile_meshes,
+    }
+}
+
+fn generate_chunk_blocks(
+    cc: Vec3<i64>,
+    chunk_tile_blocks: &mut ChunkBlocks,
+    game: &GameData,
+) {
+    /*
+    let mut rng = ChaCha20Rng::from_seed(seed);
+    if cc.y <= 0 {
+        for lti in 0..=MAX_LTI {
+            let bid =
+                [
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    AIR,
+                    game.bid_stone,
+                    game.bid_dirt,
+                    game.bid_brick,
+                ]
+                .choose(&mut rng)
+                .copied()
+                .unwrap();    
+            chunk_tile_blocks.set(lti, bid, ());
+        }
+    }
+    */
+
+    let mut noise = FastNoise::new();
+    noise.set_frequency(1.0 / 75.0);
+
+    for x in 0..CHUNK_EXTENT.x {
+        for z in 0..CHUNK_EXTENT.z {
+            let height =
+                noise.get_noise(
+                    (x + cc.x * CHUNK_EXTENT.x) as f32,
+                    (z + cc.z * CHUNK_EXTENT.z) as f32
+                )
+                / 2.0
+                * 20.0
+                + 40.0
+                - (cc.y * CHUNK_EXTENT.y) as f32;
+
+            for y in 0..i64::min(height.floor() as _, CHUNK_EXTENT.y) {
+                let ltc = Vec3 { x, y, z };
+                let lti = ltc_to_lti(ltc);
+
+                chunk_tile_blocks.set(lti, game.bid_stone, ());
+            }
+        }
     }
 }
