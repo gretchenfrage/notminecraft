@@ -12,6 +12,7 @@ use crate::{
             CLIP_FORMAT,
         },
         solid::SolidPipeline,
+        line::LinePipeline,
         image::{
             ImagePipeline,
             PreppedDrawImage,
@@ -89,6 +90,7 @@ pub struct Renderer {
     clear_depth_pipeline: ClearDepthPipeline,
     clip_pipeline: ClipPipeline,
     solid_pipeline: SolidPipeline,
+    line_pipeline: LinePipeline,
     image_pipeline: ImagePipeline,    
     text_pipeline: TextPipeline,
     mesh_pipeline: MeshPipeline,
@@ -238,6 +240,12 @@ impl Renderer {
             &clip_pipeline.clip_texture_bind_group_layout,
         )?;
 
+        trace!("creating line pipeline");
+        let line_pipeline = LinePipeline::new(
+            &device,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
+        )?;
         
         // create the image pipeline
         trace!("creating image pipeline");
@@ -290,6 +298,7 @@ impl Renderer {
             clear_depth_pipeline,
             clip_pipeline,
             solid_pipeline,
+            line_pipeline,
             image_pipeline,
             text_pipeline,
             mesh_pipeline,
@@ -387,6 +396,7 @@ impl Renderer {
         #[derive(Debug)]
         enum PreppedRenderObj<'a> {
             Solid,
+            Line,
             Image(PreppedDrawImage<'a>),
             Text(PreppedDrawText),
             Mesh(&'a DrawMesh<'a>),
@@ -407,6 +417,7 @@ impl Renderer {
                         });
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,
+                        DrawObjNorm::Line => PreppedRenderObj::Line,
                         DrawObjNorm::Image(image) => PreppedRenderObj::Image(
                             ImagePipeline::pre_render(
                                 image,
@@ -533,6 +544,10 @@ impl Renderer {
                     match obj {
                         PreppedRenderObj::Solid => {
                             self.solid_pipeline
+                                .render(&mut pass);
+                        }
+                        PreppedRenderObj::Line => {
+                            self.line_pipeline
                                 .render(&mut pass);
                         }
                         PreppedRenderObj::Image(image) => {

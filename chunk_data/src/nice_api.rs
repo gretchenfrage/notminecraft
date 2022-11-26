@@ -1,5 +1,9 @@
 
 use crate::{
+    coord::{
+        cc_ltc_to_gtc,
+        lti_to_ltc,
+    },
     block::{
         ChunkBlocks,
         RawBlockId,
@@ -45,6 +49,10 @@ impl TileKey {
         <T as CiGet>::Output: LtiSet<V>,
     {
         per_chunk.get(self.cc, self.ci).set(self.lti, val);
+    }
+
+    pub fn gtc(self) -> Vec3<i64> {
+        cc_ltc_to_gtc(self.cc, lti_to_ltc(self.lti))
     }
 }
 

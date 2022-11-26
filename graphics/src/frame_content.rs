@@ -57,6 +57,7 @@ pub enum FrameItem<'a> {
 #[derive(Debug, Clone)]
 pub enum DrawObj2 {
     Solid,
+    Line,
     Image(DrawImage),
     Text(LayedOutTextBlock),
 }
@@ -64,6 +65,7 @@ pub enum DrawObj2 {
 #[derive(Debug, Clone)]
 pub enum DrawObj3<'a> {
     Solid,
+    Line,
     Image(DrawImage),
     Text(LayedOutTextBlock),
     Mesh(DrawMesh<'a>),
@@ -102,7 +104,7 @@ impl<'a> FrameContent<'a> {
             stack_len: 0,
         }
     }
-
+    /*
     #[allow(unused_must_use)] // TODO LOL
     pub fn to_pseudo_xml(&self) -> String {
         use std::fmt::Write;
@@ -315,6 +317,7 @@ impl<'a> FrameContent<'a> {
         }
         buf
     }
+    */
 }
 
 impl<'a, 'b> Canvas2<'a, 'b> {
@@ -377,6 +380,28 @@ impl<'a, 'b> Canvas2<'a, 'b> {
             .reborrow()
             .scale(size.into())
             .draw(DrawObj2::Solid);
+        self
+    }
+
+    pub fn draw_line<A, B>(mut self, from: A, to: B) -> Self
+    where
+        A: Into<Vec2<f32>>,
+        B: Into<Vec2<f32>>,
+    {
+        let from = from.into();
+        let to = to.into();
+        let delta = to - from;
+        let mat =
+            Mat3::new(
+                delta.x, 0.0, from.x,
+                delta.y, 0.0, from.y,
+                0.0, 0.0, 1.0,
+            );
+
+        self
+            .reborrow()
+            .modify(Transform2(mat))
+            .draw(DrawObj2::Line);
         self
     }
 
@@ -522,6 +547,29 @@ impl<'a, 'b> Canvas3<'a, 'b> {
 
     pub fn draw_solid(self) -> Self {
         self.draw(DrawObj3::Solid)
+    }
+
+    pub fn draw_line<A, B>(mut self, from: A, to: B) -> Self
+    where
+        A: Into<Vec3<f32>>,
+        B: Into<Vec3<f32>>,
+    {
+        let from = from.into();
+        let to = to.into();
+        let delta = to - from;
+        let mat =
+            Mat4::new(
+                delta.x, 0.0, 0.0, from.x,
+                delta.y, 0.0, 0.0, from.y,
+                delta.z, 0.0, 0.0, from.z,
+                0.0, 0.0, 0.0, 1.0,
+            );
+
+        self
+            .reborrow()
+            .modify(Transform3(mat))
+            .draw(DrawObj3::Line);
+        self
     }
 
     pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(

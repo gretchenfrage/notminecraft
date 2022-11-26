@@ -21,7 +21,6 @@ use mesh_data::{
 };
 use std::{
     mem::replace,
-    fs,
     f32::consts::PI,
 };
 //use rand::seq::SliceRandom;
@@ -100,10 +99,10 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut BasicDemo> {
         }
 
         if replace(&mut demo.xml_dump_requested, false) {
-            info!("initiating xml dump of frame to framedump.xml...");
-            fs::write("framedump.xml", canvas.target.to_pseudo_xml())
-                .expect("xml dump failed");
-            info!("...completed");
+            //info!("initiating xml dump of frame to framedump.xml...");
+            //fs::write("framedump.xml", canvas.target.to_pseudo_xml())
+            //    .expect("xml dump failed");
+            //info!("...completed");
         }
     }
 

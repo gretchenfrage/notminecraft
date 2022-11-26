@@ -42,6 +42,7 @@ use crate::{
 };
 use chunk_data::{
     FACES,
+    EDGES,
     FACES_EDGES_CORNERS,
     CHUNK_EXTENT,
     AIR,
@@ -64,6 +65,7 @@ use graphics::{
         Canvas2,
         Mesh,
     },
+    modifier::Transform3,
 };
 use std::{
     ops::Range,
@@ -379,9 +381,10 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
             .draw_solid(self.size);
 
         {
+            let view_proj = state.movement.view_proj(self.size);
             let mut canvas = canvas.reborrow()
                 .scale(self.size)
-                .begin_3d(state.movement.view_proj(self.size));
+                .begin_3d(view_proj);
 
             // patch all tile meshes
             for (cc, ci) in state.chunks.iter() {
@@ -402,6 +405,48 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
                 canvas.reborrow()
                     .translate(rel_to)
                     .draw_mesh(mesh, &ctx.resources().blocks);
+            }
+
+            let getter = state.chunks.getter();
+            let cam_dir = state.movement.cam_dir();
+            let looking_at = compute_looking_at(
+                state.movement.cam_pos,
+                cam_dir,
+                100.0,
+                &getter,
+                &state.tile_blocks,
+                ctx.game(),
+            );
+            if let Some(looking_at) = looking_at {
+                let mut canvas = canvas.reborrow()
+                    .translate(looking_at.tile.gtc().map(|n| n as f32))
+                    .translate(-cam_dir * looking_at.dist / 1000.0)
+                    .color(Rgba::black());
+
+                for edge in EDGES {
+                    let ranges: Vec3<Range<i32>> = edge
+                        .to_vec()
+                        .map(|n| match n {
+                            -1 => 0..1,
+                            0 => 0..2,
+                            1 => 1..2,
+                            _ => unreachable!(),
+                        });
+                    let mut points = [Vec3::from(0.0); 2];
+                    let mut i = 0;
+                    for z in ranges.z {
+                        for y in ranges.y.clone() {
+                            for x in ranges.x.clone() {
+                                points[i] = Vec3 { x, y, z }.map(|n| n as f32);
+                                i += 1;
+                            }
+                        }
+                    }
+                    debug_assert_eq!(i, 2);
+                    let [start, end] = points;
+                    canvas.reborrow()
+                        .draw_line(start, end);
+                }
             }
         }
 

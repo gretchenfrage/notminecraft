@@ -34,6 +34,7 @@ enum FrameItemNorm<'a> {
 #[derive(Debug, Clone)]
 pub enum DrawObjNorm<'a> {
     Solid,
+    Line,
     Image(&'a DrawImage),
     Text(&'a LayedOutTextBlock),
     Mesh(&'a DrawMesh<'a>),
@@ -43,6 +44,7 @@ impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
     fn from(obj: &'a DrawObj2) -> Self {
         match obj {
             &DrawObj2::Solid => DrawObjNorm::Solid,
+            &DrawObj2::Line => DrawObjNorm::Line,
             &DrawObj2::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj2::Text(ref obj) => DrawObjNorm::Text(obj),
         }
@@ -53,6 +55,7 @@ impl<'a> From<&'a DrawObj3<'a>> for DrawObjNorm<'a> {
     fn from(obj: &'a DrawObj3) -> Self {
         match obj {
             &DrawObj3::Solid => DrawObjNorm::Solid,
+            &DrawObj3::Line => DrawObjNorm::Line,
             &DrawObj3::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
             &DrawObj3::Mesh(ref obj) => DrawObjNorm::Mesh(obj),

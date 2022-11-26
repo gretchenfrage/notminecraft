@@ -7,3 +7,4 @@ pub mod solid;
 pub mod image;
 pub mod text;
 pub mod mesh;
+pub mod line;
