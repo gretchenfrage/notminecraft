@@ -207,14 +207,20 @@ impl Singleplayer {
     pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
         let chunk_loader = ChunkLoader::new(game, renderer);
 
-        let view_dist = 4;
+        let view_dist = 12;
 
+        let mut to_request = Vec::new();
         for x in -view_dist..view_dist {
             for y in 0..2 {
                 for z in -view_dist..view_dist {
-                    chunk_loader.request(Vec3::new(x, y, z));
+                    to_request.push(Vec3 { x, y, z });
+                    //chunk_loader.request(Vec3::new(x, y, z));
                 }
             }
+        }
+        to_request.sort_by_key(|cc| cc.x * cc.x + cc.z * cc.z );
+        for cc in to_request {
+            chunk_loader.request(cc);
         }
 
         let mut debug_cube_mesh = MeshData::new();

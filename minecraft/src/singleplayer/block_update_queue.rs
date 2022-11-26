@@ -51,6 +51,7 @@ impl BlockUpdateQueue {
     }
 
     /// See `chunk_data::PerChunk::remove_chunk`.
+    #[allow(dead_code)]
     pub fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize) {
         assert!(
             self.queue.is_empty(),
