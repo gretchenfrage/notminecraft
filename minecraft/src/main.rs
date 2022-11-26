@@ -9,7 +9,6 @@ pub mod util;
 pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
-pub mod basic_demo;
 pub mod singleplayer;
 
 

@@ -118,6 +118,13 @@ macro_rules! axis_enum {
                     val.clone(),
                 )*])
             }
+
+            pub fn map<B, F>(self, f: F) -> $per_name<B>
+            where
+                F: FnMut(T) -> B,
+            {
+                $per_name(self.0.map(f))
+            }
         }
 
         impl<T> IntoIterator for $per_name<T> {

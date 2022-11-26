@@ -16,7 +16,6 @@ use crate::{
         },
 	},
 	util::hex_color::hex_color,
-    basic_demo::BasicDemo,
     singleplayer::Singleplayer,
 };
 use graphics::{
@@ -190,7 +189,6 @@ pub struct MainMenu {
     mods_button: MenuButton,
     options_button: MenuButton,
     */
-    basic_demo_button: MenuButton,
     singleplayer_button: MenuButton,
     exit_game_button: MenuButton,
     
@@ -289,9 +287,6 @@ impl MainMenu {
             ::new(&lang.menu_options)
             .build(resources);
         */
-        let basic_demo_button = MenuButtonBuilder
-            ::new("Basic Demo")
-            .build(resources);
         let singleplayer_button = MenuButtonBuilder
             ::new(&lang.menu_singleplayer)
             .build(resources);
@@ -308,7 +303,6 @@ impl MainMenu {
             mods_button,
             options_button,
             */
-            basic_demo_button,
             singleplayer_button,
             exit_game_button,
             splash_text,
@@ -346,8 +340,6 @@ impl MainMenu {
                                 self.mods_button.gui(ctx),
                                 self.options_button.gui(ctx),
                                 */
-                                self.basic_demo_button
-                                    .gui(on_basic_demo_click),
                                 self.singleplayer_button
                                     .gui(on_singleplayer_click),
                                 self.exit_game_button
@@ -365,13 +357,6 @@ impl MainMenu {
             ScrollScaleChanger,
 		))
 	}
-}
-
-fn on_basic_demo_click(ctx: &GuiGlobalContext) {
-    ctx.push_state_frame(BasicDemo::new(
-        ctx.game,
-        &ctx.renderer.borrow(),
-    ));
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {

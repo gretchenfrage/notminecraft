@@ -9,8 +9,6 @@ use graphics::{
     AsyncGpuVecContext,
 };
 use chunk_data::{
-    AIR,
-    MAX_LTI,
     CHUNK_EXTENT,
     ChunkBlocks,
     LoadedChunks,
@@ -311,12 +309,20 @@ fn generate_chunk_blocks(
                 * 20.0
                 + 40.0
                 - (cc.y * CHUNK_EXTENT.y) as f32;
+            let height = height.floor() as i64;
 
-            for y in 0..i64::min(height.floor() as _, CHUNK_EXTENT.y) {
+            for y in 0..i64::min(height, CHUNK_EXTENT.y) {
                 let ltc = Vec3 { x, y, z };
                 let lti = ltc_to_lti(ltc);
 
-                chunk_tile_blocks.set(lti, game.bid_stone, ());
+                let depth = height - y;
+                debug_assert!(depth >= 1);
+
+                if depth == 1 {
+                    chunk_tile_blocks.set(lti, game.bid_grass, ());
+                } else {
+                    chunk_tile_blocks.set(lti, game.bid_dirt, ());
+                }
             }
         }
     }

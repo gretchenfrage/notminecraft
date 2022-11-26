@@ -28,7 +28,10 @@ pub struct JarAssets {
 
 	block_stone: DynamicImage,
 	block_dirt: DynamicImage,
+	block_grass_side: DynamicImage,
+	block_grass_top: DynamicImage,
 	block_brick: DynamicImage,
+	block_glass: DynamicImage,
 	
 	lang: Localization,
 }
@@ -74,7 +77,10 @@ impl JarAssets {
 
 		let block_stone = terrain.crop_imm(16, 0, 16, 16);
 		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
+		let block_grass_side = terrain.crop_imm(3 * 16, 0, 16, 16);
+		let block_grass_top = terrain.crop_imm(0, 0, 16, 16);
 		let block_brick = terrain.crop_imm(7 * 16, 0, 16, 16);
+		let block_glass = terrain.crop_imm(16, 3 * 16, 16, 16);
 
 		let menu_bg = jar.read_image("gui/background.png").await?;
 
@@ -110,7 +116,10 @@ impl JarAssets {
 
 			block_stone,
 			block_dirt,
+			block_grass_side,
+			block_grass_top,
 			block_brick,
+			block_glass,
 
 			lang,
 		})
@@ -152,7 +161,10 @@ impl JarAssets {
 				[
 					self.block_stone,
 					self.block_dirt,
+					self.block_grass_side,
+					self.block_grass_top,
 					self.block_brick,
+					self.block_glass,
 				],
 			);
 
@@ -177,6 +189,8 @@ impl JarAssets {
 			sky_sunset,
 
 			blocks,
+
+			//grass_color: hex_color(0x62a23800).rgb(),
 		};
 
 		(resources, self.lang)

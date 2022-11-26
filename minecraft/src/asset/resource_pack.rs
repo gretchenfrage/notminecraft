@@ -40,6 +40,8 @@ pub struct ResourcePack {
 
     pub blocks: GpuImageArray,
 
+    //pub grass_color: Rgb<f32>,
+
     //pub block_grass_side: usize,
     //pub block_grass_side_snowy: usize,
     //pub block_grass_top: usize,

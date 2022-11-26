@@ -65,7 +65,6 @@ use graphics::{
         Canvas2,
         Mesh,
     },
-    modifier::Transform3,
 };
 use std::{
     ops::Range,
@@ -357,7 +356,7 @@ impl GuiStateFrame for Singleplayer {
                         put_block(
                             tile2,
                             &getter,
-                            ctx.game().bid_brick,
+                            ctx.game().bid_glass,
                             (),
                             &mut self.tile_blocks,
                             &mut self.block_updates,

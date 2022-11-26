@@ -39,7 +39,9 @@ pub fn compute_looking_at(
                 .unwrap_or(&BlockMeshLogic::Invisible);
             match mesh_logic {
                 BlockMeshLogic::Invisible => (),
-                BlockMeshLogic::Simple(_) => {
+                BlockMeshLogic::Simple(_)
+                | BlockMeshLogic::SimpleFaces(_)
+                | BlockMeshLogic::Grass => {
                     return Some(LookingAt {
                         tile,
                         pos,
