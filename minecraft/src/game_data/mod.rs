@@ -20,6 +20,8 @@ pub struct GameData {
 
     pub block_obscures: PerBlock<PerFace<bool>>,
     pub block_mesh_logics: PerBlock<BlockMeshLogic>,
+    pub block_can_place_over: PerBlock<bool>,
+    pub block_on_break: PerBlock<BlockOnBreak>,
 
     pub bid_stone: BlockId<()>,
     pub bid_dirt: BlockId<()>,
@@ -28,6 +30,7 @@ pub struct GameData {
     pub bid_brick: BlockId<()>,
     pub bid_glass: BlockId<()>,
     pub bid_log: BlockId<()>,
+    pub bid_door: BlockId<DoorMeta>,
 }
 
 #[derive(Debug)]
@@ -40,6 +43,13 @@ pub enum BlockMeshLogic {
     SimpleFaces(PerFace<usize>),
     /// Grass. Hehe.
     Grass,
+    /// Door. Hehe.
+    Door,
+}
+
+#[derive(Debug)]
+pub enum BlockOnBreak {
+    Door,
 }
 
 // block tex indexes:
@@ -53,6 +63,8 @@ pub const BTI_BRICK: usize = 5;
 pub const BTI_GLASS: usize = 6;
 pub const BTI_LOG_SIDE: usize = 7;
 pub const BTI_LOG_TOP: usize = 8;
+pub const BTI_DOOR_UPPER: usize = 9;
+pub const BTI_DOOR_LOWER: usize = 10;
 
 impl GameData {
     pub fn new() -> Self {
@@ -60,9 +72,12 @@ impl GameData {
 
         let mut block_obscures = PerBlock::new();
         let mut block_mesh_logics = PerBlock::new();
+        let mut block_can_place_over = PerBlock::new();
+        let mut block_on_break = PerBlock::new();
 
         block_obscures.set(AIR, PerFace::repeat(false));
         block_mesh_logics.set(AIR, BlockMeshLogic::Invisible);
+        block_can_place_over.set(AIR, true);
 
         let bid_stone = blocks.register();
         block_obscures.set(bid_stone, PerFace::repeat(true));
@@ -99,11 +114,18 @@ impl GameData {
                 })),
             );
 
+        let bid_door = blocks.register();
+        block_obscures.set(bid_door, PerFace::repeat(false));
+        block_mesh_logics.set(bid_door, BlockMeshLogic::Door);
+        block_on_break.set(bid_door, BlockOnBreak::Door);
+
         GameData {
             blocks: blocks.finalize(),
 
             block_obscures,
             block_mesh_logics,
+            block_can_place_over,
+            block_on_break,
 
             bid_stone,
             bid_dirt,
@@ -112,6 +134,44 @@ impl GameData {
             bid_brick,
             bid_glass,
             bid_log,
+            bid_door,
         }
     }
+}
+
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct DoorMeta {
+    pub part: DoorPart,
+    pub dir: DoorDir,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum DoorPart {
+    Upper,
+    Lower,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum DoorDir {
+    PosX,
+    NegX,
+    PosZ,
+    NegZ,
+}
+
+impl DoorDir {
+    pub fn to_face(self) -> Face {
+        match self {
+            DoorDir::PosX => Face::PosX,
+            DoorDir::NegX => Face::NegX,
+            DoorDir::PosZ => Face::PosZ,
+            DoorDir::NegZ => Face::NegZ,
+        }
+    }
+}
+
+#[test]
+fn door_is_inline() {
+    assert!(std::mem::size_of::<DoorMeta>() <= 2);
 }

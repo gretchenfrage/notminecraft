@@ -4,8 +4,13 @@ use crate::{
         BTI_DIRT,
         BTI_GRASS_SIDE,
         BTI_GRASS_TOP,
+        BTI_DOOR_UPPER,
+        BTI_DOOR_LOWER,
         GameData,
         BlockMeshLogic,
+        DoorMeta,
+        DoorPart,
+        DoorDir,
     },
     util::hex_color::hex_color,
 };
@@ -71,7 +76,7 @@ pub fn mesh_tile(
                 );
             }
         }
-        &BlockMeshLogic::Grass =>{
+        &BlockMeshLogic::Grass => {
             for face in FACES {
                 let grass_color = hex_color(0x74b44aff) / hex_color(0x969696ff);
                 let (tex_index, color) = match face {
@@ -90,6 +95,40 @@ pub fn mesh_tile(
                     game,
                 );
             }
+        }
+        &BlockMeshLogic::Door => {
+            let DoorMeta {
+                part,
+                dir,
+            } = tile.get(tile_blocks).meta(game.bid_door);
+            let tex_index = match part {
+                DoorPart::Upper => BTI_DOOR_UPPER,
+                DoorPart::Lower => BTI_DOOR_LOWER,
+            };
+            let (pos_start, pos_ext_1, pos_ext_2) = match dir {
+                DoorDir::PosX => ([1, 0, 0], [0, 1,  0], [ 0, 0,  1]),
+                DoorDir::NegX => ([0, 0, 1], [0, 1,  0], [ 0, 0, -1]),
+                DoorDir::PosZ => ([1, 0, 1], [0, 1,  0], [-1, 0,  0]),
+                DoorDir::NegZ => ([0, 0, 0], [0, 1,  0], [ 1, 0,  0]),
+            };
+
+            let pos_start = Vec3::from(pos_start)
+                .map(|n: i32| n as f32);
+            let pos_ext_1 = Extent3::from(pos_ext_1)
+                .map(|n: i32| n as f32);
+            let pos_ext_2 = Extent3::from(pos_ext_2)
+                .map(|n: i32| n as f32);
+            
+            mesh_buf
+                .add_quad(&Quad {
+                    pos_start,
+                    pos_ext_1,
+                    pos_ext_2,
+                    tex_start: 0.0.into(),
+                    tex_extent: 1.0.into(),
+                    vert_colors: [Rgba::white(); 4],
+                    tex_index,
+                });
         }
     }
 }

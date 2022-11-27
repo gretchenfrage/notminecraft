@@ -19,7 +19,13 @@ use self::{
     looking_at::compute_looking_at,
 };
 use crate::{
-    game_data::GameData,
+    game_data::{
+        GameData,
+        DoorMeta,
+        DoorPart,
+        DoorDir,
+        BlockOnBreak,
+    },
     chunk_mesh::ChunkMesh,
     gui::{
         blocks::simple_gui_block::{
@@ -53,6 +59,7 @@ use chunk_data::{
     ChunkBlocks,
     Getter,
     BlockId,
+    Face,
     lti_to_ltc,
     cc_ltc_to_gtc,
 };
@@ -70,6 +77,7 @@ use graphics::{
 use std::{
     ops::Range,
     sync::Arc,
+    f32::consts::PI,
 };
 use vek::*;
 
@@ -87,10 +95,16 @@ pub struct Singleplayer {
     block_updates: BlockUpdateQueue,
     chunk_loader: ChunkLoader,
 
-    selected_block: BlockId<()>,
+    selected_block: SelectedBlock,
 
     _debug_cube_mesh: Mesh,
     //_human_mesh: Mesh,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum SelectedBlock {
+    Simple(BlockId<()>),
+    Door,
 }
 
 fn insert_chunk(
@@ -265,7 +279,7 @@ impl Singleplayer {
             block_updates: BlockUpdateQueue::new(),
             chunk_loader,
 
-            selected_block: game.bid_stone,
+            selected_block: SelectedBlock::Simple(game.bid_stone),
 
             _debug_cube_mesh: debug_cube_mesh,
         }
@@ -324,13 +338,14 @@ impl GuiStateFrame for Singleplayer {
             ctx.global().pop_state_frame();
         } else if let Some(n) = num_row_key(key) {
             let select = match n {
-                1 => Some(ctx.game().bid_stone),
-                2 => Some(ctx.game().bid_dirt),
-                3 => Some(ctx.game().bid_grass),
-                4 => Some(ctx.game().bid_planks),
-                5 => Some(ctx.game().bid_brick),
-                6 => Some(ctx.game().bid_glass),
-                7 => Some(ctx.game().bid_log),
+                1 => Some(SelectedBlock::Simple(ctx.game().bid_stone)),
+                2 => Some(SelectedBlock::Simple(ctx.game().bid_dirt)),
+                3 => Some(SelectedBlock::Simple(ctx.game().bid_grass)),
+                4 => Some(SelectedBlock::Simple(ctx.game().bid_planks)),
+                5 => Some(SelectedBlock::Simple(ctx.game().bid_brick)),
+                6 => Some(SelectedBlock::Simple(ctx.game().bid_glass)),
+                7 => Some(SelectedBlock::Simple(ctx.game().bid_log)),
+                8 => Some(SelectedBlock::Door),
                 _ => None,
             };
             if let Some(select) = select {
@@ -363,14 +378,51 @@ impl GuiStateFrame for Singleplayer {
         );
         if let Some(looking_at) = looking_at {
             match button {
-                MouseButton::Left => put_block(
-                    looking_at.tile,
-                    &getter,
-                    AIR,
-                    (),
-                    &mut self.tile_blocks,
-                    &mut self.block_updates,
-                ),
+                MouseButton::Left => {
+                    let bid = looking_at.tile.get(&self.tile_blocks).get();
+                    let on_break = ctx.game().block_on_break.get(bid);
+                    if let Some(on_break) = on_break {
+                        match on_break {
+                            &BlockOnBreak::Door => {
+                                let &DoorMeta { part, .. } = looking_at
+                                    .tile
+                                    .get(&self.tile_blocks)
+                                    .meta(ctx.game().bid_door);
+                                let also_break_dir = match part {
+                                    DoorPart::Upper => Face::NegY,
+                                    DoorPart::Lower => Face::PosY,
+                                };
+
+                                let gtc2 =
+                                    looking_at.tile.gtc()
+                                    + also_break_dir.to_vec();
+                                if let Some(tile2) = getter.gtc_get(gtc2) {
+                                    let bid2 = tile2
+                                        .get(&self.tile_blocks)
+                                        .get();
+                                    if bid2 == ctx.game().bid_door {
+                                        put_block(
+                                            tile2,
+                                            &getter,
+                                            AIR,
+                                            (),
+                                            &mut self.tile_blocks,
+                                            &mut self.block_updates,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    put_block(
+                        looking_at.tile,
+                        &getter,
+                        AIR,
+                        (),
+                        &mut self.tile_blocks,
+                        &mut self.block_updates,
+                    );
+                }
                 MouseButton::Right => {
                     let tile1 = looking_at.tile;
                     let gtc1 = cc_ltc_to_gtc(tile1.cc, lti_to_ltc(tile1.lti));
@@ -378,14 +430,73 @@ impl GuiStateFrame for Singleplayer {
                         .face
                         .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
                     {
-                        put_block(
-                            tile2,
-                            &getter,
-                            self.selected_block,
-                            (),
-                            &mut self.tile_blocks,
-                            &mut self.block_updates,
-                        );
+                        match self.selected_block {
+                            SelectedBlock::Simple(bid) => {
+                                put_block(
+                                    tile2,
+                                    &getter,
+                                    bid,
+                                    (),
+                                    &mut self.tile_blocks,
+                                    &mut self.block_updates,
+                                );
+                            }
+                            SelectedBlock::Door => {
+                                let yaw = self.movement.cam_yaw
+                                    + (2.0 * PI) 
+                                    % (2.0 * PI);
+                                let dir =
+                                    if yaw < 0.25 * PI {
+                                        DoorDir::NegZ
+                                    } else if yaw < 0.75 * PI {
+                                        DoorDir::PosX
+                                    } else if yaw < 1.25 * PI {
+                                        DoorDir::PosZ
+                                    } else if yaw < 1.75 * PI {
+                                        DoorDir::NegX // TODO directions???
+                                    } else if yaw <= 2.0 * PI {
+                                        DoorDir::NegZ
+                                    } else {
+                                        unreachable!()
+                                    };
+                                let gtc3 = tile2.gtc() + Face::PosY.to_vec();
+                                if let Some(tile3) = getter.gtc_get(gtc3) {
+                                    let bid3 = tile3
+                                        .get(&self.tile_blocks)
+                                        .get();
+                                    let can_place_over = ctx.game()
+                                        .block_can_place_over
+                                        .get(bid3)
+                                        .copied()
+                                        .unwrap_or(false);
+                                    if can_place_over {
+                                        put_block(
+                                            tile2,
+                                            &getter,
+                                            ctx.game().bid_door,
+                                            DoorMeta {
+                                                part: DoorPart::Lower,
+                                                dir,
+                                            },
+                                            &mut self.tile_blocks,
+                                            &mut self.block_updates,
+                                        );
+                                        put_block(
+                                            tile3,
+                                            &getter,
+                                            ctx.game().bid_door,
+                                            DoorMeta {
+                                                part: DoorPart::Upper,
+                                                dir,
+                                            },
+                                            &mut self.tile_blocks,
+                                            &mut self.block_updates,
+                                        );
+                                    }
+                                }
+
+                            }
+                        }
                     }
                 }
                 _ => (),

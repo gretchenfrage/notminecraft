@@ -35,6 +35,8 @@ pub struct JarAssets {
 	block_glass: DynamicImage,
 	block_log_side: DynamicImage,
 	block_log_top: DynamicImage,
+	block_door_upper: DynamicImage,
+	block_door_lower: DynamicImage,
 	
 	lang: Localization,
 }
@@ -87,6 +89,8 @@ impl JarAssets {
 		let block_glass = terrain.crop_imm(16, 3 * 16, 16, 16);
 		let block_log_side = terrain.crop_imm(4 * 16, 16, 16, 16);
 		let block_log_top = terrain.crop_imm(5 * 16, 16, 16, 16);
+		let block_door_upper = terrain.crop_imm(16, 5 * 16, 16, 16);
+		let block_door_lower = terrain.crop_imm(16, 6 * 16, 16, 16);
 
 		let menu_bg = jar.read_image("gui/background.png").await?;
 
@@ -129,6 +133,8 @@ impl JarAssets {
 			block_glass,
 			block_log_side,
 			block_log_top,
+			block_door_upper,
+			block_door_lower,
 
 			lang,
 		})
@@ -177,6 +183,8 @@ impl JarAssets {
 					self.block_glass,
 					self.block_log_side,
 					self.block_log_top,
+					self.block_door_upper,
+					self.block_door_lower,
 				],
 			);
 

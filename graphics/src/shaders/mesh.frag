@@ -37,4 +37,7 @@ void main() {
     if (i_pos.z > max_z) {
         discard;
     }
+    if (tex_color.a == 0) {
+        discard;
+    }
 }

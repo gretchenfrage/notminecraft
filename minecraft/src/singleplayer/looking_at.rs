@@ -41,7 +41,8 @@ pub fn compute_looking_at(
                 BlockMeshLogic::Invisible => (),
                 BlockMeshLogic::Simple(_)
                 | BlockMeshLogic::SimpleFaces(_)
-                | BlockMeshLogic::Grass => {
+                | BlockMeshLogic::Grass
+                | BlockMeshLogic::Door => {
                     return Some(LookingAt {
                         tile,
                         pos,
