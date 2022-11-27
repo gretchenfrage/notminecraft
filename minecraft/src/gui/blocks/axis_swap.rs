@@ -138,7 +138,7 @@ impl<'a, I: GuiVisitorMaperator<'a>> GuiVisitorMaperator<'a> for AxisSwap<I> {
         visitor: &'b mut GuiVisitor<'a, '_, T>,
     ) -> GuiVisitor<'a, 'b, T>
     {
-        visitor.reborrow()
+        self.0.next(visitor)
             .modify(Transform2(Mat3::new(
                 0.0, 1.0, 0.0,
                 1.0, 0.0, 0.0,

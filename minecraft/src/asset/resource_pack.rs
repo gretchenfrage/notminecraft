@@ -18,6 +18,8 @@ pub struct ResourcePack {
 	pub menu_bg: GpuImage,
 
     pub hud_crosshair: GpuImage,
+    pub hud_hotbar: GpuImage,
+    pub hud_hotbar_selected: GpuImage,
 
     /// Baseline sky color at no-rain daytime.
     pub sky_day: Rgb<f32>,

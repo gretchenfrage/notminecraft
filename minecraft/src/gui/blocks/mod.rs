@@ -12,23 +12,11 @@ mod margin;
 mod modify;
 mod logical_size;
 mod stack;
+mod image;
 mod tile_image;
 mod tile_9;
 mod text;
 
-
-//mod mc;
-/*mod axis_swap;
-mod center;
-mod cursor_is_over_tracker;
-mod layer;
-mod margin;
-mod modify;
-mod stable_unscaled_size;
-mod stack;*/
-//mod text;
-//mod tile_9;
-//mod tile_image;
 
 pub use self::{
     axis_swap::{

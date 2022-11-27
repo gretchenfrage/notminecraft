@@ -28,22 +28,14 @@ use crate::{
     },
     chunk_mesh::ChunkMesh,
     gui::{
-        blocks::simple_gui_block::{
-            SimpleGuiBlock,
-            simple_blocks_cursor_impl,
+        blocks::{
+            simple_gui_block::{
+                SimpleGuiBlock,
+                simple_blocks_cursor_impl,
+            },
+            *,
         },
-        GuiStateFrame,
-        DimParentSets,
-        GuiVisitor,
-        GuiVisitorTarget,
-        GuiWindowContext,
-        GuiSpatialContext,
-        GuiBlock,
-        SizedGuiBlock,
-        GuiNode,
-        MouseButton,
-        VirtualKeyCode,
-        impl_visit_nodes,
+        *,
     },
     util::number_key::num_row_key,
 };
@@ -95,16 +87,86 @@ pub struct Singleplayer {
     block_updates: BlockUpdateQueue,
     chunk_loader: ChunkLoader,
 
-    selected_block: SelectedBlock,
+    reach: f32,
 
+    hotbar_items: [Option<HotbarItem>; 9],
+    hotbar_selected: usize,
+ 
     _debug_cube_mesh: Mesh,
     //_human_mesh: Mesh,
+
 }
 
-#[derive(Debug, Copy, Clone)]
-enum SelectedBlock {
-    Simple(BlockId<()>),
-    Door,
+#[derive(Debug)]
+enum HotbarItem {
+    SimpleBlock {
+        bid: BlockId<()>,
+        hud_mesh: Mesh,
+    },
+    Door {
+        hud_mesh: Mesh,
+    }
+}
+
+fn simple_hud_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
+    let mut mesh_buf = MeshData::new();
+    let shade = 0.5;
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.0, 0.0, 0.0].into(),
+            pos_ext_1: [0.0, 1.0, 0.0].into(),
+            pos_ext_2: [1.0, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
+            tex_index,
+        });
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [1.0, 0.0, 0.0].into(),
+            pos_ext_1: [0.0, 1.0, 0.0].into(),
+            pos_ext_2: [0.0, 0.0, 1.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
+            tex_index,
+        });
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.0, 1.0, 0.0].into(),
+            pos_ext_1: [0.0, 0.0, 1.0].into(),
+            pos_ext_2: [1.0, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [Rgba::white(); 4],
+            tex_index,
+        });
+    mesh_buf.upload(renderer)
+}
+
+fn door_hud_mesh(renderer: &Renderer) -> Mesh {
+    let mut mesh_buf = MeshData::new();
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.25, 0.0, 0.5].into(),
+            pos_ext_1: [0.0, 0.5, 0.0].into(),
+            pos_ext_2: [0.5, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [Rgba::white(); 4],
+            tex_index: 10,
+        });
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.25, 0.5, 0.5].into(),
+            pos_ext_1: [0.0, 0.5, 0.0].into(),
+            pos_ext_2: [0.5, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [Rgba::white(); 4],
+            tex_index: 9,
+        });
+    mesh_buf.upload(renderer)
 }
 
 fn insert_chunk(
@@ -279,7 +341,43 @@ impl Singleplayer {
             block_updates: BlockUpdateQueue::new(),
             chunk_loader,
 
-            selected_block: SelectedBlock::Simple(game.bid_stone),
+            reach: 12.0,
+
+            hotbar_items: [
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_stone,
+                    hud_mesh: simple_hud_mesh(0, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_dirt,
+                    hud_mesh: simple_hud_mesh(1, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_grass,
+                    hud_mesh: simple_hud_mesh(2, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_planks,
+                    hud_mesh: simple_hud_mesh(4, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_brick,
+                    hud_mesh: simple_hud_mesh(5, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_glass,
+                    hud_mesh: simple_hud_mesh(6, renderer),
+                }),
+                Some(HotbarItem::SimpleBlock {
+                    bid: game.bid_log,
+                    hud_mesh: simple_hud_mesh(7, renderer),
+                }),
+                Some(HotbarItem::Door {
+                    hud_mesh: door_hud_mesh(renderer),
+                }),
+                None,
+            ],
+            hotbar_selected: 0,
 
             _debug_cube_mesh: debug_cube_mesh,
         }
@@ -287,13 +385,161 @@ impl Singleplayer {
 
     fn gui<'a>(
         &'a mut self,
-        _: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
     {
-        self
+        layer((
+            WorldGuiBlock {
+                movement: &self.movement,
+                chunks: &self.chunks,
+                tile_meshes: &mut self.tile_meshes,
+                tile_blocks: &self.tile_blocks,
+                reach: self.reach,
+            },
+            align(0.5,
+                logical_size(30.0,
+                    &ctx.resources().hud_crosshair,
+                ),
+            ),
+            align([0.5, 1.0],
+                logical_size([364.0, 44.0],
+                    layer((
+                        &ctx.resources().hud_hotbar,
+                        align(0.5,
+                            logical_height(40.0,
+                                h_stack(0.0, (
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[0],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[1],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[2],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[3],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[4],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[5],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[6],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[7],
+                                        },
+                                    ),
+                                    logical_width(40.0,
+                                        HotbarItemGuiBlock {
+                                            item: &self.hotbar_items[8],
+                                        },
+                                    ),
+                                     // TODO not be this is how it needs to be made by me
+                                )),
+                            )
+                        ),
+                        align([self.hotbar_selected as f32 / 8.0, 0.5],
+                            logical_size([44.0, 44.0],
+                                align(0.5,
+                                    logical_size(48.0,
+                                        &ctx.resources().hud_hotbar_selected,
+                                    )
+                                )
+                            )
+                        ),
+                    )),
+                ),
+            ),
+            CaptureMouseGuiBlock,
+        ))
     }
 }
 
+#[derive(Debug)]
+struct HotbarItemGuiBlock<'a> {
+    item: &'a Option<HotbarItem>,
+}
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
+    simple_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
+    {
+        match self.inner.item {
+            Some(HotbarItem::SimpleBlock { hud_mesh, .. }) => {
+                let view_proj = Mat4::new(
+                    1.0, 0.0, 0.0, 0.5,
+                    0.0, -1.0, 0.0, 0.5,
+                    0.0, 0.0, 0.01, 0.5,
+                    0.0, 0.0, 0.0, 1.0,
+                );
+                canvas.reborrow()
+                    .scale(self.size)
+                    .begin_3d(view_proj)
+                    .scale(0.5)
+                    .rotate(Quaternion::rotation_x(-PI / 5.0))
+                    .rotate(Quaternion::rotation_y(PI / 4.0))
+                    .translate(-0.5)
+                    .draw_mesh(hud_mesh, &ctx.resources().blocks);
+                /*
+                let view_proj =
+                    Mat4::<f32>::translation_3d([0.0, 0.0, 0.5])
+                    * Mat4::<f32>::scaling_3d([0.5, 0.5, 0.01])
+                    * Mat4::<f32>::rotation_z(PI / 4.0)
+                    * Mat4::<f32>::rotation_y(PI / 4.0);
+                canvas.reborrow()
+                    .scale(self.size)
+                    .begin_3d(view_proj)
+                    .draw_mesh(self.inner.cube_mesh, &ctx.resources().blocks);
+                    */
+            },
+            Some(HotbarItem::Door { hud_mesh }) => {
+                let view_proj = Mat4::new(
+                    1.0, 0.0, 0.0, 0.5,
+                    0.0, -1.0, 0.0, 0.5,
+                    0.0, 0.0, 0.01, 0.5,
+                    0.0, 0.0, 0.0, 1.0,
+                );
+                canvas.reborrow()
+                    .scale(self.size)
+                    .begin_3d(view_proj)
+                    .scale(0.5)
+                    .rotate(Quaternion::rotation_x(-PI / 5.0))
+                    .rotate(Quaternion::rotation_y(PI / 4.0))
+                    .translate(-0.5)
+                    .draw_mesh(hud_mesh, &ctx.resources().blocks);
+            }
+            None => (),
+        }
+    }
+}
+
+ /*
+        let crosshair_size = 30.0 * self.scale;
+        canvas.reborrow()
+            .translate(-crosshair_size / 2.0)
+            .translate(self.size / 2.0)
+            .draw_image(&ctx.resources().hud_crosshair, crosshair_size);
+            */
 impl GuiStateFrame for Singleplayer {
     impl_visit_nodes!();
 
@@ -337,19 +583,8 @@ impl GuiStateFrame for Singleplayer {
         if key == VirtualKeyCode::Escape {
             ctx.global().pop_state_frame();
         } else if let Some(n) = num_row_key(key) {
-            let select = match n {
-                1 => Some(SelectedBlock::Simple(ctx.game().bid_stone)),
-                2 => Some(SelectedBlock::Simple(ctx.game().bid_dirt)),
-                3 => Some(SelectedBlock::Simple(ctx.game().bid_grass)),
-                4 => Some(SelectedBlock::Simple(ctx.game().bid_planks)),
-                5 => Some(SelectedBlock::Simple(ctx.game().bid_brick)),
-                6 => Some(SelectedBlock::Simple(ctx.game().bid_glass)),
-                7 => Some(SelectedBlock::Simple(ctx.game().bid_log)),
-                8 => Some(SelectedBlock::Door),
-                _ => None,
-            };
-            if let Some(select) = select {
-                self.selected_block = select;
+            if n >= 1 && n <= 9 {
+                self.hotbar_selected = n as usize - 1;
             }
         }
     }
@@ -371,7 +606,7 @@ impl GuiStateFrame for Singleplayer {
         let looking_at = compute_looking_at(
             self.movement.cam_pos,
             self.movement.cam_dir(),
-            100.0,
+            self.reach,
             &getter,
             &self.tile_blocks,
             ctx.game(),
@@ -430,8 +665,8 @@ impl GuiStateFrame for Singleplayer {
                         .face
                         .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
                     {
-                        match self.selected_block {
-                            SelectedBlock::Simple(bid) => {
+                        match self.hotbar_items[self.hotbar_selected] {
+                            Some(HotbarItem::SimpleBlock { bid, .. }) => {
                                 put_block(
                                     tile2,
                                     &getter,
@@ -441,9 +676,10 @@ impl GuiStateFrame for Singleplayer {
                                     &mut self.block_updates,
                                 );
                             }
-                            SelectedBlock::Door => {
-                                let yaw = self.movement.cam_yaw
-                                    + (2.0 * PI) 
+                            Some(HotbarItem::Door { .. }) => {
+                                let yaw = ((self.movement.cam_yaw
+                                    % (2.0 * PI))
+                                    + (2.0 * PI))
                                     % (2.0 * PI);
                                 let dir =
                                     if yaw < 0.25 * PI {
@@ -494,8 +730,8 @@ impl GuiStateFrame for Singleplayer {
                                         );
                                     }
                                 }
-
-                            }
+                            },
+                            None => (),
                         }
                     }
                 }
@@ -505,7 +741,16 @@ impl GuiStateFrame for Singleplayer {
     }
 }
 
-impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
+#[derive(Debug)]
+struct WorldGuiBlock<'a> {
+    movement: &'a MovementController,
+    chunks: &'a LoadedChunks,
+    tile_meshes: &'a mut PerChunk<ChunkMesh>,
+    tile_blocks: &'a PerChunk<ChunkBlocks>,
+    reach: f32,
+}
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
     simple_blocks_cursor_impl!();
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
@@ -549,7 +794,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
             let looking_at = compute_looking_at(
                 state.movement.cam_pos,
                 cam_dir,
-                100.0,
+                state.reach,
                 &getter,
                 &state.tile_blocks,
                 ctx.game(),
@@ -588,12 +833,21 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut Singleplayer> {
         }
 
         // render the crosshair
+        /*
         let crosshair_size = 30.0 * self.scale;
         canvas.reborrow()
             .translate(-crosshair_size / 2.0)
             .translate(self.size / 2.0)
             .draw_image(&ctx.resources().hud_crosshair, crosshair_size);
+            */
     }
+}
+
+#[derive(Debug)]
+struct CaptureMouseGuiBlock;
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<CaptureMouseGuiBlock> {
+    simple_blocks_cursor_impl!();
 
     fn on_cursor_click(
         self,

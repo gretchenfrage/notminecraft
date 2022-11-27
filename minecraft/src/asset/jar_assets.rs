@@ -25,6 +25,8 @@ pub struct JarAssets {
 	menu_bg: DynamicImage,
 
 	hud_crosshair: DynamicImage,
+	hud_hotbar: DynamicImage,
+	hud_hotbar_selected: DynamicImage,
 
 	block_stone: DynamicImage,
 	block_dirt: DynamicImage,
@@ -76,6 +78,8 @@ impl JarAssets {
 			left: 2,
 			right: 2,
 		})?;
+		let hud_hotbar = gui.crop_imm(0, 0, 182, 22);
+		let hud_hotbar_selected = gui.crop_imm(0, 22, 24, 24);
 
 		let icons = jar.read_image("gui/icons.png").await?;
 		let hud_crosshair = icons.crop_imm(0, 0, 15, 15);
@@ -123,6 +127,8 @@ impl JarAssets {
 			menu_bg,
 
 			hud_crosshair,
+			hud_hotbar,
+			hud_hotbar_selected,
 
 			block_stone,
 			block_dirt,
@@ -159,6 +165,8 @@ impl JarAssets {
 		let menu_bg = renderer.load_image_raw(&self.menu_bg);
 
 		let hud_crosshair = renderer.load_image_raw(&self.hud_crosshair);
+		let hud_hotbar = renderer.load_image_raw(&self.hud_hotbar);
+		let hud_hotbar_selected = renderer.load_image_raw(&self.hud_hotbar_selected);		
 
 		let sky_day = [0.45, 0.62, 1.00].into();
 		let sky_night = [0.00, 0.02, 0.05].into();
@@ -197,6 +205,8 @@ impl JarAssets {
 			menu_bg,
 
 			hud_crosshair,
+			hud_hotbar,
+			hud_hotbar_selected,
 
 			sky_day,
 			sky_night,
