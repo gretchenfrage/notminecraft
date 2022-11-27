@@ -5,9 +5,11 @@ pub mod per_block;
 use self::per_block::PerBlock;
 use chunk_data::{
     AIR,
+    FACES,
     BlockRegistry,
     BlockId,
     PerFace,
+    Face,
 };
 use std::sync::Arc;
 
@@ -22,8 +24,10 @@ pub struct GameData {
     pub bid_stone: BlockId<()>,
     pub bid_dirt: BlockId<()>,
     pub bid_grass: BlockId<()>,
+    pub bid_planks: BlockId<()>,
     pub bid_brick: BlockId<()>,
     pub bid_glass: BlockId<()>,
+    pub bid_log: BlockId<()>,
 }
 
 #[derive(Debug)]
@@ -44,8 +48,11 @@ pub const BTI_STONE: usize = 0;
 pub const BTI_DIRT: usize = 1;
 pub const BTI_GRASS_SIDE: usize = 2;
 pub const BTI_GRASS_TOP: usize = 3;
-pub const BTI_BRICK: usize = 4;
-pub const BTI_GLASS: usize = 5;
+pub const BTI_PLANKS: usize = 4;
+pub const BTI_BRICK: usize = 5;
+pub const BTI_GLASS: usize = 6;
+pub const BTI_LOG_SIDE: usize = 7;
+pub const BTI_LOG_TOP: usize = 8;
 
 impl GameData {
     pub fn new() -> Self {
@@ -69,6 +76,10 @@ impl GameData {
         block_obscures.set(bid_grass, PerFace::repeat(true));
         block_mesh_logics.set(bid_grass, BlockMeshLogic::Grass);
 
+        let bid_planks = blocks.register();
+        block_obscures.set(bid_planks, PerFace::repeat(true));
+        block_mesh_logics.set(bid_planks, BlockMeshLogic::Simple(BTI_PLANKS));
+
         let bid_brick = blocks.register();
         block_obscures.set(bid_brick, PerFace::repeat(true));
         block_mesh_logics.set(bid_brick, BlockMeshLogic::Simple(BTI_BRICK));
@@ -76,6 +87,17 @@ impl GameData {
         let bid_glass = blocks.register();
         block_obscures.set(bid_glass, PerFace::repeat(false));
         block_mesh_logics.set(bid_glass, BlockMeshLogic::Simple(BTI_GLASS));
+
+        let bid_log = blocks.register();
+        block_obscures.set(bid_log, PerFace::repeat(true));
+        block_mesh_logics
+            .set(
+                bid_log,
+                BlockMeshLogic::SimpleFaces(FACES.map(|face| match face {
+                    Face::PosY | Face::NegY => BTI_LOG_TOP,
+                    _ => BTI_LOG_SIDE,
+                })),
+            );
 
         GameData {
             blocks: blocks.finalize(),
@@ -86,8 +108,10 @@ impl GameData {
             bid_stone,
             bid_dirt,
             bid_grass,
+            bid_planks,
             bid_brick,
             bid_glass,
+            bid_log,
         }
     }
 }

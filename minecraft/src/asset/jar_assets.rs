@@ -30,8 +30,11 @@ pub struct JarAssets {
 	block_dirt: DynamicImage,
 	block_grass_side: DynamicImage,
 	block_grass_top: DynamicImage,
+	block_planks: DynamicImage,
 	block_brick: DynamicImage,
 	block_glass: DynamicImage,
+	block_log_side: DynamicImage,
+	block_log_top: DynamicImage,
 	
 	lang: Localization,
 }
@@ -79,8 +82,11 @@ impl JarAssets {
 		let block_dirt = terrain.crop_imm(32, 0, 16, 16);
 		let block_grass_side = terrain.crop_imm(3 * 16, 0, 16, 16);
 		let block_grass_top = terrain.crop_imm(0, 0, 16, 16);
+		let block_planks = terrain.crop_imm(4 * 16, 0, 16, 16);
 		let block_brick = terrain.crop_imm(7 * 16, 0, 16, 16);
 		let block_glass = terrain.crop_imm(16, 3 * 16, 16, 16);
+		let block_log_side = terrain.crop_imm(4 * 16, 16, 16, 16);
+		let block_log_top = terrain.crop_imm(5 * 16, 16, 16, 16);
 
 		let menu_bg = jar.read_image("gui/background.png").await?;
 
@@ -118,8 +124,11 @@ impl JarAssets {
 			block_dirt,
 			block_grass_side,
 			block_grass_top,
+			block_planks,
 			block_brick,
 			block_glass,
+			block_log_side,
+			block_log_top,
 
 			lang,
 		})
@@ -163,8 +172,11 @@ impl JarAssets {
 					self.block_dirt,
 					self.block_grass_side,
 					self.block_grass_top,
+					self.block_planks,
 					self.block_brick,
 					self.block_glass,
+					self.block_log_side,
+					self.block_log_top,
 				],
 			);
 

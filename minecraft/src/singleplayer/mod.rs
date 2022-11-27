@@ -39,6 +39,7 @@ use crate::{
         VirtualKeyCode,
         impl_visit_nodes,
     },
+    util::number_key::num_row_key,
 };
 use chunk_data::{
     FACES,
@@ -85,6 +86,8 @@ pub struct Singleplayer {
     
     block_updates: BlockUpdateQueue,
     chunk_loader: ChunkLoader,
+
+    selected_block: BlockId<()>,
 
     _debug_cube_mesh: Mesh,
     //_human_mesh: Mesh,
@@ -262,6 +265,8 @@ impl Singleplayer {
             block_updates: BlockUpdateQueue::new(),
             chunk_loader,
 
+            selected_block: game.bid_stone,
+
             _debug_cube_mesh: debug_cube_mesh,
         }
     }
@@ -317,6 +322,20 @@ impl GuiStateFrame for Singleplayer {
     ) {
         if key == VirtualKeyCode::Escape {
             ctx.global().pop_state_frame();
+        } else if let Some(n) = num_row_key(key) {
+            let select = match n {
+                1 => Some(ctx.game().bid_stone),
+                2 => Some(ctx.game().bid_dirt),
+                3 => Some(ctx.game().bid_grass),
+                4 => Some(ctx.game().bid_planks),
+                5 => Some(ctx.game().bid_brick),
+                6 => Some(ctx.game().bid_glass),
+                7 => Some(ctx.game().bid_log),
+                _ => None,
+            };
+            if let Some(select) = select {
+                self.selected_block = select;
+            }
         }
     }
 
@@ -362,7 +381,7 @@ impl GuiStateFrame for Singleplayer {
                         put_block(
                             tile2,
                             &getter,
-                            ctx.game().bid_glass,
+                            self.selected_block,
                             (),
                             &mut self.tile_blocks,
                             &mut self.block_updates,
