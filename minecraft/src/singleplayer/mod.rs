@@ -64,7 +64,9 @@ use graphics::{
     frame_content::{
         Canvas2,
         Mesh,
+        GpuImage,
     },
+    modifier::Transform2,
 };
 use std::{
     ops::Range,
@@ -91,6 +93,9 @@ pub struct Singleplayer {
 
     hotbar_items: [Option<HotbarItem>; 9],
     hotbar_selected: usize,
+
+    evil_jpg: GpuImage,
+    evil_animation: f32,
  
     _debug_cube_mesh: Mesh,
     //_human_mesh: Mesh,
@@ -286,7 +291,7 @@ impl Singleplayer {
     pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
         let chunk_loader = ChunkLoader::new(game, renderer);
 
-        let view_dist = 12;
+        let view_dist = 6;
 
         let mut to_request = Vec::new();
         for x in -view_dist..view_dist {
@@ -379,6 +384,9 @@ impl Singleplayer {
             ],
             hotbar_selected: 0,
 
+            evil_jpg: renderer.load_image(include_bytes!("evil.png")).unwrap(),
+            evil_animation: 0.0,
+
             _debug_cube_mesh: debug_cube_mesh,
         }
     }
@@ -388,6 +396,9 @@ impl Singleplayer {
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
     {
+        let hand_w = ctx.size.w as f32 * 0.3 / ctx.scale;
+        let hand_h = hand_w / 2368.0 * 3014.0;
+        let hand_size = Extent2::new(hand_w, hand_h);
         layer((
             WorldGuiBlock {
                 movement: &self.movement,
@@ -396,6 +407,30 @@ impl Singleplayer {
                 tile_blocks: &self.tile_blocks,
                 reach: self.reach,
             },
+            align([1.1, 1.1],
+                modify(Transform2::translate(hand_size),
+                    modify(Transform2::rotate(PI * 0.10 * self.evil_animation.sin()),
+                        modify(Transform2::translate(-hand_size),
+                            logical_size(hand_size,
+                                layer((
+                                    align([0.25, 0.25],
+                                        logical_size(0.0,
+                                            align(0.5,
+                                                logical_size(hand_w * 0.75,
+                                                    HotbarItemGuiBlock {
+                                                        item: &self.hotbar_items[self.hotbar_selected],
+                                                    },
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                    &self.evil_jpg,
+                                )),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
             align(0.5,
                 logical_size(30.0,
                     &ctx.resources().hud_crosshair,
@@ -522,7 +557,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
                 canvas.reborrow()
                     .scale(self.size)
                     .begin_3d(view_proj)
-                    .scale(0.5)
+                    .scale(0.75)
                     .rotate(Quaternion::rotation_x(-PI / 5.0))
                     .rotate(Quaternion::rotation_y(PI / 4.0))
                     .translate(-0.5)
@@ -544,6 +579,9 @@ impl GuiStateFrame for Singleplayer {
     impl_visit_nodes!();
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+        self.evil_animation -= elapsed * 15.0;
+        self.evil_animation = f32::max(self.evil_animation, 0.0);
+
         // insert chunks that are ready to be loaded
         // this may generate block updates
         /*while*/ if let Some(chunk) = self.chunk_loader.poll_ready() {
@@ -602,6 +640,8 @@ impl GuiStateFrame for Singleplayer {
         ctx: &GuiWindowContext,
         button: MouseButton,
     ) {
+        self.evil_animation = PI;
+
         let getter = self.chunks.getter();
         let looking_at = compute_looking_at(
             self.movement.cam_pos,

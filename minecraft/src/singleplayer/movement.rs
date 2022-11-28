@@ -63,7 +63,7 @@ impl Default for MovementController {
             fly_v_speed: 8.0,
 
             fly_h_speed_sprinting: 21.6,
-            fly_v_speed_sprinting: 8.0,
+            fly_v_speed_sprinting: 16.0,
 
             acceleration_h: 50.0,
             acceleration_v: 50.0,
