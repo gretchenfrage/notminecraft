@@ -181,6 +181,34 @@ impl Sign {
             Sign::Zero
         }
     }
+
+    pub const fn of_float(n: f32) -> Self {
+        if n > 0.0 {
+            Sign::Pos
+        } else if n < 0.0 {
+            Sign::Neg
+        } else {
+            Sign::Zero
+        }
+    }
+
+    pub const fn from_int(n: i64) -> Option<Self> {
+        match n {
+            -1 => Some(Sign::Neg),
+            0 => Some(Sign::Zero),
+            1 => Some(Sign::Pos),
+            _ => None,
+        }
+    }
+
+    pub const fn neg(self) -> Self {
+        // TODO: this only exists because const traits aren't stable yet
+        match self {
+            Sign::Neg => Sign::Pos,
+            Sign::Zero => Sign::Zero,
+            Sign::Pos => Sign::Neg,
+        }
+    }
 }
 
 impl Into<i64> for Sign {
@@ -195,33 +223,11 @@ impl Into<f32> for Sign {
     }
 }
 
-impl From<i64> for Sign {
-    fn from(n: i64) -> Self {
-        Sign::of_int(n)
-    }
-}
-
-impl From<f32> for Sign {
-    fn from(n: f32) -> Self {
-        if n > 0.0 {
-            Sign::Pos
-        } else if n < 0.0 {
-            Sign::Neg
-        } else {
-            Sign::Zero
-        }
-    }
-}
-
 impl Neg for Sign {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        match self {
-            Sign::Neg => Sign::Pos,
-            Sign::Zero => Sign::Zero,
-            Sign::Pos => Sign::Neg,
-        }
+        Sign::neg(self)
     }
 }
 
@@ -232,8 +238,9 @@ macro_rules! veclike_axis_enum {
         $per_name:ident,
         $all_constant:ident,
         ($(
-            $pos:ident = [$pos_x:expr, $pos_y:expr, $pos_z:expr],
-            $neg:ident = [$neg_x:expr, $neg_y:expr, $neg_z:expr],
+            $pos:ident
+                = [$pos_x:ident, $pos_y:ident, $pos_z:ident]
+                = -$neg:ident,
         )*),
     )=>{
         axis_enum!(
@@ -248,25 +255,45 @@ macro_rules! veclike_axis_enum {
         );
 
         impl $name {
-            pub const fn to_vec(self) -> Vec3<i64> {
+            pub const fn to_signs(self) -> Vec3<Sign> {
                 match self {$(
-                    $name::$pos => Vec3 { x: $pos_x, y: $pos_y, z: $pos_z },
-                    $name::$neg => Vec3 { x: $neg_x, y: $neg_y, z: $neg_z },
+                    $name::$pos => Vec3 {
+                        x: Sign::$pos_x,
+                        y: Sign::$pos_y,
+                        z: Sign::$pos_z,
+                    },
+                    $name::$neg => Vec3 {
+                        x: -Sign::$pos_x,
+                        y: -Sign::$pos_y,
+                        z: -Sign::$pos_z,
+                    },
                 )*}
             }
 
-            pub const fn from_vec(vec: Vec3<i64>) -> Option<Self> {
+            pub const fn to_vec(self) -> Vec3<i64> {
+                self.to_signs().map(|n| n.to_int())
+            }
+
+            pub const fn from_signs(signs: Vec3<Sign>) -> Option<Self> {
                 match vec {
                     $(
                         Vec3 {
-                            x: $pos_x, y: $pos_y, z: $pos_z
+                            x: Sign::$pos_x,
+                            y: Sign::$pos_y,
+                            z: Sign::$pos_z,
                         } => Some($name::$pos),
                         Vec3 {
-                            x: $neg_x, y: $neg_y, z: $neg_z
+                            x: Sign::$pos_x.neg(),
+                            y: Sign::$pos_y.neg(),
+                            z: Sign::$pos_z.neg(),
                         } => Some($name::$neg),
                     )*
                     _ => None
                 }
+            }
+
+            pub const fn from_vec(vec: Vec3<i64>) -> Option<Self> {
+                if let 
             }
         }
 
