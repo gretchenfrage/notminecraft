@@ -20,6 +20,8 @@ num_cpus = "1"
 crossbeam-channel = "0.5"
 std-semaphore = "0.1"
 bracket-noise = "0.8"
+serde = "1"
+bincode = "1"
 
 [dependencies.graphics]
 path = "../graphics"

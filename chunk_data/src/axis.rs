@@ -17,15 +17,13 @@ macro_rules! axis_enum {
         $per_name:ident,
         $all_constant:ident,
         ($(
-            $pos:ident = [$pos_x:expr, $pos_y:expr, $pos_z:expr],
-            $neg:ident = [$neg_x:expr, $neg_y:expr, $neg_z:expr],
+            $variant:ident,
         )*),
     )=>{
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[repr(u8)]
         pub enum $name {$(
-            $pos,
-            $neg,
+            $variant,
         )*}
 
         pub const $num_constant: usize = $num;
@@ -34,9 +32,112 @@ macro_rules! axis_enum {
         pub struct $per_name<T>(pub [T; $num_constant]);
 
         pub const $all_constant: $per_name<$name> = $per_name([$(
-            $name::$pos,
-            $name::$neg,
+            $name::$variant,
         )*]);
+
+        impl<T> Index<$name> for $per_name<T> {
+            type Output = T;
+
+            fn index(&self, i: $name) -> &Self::Output {
+                &self.0[i as usize]
+            }
+        }
+
+        impl<T> IndexMut<$name> for $per_name<T> {
+            fn index_mut(&mut self, i: $name) -> &mut Self::Output {
+                &mut self.0[i as usize]
+            }
+        }
+
+        
+
+        impl<T: Clone> $per_name<T> {
+            pub fn repeat(val: T) -> Self {
+                $per_name([$(
+                    #[allow(non_snake_case)]
+                    {
+                        let $variant = ();
+                        let _ = $variant;
+                        val.clone()
+                    },
+                )*])
+            }
+
+            pub fn map<B, F>(self, f: F) -> $per_name<B>
+            where
+                F: FnMut(T) -> B,
+            {
+                $per_name(self.0.map(f))
+            }
+        }
+
+        impl<T> IntoIterator for $per_name<T> {
+            type Item = T;
+            type IntoIter = <[T; $num_constant] as IntoIterator>::IntoIter;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.0.into_iter()
+            }
+        }
+    };
+}
+
+axis_enum!(
+    Axis,
+    NUM_AXES = 3,
+    PerAxis,
+    AXES,
+    (
+        X,
+        Y,
+        Z,
+    ),
+);
+
+axis_enum!(
+    Pole,
+    NUM_POLES = 2,
+    PerPole,
+    POLES,
+    (
+        Pos,
+        Neg,
+    ),
+);
+
+axis_enum!(
+    Sign,
+    NUM_SIGNS = 3,
+    PerSign,
+    SIGNS,
+    (
+        Neg,
+        Zero,
+        Pos,
+    ),
+);
+
+macro_rules! veclike_axis_enum {
+    (
+        $name:ident,
+        $num_constant:ident = $num:expr,
+        $per_name:ident,
+        $all_constant:ident,
+        ($(
+            $pos:ident = [$pos_x:expr, $pos_y:expr, $pos_z:expr],
+            $neg:ident = [$neg_x:expr, $neg_y:expr, $neg_z:expr],
+        )*),
+    )=>{
+        axis_enum!(
+            $name,
+            $num_constant = $num,
+            $per_name,
+            $all_constant,
+            ($(
+                $pos,
+                $neg,
+            )*),
+        );
 
         impl $name {
             pub const fn to_vec(self) -> Vec3<i64> {
@@ -81,20 +182,6 @@ macro_rules! axis_enum {
             }
         }
 
-        impl<T> Index<$name> for $per_name<T> {
-            type Output = T;
-
-            fn index(&self, i: $name) -> &Self::Output {
-                &self.0[i as usize]
-            }
-        }
-
-        impl<T> IndexMut<$name> for $per_name<T> {
-            fn index_mut(&mut self, i: $name) -> &mut Self::Output {
-                &mut self.0[i as usize]
-            }
-        }
-
         impl Neg for $name {
             type Output = Self;
 
@@ -103,36 +190,6 @@ macro_rules! axis_enum {
                     $name::$pos => $name::$neg,
                     $name::$neg => $name::$pos,
                 )*}
-            }
-        }
-
-        impl<T: Clone> $per_name<T> {
-            pub fn repeat(val: T) -> Self {
-                $per_name([$(
-                    #[allow(non_snake_case)]
-                    {
-                        let $pos = ();
-                        let _ = $pos;
-                        val.clone()
-                    },
-                    val.clone(),
-                )*])
-            }
-
-            pub fn map<B, F>(self, f: F) -> $per_name<B>
-            where
-                F: FnMut(T) -> B,
-            {
-                $per_name(self.0.map(f))
-            }
-        }
-
-        impl<T> IntoIterator for $per_name<T> {
-            type Item = T;
-            type IntoIter = <[T; $num_constant] as IntoIterator>::IntoIter;
-
-            fn into_iter(self) -> Self::IntoIter {
-                self.0.into_iter()
             }
         }
     };
@@ -150,7 +207,7 @@ macro_rules! fec_system {
             $corner:ident = [$($corner_vec:tt)*],
         )*),
     )=>{
-        axis_enum!(
+        veclike_axis_enum!(
             Face,
             NUM_FACES = 6,
             PerFace,
@@ -160,7 +217,7 @@ macro_rules! fec_system {
             )*),
         );
 
-        axis_enum!(
+        veclike_axis_enum!(
             Edge,
             NUM_EDGES = 12,
             PerEdge,
@@ -170,7 +227,7 @@ macro_rules! fec_system {
             )*),
         );
 
-        axis_enum!(
+        veclike_axis_enum!(
             Corner,
             NUM_CORNERS = 8,
             PerCorner,
@@ -180,7 +237,7 @@ macro_rules! fec_system {
             )*),
         );
 
-        axis_enum!(
+        veclike_axis_enum!(
             FaceEdgeCorner,
             NUM_FACES_EDGES_CORNERS = 26,
             PerFaceEdgeCorner,
