@@ -49,8 +49,6 @@ macro_rules! axis_enum {
             }
         }
 
-        
-
         impl<T: Clone> $per_name<T> {
             pub fn repeat(val: T) -> Self {
                 $per_name([$(
@@ -94,97 +92,138 @@ axis_enum!(
     ),
 );
 
-macro_rules! scalarlike_axis_enum {
-    (
-        $name:ident,
-        $num_constant:ident = $num:expr,
-        $per_name:ident,
-        $all_constant:ident,
-        ($(
-            $variant:ident = ($int:expr) = -$neg:ident,
-        )*),
-    )=>{
-        axis_enum!(
-            $name,
-            $num_constant = $num,
-            $per_name,
-            $all_constant,
-            ($(
-                $variant,
-            )*),
-        );
-
-        impl $name {
-            pub const fn to_int(self) -> i64 {
-                match self {$(
-                    $name::$variant => $int,
-                )*}
-            }
-
-            pub const fn from_int(int: i64) -> Option<Self> {
-                match int {
-                    $(
-                        $int => Some($name::$variant),
-                    )*
-                    _ => None
-                }
-            }
-        }
-
-        impl Into<i64> for $name {
-            fn into(self) -> i64 {
-                self.to_int()
-            }
-        }
-
-        impl Into<f32> for $name {
-            fn into(self) -> f32 {
-                self.to_int() as f32
-            }
-        }
-
-        impl TryFrom<i64> for $name {
-            type Error = ();
-
-            fn try_from(int: i64) -> Result<Self, ()> {
-                Self::from_int(int).ok_or(())
-            }
-        }
-
-        impl Neg for $name {
-            type Output = Self;
-
-            fn neg(self) -> Self {
-                match self {$(
-                    $name::$variant => $name::$neg,
-                )*}
-            }
-        }
-    };
-}
-
-scalarlike_axis_enum!(
+axis_enum!(
     Pole,
     NUM_POLES = 2,
     PerPole,
     POLES,
     (
-        Pos = (1) = -Neg,
-        Neg = (-1) = -Pos,
+        Neg,
+        Pos,
     ),
 );
 
-scalarlike_axis_enum!(
+impl Pole {
+    pub const fn to_int(self) -> i64 {
+        match self {
+            Pole::Neg => -1,
+            Pole::Pos => 1,
+        }
+    }
+
+    pub const fn from_int(int: i64) -> Option<Self> {
+        match int {
+            -1 => Some(Pole::Neg),
+            1 => Some(Pole::Pos),
+            _ => None,
+        }
+    }
+}
+
+impl Into<i64> for Pole {
+    fn into(self) -> i64 {
+        self.to_int()
+    }
+}
+
+impl Into<f32> for Pole {
+    fn into(self) -> f32 {
+        self.to_int() as f32
+    }
+}
+
+impl TryFrom<i64> for Pole {
+    type Error = ();
+
+    fn try_from(int: i64) -> Result<Self, ()> {
+        Self::from_int(int).ok_or(())
+    }
+}
+
+impl Neg for Pole {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        match self {
+            Pole::Pos => Pole::Neg,
+            Pole::Neg => Pole::Pos,
+        }
+    }
+}
+
+axis_enum!(
     Sign,
     NUM_SIGNS = 3,
     PerSign,
     SIGNS,
     (
-        Neg = (-1) = -Pos,
-        Zero = (0) = -Zero,
-        Pos = (1) = -Neg,
+        Neg,
+        Zero,
+        Pos,
     ),
 );
+
+impl Sign {
+    pub const fn to_int(self) -> i64 {
+        match self {
+            Sign::Neg => -1,
+            Sign::Zero => 0,
+            Sign::Pos => 1,
+        }
+    }
+
+    pub const fn of_int(n: i64) -> Self {
+        if n > 0 {
+            Sign::Pos
+        } else if n < 0 {
+            Sign::Neg
+        } else {
+            Sign::Zero
+        }
+    }
+}
+
+impl Into<i64> for Sign {
+    fn into(self) -> i64 {
+        self.to_int()
+    }
+}
+
+impl Into<f32> for Sign {
+    fn into(self) -> f32 {
+        self.to_int() as f32
+    }
+}
+
+impl From<i64> for Sign {
+    fn from(n: i64) -> Self {
+        Sign::of_int(n)
+    }
+}
+
+impl From<f32> for Sign {
+    fn from(n: f32) -> Self {
+        if n > 0.0 {
+            Sign::Pos
+        } else if n < 0.0 {
+            Sign::Neg
+        } else {
+            Sign::Zero
+        }
+    }
+}
+
+impl Neg for Sign {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Sign::Neg => Sign::Pos,
+            Sign::Zero => Sign::Zero,
+            Sign::Pos => Sign::Neg,
+        }
+    }
+}
 
 macro_rules! veclike_axis_enum {
     (
