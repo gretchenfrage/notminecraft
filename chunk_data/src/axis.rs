@@ -94,26 +94,95 @@ axis_enum!(
     ),
 );
 
-axis_enum!(
+macro_rules! scalarlike_axis_enum {
+    (
+        $name:ident,
+        $num_constant:ident = $num:expr,
+        $per_name:ident,
+        $all_constant:ident,
+        ($(
+            $variant:ident = ($int:expr) = -$neg:ident,
+        )*),
+    )=>{
+        axis_enum!(
+            $name,
+            $num_constant = $num,
+            $per_name,
+            $all_constant,
+            ($(
+                $variant,
+            )*),
+        );
+
+        impl $name {
+            pub const fn to_int(self) -> i64 {
+                match self {$(
+                    $name::$variant => $int,
+                )*}
+            }
+
+            pub const fn from_int(int: i64) -> Option<Self> {
+                match int {
+                    $(
+                        $int => Some($name::$variant),
+                    )*
+                    _ => None
+                }
+            }
+        }
+
+        impl Into<i64> for $name {
+            fn into(self) -> i64 {
+                self.to_int()
+            }
+        }
+
+        impl Into<f32> for $name {
+            fn into(self) -> f32 {
+                self.to_int() as f32
+            }
+        }
+
+        impl TryFrom<i64> for $name {
+            type Error = ();
+
+            fn try_from(int: i64) -> Result<Self, ()> {
+                Self::from_int(int).ok_or(())
+            }
+        }
+
+        impl Neg for $name {
+            type Output = Self;
+
+            fn neg(self) -> Self {
+                match self {$(
+                    $name::$variant => $name::$neg,
+                )*}
+            }
+        }
+    };
+}
+
+scalarlike_axis_enum!(
     Pole,
     NUM_POLES = 2,
     PerPole,
     POLES,
     (
-        Pos,
-        Neg,
+        Pos = (1) = -Neg,
+        Neg = (-1) = -Pos,
     ),
 );
 
-axis_enum!(
+scalarlike_axis_enum!(
     Sign,
     NUM_SIGNS = 3,
     PerSign,
     SIGNS,
     (
-        Neg,
-        Zero,
-        Pos,
+        Neg = (-1) = -Pos,
+        Zero = (0) = -Zero,
+        Pos = (1) = -Neg,
     ),
 );
 
