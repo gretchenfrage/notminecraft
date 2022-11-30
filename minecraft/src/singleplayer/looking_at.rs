@@ -35,8 +35,7 @@ pub fn compute_looking_at(
             let bid = tile.get(tile_blocks).get();
             let mesh_logic = game
                 .block_mesh_logics
-                .get(bid)
-                .unwrap_or(&BlockMeshLogic::Invisible);
+                .get(bid);
             match mesh_logic {
                 BlockMeshLogic::Invisible => (),
                 BlockMeshLogic::Simple(_)

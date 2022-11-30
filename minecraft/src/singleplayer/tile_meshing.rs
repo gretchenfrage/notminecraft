@@ -42,9 +42,7 @@ pub fn mesh_tile(
 
     let gtc = cc_ltc_to_gtc(tile.cc, lti_to_ltc(tile.lti));
     let bid = tile.get(tile_blocks).get();
-    let mesh_logic = game.block_mesh_logics
-        .get(bid)
-        .unwrap_or(&BlockMeshLogic::Simple(0));
+    let mesh_logic = game.block_mesh_logics.get(bid);
 
     match mesh_logic {
         &BlockMeshLogic::Invisible => (),
@@ -146,11 +144,10 @@ fn mesh_simple_face(
     let gtc2 = gtc + face.to_vec();
     let obscured = getter
         .gtc_get(gtc2)
-        .and_then(|tile2| {
+        .map(|tile2| {
             let bid2 = tile2.get(tile_blocks).get();
-            game.block_obscures.get(bid2)
+            game.block_obscures.get(bid2)[-face]
         })
-        .map(|obscures| obscures[-face])
         .unwrap_or(false);
     if !obscured {
         let (

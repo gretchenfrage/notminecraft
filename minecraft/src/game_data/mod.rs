@@ -49,6 +49,7 @@ pub enum BlockMeshLogic {
 
 #[derive(Debug)]
 pub enum BlockOnBreak {
+    Null,
     Door,
 }
 
@@ -70,41 +71,34 @@ impl GameData {
     pub fn new() -> Self {
         let mut blocks = BlockRegistry::new();
 
-        let mut block_obscures = PerBlock::new();
-        let mut block_mesh_logics = PerBlock::new();
-        let mut block_can_place_over = PerBlock::new();
-        let mut block_on_break = PerBlock::new();
+        let mut block_obscures = PerBlock::new(PerFace::repeat(true));
+        let mut block_mesh_logics = PerBlock::new_no_default();
+        let mut block_can_place_over = PerBlock::new(false);
+        let mut block_on_break = PerBlock::new(BlockOnBreak::Null);
 
         block_obscures.set(AIR, PerFace::repeat(false));
         block_mesh_logics.set(AIR, BlockMeshLogic::Invisible);
         block_can_place_over.set(AIR, true);
 
         let bid_stone = blocks.register();
-        block_obscures.set(bid_stone, PerFace::repeat(true));
         block_mesh_logics.set(bid_stone, BlockMeshLogic::Simple(BTI_STONE));
 
         let bid_dirt = blocks.register();
-        block_obscures.set(bid_dirt, PerFace::repeat(true));
         block_mesh_logics.set(bid_dirt, BlockMeshLogic::Simple(BTI_DIRT));
 
         let bid_grass = blocks.register();
-        block_obscures.set(bid_grass, PerFace::repeat(true));
         block_mesh_logics.set(bid_grass, BlockMeshLogic::Grass);
 
         let bid_planks = blocks.register();
-        block_obscures.set(bid_planks, PerFace::repeat(true));
         block_mesh_logics.set(bid_planks, BlockMeshLogic::Simple(BTI_PLANKS));
 
         let bid_brick = blocks.register();
-        block_obscures.set(bid_brick, PerFace::repeat(true));
         block_mesh_logics.set(bid_brick, BlockMeshLogic::Simple(BTI_BRICK));
 
         let bid_glass = blocks.register();
-        block_obscures.set(bid_glass, PerFace::repeat(false));
         block_mesh_logics.set(bid_glass, BlockMeshLogic::Simple(BTI_GLASS));
 
         let bid_log = blocks.register();
-        block_obscures.set(bid_log, PerFace::repeat(true));
         block_mesh_logics
             .set(
                 bid_log,

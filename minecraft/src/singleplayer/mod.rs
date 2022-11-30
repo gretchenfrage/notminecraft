@@ -656,35 +656,34 @@ impl GuiStateFrame for Singleplayer {
                 MouseButton::Left => {
                     let bid = looking_at.tile.get(&self.tile_blocks).get();
                     let on_break = ctx.game().block_on_break.get(bid);
-                    if let Some(on_break) = on_break {
-                        match on_break {
-                            &BlockOnBreak::Door => {
-                                let &DoorMeta { part, .. } = looking_at
-                                    .tile
-                                    .get(&self.tile_blocks)
-                                    .meta(ctx.game().bid_door);
-                                let also_break_dir = match part {
-                                    DoorPart::Upper => Face::NegY,
-                                    DoorPart::Lower => Face::PosY,
-                                };
+                    match on_break {
+                        &BlockOnBreak::Null => (),
+                        &BlockOnBreak::Door => {
+                            let &DoorMeta { part, .. } = looking_at
+                                .tile
+                                .get(&self.tile_blocks)
+                                .meta(ctx.game().bid_door);
+                            let also_break_dir = match part {
+                                DoorPart::Upper => Face::NegY,
+                                DoorPart::Lower => Face::PosY,
+                            };
 
-                                let gtc2 =
-                                    looking_at.tile.gtc()
-                                    + also_break_dir.to_vec();
-                                if let Some(tile2) = getter.gtc_get(gtc2) {
-                                    let bid2 = tile2
-                                        .get(&self.tile_blocks)
-                                        .get();
-                                    if bid2 == ctx.game().bid_door {
-                                        put_block(
-                                            tile2,
-                                            &getter,
-                                            AIR,
-                                            (),
-                                            &mut self.tile_blocks,
-                                            &mut self.block_updates,
-                                        );
-                                    }
+                            let gtc2 =
+                                looking_at.tile.gtc()
+                                + also_break_dir.to_vec();
+                            if let Some(tile2) = getter.gtc_get(gtc2) {
+                                let bid2 = tile2
+                                    .get(&self.tile_blocks)
+                                    .get();
+                                if bid2 == ctx.game().bid_door {
+                                    put_block(
+                                        tile2,
+                                        &getter,
+                                        AIR,
+                                        (),
+                                        &mut self.tile_blocks,
+                                        &mut self.block_updates,
+                                    );
                                 }
                             }
                         }
@@ -743,8 +742,7 @@ impl GuiStateFrame for Singleplayer {
                                     let can_place_over = ctx.game()
                                         .block_can_place_over
                                         .get(bid3)
-                                        .copied()
-                                        .unwrap_or(false);
+                                        .clone();
                                     if can_place_over {
                                         put_block(
                                             tile2,
