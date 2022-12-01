@@ -57,6 +57,43 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
         scale_seq: ScaleSeq,
     ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq);
 }
+/* TODO
+impl<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    T: GuiBlock<'a, W, H>,
+    const LEN: usize,
+> GuiBlockSeq<'a, W, H> for [T; LEN] {
+    type SizedSeq = [T::Sized; LEN];
+    type WOutSeq = [W::Out; LEN];
+    type HOutSeq = [H::Out; LEN];
+
+    fn len(&self) -> usize { LEN }
+
+    fn size_all<
+        WInSeq: IntoIterator<Item=W::In>,
+        HInSeq: IntoIterator<Item=H::In>,
+        ScaleSeq: IntoIterator<Item=f32>,
+    >(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w_in_seq: WInSeq,
+        h_in_seq: HInSeq,
+        scale_seq: ScaleSeq,
+    ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq) {
+        let mut w_in_iter = w_in_seq.into_iter();
+        let mut h_in_iter = h_in_seq.into_iter();
+        let mut scale_iter = scale_seq.into_iter();
+
+        self.map(|block| block.size(
+                ctx,
+                w_in_iter.next().unwrap(),
+                h_in_iter.next().unwrap(),
+                scale_seq.next().unwrap(),
+            ))
+    }
+}*/
 
 /// Sequence version of `SizedGuiBlock`. Essentially a compile-time
 /// heterogenous tuple of `SizedGuiBlock` implementations.
@@ -74,6 +111,39 @@ pub trait SizedGuiBlockSeq<'a>: Debug {
     where
         T: GuiVisitorTarget<'a>,
         M: GuiVisitorMaperator<'a>;
+}
+
+impl<
+    'a,
+    I: SizedGuiBlock<'a>,
+    const LEN: usize,
+> SizedGuiBlockSeq<'a> for [I; LEN] {
+    fn visit_items_nodes<T, M>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        mut maperator: M,
+        forward: bool,
+    )
+    where
+        T: GuiVisitorTarget<'a>,
+        M: GuiVisitorMaperator<'a>,
+    {
+        if forward {
+            for item in self.into_iter() {
+                item.visit_nodes(
+                        &mut maperator.next(visitor),
+                        true,
+                    );
+            }
+        } else {
+            for item in self.into_iter().rev() {
+                item.visit_nodes(
+                        &mut maperator.next(visitor),
+                        false,
+                    );
+            }
+        }
+    }
 }
 
 /// A GUI visitor "maperator" for use with `SizedGuiBlockSeq`.
@@ -94,32 +164,6 @@ pub trait GuiVisitorMaperator<'a>: Debug {
         visitor: &'b mut GuiVisitor<'a, '_, T>,
     ) -> GuiVisitor<'a, 'b, T>;
 }
-
-
-
-// adapted from
-// https://stackoverflow.com/a/42174800/4957011
-// :)
-/*
-macro_rules! reverse {
-    (
-        []
-        $( ($($reversed:tt)*) ),*$(,)?
-    )=>{
-        $( ($($reversed)*), )*
-    };
-    (
-        [($($first:tt)*) $( , ($($rest:tt)*) )*$(,)?]
-        $( ($($reversed:tt)*) ),*$(,)?
-    )=>{
-        reverse!(
-            [$( ($($rest)*), )*]
-            ($($first)*) $( , ($($reversed)*) )* ,
-        )
-    };
-}
-*/
-
 
 macro_rules! reverse_visit_nodes {
     (

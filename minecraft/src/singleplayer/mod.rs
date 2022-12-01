@@ -22,9 +22,6 @@ use self::{
 use crate::{
     game_data::{
         GameData,
-        DoorMeta,
-        DoorPart,
-        DoorDir,
         BlockBreakLogic,
     },
     chunk_mesh::ChunkMesh,
@@ -52,7 +49,6 @@ use chunk_data::{
     ChunkBlocks,
     Getter,
     BlockId,
-    Face,
     lti_to_ltc,
     cc_ltc_to_gtc,
 };
@@ -659,35 +655,13 @@ impl GuiStateFrame for Singleplayer {
                     let break_logic = ctx.game().blocks_break_logic.get(bid);
                     match break_logic {
                         &BlockBreakLogic::Null => (),
-                        &BlockBreakLogic::Door => {
-                            let &DoorMeta { part, .. } = looking_at
-                                .tile
-                                .get(&self.tile_blocks)
-                                .meta(ctx.game().bid_door);
-                            let also_break_dir = match part {
-                                DoorPart::Upper => Face::NegY,
-                                DoorPart::Lower => Face::PosY,
-                            };
-
-                            let gtc2 =
-                                looking_at.tile.gtc()
-                                + also_break_dir.to_vec();
-                            if let Some(tile2) = getter.gtc_get(gtc2) {
-                                let bid2 = tile2
-                                    .get(&self.tile_blocks)
-                                    .get();
-                                if bid2 == ctx.game().bid_door {
-                                    put_block(
-                                        tile2,
-                                        &getter,
-                                        AIR,
-                                        (),
-                                        &mut self.tile_blocks,
-                                        &mut self.block_updates,
-                                    );
-                                }
-                            }
-                        }
+                        &BlockBreakLogic::Door => blocks::door::on_break_door(
+                            looking_at,
+                            &getter,
+                            &mut self.tile_blocks,
+                            &mut self.block_updates,
+                            ctx.game(),
+                        ),
                     }
                     put_block(
                         looking_at.tile,
@@ -716,60 +690,14 @@ impl GuiStateFrame for Singleplayer {
                                     &mut self.block_updates,
                                 );
                             }
-                            Some(HotbarItem::Door { .. }) => {
-                                let yaw = ((self.movement.cam_yaw
-                                    % (2.0 * PI))
-                                    + (2.0 * PI))
-                                    % (2.0 * PI);
-                                let dir =
-                                    if yaw < 0.25 * PI {
-                                        DoorDir::NegZ
-                                    } else if yaw < 0.75 * PI {
-                                        DoorDir::PosX
-                                    } else if yaw < 1.25 * PI {
-                                        DoorDir::PosZ
-                                    } else if yaw < 1.75 * PI {
-                                        DoorDir::NegX // TODO directions???
-                                    } else if yaw <= 2.0 * PI {
-                                        DoorDir::NegZ
-                                    } else {
-                                        unreachable!()
-                                    };
-                                let gtc3 = tile2.gtc() + Face::PosY.to_vec();
-                                if let Some(tile3) = getter.gtc_get(gtc3) {
-                                    let bid3 = tile3
-                                        .get(&self.tile_blocks)
-                                        .get();
-                                    let can_place_over = ctx.game()
-                                        .blocks_can_place_over
-                                        .get(bid3)
-                                        .clone();
-                                    if can_place_over {
-                                        put_block(
-                                            tile2,
-                                            &getter,
-                                            ctx.game().bid_door,
-                                            DoorMeta {
-                                                part: DoorPart::Lower,
-                                                dir,
-                                            },
-                                            &mut self.tile_blocks,
-                                            &mut self.block_updates,
-                                        );
-                                        put_block(
-                                            tile3,
-                                            &getter,
-                                            ctx.game().bid_door,
-                                            DoorMeta {
-                                                part: DoorPart::Upper,
-                                                dir,
-                                            },
-                                            &mut self.tile_blocks,
-                                            &mut self.block_updates,
-                                        );
-                                    }
-                                }
-                            },
+                            Some(HotbarItem::Door { .. }) => blocks::door::on_place_door(
+                                self.movement.cam_yaw,
+                                tile2,
+                                &getter,
+                                &mut self.tile_blocks,
+                                &mut self.block_updates,
+                                ctx.game(),
+                            ),
                             None => (),
                         }
                     }

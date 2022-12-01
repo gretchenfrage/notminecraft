@@ -1,18 +1,9 @@
 
 use crate::{
     game_data::{
-        BTI_DIRT,
-        BTI_GRASS_SIDE,
-        BTI_GRASS_TOP,
-        BTI_DOOR_UPPER,
-        BTI_DOOR_LOWER,
         GameData,
         BlockMeshLogic,
-        DoorMeta,
-        DoorPart,
-        DoorDir,
     },
-    util::hex_color::hex_color,
     singleplayer::blocks,
 };
 use chunk_data::{
@@ -68,40 +59,12 @@ pub fn mesh_tile(
             tile_blocks,
             game,
         ),
-        &BlockMeshLogic::Door => {
-            let DoorMeta {
-                part,
-                dir,
-            } = tile.get(tile_blocks).meta(game.bid_door);
-            let tex_index = match part {
-                DoorPart::Upper => BTI_DOOR_UPPER,
-                DoorPart::Lower => BTI_DOOR_LOWER,
-            };
-            let (pos_start, pos_ext_1, pos_ext_2) = match dir {
-                DoorDir::PosX => ([1, 0, 0], [0, 1,  0], [ 0, 0,  1]),
-                DoorDir::NegX => ([0, 0, 1], [0, 1,  0], [ 0, 0, -1]),
-                DoorDir::PosZ => ([1, 0, 1], [0, 1,  0], [-1, 0,  0]),
-                DoorDir::NegZ => ([0, 0, 0], [0, 1,  0], [ 1, 0,  0]),
-            };
-
-            let pos_start = Vec3::from(pos_start)
-                .map(|n: i32| n as f32);
-            let pos_ext_1 = Extent3::from(pos_ext_1)
-                .map(|n: i32| n as f32);
-            let pos_ext_2 = Extent3::from(pos_ext_2)
-                .map(|n: i32| n as f32);
-            
-            mesh_buf
-                .add_quad(&Quad {
-                    pos_start,
-                    pos_ext_1,
-                    pos_ext_2,
-                    tex_start: 0.0.into(),
-                    tex_extent: 1.0.into(),
-                    vert_colors: [Rgba::white(); 4],
-                    tex_index,
-                });
-        }
+        &BlockMeshLogic::Door => blocks::door::mesh_door_tile(
+            mesh_buf,
+            tile,
+            tile_blocks,
+            game,
+        ),
     }
 }
 
