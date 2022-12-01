@@ -37,9 +37,6 @@ pub struct GameData {
 #[derive(Debug)]
 pub enum BlockMeshLogic {
     NoMesh,
-    //BasicCube(usize),
-    //BasicCubeFaces(PerFace<usize>),
-    //BasicCubeTransparent(usize),
     FullCube(BlockMeshLogicFullCube),
     Grass,
     Door,
@@ -76,9 +73,6 @@ impl BlockMeshLogic {
     pub fn obscures(&self, _face: Face) -> bool {
         match self {
             &BlockMeshLogic::NoMesh => false,
-            //&BlockMeshLogic::BasicCube(_) => true,
-            //&BlockMeshLogic::BasicCubeFaces(_) => true,
-            //&BlockMeshLogic::BasicCubeTransparent(_) => false,
             &BlockMeshLogic::FullCube(mesh_logic) => !mesh_logic.transparent,
             &BlockMeshLogic::Grass => true,
             &BlockMeshLogic::Door => false,

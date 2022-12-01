@@ -5,6 +5,7 @@ pub mod simple_gui_block;
 
 pub mod mc;
 
+mod gap;
 mod axis_swap;
 mod align;
 mod layer;
@@ -19,6 +20,7 @@ mod text;
 
 
 pub use self::{
+    gap::gap,
     axis_swap::{
         axis_swap,
         axis_swap_seq,

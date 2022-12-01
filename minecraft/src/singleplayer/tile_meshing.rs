@@ -47,50 +47,6 @@ pub fn mesh_tile(
 
     match mesh_logic {
         &BlockMeshLogic::NoMesh => (),
-        /*
-        &BlockMeshLogic::BasicCube(tex_index) => {
-            for face in FACES {
-                mesh_simple_face(
-                    mesh_buf,
-                    face,
-                    tex_index,
-                    Rgba::white(),
-                    gtc,
-                    getter,
-                    tile_blocks,
-                    game,
-                );
-            }
-        }
-        &BlockMeshLogic::BasicCubeFaces(tex_indices) => {
-            for face in FACES {
-                mesh_simple_face(
-                    mesh_buf,
-                    face,
-                    tex_indices[face],
-                    Rgba::white(),
-                    gtc,
-                    getter,
-                    tile_blocks,
-                    game,
-                );
-            }
-        }
-        &BlockMeshLogic::BasicCubeTransparent(tex_index) => {
-            for face in FACES {
-                mesh_simple_face(
-                    mesh_buf,
-                    face,
-                    tex_index,
-                    Rgba::white(),
-                    gtc,
-                    getter,
-                    tile_blocks,
-                    game,
-                );
-            }
-        }
-        */
         &BlockMeshLogic::FullCube(mesh_logic) => {
             for face in FACES {
                 mesh_simple_face(
