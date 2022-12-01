@@ -20,8 +20,7 @@ pub struct GameData {
 
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
-    // TODO blocks_physics_logic
-
+    pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
     pub blocks_break_logic: PerBlock<BlockBreakLogic>,
 
@@ -38,20 +37,49 @@ pub struct GameData {
 #[derive(Debug)]
 pub enum BlockMeshLogic {
     NoMesh,
-    BasicCube(usize),
-    BasicCubeFaces(PerFace<usize>),
-    BasicCubeTransparent(usize),
+    //BasicCube(usize),
+    //BasicCubeFaces(PerFace<usize>),
+    //BasicCubeTransparent(usize),
+    FullCube(BlockMeshLogicFullCube),
     Grass,
     Door,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct BlockMeshLogicFullCube {
+    pub tex_indices: PerFace<usize>,
+    pub transparent: bool,
+}
+
 impl BlockMeshLogic {
+    pub fn basic_cube(tex_index: usize) -> Self {
+        BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
+            tex_indices: PerFace::repeat(tex_index),
+            transparent: false,
+        })
+    }
+
+    pub fn basic_cube_faces(tex_indices: PerFace<usize>) -> Self {
+        BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
+            tex_indices,
+            transparent: false,
+        })
+    }
+
+    pub fn basic_cube_transparent(tex_index: usize) -> Self {
+        BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
+            tex_indices: PerFace::repeat(tex_index),
+            transparent: false,
+        })
+    }
+
     pub fn obscures(&self, _face: Face) -> bool {
         match self {
             &BlockMeshLogic::NoMesh => false,
-            &BlockMeshLogic::BasicCube(_) => true,
-            &BlockMeshLogic::BasicCubeFaces(_) => true,
-            &BlockMeshLogic::BasicCubeTransparent(_) => false,
+            //&BlockMeshLogic::BasicCube(_) => true,
+            //&BlockMeshLogic::BasicCubeFaces(_) => true,
+            //&BlockMeshLogic::BasicCubeTransparent(_) => false,
+            &BlockMeshLogic::FullCube(mesh_logic) => !mesh_logic.transparent,
             &BlockMeshLogic::Grass => true,
             &BlockMeshLogic::Door => false,
         }
@@ -68,6 +96,12 @@ pub enum BlockHitscanLogic {
 pub enum BlockBreakLogic {
     Null,
     Door,
+}
+
+#[derive(Debug)]
+pub enum BlockPhysicsLogic {
+    NoClip,
+    BasicCube,
 }
 
 // block tex indexes (BTIs):
@@ -90,30 +124,32 @@ impl GameData {
 
         let mut blocks_mesh_logic = PerBlock::new_no_default();
         let mut blocks_hitscan_logic = PerBlock::new(BlockHitscanLogic::BasicCube);
+        let mut blocks_physics_logic = PerBlock::new(BlockPhysicsLogic::BasicCube);
         let mut blocks_can_place_over = PerBlock::new(false);
         let mut blocks_break_logic = PerBlock::new(BlockBreakLogic::Null);
 
         blocks_mesh_logic.set(AIR, BlockMeshLogic::NoMesh);
         blocks_hitscan_logic.set(AIR, BlockHitscanLogic::Vacuous);
+        blocks_physics_logic.set(AIR, BlockPhysicsLogic::NoClip);
         blocks_can_place_over.set(AIR, true);
 
         let bid_stone = blocks.register();
-        blocks_mesh_logic.set(bid_stone, BlockMeshLogic::BasicCube(BTI_STONE));
+        blocks_mesh_logic.set(bid_stone, BlockMeshLogic::basic_cube(BTI_STONE));
 
         let bid_dirt = blocks.register();
-        blocks_mesh_logic.set(bid_dirt, BlockMeshLogic::BasicCube(BTI_DIRT));
+        blocks_mesh_logic.set(bid_dirt, BlockMeshLogic::basic_cube(BTI_DIRT));
 
         let bid_grass = blocks.register();
         blocks_mesh_logic.set(bid_grass, BlockMeshLogic::Grass);
 
         let bid_planks = blocks.register();
-        blocks_mesh_logic.set(bid_planks, BlockMeshLogic::BasicCube(BTI_PLANKS));
+        blocks_mesh_logic.set(bid_planks, BlockMeshLogic::basic_cube(BTI_PLANKS));
 
         let bid_brick = blocks.register();
-        blocks_mesh_logic.set(bid_brick, BlockMeshLogic::BasicCube(BTI_BRICK));
+        blocks_mesh_logic.set(bid_brick, BlockMeshLogic::basic_cube(BTI_BRICK));
 
         let bid_glass = blocks.register();
-        blocks_mesh_logic.set(bid_glass, BlockMeshLogic::BasicCube(BTI_GLASS));
+        blocks_mesh_logic.set(bid_glass, BlockMeshLogic::basic_cube(BTI_GLASS));
 
         let bid_log = blocks.register();
         blocks_mesh_logic.set(bid_log, blocks::log::log_mesh_logic());
@@ -127,6 +163,7 @@ impl GameData {
 
             blocks_mesh_logic,
             blocks_hitscan_logic,
+            blocks_physics_logic,
             blocks_can_place_over,
             blocks_break_logic,
 

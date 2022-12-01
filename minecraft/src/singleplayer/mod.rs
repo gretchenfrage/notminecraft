@@ -1,4 +1,5 @@
 
+mod blocks;
 mod block_update_queue;
 mod chunk_loader;
 mod movement;

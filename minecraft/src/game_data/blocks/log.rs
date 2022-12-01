@@ -11,7 +11,7 @@ use chunk_data::{
 
 
 pub fn log_mesh_logic() -> BlockMeshLogic {
-	BlockMeshLogic::BasicCubeFaces(FACES.map(|face|
+	BlockMeshLogic::basic_cube_faces(FACES.map(|face|
 		match face.to_axis() {
 	        Axis::Y => BTI_LOG_TOP,
 	        _ => BTI_LOG_SIDE,

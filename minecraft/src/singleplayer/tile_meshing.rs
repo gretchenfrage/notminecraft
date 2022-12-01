@@ -13,6 +13,7 @@ use crate::{
         DoorDir,
     },
     util::hex_color::hex_color,
+    singleplayer::blocks,
 };
 use chunk_data::{
     FACES,
@@ -46,6 +47,7 @@ pub fn mesh_tile(
 
     match mesh_logic {
         &BlockMeshLogic::NoMesh => (),
+        /*
         &BlockMeshLogic::BasicCube(tex_index) => {
             for face in FACES {
                 mesh_simple_face(
@@ -88,19 +90,14 @@ pub fn mesh_tile(
                 );
             }
         }
-        &BlockMeshLogic::Grass => {
+        */
+        &BlockMeshLogic::FullCube(mesh_logic) => {
             for face in FACES {
-                let grass_color = hex_color(0x74b44aff) / hex_color(0x969696ff);
-                let (tex_index, color) = match face {
-                    Face::PosY => (BTI_GRASS_TOP, grass_color),
-                    Face::NegY => (BTI_DIRT, Rgba::white()),
-                    _ => (BTI_GRASS_SIDE, Rgba::white()),
-                };
                 mesh_simple_face(
                     mesh_buf,
                     face,
-                    tex_index,
-                    color,
+                    mesh_logic.tex_indices[face],
+                    Rgba::white(),
                     gtc,
                     getter,
                     tile_blocks,
@@ -108,6 +105,13 @@ pub fn mesh_tile(
                 );
             }
         }
+        &BlockMeshLogic::Grass => blocks::grass::mesh_grass_tile(
+            mesh_buf,
+            gtc,
+            getter,
+            tile_blocks,
+            game,
+        ),
         &BlockMeshLogic::Door => {
             let DoorMeta {
                 part,
@@ -145,7 +149,7 @@ pub fn mesh_tile(
     }
 }
 
-fn mesh_simple_face(
+pub fn mesh_simple_face(
     mesh_buf: &mut MeshData,
     face: Face,
     tex_index: usize,
