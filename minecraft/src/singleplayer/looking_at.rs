@@ -1,7 +1,7 @@
 
 use crate::game_data::{
     GameData,
-    BlockMeshLogic,
+    BlockHitscanLogic,
 };
 use chunk_data::{
     Getter,
@@ -33,15 +33,12 @@ pub fn compute_looking_at(
     while dist < max_dist {
         if let Some(tile) = getter.gtc_get(gtc) {
             let bid = tile.get(tile_blocks).get();
-            let mesh_logic = game
-                .block_mesh_logics
+            let hitscan_logic = game
+                .blocks_hitscan_logic
                 .get(bid);
-            match mesh_logic {
-                BlockMeshLogic::Invisible => (),
-                BlockMeshLogic::Simple(_)
-                | BlockMeshLogic::SimpleFaces(_)
-                | BlockMeshLogic::Grass
-                | BlockMeshLogic::Door => {
+            match hitscan_logic {
+                BlockHitscanLogic::Vacuous => (),
+                BlockHitscanLogic::BasicCube => {
                     return Some(LookingAt {
                         tile,
                         pos,

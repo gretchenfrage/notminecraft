@@ -42,11 +42,11 @@ pub fn mesh_tile(
 
     let gtc = cc_ltc_to_gtc(tile.cc, lti_to_ltc(tile.lti));
     let bid = tile.get(tile_blocks).get();
-    let mesh_logic = game.block_mesh_logics.get(bid);
+    let mesh_logic = game.blocks_mesh_logic.get(bid);
 
     match mesh_logic {
-        &BlockMeshLogic::Invisible => (),
-        &BlockMeshLogic::Simple(tex_index) => {
+        &BlockMeshLogic::NoMesh => (),
+        &BlockMeshLogic::BasicCube(tex_index) => {
             for face in FACES {
                 mesh_simple_face(
                     mesh_buf,
@@ -60,12 +60,26 @@ pub fn mesh_tile(
                 );
             }
         }
-        &BlockMeshLogic::SimpleFaces(tex_indices) => {
+        &BlockMeshLogic::BasicCubeFaces(tex_indices) => {
             for face in FACES {
                 mesh_simple_face(
                     mesh_buf,
                     face,
                     tex_indices[face],
+                    Rgba::white(),
+                    gtc,
+                    getter,
+                    tile_blocks,
+                    game,
+                );
+            }
+        }
+        &BlockMeshLogic::BasicCubeTransparent(tex_index) => {
+            for face in FACES {
+                mesh_simple_face(
+                    mesh_buf,
+                    face,
+                    tex_index,
                     Rgba::white(),
                     gtc,
                     getter,
@@ -146,7 +160,7 @@ fn mesh_simple_face(
         .gtc_get(gtc2)
         .map(|tile2| {
             let bid2 = tile2.get(tile_blocks).get();
-            game.block_obscures.get(bid2)[-face]
+            game.blocks_mesh_logic.get(bid2).obscures(-face)
         })
         .unwrap_or(false);
     if !obscured {

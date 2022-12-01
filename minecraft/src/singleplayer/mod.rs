@@ -24,7 +24,7 @@ use crate::{
         DoorMeta,
         DoorPart,
         DoorDir,
-        BlockOnBreak,
+        BlockBreakLogic,
     },
     chunk_mesh::ChunkMesh,
     gui::{
@@ -655,10 +655,10 @@ impl GuiStateFrame for Singleplayer {
             match button {
                 MouseButton::Left => {
                     let bid = looking_at.tile.get(&self.tile_blocks).get();
-                    let on_break = ctx.game().block_on_break.get(bid);
-                    match on_break {
-                        &BlockOnBreak::Null => (),
-                        &BlockOnBreak::Door => {
+                    let break_logic = ctx.game().blocks_break_logic.get(bid);
+                    match break_logic {
+                        &BlockBreakLogic::Null => (),
+                        &BlockBreakLogic::Door => {
                             let &DoorMeta { part, .. } = looking_at
                                 .tile
                                 .get(&self.tile_blocks)
@@ -740,7 +740,7 @@ impl GuiStateFrame for Singleplayer {
                                         .get(&self.tile_blocks)
                                         .get();
                                     let can_place_over = ctx.game()
-                                        .block_can_place_over
+                                        .blocks_can_place_over
                                         .get(bid3)
                                         .clone();
                                     if can_place_over {
