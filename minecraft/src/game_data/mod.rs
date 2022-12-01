@@ -1,16 +1,15 @@
 
 pub mod per_block;
+pub mod blocks;
 
 
 use self::per_block::PerBlock;
 use chunk_data::{
     AIR,
-    FACES,
     BlockRegistry,
     BlockId,
     PerFace,
     Face,
-    Axis,
 };
 use std::sync::Arc;
 
@@ -117,16 +116,7 @@ impl GameData {
         blocks_mesh_logic.set(bid_glass, BlockMeshLogic::BasicCube(BTI_GLASS));
 
         let bid_log = blocks.register();
-        blocks_mesh_logic
-            .set(
-                bid_log,
-                BlockMeshLogic::BasicCubeFaces(
-                    FACES.map(|face| match face.to_axis() {
-                        Axis::Y => BTI_LOG_TOP,
-                        _ => BTI_LOG_SIDE,
-                    })
-                ),
-            );
+        blocks_mesh_logic.set(bid_log, blocks::log::log_mesh_logic());
 
         let bid_door = blocks.register();
         blocks_mesh_logic.set(bid_door, BlockMeshLogic::Door);
