@@ -2,7 +2,6 @@
 
 
 pub mod simple_gui_block;
-
 pub mod mc;
 
 mod gap;
@@ -17,6 +16,7 @@ mod image;
 mod tile_image;
 mod tile_9;
 mod text;
+mod either;
 
 
 pub use self::{
@@ -56,5 +56,6 @@ pub use self::{
     text::{
         GuiTextBlockConfig,
         GuiTextBlock, 
-    }
+    },
+    either::GuiEither,
 };
