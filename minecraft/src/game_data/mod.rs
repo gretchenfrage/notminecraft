@@ -84,6 +84,7 @@ impl BlockMeshLogic {
 pub enum BlockHitscanLogic {
     Vacuous,
     BasicCube,
+    Door,
 }
 
 #[derive(Debug)]
@@ -96,6 +97,7 @@ pub enum BlockBreakLogic {
 pub enum BlockPhysicsLogic {
     NoClip,
     BasicCube,
+    Door,
 }
 
 // block tex indexes (BTIs):
@@ -150,6 +152,8 @@ impl GameData {
 
         let bid_door = blocks.register();
         blocks_mesh_logic.set(bid_door, BlockMeshLogic::Door);
+        blocks_hitscan_logic.set(bid_door, BlockHitscanLogic::Door);
+        blocks_physics_logic.set(bid_door, BlockPhysicsLogic::Door);
         blocks_break_logic.set(bid_door, BlockBreakLogic::Door);
 
         GameData {
