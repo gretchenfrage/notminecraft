@@ -54,6 +54,8 @@ pub struct MovementController {
     pub cam_pitch: f32,
     pub cam_yaw: f32,
     pub cam_fov: f32,
+
+    pub on_ground: bool,
 }
 
 impl Default for MovementController {
@@ -77,6 +79,8 @@ impl Default for MovementController {
             cam_pitch: f32::to_radians(-30.0),
             cam_yaw: 0.0,
             cam_fov: f32::to_radians(90.0),
+
+            on_ground: false,
         }
     }
 }
@@ -142,7 +146,7 @@ impl MovementController {
     ) {
         // move_h's <x,y> is the world grid's <x,z> 
         let mut move_h = Vec2::from(0.0);
-        let mut move_v = 0.0;
+        //let mut move_v = 0.0;
 
         if ctx.focus_level == FocusLevel::MouseCaptured {
             let sprinting =
@@ -174,7 +178,7 @@ impl MovementController {
             // rotate it in accordance with cam yaw
             move_h.rotate_z(self.cam_yaw);
 
-
+            /*
             // determine vertical movement direction
             if ctx.pressed_keys_semantic.contains(&bindings.move_up) {
                 move_v += 1.0;
@@ -187,7 +191,7 @@ impl MovementController {
             move_v *= match sprinting {
                 false => self.fly_v_speed,
                 true => self.fly_v_speed_sprinting,
-            };
+            };*/
         }
 
         // apply to velocity
@@ -198,17 +202,18 @@ impl MovementController {
         );
 
         // apply to position
-        self.cam_pos += Vec3::new(self.vel_h.x, 0.0, self.vel_h.y) * elapsed;
+        //self.cam_pos += Vec3::new(self.vel_h.x, 0.0, self.vel_h.y) * elapsed;
 
         // apply to velocity
+        /*
         apply_friction_f32(
             &mut self.vel_v,
             move_v,
             self.acceleration_v * elapsed,
-        );
+        );*/
 
         // apply to position
-        self.cam_pos.y += self.vel_v * elapsed;
+        //self.cam_pos.y += self.vel_v * elapsed;
     }
 
     pub fn on_captured_mouse_move(

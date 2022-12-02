@@ -92,6 +92,16 @@ axis_enum!(
     ),
 );
 
+impl Axis {
+    pub fn other_axes(self) -> [Axis; 2] {
+        match self {
+            Axis::X => [Axis::Y, Axis::Z],
+            Axis::Y => [Axis::Z, Axis::X],
+            Axis::Z => [Axis::X, Axis::Y],
+        }
+    }
+}
+
 macro_rules! scalarlike_axis_enum {
     (
         $name:ident,
@@ -219,6 +229,24 @@ impl From<Pole> for Sign {
             Pole::Pos => Sign::Pos,
             Pole::Neg => Sign::Neg,
         }
+    }
+}
+
+impl Pole {
+    pub const fn from_sign(sign: Sign) -> Option<Self> {
+        match sign {
+            Sign::Pos => Some(Pole::Pos),
+            Sign::Neg => Some(Pole::Neg),
+            Sign::Zero => None,
+        }
+    }
+}
+
+impl TryFrom<Sign> for Pole {
+    type Error = ();
+
+    fn try_from(sign: Sign) -> Result<Self, ()> {
+        Pole::from_sign(sign).ok_or(())
     }
 }
 

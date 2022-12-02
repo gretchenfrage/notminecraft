@@ -5,6 +5,8 @@ mod chunk_loader;
 mod movement;
 mod tile_meshing;
 mod looking_at;
+mod physics;
+
 
 use self::{
     block_update_queue::BlockUpdateQueue,
@@ -607,7 +609,31 @@ impl GuiStateFrame for Singleplayer {
         }
 
         // do movement stuff
+        self.movement.vel_v -= 18.0 * elapsed;
         self.movement.update(ctx.global(), &self.bindings, elapsed);
+        let body_extent = Extent3::new(0.5, 1.98, 0.5);
+        let body_offset = Vec3::new(0.25, 1.93, 0.25);
+        let mut pos = self.movement.cam_pos - body_offset;
+        let mut vel =
+            Vec3::new(
+                self.movement.vel_h.x,
+                self.movement.vel_v,
+                self.movement.vel_h.y,
+            );
+        let did_physics = physics::do_physics(
+            elapsed,
+            &mut pos,
+            &mut vel,
+            body_extent,
+            &getter,
+            &self.tile_blocks,
+            ctx.game(),
+        );
+        self.movement.cam_pos = pos + body_offset;
+        self.movement.vel_h.x = vel.x;
+        self.movement.vel_v = vel.y;
+        self.movement.vel_h.y = vel.z;
+        self.movement.on_ground = did_physics.on_ground;
     }
 
     fn on_key_press_semantic(
@@ -617,6 +643,11 @@ impl GuiStateFrame for Singleplayer {
     ) {
         if key == VirtualKeyCode::Escape {
             ctx.global().pop_state_frame();
+        } else if key == VirtualKeyCode::Space {
+            if self.movement.on_ground {
+                self.movement.vel_v += 10.0;
+                self.movement.on_ground = false;
+            }
         } else if let Some(n) = num_row_key(key) {
             if n >= 1 && n <= 9 {
                 self.hotbar_selected = n as usize - 1;
