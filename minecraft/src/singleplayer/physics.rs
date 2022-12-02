@@ -333,5 +333,6 @@ fn gtc_boxes<F: FnMut(BarrierBox)>(
                 ext: 1.0.into(),
             });
         }
+        &BlockPhysicsLogic::Door => unimplemented!(),
     }
 }

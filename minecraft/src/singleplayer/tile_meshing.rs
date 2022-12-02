@@ -106,6 +106,18 @@ pub fn mesh_simple_face(
             .map(|n: i32| n as f32);
         let pos_ext_2 = Extent3::from(pos_ext_2)
             .map(|n: i32| n as f32);
+
+        let face_darken = match face {
+            Face::PosY => 0,
+            Face::PosX | Face::NegX => 1,
+            Face::PosZ | Face::NegZ => 2,
+            Face::NegY => 3,
+        };
+
+        let mut color = color;
+        for i in 0..3 {
+            color[i] *= 1.0 - 0.07 * face_darken as f32;
+        }
         
         mesh_buf
             .add_quad(&Quad {

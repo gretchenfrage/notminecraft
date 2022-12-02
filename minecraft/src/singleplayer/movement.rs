@@ -42,8 +42,11 @@ pub struct MovementController {
     pub fly_h_speed_sprinting: f32,
     pub fly_v_speed_sprinting: f32,
 
-    pub acceleration_h: f32,
-    pub acceleration_v: f32,
+    pub acceleration_h_active: f32,
+    pub acceleration_v_active: f32,
+
+    pub acceleration_h_inactive: f32,
+    pub acceleration_v_inactive: f32,    
 
     pub mouse_sensitivity: f32,
 
@@ -67,8 +70,11 @@ impl Default for MovementController {
             fly_h_speed_sprinting: 21.6,
             fly_v_speed_sprinting: 16.0,
 
-            acceleration_h: 50.0,
-            acceleration_v: 50.0,
+            acceleration_h_active: 50.0,
+            acceleration_v_active: 40.0,
+
+            acceleration_h_inactive: 25.0,
+            acceleration_v_inactive: 40.0,
 
             vel_h: 0.0.into(),
             vel_v: 0.0,
@@ -195,22 +201,34 @@ impl MovementController {
         }
 
         // apply to velocity
+        let acceleration_h =
+            match move_h != Vec2::from(0.0) {
+                true => self.acceleration_h_active,
+                false => self.acceleration_h_inactive,
+            };
         apply_friction_vec2(
             &mut self.vel_h,
             move_h,
-            self.acceleration_h * elapsed,
+            acceleration_h * elapsed,
         );
 
         // apply to position
         //self.cam_pos += Vec3::new(self.vel_h.x, 0.0, self.vel_h.y) * elapsed;
 
         // apply to velocity
+
         /*
+        let acceleration_v =
+            match move_v != 0.0 {
+                true => self.acceleration_v_active,
+                false => self.acceleration_v_inactive,
+            };
         apply_friction_f32(
             &mut self.vel_v,
             move_v,
-            self.acceleration_v * elapsed,
-        );*/
+            acceleration_v * elapsed,
+        );
+        */
 
         // apply to position
         //self.cam_pos.y += self.vel_v * elapsed;

@@ -38,7 +38,7 @@ pub fn compute_looking_at(
                 .get(bid);
             match hitscan_logic {
                 BlockHitscanLogic::Vacuous => (),
-                BlockHitscanLogic::BasicCube => {
+                BlockHitscanLogic::BasicCube | BlockHitscanLogic::Door => {
                     return Some(LookingAt {
                         tile,
                         pos,
