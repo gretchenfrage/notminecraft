@@ -6,7 +6,7 @@ mod movement;
 mod tile_meshing;
 mod looking_at;
 mod physics;
-
+mod physics2;
 
 use self::{
     block_update_queue::BlockUpdateQueue,
