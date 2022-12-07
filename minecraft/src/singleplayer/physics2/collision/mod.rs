@@ -1,4 +1,5 @@
 
+pub mod barrier_rect;
 pub mod aa_box;
 pub mod point;
 
@@ -18,12 +19,12 @@ pub trait CollisionObject: Sized {
         pos: Vec3<f32>,
         vel: Vec3<f32>,
         world_geometry: &W,
-    ) -> Option<Collision<W::ObjectId>>;
+    ) -> Option<Collision<W::BarrierId>>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Collision<I> {
     pub dt: f32,
-    pub world_obj_face: Face,
-    pub world_obj_id: I,
+    pub barrier_face: Face,
+    pub barrier_id: I,
 }

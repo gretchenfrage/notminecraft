@@ -31,12 +31,12 @@ where
             *vel,
             world_geom,
         ) {
-            if collision.world_obj_face == Face::PosY {
+            if collision.barrier_face == Face::PosY {
                 on_ground = true;
             }
 
             *pos += *vel * collision.dt;
-            vel[collision.world_obj_face.to_axis() as usize] = 0.0;
+            vel[collision.barrier_face.to_axis() as usize] = 0.0;
             if collision.dt > 0.0 {
                 dt -= collision.dt;
             }

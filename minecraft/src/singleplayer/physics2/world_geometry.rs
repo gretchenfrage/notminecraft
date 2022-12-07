@@ -16,10 +16,10 @@ use vek::*;
 /// Set of AA boxes in the world, each associated (not necessarily uniquely)
 /// with some `Self::Object` identifier, and a broadphase for querying them.
 pub trait WorldGeometry: Sized {
-    type ObjectId;
+    type BarrierId;
 
     /// Visit AA boxes, _relative to `gtc`_, which may be in the given tile.
-    fn tile_geometry<V: FnMut(AaBox, Self::ObjectId)>(
+    fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
         &self,
         gtc: Vec3<i64>,
         visit: V,
@@ -35,9 +35,9 @@ pub struct WorldPhysicsGeometry<'a> {
 }
 
 impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
-    type ObjectId = ();
+    type BarrierId = ();
 
-    fn tile_geometry<V: FnMut(AaBox, Self::ObjectId)>(
+    fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
         &self,
         gtc: Vec3<i64>,
         mut visit: V,
@@ -53,10 +53,7 @@ impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
             &BlockPhysicsLogic::NoClip => (),
             &BlockPhysicsLogic::BasicCube | &BlockPhysicsLogic::Door => {
                 visit(
-                    AaBox {
-                        pos: 0.0.into(),
-                        ext: 1.0.into(),
-                    },
+                    AaBox::UNIT_BOX,
                     (),
                 );
             }
@@ -73,9 +70,9 @@ pub struct WorldHitscanGeometry<'a> {
 }
 
 impl<'a> WorldGeometry for WorldHitscanGeometry<'a> {
-    type ObjectId = Vec3<i64>;
+    type BarrierId = Vec3<i64>;
 
-    fn tile_geometry<V: FnMut(AaBox, Self::ObjectId)>(
+    fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
         &self,
         gtc: Vec3<i64>,
         mut visit: V,
@@ -89,10 +86,7 @@ impl<'a> WorldGeometry for WorldHitscanGeometry<'a> {
                 &BlockHitscanLogic::Vacuous => (),
                 &BlockHitscanLogic::BasicCube | &BlockHitscanLogic::Door => {
                     visit(
-                        AaBox {
-                            pos: 0.0.into(),
-                            ext: 1.0.into(),
-                        },
+                        AaBox::UNIT_BOX,
                         gtc,
                     );
                 }

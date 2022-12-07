@@ -11,6 +11,12 @@ pub struct AaBox {
 }
 
 impl AaBox {
+    /// Box from <0,0,0> to <1,1,1>.
+    pub const UNIT_BOX: AaBox = AaBox {
+        pos: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+        ext: Extent3 { w: 1.0, h: 1.0, d: 1.0 },
+    };
+
     pub fn translate<V: Into<Vec3<f32>>>(mut self, v: V) -> Self {
         self.pos += v.into();
         self
