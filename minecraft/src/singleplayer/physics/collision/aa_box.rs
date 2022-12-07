@@ -1,10 +1,11 @@
+//! Aa box collision object.
 
 use super::{
     super::{
         aa_box::AaBox,
         world_geometry::WorldGeometry,
     },
-    barrier_rect::BarrierRect,
+    aa_box_face::AaBoxFace,
     CollisionObject,
     Collision,
 };
@@ -63,7 +64,7 @@ impl CollisionObject for AaBoxCollisionObject {
 
             // face of object in direction of movement
             let obj_rect =
-                BarrierRect::new(
+                AaBoxFace::new(
                     AaBox {
                         pos: pos,
                         ext: self.ext,
@@ -75,14 +76,14 @@ impl CollisionObject for AaBoxCollisionObject {
             for gtc in gtc_broadphase.clone() {
                 world_geometry.tile_geometry(gtc, |aa_box, barrier_id| {
                     // see if collides along this axis
-                    let barrier_rect =
-                        BarrierRect::new(
+                    let aa_box_face =
+                        AaBoxFace::new(
                             aa_box.translate(gtc.map(|n| n as f32)),
                             barrier_face,
                         );
                     if let Some(dt) = obj_barrier_collision_dt(
                         obj_rect,
-                        barrier_rect,
+                        aa_box_face,
                         min_dt,
                         max_dt,
                         axis_vel,
@@ -110,8 +111,8 @@ impl CollisionObject for AaBoxCollisionObject {
 }
 
 fn obj_barrier_collision_dt(
-    obj_rect: BarrierRect,
-    barrier_rect: BarrierRect,
+    obj_rect: AaBoxFace,
+    aa_box_face: AaBoxFace,
     min_dt: f32,
     max_dt: f32,
     axis_vel: f32,
@@ -120,7 +121,7 @@ fn obj_barrier_collision_dt(
     debug_assert!(axis_vel != 0.0);
 
     // time would collide
-    let dt = (barrier_rect.axis_pos - obj_rect.axis_pos) / axis_vel;
+    let dt = (aa_box_face.axis_pos - obj_rect.axis_pos) / axis_vel;
 
     // filter by collision time
     if dt < min_dt || dt > max_dt {
@@ -135,9 +136,9 @@ fn obj_barrier_collision_dt(
         let other_axis_obj_col_pos_max =
             other_axis_obj_col_pos_min + obj_rect.other_axes_ext[i];
         let other_axis_barrier_col_pos_min =
-            barrier_rect.other_axes_pos[i];
+            aa_box_face.other_axes_pos[i];
         let other_axis_barrier_col_pos_max =
-            other_axis_barrier_col_pos_min + barrier_rect.other_axes_ext[i];
+            other_axis_barrier_col_pos_min + aa_box_face.other_axes_ext[i];
 
         if other_axis_obj_col_pos_max < other_axis_barrier_col_pos_min {
             return None;

@@ -1,9 +1,11 @@
+//! Point collision object.
 
 use super::{
     super::{
         aa_box::AaBox,
         world_geometry::WorldGeometry,
     },
+    aa_box_face::AaBoxFace,
     CollisionObject,
     Collision,
 };

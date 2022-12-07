@@ -13,13 +13,13 @@ use chunk_data::{
 /// which axis it is normal to and which direction along that axis the barrier
 /// faces).
 #[derive(Debug, Copy, Clone)]
-pub struct BarrierRect {
+pub struct AaBoxFace {
     pub axis_pos: f32,
     pub other_axes_pos: [f32; 2],
     pub other_axes_ext: [f32; 2],
 }
 
-impl BarrierRect {
+impl AaBoxFace {
     pub fn new(aa_box: AaBox, face: Face) -> Self {
         let (axis, pole) = face.to_axis_pole();
         let other_axes = axis.other_axes();
@@ -37,7 +37,7 @@ impl BarrierRect {
             other_axes_ext[i] = aa_box.ext[other_axes[i] as usize];
         }
 
-        BarrierRect {
+        AaBoxFace {
             axis_pos,
             other_axes_pos,
             other_axes_ext,

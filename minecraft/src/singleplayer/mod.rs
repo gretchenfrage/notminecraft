@@ -6,7 +6,7 @@ mod movement;
 mod tile_meshing;
 mod looking_at;
 //mod physics;
-mod physics2;
+mod physics;
 
 use self::{
     block_update_queue::BlockUpdateQueue,
@@ -621,7 +621,7 @@ impl GuiStateFrame for Singleplayer {
                 self.movement.vel_h.y,
             );
 
-        use physics2::{
+        use physics::{
             do_physics::do_physics,
             collision::aa_box::AaBoxCollisionObject,
             world_geometry::WorldPhysicsGeometry,

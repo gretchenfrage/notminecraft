@@ -1,5 +1,5 @@
 
-pub mod barrier_rect;
+pub mod aa_box_face;
 pub mod aa_box;
 pub mod point;
 
