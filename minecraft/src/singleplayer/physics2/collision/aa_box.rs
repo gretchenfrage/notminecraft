@@ -46,14 +46,9 @@ impl CollisionObject for AaBoxCollisionObject {
         for axis in AXES {
             let other_axes = axis.other_axes();
 
-            // pos/vel/ext along this axis and the other axes
+            // vel along this axis and the other axes
             let axis_vel = vel[axis as usize];
-            //let axis_pos = pos[axis as usize];
-
             let other_axes_vel = other_axes.map(|axis2| vel[axis2 as usize]);
-            //let other_axes_pos = other_axes.map(|axis2| pos[axis2 as usize]);
-            //let other_axes_ext = other_axes
-            //    .map(|axis2| self.ext[axis2 as usize]);
             
             // direction of movement along this axis
             // (skip loop iteration if not moving along this axis)
@@ -63,17 +58,10 @@ impl CollisionObject for AaBoxCollisionObject {
                     None => continue,
                 };
 
-            // change axis_pos to pos of physics obj's face in direction of
-            // movement
-            //let axis_pos = axis_pos
-            //    + match axis_vel_pole {
-            //        Pole::Neg => 0.0,
-            //        Pole::Pos => self.ext[axis as usize],
-            //    };
-
             let obj_face = Face::from_axis_pole(axis, axis_vel_pole);
             let barrier_face = -obj_face;
 
+            // face of object in direction of movement
             let obj_rect =
                 BarrierRect::new(
                     AaBox {
@@ -82,9 +70,6 @@ impl CollisionObject for AaBoxCollisionObject {
                     },
                     obj_face,
                 );
-
-            // face of barrier rects may collide with along this axis
-            // let barrier_face = Face::from_axis_pole(axis, -axis_vel_pole);
 
             // broadphase-visit barrier boxes
             for gtc in gtc_broadphase.clone() {
@@ -95,7 +80,6 @@ impl CollisionObject for AaBoxCollisionObject {
                             aa_box.translate(gtc.map(|n| n as f32)),
                             barrier_face,
                         );
-
                     if let Some(dt) = obj_barrier_collision_dt(
                         obj_rect,
                         barrier_rect,

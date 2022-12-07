@@ -5,7 +5,7 @@ mod chunk_loader;
 mod movement;
 mod tile_meshing;
 mod looking_at;
-mod physics;
+//mod physics;
 mod physics2;
 
 use self::{
@@ -620,14 +620,23 @@ impl GuiStateFrame for Singleplayer {
                 self.movement.vel_v,
                 self.movement.vel_h.y,
             );
-        let did_physics = physics::do_physics(
+
+        use physics2::{
+            do_physics::do_physics,
+            collision::aa_box::AaBoxCollisionObject,
+            world_geometry::WorldPhysicsGeometry,
+        };
+
+        let did_physics = do_physics(
             elapsed,
             &mut pos,
             &mut vel,
-            body_extent,
-            &getter,
-            &self.tile_blocks,
-            ctx.game(),
+            &AaBoxCollisionObject { ext: body_extent },
+            &WorldPhysicsGeometry {
+                getter: &getter,
+                tile_blocks: &self.tile_blocks,
+                game: ctx.game(),
+            },
         );
         self.movement.cam_pos = pos + body_offset;
         self.movement.vel_h.x = vel.x;
