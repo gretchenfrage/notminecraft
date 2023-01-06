@@ -624,6 +624,7 @@ impl GuiStateFrame for Singleplayer {
         use physics::{
             do_physics::do_physics,
             collision::aa_box::AaBoxCollisionObject,
+            collision::point::PointCollisionObject,
             world_geometry::WorldPhysicsGeometry,
         };
 
@@ -631,7 +632,8 @@ impl GuiStateFrame for Singleplayer {
             elapsed,
             &mut pos,
             &mut vel,
-            &AaBoxCollisionObject { ext: body_extent },
+            //&AaBoxCollisionObject { ext: body_extent },
+            &PointCollisionObject,
             &WorldPhysicsGeometry {
                 getter: &getter,
                 tile_blocks: &self.tile_blocks,

@@ -16,7 +16,7 @@ use vek::*;
 /// Set of AA boxes in the world, each associated (not necessarily uniquely)
 /// with some `Self::Object` identifier, and a broadphase for querying them.
 pub trait WorldGeometry: Sized {
-    type BarrierId;
+    type BarrierId: Clone;
 
     /// Visit AA boxes, _relative to `gtc`_, which may be in the given tile.
     fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
