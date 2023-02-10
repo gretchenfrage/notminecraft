@@ -4,6 +4,7 @@ use crate::{
     asset::{
         resource_pack::ResourcePack,
         localization::Localization,
+        sound::SoundPlayer,
     },
     game_data::GameData,
     gui::{
@@ -37,6 +38,7 @@ pub use winit::event::{
 pub struct GuiGlobalContext<'c> {
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
     pub renderer: &'c RefCell<Renderer>,
+    pub sound_player: &'c SoundPlayer,
     pub resources: &'c ResourcePack,
     pub lang: &'c Localization,
     pub game: &'c Arc<GameData>,
@@ -113,6 +115,10 @@ impl<'c> GuiSpatialContext<'c> {
         }
     }
 
+    pub fn sound_player(&self) -> &'c SoundPlayer {
+        &self.global.sound_player
+    }
+
     pub fn resources(&self) -> &'c ResourcePack {
         &self.global.resources
     }
@@ -158,6 +164,10 @@ pub struct GuiWindowContext<'c> {
 impl<'c> GuiWindowContext<'c> {
     pub fn global(&self) -> &'c GuiGlobalContext<'c> {
         &self.spatial.global
+    }
+
+    pub fn sound_player(&self) -> &'c SoundPlayer {
+        &self.spatial.global.sound_player
     }
 
     pub fn resources(&self) -> &'c ResourcePack {

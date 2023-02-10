@@ -20,8 +20,8 @@
 //!    `SizedGuiBlock` tree. Dimensional constraints are passed on windup and
 //!    decisions within those constraints are returned on winddown. Positioning
 //!    is not yet knowable at the sizing phase.
-//! 3. Positioning occurs. The `GuiBlock` tree is recursively flattened out
-//!    into a sequence of positioned `GuiNode`s with a `GuiVisitor`, which uses
+//! 3. Positioning occurs. The `SizedGuiBlock` tree is recursively flattened out
+//!    into a sequence of positioned `GuiNode`s via a `GuiVisitor`, which uses
 //!    a `graphics`-like stack instruction system.
 //! 4. Interleaved with the previous step, each node once positioned has the
 //!    relevant handler (for drawing, rendering, etc.) invoked. 

@@ -38,6 +38,9 @@ pub trait SizedGuiBlock<'a>: Debug {
     /// with it position data. Further transformations may be applied to the
     /// visitor before passing it to `visit_nodes` calls on child
     /// `SizedGuiBlock`s.
+    ///
+    /// If `forward` is true, visit nodes back-to-front, else, visit nodes
+    /// front-to-back.
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,

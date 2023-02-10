@@ -112,6 +112,24 @@ impl<'a, 's> GuiNode<'a> for SimpleGuiBlock<GuiPrintOnClickBlock<'s>> {
     }
 }*/
 
+#[derive(Debug)]
+struct GuiMakeSoundOnClickBlock;
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiMakeSoundOnClickBlock> {
+    never_blocks_cursor_impl!();
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        _button: MouseButton,
+    ) {
+        if !hits { return }
+        if !ctx.cursor_in_area(0.0, self.size) { return }
+
+        ctx.sound_player().play(&ctx.resources().click_sound);
+    }
+}
 
 struct GuiRunOnClickBlock<F>(F);
 
@@ -241,6 +259,7 @@ impl MenuButton {
             layer((
                 GuiButtonBgBlock,
                 &mut self.text,
+                GuiMakeSoundOnClickBlock,
                 GuiRunOnClickBlock(on_click),
             )),
         )

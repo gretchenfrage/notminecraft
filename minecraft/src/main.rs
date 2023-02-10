@@ -13,7 +13,10 @@ pub mod singleplayer;
 
 
 use crate::{
-    asset::jar_assets::JarAssets,
+    asset::{
+        jar_assets::JarAssets,
+        sound::SoundPlayer,
+    },
     game_data::GameData,
     gui::GuiEventLoop,
     main_menu::MainMenu,

@@ -23,6 +23,24 @@ use vek::*;
 pub trait GuiStateFrame: Debug {
     /// Size, position, and visit all GUI nodes. This will generally be
     /// followed by invoking some positional handler on the nodes.
+    ///
+    /// The recommended way to implement this method is like this:
+    ///
+    /// ```
+    /// impl MyGuiStateFrame {
+    ///     fn gui<'a>(
+    ///         &'a mut self,
+    ///         ctx: &'a GuiWindowContext,
+    ///     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
+    ///     { ... }
+    /// }
+    ///
+    /// impl GuiStateFrame for MyGuiStateFrame {
+    ///     impl_visit_nodes!();
+    ///
+    ///     ...
+    /// }
+    /// ```
     fn visit_nodes<'a, T: GuiVisitorTarget<'a>>(
         &'a mut self,
         ctx: &'a GuiWindowContext<'a>,

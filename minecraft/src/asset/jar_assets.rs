@@ -4,6 +4,7 @@ use crate::{
 		localization::Localization,
 		resource_pack::ResourcePack,
 		jar_acquire::jar_acquire,
+		sound::Sound,
 	},
 	gui::blocks::{
 		Tile9CropConfig,
@@ -41,6 +42,8 @@ pub struct JarAssets {
 	block_door_lower: DynamicImage,
 	
 	lang: Localization,
+
+	click_sound: Sound,
 }
 
 impl JarAssets {
@@ -119,6 +122,8 @@ impl JarAssets {
 			menu_options: lang["menu.options"].to_owned(),
 		};
 
+		let click_sound = Sound::read_file("/home/phoenix/sounds/random/click.ogg").await?;
+
 		Ok(JarAssets {
 			font,
 
@@ -143,6 +148,8 @@ impl JarAssets {
 			block_door_lower,
 
 			lang,
+
+			click_sound,
 		})
 	}
 
@@ -219,6 +226,8 @@ impl JarAssets {
 			sky_sunset,
 
 			blocks,
+
+			click_sound: self.click_sound,
 
 			//grass_color: hex_color(0x62a23800).rgb(),
 		};

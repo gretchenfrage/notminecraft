@@ -5,6 +5,7 @@ members = [
     "chunk_data",
     "mesh_data",
     "minecraft",
+    "asset-test"
 ]
 resolver = "2"
 

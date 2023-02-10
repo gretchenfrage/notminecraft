@@ -3,6 +3,7 @@ use crate::{
 	asset::{
 		resource_pack::ResourcePack,
 		localization::Localization,
+		sound::SoundPlayer,
 	},
 	game_data::GameData,
 	gui::{
@@ -116,6 +117,7 @@ impl EventLoopEffectQueue {
 struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
     renderer: RefCell<Renderer>,
+    sound_player: SoundPlayer,
     resources: ResourcePack,
     lang: Localization,
     game: Arc<GameData>,
@@ -139,6 +141,7 @@ impl State {
 	fn new(
 		window: &Window,
 		renderer: Renderer,
+		sound_player: SoundPlayer,
 		resources: ResourcePack,
 		lang: Localization,
 		game: Arc<GameData>,
@@ -148,6 +151,7 @@ impl State {
 		State {
 			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
 			renderer: RefCell::new(renderer),
+			sound_player,
 			resources,
 			lang,
 			game,
@@ -178,6 +182,7 @@ impl State {
 				global: &GuiGlobalContext {
 					event_loop: &self.effect_queue,
 					renderer: &self.renderer,
+					sound_player: &self.sound_player,
 					resources: &self.resources,
 					lang: &self.lang,
 					game: &self.game,
@@ -221,6 +226,7 @@ pub struct GuiEventLoop {
 	event_loop: EventLoop<()>,
 	window: Arc<Window>,
 	pub renderer: Renderer,
+	sound_player: SoundPlayer,
 }
 
 impl GuiEventLoop {
@@ -236,11 +242,14 @@ impl GuiEventLoop {
 		let renderer = Renderer::new(Arc::clone(&window))
 			.block_on()
 			.expect("failed to create renderer");
+		let sound_player = SoundPlayer::new()
+			.expect("failed to create sound player");
 		
 		GuiEventLoop {
 			event_loop,
 			window,
 			renderer,
+			sound_player,
 		}		
 	}
 
@@ -255,6 +264,7 @@ impl GuiEventLoop {
 		let mut state = State::new(
 			&self.window,
 			self.renderer,
+			self.sound_player,
 			resources,
 			lang,
 			game,

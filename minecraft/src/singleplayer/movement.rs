@@ -42,11 +42,15 @@ pub struct MovementController {
     pub fly_h_speed_sprinting: f32,
     pub fly_v_speed_sprinting: f32,
 
-    pub acceleration_h_active: f32,
-    pub acceleration_v_active: f32,
+    pub fly_acceleration_h_active: f32,
+    pub fly_acceleration_v_active: f32,
 
-    pub acceleration_h_inactive: f32,
-    pub acceleration_v_inactive: f32,    
+    pub fly_acceleration_h_inactive: f32,
+    pub fly_acceleration_v_inactive: f32,
+
+    pub walk_speed: f32,
+    pub walk_speed_sprinting: f32,
+    pub ground_acceleration: f32,
 
     pub mouse_sensitivity: f32,
 
@@ -70,11 +74,15 @@ impl Default for MovementController {
             fly_h_speed_sprinting: 21.6,
             fly_v_speed_sprinting: 16.0,
 
-            acceleration_h_active: 50.0,
-            acceleration_v_active: 40.0,
+            walk_speed: 4.317,
+            walk_speed_sprinting: 5.612,
+            ground_acceleration: 50.0,
 
-            acceleration_h_inactive: 25.0,
-            acceleration_v_inactive: 40.0,
+            fly_acceleration_h_active: 50.0,
+            fly_acceleration_v_active: 40.0,
+
+            fly_acceleration_h_inactive: 25.0,
+            fly_acceleration_v_inactive: 40.0,
 
             vel_h: 0.0.into(),
             vel_v: 0.0,
@@ -94,13 +102,13 @@ impl Default for MovementController {
 fn apply_friction_vec2(
     vel: &mut Vec2<f32>,
     target_vel: Vec2<f32>,
-    acceleration_time: f32,
+    fly_acceleration_time: f32,
 ) {
     let mut delta = target_vel - *vel;
     let delta_mag = delta.magnitude();
-    if delta_mag > acceleration_time {
+    if delta_mag > fly_acceleration_time {
         delta /= delta_mag;
-        delta *= acceleration_time;
+        delta *= fly_acceleration_time;
     }
     *vel += delta;
 }
@@ -108,13 +116,13 @@ fn apply_friction_vec2(
 fn apply_friction_f32(
     vel: &mut f32,
     target_vel: f32,
-    acceleration_time: f32,
+    fly_acceleration_time: f32,
 ) {
     let mut delta = target_vel - *vel;
     let delta_mag = delta.abs();
-    if delta_mag > acceleration_time {
+    if delta_mag > fly_acceleration_time {
         delta /= delta_mag;
-        delta *= acceleration_time;
+        delta *= fly_acceleration_time;
     }
     *vel += delta;
 }
@@ -177,8 +185,8 @@ impl MovementController {
                 move_h.normalize();
             }
             move_h *= match sprinting {
-                false => self.fly_h_speed,
-                true => self.fly_h_speed_sprinting,
+                false => self.walk_speed,
+                true => self.walk_speed_sprinting,
             };
 
             // rotate it in accordance with cam yaw
@@ -201,15 +209,16 @@ impl MovementController {
         }
 
         // apply to velocity
-        let acceleration_h =
+        /*
+        let fly_acceleration_h =
             match move_h != Vec2::from(0.0) {
-                true => self.acceleration_h_active,
-                false => self.acceleration_h_inactive,
-            };
+                true => self.walk,
+                false => self.fly_acceleration_h_inactive,
+            };*/
         apply_friction_vec2(
             &mut self.vel_h,
             move_h,
-            acceleration_h * elapsed,
+            /*fly_acceleration_h*/ self.ground_acceleration * elapsed,
         );
 
         // apply to position
@@ -218,15 +227,15 @@ impl MovementController {
         // apply to velocity
 
         /*
-        let acceleration_v =
+        let fly_acceleration_v =
             match move_v != 0.0 {
-                true => self.acceleration_v_active,
-                false => self.acceleration_v_inactive,
+                true => self.fly_acceleration_v_active,
+                false => self.fly_acceleration_v_inactive,
             };
         apply_friction_f32(
             &mut self.vel_v,
             move_v,
-            acceleration_v * elapsed,
+            fly_acceleration_v * elapsed,
         );
         */
 

@@ -1,5 +1,8 @@
 
-use crate::gui::blocks::Tile9Parts;
+use crate::{
+    gui::blocks::Tile9Parts,
+    asset::sound::Sound,
+};
 use graphics::frame_content::{
 	FontId,
 	GpuImage,
@@ -41,6 +44,9 @@ pub struct ResourcePack {
     pub sky_sunset: Rgb<f32>,
 
     pub blocks: GpuImageArray,
+
+    pub click_sound: Sound,
+    
 
     //pub grass_color: Rgb<f32>,
 
