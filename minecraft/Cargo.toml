@@ -33,6 +33,9 @@ path = "../chunk_data"
 [dependencies.mesh_data]
 path = "../mesh_data"
 
+[dependencies.get_assets]
+path = "../get_assets"
+
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]

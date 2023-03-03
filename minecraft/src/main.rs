@@ -3,6 +3,7 @@
 extern crate tracing;
 
 
+pub mod sound;
 pub mod asset;
 pub mod gui;
 pub mod util;

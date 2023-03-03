@@ -1,3 +1,4 @@
+//! Audio abstractions.
 
 use std::{
     path::Path,
@@ -17,11 +18,12 @@ use tokio::fs;
 use anyhow::*;
 
 
+/// A clip of audio, or a set of audio clips for one to be randomly selected.
 #[derive(Clone)]
-pub struct Sound(Buffered<Decoder<Cursor<Vec<u8>>>>);
+pub struct SoundEffect(Buffered<Decoder<Cursor<Vec<u8>>>>);
 
-impl Sound {
-    pub fn new(file_data: Vec<u8>) -> Result<Self> {
+impl SoundEffect {
+    pub fn load(file_data: Vec<u8>) -> Result<Self> {
         Ok(Sound(Decoder::new(Cursor::new(file_data))?.buffered()))
     }
 
@@ -35,6 +37,10 @@ impl Debug for Sound {
         f.write_str("Sound(..)")
     }
 }
+
+
+
+
 
 pub struct SoundPlayer {
     _stream: OutputStream,
