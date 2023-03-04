@@ -23,6 +23,7 @@ bracket-noise = "0.8"
 serde = "1"
 bincode = "1"
 rodio = "0.16"
+spin = "0.9"
 
 [dependencies.graphics]
 path = "../graphics"

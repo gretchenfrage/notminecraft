@@ -19,12 +19,17 @@ const ASSET_INDEX_URL: &'static str =
 const RESOURCE_URL_BASE: &'static str =
     "https://resources.download.minecraft.net";
 
+const INDEX_ENTRY_BLACKLIST: &'static [&'static str] =
+    &[
+        "READ_ME_I_AM_VERY_IMPORTANT",
+    ];
+
 
 pub async fn download_index_assets(
     base: &DataDir,
     http_client: &mut Client,
 ) -> Result<()> {
-    info!("downloading pre-1.6.json index");
+    info!("downloading index ({})", ASSET_INDEX_URL);
 
     let index = get_success(http_client, ASSET_INDEX_URL).await?;
     let index = deser_index(index.as_ref())?;
@@ -32,7 +37,7 @@ pub async fn download_index_assets(
     let base_url = Url::parse(RESOURCE_URL_BASE).unwrap();
 
     for (name, hash) in index {
-        info!("downloading {}", name);
+        let file_name = name.file_name();
 
         let mut url = base_url.clone();
         {
@@ -40,6 +45,17 @@ pub async fn download_index_assets(
             url_path.push(hash.prefix());
             url_path.push(hash.as_ref());
         }
+        
+        let skip = INDEX_ENTRY_BLACKLIST
+            .iter()
+            .any(|suffix| file_name.ends_with(suffix));
+        if skip {
+            trace!("skipping {} ({})", name, url);
+            continue;
+        }
+
+        info!("downloading {} ({})", name, url);
+
         let content = get_success(http_client, url).await?;
         let path = base.assets_subdir().join(name.to_path());
         atomic_write(base, path, content.as_ref()).await?;

@@ -18,6 +18,7 @@ use anyhow::{
 
 const JAR_URL: &'static str =
     "https://piston-data.mojang.com/v1/objects/76d35cb452e739bd4780e835d17faf0785d755f9/client.jar";
+
 const JAR_ENTRY_BLACKLIST: &'static [&'static str] =
     &[
         ".class",
@@ -27,11 +28,12 @@ const JAR_ENTRY_BLACKLIST: &'static [&'static str] =
         "null",
     ];
 
+
 pub async fn download_jar_assets(
     base: &DataDir,
     http_client: &mut Client,
 ) -> Result<()> {
-    info!("downloading jar");
+    info!("downloading jar ({})", JAR_URL);
     let jar = get_success(http_client, JAR_URL).await?;
     let mut jar = ZipArchive::new(Cursor::new(jar))?;
 
@@ -45,14 +47,21 @@ pub async fn download_jar_assets(
         if entry_path.ends_with("/") {
             continue;
         }
-        let skip = entry_path
+        let file_name = entry_path
             .file_name()
-            .and_then(|oss| oss.to_str())
+            .and_then(|oss| oss.to_str());
+        let skip = file_name
             .map(|file_name| JAR_ENTRY_BLACKLIST
                 .iter()
                 .any(|suffix| file_name.ends_with(suffix)))
             .unwrap_or(true);
         if skip {
+            if file_name
+                .map(|file_name| !file_name.ends_with(".class"))
+                .unwrap_or(true)
+            {
+                trace!("skipping {:?}", entry_path);
+            }
             continue;
         }
         trace!("jar-extracting {:?}", entry_path);

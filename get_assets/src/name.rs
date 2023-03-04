@@ -8,6 +8,7 @@ use std::{
     },
     borrow::Borrow,
     fmt::{self, Formatter, Display},
+    mem::replace,
 };
 use anyhow::{
     Result,
@@ -36,6 +37,20 @@ impl<S: Borrow<str>> AssetName<S> {
     pub fn parts<'a>(&'a self) -> impl Iterator<Item=&'a str> + 'a
     {
         self.0.borrow().split(NAME_SEPARATOR)
+    }
+
+    pub fn file_name(&self) -> &str {
+        self.0.borrow().split(NAME_SEPARATOR).rev().next().unwrap()
+    }
+
+    pub fn split_dir_file(&self) -> (PathBuf, &str) {
+        let mut parts = self.parts();
+        let mut dir = PathBuf::new();
+        let mut file = parts.next().unwrap();
+        for part in parts {
+            dir.push(replace(&mut file, part));
+        }
+        (dir, file)
     }
 
     /// Convert to relative path.
