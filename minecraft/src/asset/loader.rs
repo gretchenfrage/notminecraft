@@ -1,14 +1,7 @@
 
-use crate::{
-    sound::{
-        SoundClip,
-        SoundEffect,
-    },
-    gui::blocks::{
-        Tile9CropConfig,
-        tile_9_crop,
-        Tile9Parts,
-    },
+use crate::sound::{
+    SoundClip,
+    SoundEffect,
 };
 use graphics::{
     Renderer,
@@ -20,10 +13,7 @@ use graphics::{
 };
 use get_assets::DataDir;
 use std::{
-    borrow::{
-        Borrow,
-        Cow,
-    },
+    borrow::Borrow,
     collections::HashMap,
     cell::RefCell,
     ops::Index,
@@ -36,7 +26,6 @@ use image::{
         FilterType,
     },
 };
-use anyhow::Result;
 use vek::*;
 
 

@@ -66,7 +66,7 @@ impl DataDir {
     /// delete it fully if they want to be prompted for regeneration.
     pub async fn assets_present(&self) -> Result<bool> {
         let path = self.0.join(ASSETS_SUBDIR);
-        Ok(fs_util::exists(&self.assets_subdir()).await?)
+        Ok(fs_util::exists(&path).await?)
     }
 
     /// Download all assets into the local assets dir.

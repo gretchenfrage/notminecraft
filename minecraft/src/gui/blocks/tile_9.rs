@@ -12,15 +12,11 @@ use super::simple_gui_block::{
     SimpleGuiBlock,
     simple_blocks_cursor_impl,
 };
-use graphics::{
-    Renderer,
-    frame_content::{
-        GpuImage,
-        Canvas2,
-    },
+use graphics::frame_content::{
+    GpuImage,
+    Canvas2,
 };
 use vek::*;
-use anyhow::*;
 
 
 // ==== image types and loading logic ====
@@ -56,9 +52,6 @@ pub fn tile_9_crop(
     // assert ranges possible
     assert!(cfg.top + cfg.bottom < cfg.extent.h);
     assert!(cfg.left + cfg.right < cfg.extent.w);
-
-    // ensure image sufficiently large
-    let req_size = Extent2::<u32>::from(cfg.start + cfg.extent);
 
     // prep segments (per-axis arrays of 1D start+extent tuples)
     let h_segs = [

@@ -14,7 +14,6 @@ pub mod singleplayer;
 
 
 use crate::{
-    sound::SoundPlayer,
     game_data::GameData,
     gui::GuiEventLoop,
     main_menu::MainMenu,
@@ -41,7 +40,6 @@ use tokio::{
         stdin,
         BufReader,
         AsyncBufReadExt,
-        AsyncWriteExt,
     },
 };
 use tracing_subscriber::{
@@ -54,7 +52,6 @@ use tracing_subscriber::{
     EnvFilter,
 };
 use anyhow::{
-    Error,
     Result,
     ensure,
     bail,
