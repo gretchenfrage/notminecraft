@@ -15,6 +15,7 @@ use crate::gui::{
 use std::fmt::Debug;
 
 
+/// A direction -> `GuiVisitorMaperator` constructor.
 pub trait DirMaperators<'a>: Debug {
     type Forward: GuiVisitorMaperator<'a>;
     type Reverse: GuiVisitorMaperator<'a>;
@@ -23,7 +24,9 @@ pub trait DirMaperators<'a>: Debug {
     fn reverse(self) -> Self::Reverse;
 }
 
-
+/// Directionally symmetric maperator. Adapts `GuiVisitorMaperator` to
+/// `DirMaperators` by simply returning the same inner value regardless of
+/// direction.
 #[derive(Debug)]
 pub struct DirSymMaperator<M>(pub M);
 

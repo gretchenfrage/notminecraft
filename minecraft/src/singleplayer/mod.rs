@@ -408,6 +408,7 @@ impl Singleplayer {
                 tile_meshes: &mut self.tile_meshes,
                 tile_blocks: &self.tile_blocks,
                 reach: self.reach,
+                debug_cube_mesh: &self._debug_cube_mesh,
             },
             align([1.1, 1.1],
                 modify(Transform2::translate(hand_size),
@@ -768,6 +769,7 @@ struct WorldGuiBlock<'a> {
     tile_meshes: &'a mut PerChunk<ChunkMesh>,
     tile_blocks: &'a PerChunk<ChunkBlocks>,
     reach: f32,
+    debug_cube_mesh: &'a Mesh,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -786,6 +788,8 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             let mut canvas = canvas.reborrow()
                 .scale(self.size)
                 .begin_3d(view_proj);
+
+
 
             // patch all tile meshes
             for (cc, ci) in state.chunks.iter() {
@@ -850,6 +854,14 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                         .draw_line(start, end);
                 }
             }
+
+            let body_extent = Extent3::new(0.5, 1.98, 0.5);
+            canvas.reborrow()
+                .translate(state.movement.cam_pos)
+                .scale(body_extent)
+                .translate([-0.5, -1.0, -0.5])
+                .color([1.0, 1.0, 1.0, 0.6])
+                .draw_mesh(state.debug_cube_mesh, &ctx.assets().blocks);
         }
 
         // render the crosshair

@@ -13,9 +13,9 @@ To run, `cargo run`. Is simple :)
 |physics|core systems good, but FP precision-related problems|
 |blocks|core systems good|
 |GUI|core systems good|
+|sound|core systems good|
 |items|not started|
 |mobs|not started|
-|sound|not started|
 |save file|not started|
 |multiplayer|not started|
 |interpolation|not started|

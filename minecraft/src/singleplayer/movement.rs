@@ -145,7 +145,7 @@ impl MovementController {
 
     pub fn view_proj(&self, size: Extent2<f32>) -> ViewProj {      
         ViewProj::perspective(
-            self.cam_pos,
+            self.cam_pos - self.cam_dir() * 5.0,
             self.cam_rot(),
             self.cam_fov,
             size.w / size.h,
