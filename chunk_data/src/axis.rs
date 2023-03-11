@@ -12,6 +12,7 @@ use vek::*;
 
 macro_rules! axis_enum {
     (
+        $doc:literal,
         $name:ident,
         $num_constant:ident = $num:expr,
         $per_name:ident,
@@ -22,15 +23,19 @@ macro_rules! axis_enum {
     )=>{
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[repr(u8)]
+        #[doc = $doc]
         pub enum $name {$(
             $variant,
         )*}
 
+        #[doc = concat!("Number of variants of `", stringify!($name), "`.")]
         pub const $num_constant: usize = $num;
 
+        #[doc = concat!("Array of `T` for each `", stringify!($name), "`.")]
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         pub struct $per_name<T>(pub [T; $num_constant]);
 
+        #[doc = concat!("All variants of `", stringify!($name), "`.")]
         pub const $all_constant: $per_name<$name> = $per_name([$(
             $name::$variant,
         )*]);
@@ -81,6 +86,7 @@ macro_rules! axis_enum {
 }
 
 axis_enum!(
+    "{X, Y, Z}",
     Axis,
     NUM_AXES = 3,
     PerAxis,
@@ -104,6 +110,7 @@ impl Axis {
 
 macro_rules! scalarlike_axis_enum {
     (
+        $doc:literal,
         $name:ident,
         $num_constant:ident = $num:expr,
         $per_name:ident,
@@ -115,6 +122,7 @@ macro_rules! scalarlike_axis_enum {
         )*),
     )=>{
         axis_enum!(
+            $doc,
             $name,
             $num_constant = $num,
             $per_name,
@@ -179,6 +187,7 @@ macro_rules! scalarlike_axis_enum {
 }
 
 scalarlike_axis_enum!(
+    "Positive or negative.",
     Pole,
     NUM_POLES = 2,
     PerPole,
@@ -190,6 +199,7 @@ scalarlike_axis_enum!(
 );
 
 scalarlike_axis_enum!(
+    "Positive, negative, or zero.",
     Sign,
     NUM_SIGNS = 3,
     PerSign,
@@ -252,6 +262,7 @@ impl TryFrom<Sign> for Pole {
 
 macro_rules! veclike_axis_enum {
     (
+        $doc:literal,
         $name:ident,
         $num_constant:ident = $num:expr,
         $per_name:ident,
@@ -263,6 +274,7 @@ macro_rules! veclike_axis_enum {
         )*),
     )=>{
         axis_enum!(
+            $doc,
             $name,
             $num_constant = $num,
             $per_name,
@@ -404,6 +416,7 @@ macro_rules! fec_system {
         )*),
     )=>{
         veclike_axis_enum!(
+            "Any of 6 directions going straight along an axis, like axis-aligned cube faces.",
             Face,
             NUM_FACES = 6,
             PerFace,
@@ -414,6 +427,7 @@ macro_rules! fec_system {
         );
 
         veclike_axis_enum!(
+            "Any of 12 directions going diagonally between 2 axes, like axis-aligned unit cube edges.",
             Edge,
             NUM_EDGES = 12,
             PerEdge,
@@ -424,6 +438,7 @@ macro_rules! fec_system {
         );
 
         veclike_axis_enum!(
+            "Any of 8 directions going diagonally between all 3 axes, like axis-aligned unit cube corners.",
             Corner,
             NUM_CORNERS = 8,
             PerCorner,
@@ -434,6 +449,7 @@ macro_rules! fec_system {
         );
 
         veclike_axis_enum!(
+            "Any of 26 Faces, Edges, or Corners. A non-zero 3-vector in which all components are 0, 1, or -1.",
             FaceEdgeCorner,
             NUM_FACES_EDGES_CORNERS = 26,
             PerFaceEdgeCorner,
