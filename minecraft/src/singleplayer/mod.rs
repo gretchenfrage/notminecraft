@@ -99,6 +99,7 @@ pub struct Singleplayer {
     _debug_cube_mesh: Mesh,
     //_human_mesh: Mesh,
 
+    time_since_step_sound: f32,
 }
 
 #[derive(Debug)]
@@ -387,6 +388,8 @@ impl Singleplayer {
             evil_animation: 0.0,
 
             _debug_cube_mesh: debug_cube_mesh,
+
+            time_since_step_sound: 0.0,
         }
     }
 
@@ -580,6 +583,7 @@ impl GuiStateFrame for Singleplayer {
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         self.evil_animation -= elapsed * 15.0;
         self.evil_animation = f32::max(self.evil_animation, 0.0);
+        self.time_since_step_sound += elapsed;
 
         // insert chunks that are ready to be loaded
         // this may generate block updates
@@ -645,6 +649,11 @@ impl GuiStateFrame for Singleplayer {
         self.movement.vel_v = vel.y;
         self.movement.vel_h.y = vel.z;
         self.movement.on_ground = did_physics.on_ground;
+
+        if did_physics.on_ground && (vel.x != 0.0 || vel.z != 0.0) && self.time_since_step_sound >= 0.5 {
+            ctx.sound_player().play(&ctx.assets().grass_step_sound);
+            self.time_since_step_sound = 0.0;
+        }
     }
 
     fn on_key_press_semantic(
@@ -713,6 +722,7 @@ impl GuiStateFrame for Singleplayer {
                         &mut self.tile_blocks,
                         &mut self.block_updates,
                     );
+                    ctx.sound_player().play(&ctx.assets().grass_dig_sound);
                 }
                 MouseButton::Right => {
                     let tile1 = looking_at.tile;
@@ -731,6 +741,7 @@ impl GuiStateFrame for Singleplayer {
                                     &mut self.tile_blocks,
                                     &mut self.block_updates,
                                 );
+                                ctx.sound_player().play(&ctx.assets().grass_dig_sound);
                             }
                             Some(HotbarItem::Door { .. }) => blocks::door::on_place_door(
                                 self.movement.cam_yaw,

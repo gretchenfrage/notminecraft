@@ -34,6 +34,8 @@ pub struct Assets {
     pub blocks: GpuImageArray,
 
     pub click_sound: SoundEffect,
+    pub grass_step_sound: SoundEffect,
+    pub grass_dig_sound: SoundEffect,
 
     pub menu_splash_text: String,
 
@@ -115,6 +117,8 @@ impl Assets {
                 [1, 6], // 10: door lower
             ]),
             click_sound: loader.load_sound_effect("sound3/random/click.ogg").await,
+            grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
+            grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,
             menu_splash_text: "Now it's YOUR craft!".to_owned(),
             menu_version: "Not Minecraft Beta 1.0.2".to_owned(),
             menu_uncopyright: "Everything in the universe is in the public domain.".to_owned(),
