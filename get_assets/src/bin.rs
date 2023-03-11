@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
         .expect("unable to install log subscriber");
 
     let base = DataDir::new();
-    //base.download_assets().await?;
-    println!("{:#?}", base.match_assets("sound/step/grass*.ogg").await.unwrap().len());
+    base.download_assets().await?;
+    //println!("{:#?}", base.match_assets("sound/step/grass*.ogg").await.unwrap().len());
     Ok(())
 }

@@ -1,10 +1,7 @@
 
 use crate::{
-	asset::{
-		resource_pack::ResourcePack,
-		localization::Localization,
-		sound::SoundPlayer,
-	},
+	asset::Assets,
+	sound::SoundPlayer,
 	game_data::GameData,
 	gui::{
 		context::{
@@ -118,8 +115,7 @@ struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
     renderer: RefCell<Renderer>,
     sound_player: SoundPlayer,
-    resources: ResourcePack,
-    lang: Localization,
+    assets: Assets,
     game: Arc<GameData>,
     focus_level: FocusLevel,
 	pressed_keys_semantic: HashSet<VirtualKeyCode>,
@@ -142,8 +138,7 @@ impl State {
 		window: &Window,
 		renderer: Renderer,
 		sound_player: SoundPlayer,
-		resources: ResourcePack,
-		lang: Localization,
+		assets: Assets,
 		game: Arc<GameData>,
 	) -> Self
 	{
@@ -152,8 +147,7 @@ impl State {
 			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
 			renderer: RefCell::new(renderer),
 			sound_player,
-			resources,
-			lang,
+			assets,
 			game,
 			focus_level: FocusLevel::Focused,
 			pressed_keys_semantic: HashSet::new(),
@@ -183,8 +177,7 @@ impl State {
 					event_loop: &self.effect_queue,
 					renderer: &self.renderer,
 					sound_player: &self.sound_player,
-					resources: &self.resources,
-					lang: &self.lang,
+					assets: &self.assets,
 					game: &self.game,
 					focus_level: self.focus_level,
 					pressed_keys_semantic:
@@ -256,8 +249,7 @@ impl GuiEventLoop {
 	pub fn run(
 		self,
 		state_frame: Box<dyn GuiStateFrameObj>,
-		resources: ResourcePack,
-		lang: Localization,
+		assets: Assets,
 		game: Arc<GameData>,
 	) -> ! {
 		let mut stack = Stack::new(state_frame);
@@ -265,8 +257,7 @@ impl GuiEventLoop {
 			&self.window,
 			self.renderer,
 			self.sound_player,
-			resources,
-			lang,
+			assets,
 			game,
 		);
 
@@ -524,7 +515,7 @@ impl GuiEventLoop {
 					let mut frame_content = FrameContent::new();
 					stack.top().draw(ctx, &mut frame_content);
 
-					let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.resources());
+					let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.assets());
 					fps_overlay.draw(ctx, &mut frame_content);
 					
 					if state.renderer.borrow().size() != state.size {

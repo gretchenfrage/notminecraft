@@ -1,11 +1,8 @@
 //! State maintained by event loop between GUI events.
 
 use crate::{
-    asset::{
-        resource_pack::ResourcePack,
-        localization::Localization,
-        sound::SoundPlayer,
-    },
+    asset::Assets,
+    sound::SoundPlayer,
     game_data::GameData,
     gui::{
         gui_event_loop::EventLoopEffectQueue,
@@ -39,8 +36,7 @@ pub struct GuiGlobalContext<'c> {
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
     pub renderer: &'c RefCell<Renderer>,
     pub sound_player: &'c SoundPlayer,
-    pub resources: &'c ResourcePack,
-    pub lang: &'c Localization,
+    pub assets: &'c Assets,
     pub game: &'c Arc<GameData>,
     /// Window focus level.
     pub focus_level: FocusLevel,
@@ -119,12 +115,8 @@ impl<'c> GuiSpatialContext<'c> {
         &self.global.sound_player
     }
 
-    pub fn resources(&self) -> &'c ResourcePack {
-        &self.global.resources
-    }
-
-    pub fn lang(&self) -> &'c Localization {
-        &self.global.lang
+    pub fn assets(&self) -> &'c Assets {
+        &self.global.assets
     }
 
     pub fn game(&self) -> &'c Arc<GameData> {
@@ -170,12 +162,8 @@ impl<'c> GuiWindowContext<'c> {
         &self.spatial.global.sound_player
     }
 
-    pub fn resources(&self) -> &'c ResourcePack {
-        &self.spatial.global.resources
-    }
-
-    pub fn lang(&self) -> &'c Localization {
-        &self.spatial.global.lang
+    pub fn assets(&self) -> &'c Assets {
+        &self.spatial.global.assets
     }
 
     pub fn game(&self) -> &'c Arc<GameData> {

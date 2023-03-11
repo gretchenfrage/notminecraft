@@ -152,7 +152,7 @@ impl<'a> GuiNode<'a> for GuiTitleNode<'a> {
                 .translate(pixel)
                 .draw_mesh(
                     &self.inner.pixel_mesh,
-                    &ctx.resources().menu_title_pixel,
+                    &ctx.assets().menu_title_pixel,
                 );
         }
     }

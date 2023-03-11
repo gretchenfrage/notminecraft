@@ -102,8 +102,8 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiSplashText> {
         self.inner
             .validate_cache(
                 &ctx.global.renderer.borrow(),
-                &ctx.lang().menu_splash_text,
-                ctx.resources().font,
+                &ctx.assets().menu_splash_text,
+                ctx.assets().font,
                 self.scale,
             );
         let &(_, ref layed_out) = self.inner.cache.as_ref().unwrap();

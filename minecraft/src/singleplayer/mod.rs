@@ -432,13 +432,13 @@ impl Singleplayer {
             ),
             align(0.5,
                 logical_size(30.0,
-                    &ctx.resources().hud_crosshair,
+                    &ctx.assets().hud_crosshair,
                 ),
             ),
             align([0.5, 1.0],
                 logical_size([364.0, 44.0],
                     layer((
-                        &ctx.resources().hud_hotbar,
+                        &ctx.assets().hud_hotbar,
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(0.0, (
@@ -495,7 +495,7 @@ impl Singleplayer {
                             logical_size([44.0, 44.0],
                                 align(0.5,
                                     logical_size(48.0,
-                                        &ctx.resources().hud_hotbar_selected,
+                                        &ctx.assets().hud_hotbar_selected,
                                     )
                                 )
                             )
@@ -533,7 +533,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
                     .rotate(Quaternion::rotation_x(-PI / 5.0))
                     .rotate(Quaternion::rotation_y(PI / 4.0))
                     .translate(-0.5)
-                    .draw_mesh(hud_mesh, &ctx.resources().blocks);
+                    .draw_mesh(hud_mesh, &ctx.assets().blocks);
                 /*
                 let view_proj =
                     Mat4::<f32>::translation_3d([0.0, 0.0, 0.5])
@@ -543,7 +543,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
                 canvas.reborrow()
                     .scale(self.size)
                     .begin_3d(view_proj)
-                    .draw_mesh(self.inner.cube_mesh, &ctx.resources().blocks);
+                    .draw_mesh(self.inner.cube_mesh, &ctx.assets().blocks);
                     */
             },
             Some(HotbarItem::Door { hud_mesh }) => {
@@ -560,7 +560,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
                     .rotate(Quaternion::rotation_x(-PI / 5.0))
                     .rotate(Quaternion::rotation_y(PI / 4.0))
                     .translate(-0.5)
-                    .draw_mesh(hud_mesh, &ctx.resources().blocks);
+                    .draw_mesh(hud_mesh, &ctx.assets().blocks);
             }
             None => (),
         }
@@ -572,7 +572,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
         canvas.reborrow()
             .translate(-crosshair_size / 2.0)
             .translate(self.size / 2.0)
-            .draw_image(&ctx.resources().hud_crosshair, crosshair_size);
+            .draw_image(&ctx.assets().hud_crosshair, crosshair_size);
             */
 impl GuiStateFrame for Singleplayer {
     impl_visit_nodes!();
@@ -767,7 +767,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         let state = self.inner;
 
         canvas.reborrow()
-            .color(ctx.resources().sky_day)
+            .color(ctx.assets().sky_day)
             .draw_solid(self.size);
 
         {
@@ -794,7 +794,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
 
                 canvas.reborrow()
                     .translate(rel_to)
-                    .draw_mesh(mesh, &ctx.resources().blocks);
+                    .draw_mesh(mesh, &ctx.assets().blocks);
             }
 
             // render the outline for the block being looked at
@@ -847,7 +847,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         canvas.reborrow()
             .translate(-crosshair_size / 2.0)
             .translate(self.size / 2.0)
-            .draw_image(&ctx.resources().hud_crosshair, crosshair_size);
+            .draw_image(&ctx.assets().hud_crosshair, crosshair_size);
             */
     }
 }

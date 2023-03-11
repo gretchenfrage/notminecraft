@@ -4,8 +4,8 @@ members = [
     "graphics",
     "chunk_data",
     "mesh_data",
-    "minecraft",
     "get_assets",
+    "minecraft",
 ]
 resolver = "2"
 

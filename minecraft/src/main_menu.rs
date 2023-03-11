@@ -1,9 +1,6 @@
 
 use crate::{
-    asset::{
-    	resource_pack::ResourcePack,
-    	localization::Localization,
-    },
+    asset::Assets,
 	gui::{
 		*,
 		blocks::{
@@ -76,8 +73,8 @@ impl<'a> SizedGuiBlock<'a> for GuiButtonBgBlockSized {
             )
             .unwrap_or(false);
         let images =
-            if highlight { &visitor.ctx.resources().menu_button_highlight }
-            else { &visitor.ctx.resources().menu_button };
+            if highlight { &visitor.ctx.assets().menu_button_highlight }
+            else { &visitor.ctx.assets().menu_button };
         let ((), (), inner_sized) = tile_9(
             images,
             [400.0, 40.0],
@@ -127,7 +124,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiMakeSoundOnClickBlock> {
         if !hits { return }
         if !ctx.cursor_in_area(0.0, self.size) { return }
 
-        ctx.sound_player().play(&ctx.resources().click_sound);
+        ctx.sound_player().play(&ctx.assets().click_sound);
     }
 }
 
@@ -229,10 +226,10 @@ impl<'a> MenuButtonBuilder<'a> {
         }
     }
 
-    pub fn build(self, resources: &ResourcePack) -> MenuButton {
+    pub fn build(self, assets: &Assets) -> MenuButton {
         let text = GuiTextBlock::new(&GuiTextBlockConfig {
             text: self.text,
-            font: resources.font,
+            font: assets.font,
             logical_font_size: 16.0,
             color: hex_color(0xE0E0E0FF),
             h_align: HAlign::Center,
@@ -269,14 +266,13 @@ impl MenuButton {
 impl MainMenu {
 	pub fn new(
 		renderer: &Renderer,
-		resources: &ResourcePack,
-		lang: &Localization,
+		assets: &Assets,
 	) -> Self
 	{
         let title = GuiTitleBlock::new(renderer, &mut thread_rng());
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
-			text: &lang.menu_version,
-			font: resources.font,
+			text: &assets.menu_version,
+			font: assets.font,
 			logical_font_size: 16.0,
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Left,
@@ -284,8 +280,8 @@ impl MainMenu {
 			wrap: true,
 		});
 		let uncopyright_text = GuiTextBlock::new(&GuiTextBlockConfig {
-			text: &lang.menu_uncopyright,
-			font: resources.font,
+			text: &assets.menu_uncopyright,
+			font: assets.font,
 			logical_font_size: 16.0,
 			color: Rgba::white(),
 			h_align: HAlign::Right,
@@ -307,11 +303,11 @@ impl MainMenu {
             .build(resources);
         */
         let singleplayer_button = MenuButtonBuilder
-            ::new(&lang.menu_singleplayer)
-            .build(resources);
+            ::new(&assets.menu_singleplayer)
+            .build(assets);
         let exit_game_button = MenuButtonBuilder
             ::new("Quit")
-            .build(resources);
+            .build(assets);
         let splash_text = GuiSplashText::new();
 		MainMenu {
             title,
@@ -335,7 +331,7 @@ impl MainMenu {
 	{
 		layer((
 			modify(Rgba::new(0.25, 0.25, 0.25, 1.0),
-                tile_image(&ctx.resources().menu_bg, 64.0)
+                tile_image(&ctx.assets().menu_bg, 64.0)
             ),
 			margin(4.0, 4.0, 4.0, 4.0,
                 layer((

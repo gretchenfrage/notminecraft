@@ -1,6 +1,6 @@
 
 use crate::{
-	asset::resource_pack::ResourcePack,
+	asset::Assets,
 	gui::{
 		*,
 		blocks::*,
@@ -19,10 +19,10 @@ pub struct FpsOverlay {
 }
 
 impl FpsOverlay {
-	pub fn new(fps: f32, resources: &ResourcePack) -> Self {
+	pub fn new(fps: f32, assets: &Assets) -> Self {
 		let gui_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &format!("{} fps", fps),
-			font: resources.font,
+			font: assets.font,
 			logical_font_size: 16.0,
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Right,

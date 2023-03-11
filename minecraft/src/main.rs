@@ -14,10 +14,7 @@ pub mod singleplayer;
 
 
 use crate::{
-    asset::{
-        jar_assets::JarAssets,
-        sound::SoundPlayer,
-    },
+    sound::SoundPlayer,
     game_data::GameData,
     gui::GuiEventLoop,
     main_menu::MainMenu,
@@ -38,6 +35,7 @@ use tracing_subscriber::{
 
 
 fn main() {
+    /*
     // initialize and install logging system
     let stdout_log = tracing_subscriber::fmt::layer()
         .pretty();
@@ -87,4 +85,5 @@ fn main() {
 
     // enter window event loop
     event_loop.run(Box::new(gui_state), resources, lang, game);
+    */
 }

@@ -1,7 +1,6 @@
 //! Audio abstractions.
 
 use std::{
-    path::Path,
     io::Cursor,
     fmt::{self, Formatter, Debug},
 };
@@ -14,7 +13,6 @@ use rodio::{
     OutputStream,
     OutputStreamHandle,
 };
-use tokio::fs;
 use rand::Rng;
 use rand_pcg::Pcg32;
 use spin::Mutex;
@@ -27,7 +25,7 @@ pub struct SoundClip(Buffered<Decoder<Cursor<Vec<u8>>>>);
 
 impl SoundClip {
     pub fn new(file_data: Vec<u8>) -> Result<Self> {
-        Ok(Sound(Decoder::new(Cursor::new(file_data))?.buffered()))
+        Ok(SoundClip(Decoder::new(Cursor::new(file_data))?.buffered()))
     }
 }
 
@@ -69,12 +67,15 @@ impl SoundPlayer {
         Ok(SoundPlayer {
             _stream: stream,
             stream_handle,
-            rng: Mutex::new(Pcg32::default()),
+            rng: Mutex::new(Pcg32::new(
+                0xcafef00dd15ea5e5,
+                0x0a02bdbf7bb3c0a7,
+            )),
         })
     }
 
     pub fn play(&self, sound: &SoundEffect) {
-        let r = self.rng.lock().gen();
+        let r = self.rng.lock().gen::<usize>();
         let clip = &sound.0[r % sound.0.len()];
 
         let res = self.stream_handle.play_raw(clip.0.clone().convert_samples());
