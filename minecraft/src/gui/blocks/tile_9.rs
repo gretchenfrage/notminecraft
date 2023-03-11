@@ -1,9 +1,12 @@
 
-use crate::gui::{
-    GuiNode,
-    GuiSpatialContext,
-    GuiBlock,
-    DimParentSets,
+use crate::{
+    asset::loader::ImageClipper,
+    gui::{
+        GuiNode,
+        GuiSpatialContext,
+        GuiBlock,
+        DimParentSets,
+    },
 };
 use super::simple_gui_block::{
     SimpleGuiBlock,
@@ -16,7 +19,6 @@ use graphics::{
         Canvas2,
     },
 };
-use image::DynamicImage;
 use vek::*;
 use anyhow::*;
 
@@ -24,8 +26,8 @@ use anyhow::*;
 // ==== image types and loading logic ====
 
 #[derive(Debug, Clone)]
-pub struct Tile9CropConfig<'a> {
-    pub base: &'a DynamicImage,
+pub struct Tile9CropConfig<'a, 'b, 'c> {
+    pub base: &'a ImageClipper<'b, 'c>,
 
     pub start: Vec2<u32>,
     pub extent: Extent2<u32>,
@@ -49,16 +51,14 @@ impl<I> Tile9Parts<I> {
 
 pub fn tile_9_crop(
     cfg: &Tile9CropConfig,
-) -> Result<Tile9Parts<DynamicImage>>
+) -> Tile9Parts<GpuImage>
 {
     // assert ranges possible
     assert!(cfg.top + cfg.bottom < cfg.extent.h);
     assert!(cfg.left + cfg.right < cfg.extent.w);
 
     // ensure image sufficiently large
-    let req_size = Extent2::from(cfg.start + cfg.extent);
-    ensure!(cfg.base.width() >= req_size.w, "base image w too small");
-    ensure!(cfg.base.height() >= req_size.h, "base image h too small");
+    let req_size = Extent2::<u32>::from(cfg.start + cfg.extent);
 
     // prep segments (per-axis arrays of 1D start+extent tuples)
     let h_segs = [
@@ -71,8 +71,6 @@ pub fn tile_9_crop(
         (cfg.top, cfg.extent.h - (cfg.top + cfg.bottom)),
         (cfg.extent.h - cfg.bottom, cfg.bottom),
     ];
-    //dbg!(&h_segs);
-    //dbg!(&v_segs);
 
     // prep regions (Tile9Parts of 2D start+extent tuples)
     let regions = Tile9Parts(h_segs
@@ -83,19 +81,7 @@ pub fn tile_9_crop(
             ))));
 
     // crop
-    Ok(regions
-        .map(|(start, extent)| cfg.base.crop_imm(
-            start.x,
-            start.y,
-            extent.w,
-            extent.h,
-        )))
-}
-
-impl Tile9Parts<DynamicImage> {
-    pub fn load(self, renderer: &Renderer) -> Tile9Parts<GpuImage> {
-        self.map(|img| renderer.load_image_raw(img))
-    }
+    regions.map(|(start, extent)| cfg.base.load_clip(start, extent))
 }
 
 

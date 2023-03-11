@@ -9,11 +9,15 @@ mod download;
 mod glob;
 
 use crate::name::AssetName;
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    env,
+};
 use tokio::fs;
 use anyhow::Result;
 
 
+const ENV: &'static str = "NOT_MINECRAFT_DATA_DIR";
 const DEFAULT_DATA_DIR: &'static str = "notminecraft";
 const ASSETS_SUBDIR: &'static str = "assets";
 const TMP_SUBDIR: &'static str = "tmp";
@@ -25,7 +29,8 @@ pub struct DataDir(pub PathBuf);
 
 impl DataDir {
     pub fn new() -> Self {
-        DataDir(PathBuf::from(DEFAULT_DATA_DIR))
+        DataDir(env::var(ENV).map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_DATA_DIR)))
     }
 
     pub fn assets_subdir(&self) -> PathBuf {
