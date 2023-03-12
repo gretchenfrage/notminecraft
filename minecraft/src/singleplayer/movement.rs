@@ -112,7 +112,7 @@ fn apply_friction_vec2(
     }
     *vel += delta;
 }
-
+/*
 fn apply_friction_f32(
     vel: &mut f32,
     target_vel: f32,
@@ -126,7 +126,7 @@ fn apply_friction_f32(
     }
     *vel += delta;
 }
-
+*/
 impl MovementController {
     pub fn cam_rot(&self) -> Quaternion<f32> {
         Quaternion::rotation_x(self.cam_pitch)

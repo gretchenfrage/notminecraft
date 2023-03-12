@@ -9,12 +9,13 @@ use chunk_data::{
     Getter,
     PerChunk,
     ChunkBlocks,
+    TileKey,
 };
 use vek::*;
 
 
 /// Set of AA boxes in the world, each associated (not necessarily uniquely)
-/// with some `Self::Object` identifier, and a broadphase for querying them.
+/// with some `Self::BarrierId` identifier, and a broadphase for querying them.
 pub trait WorldGeometry: Sized {
     type BarrierId: Clone;
 
@@ -24,6 +25,24 @@ pub trait WorldGeometry: Sized {
         gtc: Vec3<i64>,
         visit: V,
     );
+
+    /// Check whether `pos` is inside of an AA box.
+    fn pos_inside(
+        &self,
+        pos: Vec3<f32>,
+    ) -> Option<(AaBox, Self::BarrierId)> {
+        let mut found = None;
+
+        let gtc = pos.map(|n| n.floor() as i64);
+        let rel_pos = pos.map(|n| n % 1.0);
+        self.tile_geometry(gtc, |aa_box, barrier_id| {
+            if aa_box.contains(rel_pos) {
+                found = Some((aa_box, barrier_id));
+            }
+        });
+
+        found
+    }
 }
 
 
@@ -70,7 +89,7 @@ pub struct WorldHitscanGeometry<'a> {
 }
 
 impl<'a> WorldGeometry for WorldHitscanGeometry<'a> {
-    type BarrierId = Vec3<i64>;
+    type BarrierId = TileKey;
 
     fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
         &self,
@@ -87,7 +106,7 @@ impl<'a> WorldGeometry for WorldHitscanGeometry<'a> {
                 &BlockHitscanLogic::BasicCube | &BlockHitscanLogic::Door => {
                     visit(
                         AaBox::UNIT_BOX,
-                        gtc,
+                        tile,
                     );
                 }
             }

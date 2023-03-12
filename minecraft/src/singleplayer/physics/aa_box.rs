@@ -21,4 +21,15 @@ impl AaBox {
         self.pos += v.into();
         self
     }
+
+    pub fn contains<V: Into<Vec3<f32>>>(self, pos: V) -> bool {
+        let pos = pos.into();
+        let max = self.pos + self.ext;
+        pos.x > self.pos.x
+            && pos.y > self.pos.y
+            && pos.z > self.pos.z
+            && pos.x < max.x
+            && pos.y < max.y
+            && pos.z < max.z
+    }
 }

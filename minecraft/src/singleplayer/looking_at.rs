@@ -1,7 +1,16 @@
 
-use crate::game_data::{
-    GameData,
-    BlockHitscanLogic,
+use crate::{
+    singleplayer::physics::{
+        world_geometry::{
+            WorldGeometry,
+            WorldHitscanGeometry,
+        },
+        collision::{
+            point::PointCollisionObject,
+            CollisionObject,
+        },
+    },
+    game_data::GameData,
 };
 use chunk_data::{
     Getter,
@@ -23,6 +32,31 @@ pub fn compute_looking_at(
     game: &GameData,
 ) -> Option<LookingAt>
 {
+    let world = WorldHitscanGeometry {
+        getter,
+        tile_blocks,
+        game,
+    };
+    if let Some((_, tile)) = world.pos_inside(start) {
+        Some(LookingAt {
+            tile,
+            pos: start,
+            dist: 0.0,
+            face: None,
+        })
+    } else {
+        PointCollisionObject
+            .first_collision(0.0, max_dist, start, dir, &world)
+            .map(|collision| LookingAt {
+                tile: collision.barrier_id,
+                pos: start + dir * collision.dt,
+                dist: collision.dt,
+                face: Some(collision.barrier_face),
+            })
+
+    }
+
+    /*
     assert!(dir != Vec3::from(0.0));
 
     let mut pos = start;
@@ -81,6 +115,7 @@ pub fn compute_looking_at(
     }
 
     None
+    */
 }
 
 /// Information on which tile is being looked at from some perspective.

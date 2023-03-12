@@ -40,7 +40,6 @@ impl CollisionObject for PointCollisionObject {
         let mut pos = pos + min_dt * vel;
         let mut gtc = pos.map(|n| n.floor() as i64);
         let mut dt = min_dt;
-        let mut entered_face = None;
 
         while dt < max_dt {
             // determine the first collision in the current tile
@@ -125,7 +124,6 @@ impl CollisionObject for PointCollisionObject {
                 gtc[axis as usize] += pole.to_int();
                 pos += vel * enter_dt;
                 dt += enter_dt;
-                entered_face = Some(Face::from_axis_pole(axis, pole));
             } else {
                 // this case occurs if the velocity is <0,0,0>
                 return None;
