@@ -12,7 +12,6 @@ use crate::{
 };
 use graphics::frame_content::{
     FontId,
-    GpuImage,
     GpuImageArray,
 };
 use vek::*;
@@ -23,13 +22,13 @@ pub struct Assets {
     pub font: FontId,
 
     pub menu_title_pixel: GpuImageArray,
-    pub menu_button: Tile9Parts<GpuImage>,
-    pub menu_button_highlight: Tile9Parts<GpuImage>,
-    pub menu_bg: GpuImage,
+    pub menu_button: Tile9Parts<GpuImageArray>,
+    pub menu_button_highlight: Tile9Parts<GpuImageArray>,
+    pub menu_bg: GpuImageArray,
 
-    pub hud_crosshair: GpuImage,
-    pub hud_hotbar: GpuImage,
-    pub hud_hotbar_selected: GpuImage,
+    pub hud_crosshair: GpuImageArray,
+    pub hud_hotbar: GpuImageArray,
+    pub hud_hotbar_selected: GpuImageArray,
 
     pub blocks: GpuImageArray,
 
@@ -99,7 +98,7 @@ impl Assets {
                 left: 2,
                 right: 2,
             }),
-            menu_bg: loader.load_image("gui/background.png").await,
+            menu_bg: loader.load_image_array(&["gui/background.png"]).await,
             hud_crosshair: icons.load_clip([0, 0], [15, 15]),
             hud_hotbar: gui.load_clip([0, 0], [182, 22]),
             hud_hotbar_selected: gui.load_clip([0, 22], [24, 24]),

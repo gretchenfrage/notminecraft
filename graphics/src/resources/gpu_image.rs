@@ -18,12 +18,12 @@ use vek::*;
 
 
 #[derive(Debug)]
-pub struct GpuImageManager {
+pub struct GpuImageArrayManager {
     pub gpu_image_bind_group_layout: BindGroupLayout,
     pub gpu_image_sampler: Sampler,
 }
 
-impl GpuImageManager {
+impl GpuImageArrayManager {
     pub(crate) fn new(device: &Device) -> Self {
         let gpu_image_bind_group_layout = device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -56,7 +56,7 @@ impl GpuImageManager {
                 address_mode_v: AddressMode::Repeat,
                 ..Default::default()
             });
-        GpuImageManager {
+        GpuImageArrayManager {
             gpu_image_bind_group_layout,
             gpu_image_sampler,
         }

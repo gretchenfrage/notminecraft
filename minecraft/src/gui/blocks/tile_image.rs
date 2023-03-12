@@ -10,14 +10,14 @@ use super::simple_gui_block::{
     simple_blocks_cursor_impl,
 };
 use graphics::frame_content::{
-    GpuImage,
+    GpuImageArray,
     Canvas2,
 };
 use vek::*;
 
 
 pub fn tile_image<'a, E: Into<Extent2<f32>>>(
-    image: &'a GpuImage,
+    image: &'a GpuImageArray,
     image_logical_size: E,
 ) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
 {
@@ -31,7 +31,7 @@ pub fn tile_image<'a, E: Into<Extent2<f32>>>(
 
 #[derive(Debug)]
 struct TileImage<'a> {
-    image: &'a GpuImage,
+    image: &'a GpuImageArray,
     image_logical_size: Extent2<f32>,
 }
 
@@ -44,6 +44,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<TileImage<'a>> {
             .debug_tag("tile_image")
             .draw_image_uv(
                 &self.inner.image,
+                0,
                 self.size,
                 0.0,
                 extent,

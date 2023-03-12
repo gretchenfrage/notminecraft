@@ -61,9 +61,7 @@ use graphics::{
     frame_content::{
         Canvas2,
         Mesh,
-        GpuImage,
     },
-    modifier::Transform2,
 };
 use std::{
     ops::Range,
@@ -91,7 +89,6 @@ pub struct Singleplayer {
     hotbar_items: [Option<HotbarItem>; 9],
     hotbar_selected: usize,
 
-    evil_jpg: GpuImage,
     evil_animation: f32,
  
     _debug_cube_mesh: Mesh,
@@ -382,7 +379,6 @@ impl Singleplayer {
             ],
             hotbar_selected: 0,
 
-            evil_jpg: renderer.load_image(include_bytes!("evil.png")).unwrap(),
             evil_animation: 0.0,
 
             _debug_cube_mesh: debug_cube_mesh,
@@ -398,7 +394,7 @@ impl Singleplayer {
     {
         let hand_w = ctx.size.w as f32 * 0.3 / ctx.scale;
         let hand_h = hand_w / 2368.0 * 3014.0;
-        let hand_size = Extent2::new(hand_w, hand_h);
+        let _hand_size = Extent2::new(hand_w, hand_h);
         layer((
             WorldGuiBlock {
                 movement: &self.movement,
@@ -408,6 +404,7 @@ impl Singleplayer {
                 reach: self.reach,
                 debug_cube_mesh: &self._debug_cube_mesh,
             },
+            /*
             align([1.1, 1.1],
                 modify(Transform2::translate(hand_size),
                     modify(Transform2::rotate(PI * 0.10 * self.evil_animation.sin()),
@@ -432,6 +429,7 @@ impl Singleplayer {
                     ),
                 ),
             ),
+            */
             align(0.5,
                 logical_size(30.0,
                     &ctx.assets().hud_crosshair,

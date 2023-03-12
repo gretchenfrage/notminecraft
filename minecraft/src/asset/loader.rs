@@ -6,7 +6,6 @@ use crate::sound::{
 use graphics::{
     Renderer,
     frame_content::{
-        GpuImage,
         GpuImageArray,
         FontId,
     },
@@ -40,10 +39,14 @@ pub struct AssetLoader<'a> {
     renderer: RefCell<&'a mut Renderer>,
 }
 
-fn load_missing_image(renderer: &mut Renderer) -> GpuImage {
+fn load_missing_image(renderer: &mut Renderer) -> GpuImageArray {
     let image = image::load_from_memory(MISSING_PNG)
         .expect("missing.png bytes failed to parse");
-    renderer.load_image_raw(image)
+    renderer
+        .load_image_array_raw(
+            [image.width(), image.height()].into(),
+            [image],
+        )
 }
 
 fn load_missing_image_array(renderer: &mut Renderer, len: usize) -> GpuImageArray {
@@ -73,12 +76,6 @@ impl<'a> AssetLoader<'a> {
                     "image bytes failed to parse",
                 ))
                 .ok())
-    }
-
-    pub async fn load_image(&self, name: &str) -> GpuImage {
-        self.load_raw_image(name).await
-            .map(|image| self.renderer.borrow_mut().load_image_raw(image))
-            .unwrap_or_else(|| load_missing_image(&mut *self.renderer.borrow_mut()))
     }
 
     pub async fn load_image_array(&self, names: &[&str]) -> GpuImageArray {
@@ -193,7 +190,7 @@ impl<'a, 'b> ImageAtlas<'a, 'b> {
         }
     }
 
-    pub fn load_sprite<V: Into<Vec2<u32>>>(&self, sprite: V) -> GpuImage {
+    pub fn load_sprite<V: Into<Vec2<u32>>>(&self, sprite: V) -> GpuImageArray {
         let sprite = sprite.into();
         assert!(sprite.x < self.sprites.w, "sprite coordinates out of range");
         assert!(sprite.y < self.sprites.h, "sprite coordinates out of range");
@@ -201,7 +198,11 @@ impl<'a, 'b> ImageAtlas<'a, 'b> {
             let start = Vec2::from(self.image_size()) * sprite / self.sprites;
             let ext = self.image_size() / self.sprites;
             let image = image.crop_imm(start.x, start.y, ext.w, ext.h);
-            self.renderer.borrow_mut().load_image_raw(image)
+            self.renderer.borrow_mut()
+                .load_image_array_raw(
+                    [image.width(), image.height()].into(),
+                    [image],
+                )
         } else {
             load_missing_image(&mut *self.renderer.borrow_mut())
         }
@@ -251,7 +252,7 @@ impl<'a, 'b> ImageClipper<'a, 'b> {
         }
     }
 
-    pub fn load_clip<V, E>(&self, norm_start: V, norm_ext: E) -> GpuImage
+    pub fn load_clip<V, E>(&self, norm_start: V, norm_ext: E) -> GpuImageArray
     where
         V: Into<Vec2<u32>>,
         E: Into<Extent2<u32>>,
@@ -262,7 +263,11 @@ impl<'a, 'b> ImageClipper<'a, 'b> {
             let start = norm_start * self.image_size() / self.norm_size;
             let ext = norm_ext * self.image_size() / self.norm_size;
             let image = image.crop_imm(start.x, start.y, ext.w, ext.h);
-            self.renderer.borrow_mut().load_image_raw(image)
+            self.renderer.borrow_mut()
+                .load_image_array_raw(
+                    [image.width(), image.height()].into(),
+                    [image],
+                )
         } else {
             load_missing_image(&mut *self.renderer.borrow_mut())
         }

@@ -1,7 +1,7 @@
 
 use crate::{
     resources::gpu_image::{
-        GpuImageManager,
+        GpuImageArrayManager,
         GpuImageArray,
     },
     vertex::{
@@ -138,7 +138,7 @@ impl MeshPipeline {
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
-        gpu_image_manager: &GpuImageManager,
+        gpu_image_manager: &GpuImageArrayManager,
     ) -> Result<Self>
     {
         let mesh_vs_module = device

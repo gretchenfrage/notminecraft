@@ -20,10 +20,7 @@ use vek::*;
 pub use crate::{
     resources::gpu_image::GpuImageArray,
     pipelines::{
-        image::{
-            GpuImage,
-            DrawImage,
-        },
+        image::DrawImage,
         text::{
             TextBlock,
             TextSpan,
@@ -409,13 +406,15 @@ impl<'a, 'b> Canvas2<'a, 'b> {
 
     pub fn draw_image<V: Into<Extent2<f32>>>(
         self,
-        image: &GpuImage,
+        image: &GpuImageArray,
+        tex_index: usize,
         size: V,
     ) -> Self
     {
         self
             .draw_image_uv(
                 image,
+                tex_index,
                 size,
                 [0.0, 0.0],
                 [1.0, 1.0],
@@ -424,7 +423,8 @@ impl<'a, 'b> Canvas2<'a, 'b> {
 
     pub fn draw_image_uv<V1, V2, V3>(
         mut self,
-        image: &GpuImage,
+        image: &GpuImageArray,
+        tex_index: usize,
         size: V1,
         tex_start: V2,
         tex_extent: V3,
@@ -439,6 +439,7 @@ impl<'a, 'b> Canvas2<'a, 'b> {
             .scale(size.into())
             .draw(DrawObj2::Image(DrawImage {
                 image: image.clone(),
+                tex_index,
                 tex_start: tex_start.into(),
                 tex_extent: tex_extent.into(),
             }));
@@ -576,13 +577,15 @@ impl<'a, 'b> Canvas3<'a, 'b> {
 
     pub fn draw_image<V1: Into<Vec2<f32>>, V2: Into<Extent2<f32>>>(
         self,
-        image: &GpuImage,
+        image: &GpuImageArray,
+        tex_index: usize,
         tex_start: V1,
         tex_extent: V2,
     ) -> Self
     {
         self.draw(DrawObj3::Image(DrawImage {
             image: image.clone(),
+            tex_index,
             tex_start: tex_start.into(),
             tex_extent: tex_extent.into(),
         }))

@@ -1,6 +1,6 @@
 
 use crate::{
-    resources::gpu_image::GpuImageManager,
+    resources::gpu_image::GpuImageArrayManager,
     pipelines::{
         clear::{
             ClearPipelineCreator,
@@ -30,7 +30,6 @@ use crate::{
     },
     frame_content::{
         FrameContent,
-        GpuImage,
         TextBlock,
         LayedOutTextBlock,
         FontId,
@@ -87,7 +86,7 @@ pub struct Renderer {
     config: SurfaceConfiguration,
     uniform_buffer: UniformBuffer,
     modifier_uniform_bind_group_layout: BindGroupLayout,
-    gpu_image_manager: GpuImageManager,
+    gpu_image_manager: GpuImageArrayManager,
     clear_color_pipeline: ClearPipeline,
     clear_clip_pipeline: ClearPipeline,
     clear_depth_pipeline: ClearDepthPipeline,
@@ -221,7 +220,7 @@ impl Renderer {
 
         // create the gpu image manager
         trace!("creating gpu image manager");
-        let gpu_image_manager = GpuImageManager::new(&device);
+        let gpu_image_manager = GpuImageArrayManager::new(&device);
 
         // create the clear pipelines
         trace!("creating clear pipelines");
@@ -260,6 +259,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
+            &gpu_image_manager,
         )?;
         
         // create the text pipeline
@@ -632,20 +632,6 @@ impl Renderer {
         self.queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())
-    }
-
-    /// Load an image onto the GPU from PNG / JPG / etc file data.
-    pub fn load_image(&self, file_data: impl AsRef<[u8]>) -> Result<GpuImage> {
-        trace!("decompressing image file data");
-        let image = image::load_from_memory(file_data.as_ref())?;
-        Ok(self.load_image_raw(image))
-    }
-
-    /// Load an image onto the GPU which has already been decompressed.
-    pub fn load_image_raw(&self, image: impl Borrow<DynamicImage>) -> GpuImage {
-        trace!("loading image");
-        self.image_pipeline
-            .load_image(&self.device, &self.queue, &image.borrow().to_rgba8())
     }
 
     /// Load a font onto the renderer from OTF / TTF / etc file data.

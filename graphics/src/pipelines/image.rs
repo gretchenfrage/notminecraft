@@ -1,5 +1,9 @@
 
 use crate::{
+    resources::gpu_image::{
+        GpuImageArray,
+        GpuImageArrayManager,
+    },
     SWAPCHAIN_FORMAT,
     DEPTH_FORMAT,
     std140::{
@@ -9,58 +13,33 @@ use crate::{
     shader::load_shader,
     uniform_buffer::UniformDataPacker,
 };
-use std::sync::Arc;
-use image::RgbaImage;
-use wgpu::{
-    *,
-    util::DeviceExt,
-};
+use wgpu::*;
 use vek::*;
 use anyhow::*;
 
 
 #[derive(Debug, Clone)]
 pub struct DrawImage {
-    pub image: GpuImage,
+    pub image: GpuImageArray,
+    pub tex_index: usize,
     pub tex_start: Vec2<f32>,
     pub tex_extent: Extent2<f32>,
 }
 
-
-/// 2D RGBA image loaded into a GPU texture.
-///
-/// Internally reference-counted.
-#[derive(Debug, Clone)]
-pub struct GpuImage(Arc<GpuImageInner>);
-
-#[derive(Debug)]
-struct GpuImageInner {
-    size: Extent2<u32>,
-    texture_bind_group: BindGroup, // TODO proper error for 0-size images
-}
-
-impl GpuImage {
-    /// Get image size in pixels.
-    pub fn size(&self) -> Extent2<u32> {
-        self.0.size
-    }
-}
-
-
 pub struct ImagePipeline {
     image_pipeline: RenderPipeline,
     image_uniform_bind_group_layout: BindGroupLayout,
-    image_texture_bind_group_layout: BindGroupLayout,
-    image_sampler: Sampler,
 }
 
 #[derive(Debug, Copy, Clone)]
 struct ImageUniformData {
+    tex_index: u32,
     tex_start: Vec2<f32>,
     tex_extent: Extent2<f32>,
 }
 
 std140_struct!(ImageUniformData {
+    tex_index: u32,
     tex_start: Vec2<f32>,
     tex_extent: Extent2<f32>,
 });
@@ -68,7 +47,7 @@ std140_struct!(ImageUniformData {
 #[derive(Debug, Copy, Clone)]
 pub struct PreppedDrawImage<'a> {
     image_uniform_offset: u32,
-    image: &'a GpuImage,
+    image: &'a GpuImageArray,
 }
 
 impl ImagePipeline {
@@ -76,6 +55,7 @@ impl ImagePipeline {
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
+        gpu_image_manager: &GpuImageArrayManager,
     ) -> Result<Self>
     {
         let image_vs_module = device
@@ -98,30 +78,6 @@ impl ImagePipeline {
                     },
                 ],
             });
-        let image_texture_bind_group_layout = device
-            .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("image texture bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float {
-                                filterable: false,
-                            },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                        count: None,
-                    },
-                ],
-            });
         let image_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("image pipeline layout"),
@@ -130,7 +86,7 @@ impl ImagePipeline {
                     clip_texture_bind_group_layout,
                     clip_texture_bind_group_layout,
                     &image_uniform_bind_group_layout,
-                    &image_texture_bind_group_layout,
+                    &gpu_image_manager.gpu_image_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -166,18 +122,8 @@ impl ImagePipeline {
                 multiview: None,
             });
 
-        let image_sampler = device
-            .create_sampler(&SamplerDescriptor {
-                label: Some("image sampler"),
-                address_mode_u: AddressMode::Repeat,
-                address_mode_v: AddressMode::Repeat,
-                ..Default::default()
-            });
-
         Ok(ImagePipeline {
             image_pipeline,
-            image_texture_bind_group_layout,
-            image_sampler,
             image_uniform_bind_group_layout,
         })
     }
@@ -210,8 +156,10 @@ impl ImagePipeline {
         uniform_packer: &mut UniformDataPacker,
     ) -> PreppedDrawImage<'a>
     {
+        debug_assert!(image.tex_index < image.image.len());
         let image_uniform_offset = uniform_packer
             .pack(&ImageUniformData {
+                tex_index: image.tex_index as u32,
                 tex_start: image.tex_start,
                 tex_extent: image.tex_extent,
             });
@@ -238,69 +186,9 @@ impl ImagePipeline {
         pass
             .set_bind_group(
                 4,
-                &image.image.0.texture_bind_group,
+                &image.image.0.texture_bind_group.as_ref().unwrap(),
                 &[],
             );
         pass.draw(0..6, 0..1);
-    }
-
-    pub(crate) fn load_image(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        image: &RgbaImage,
-    ) -> GpuImage
-    {
-        let texture_format = TextureFormat::Rgba8Unorm;
-
-        // create texture
-        let texture = device
-            .create_texture_with_data(
-                &queue,
-                &TextureDescriptor {
-                    label: Some("image texture"),
-                    size: Extent3d {
-                        width: image.width(),
-                        height: image.height(),
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format: texture_format,
-                    usage: TextureUsages::TEXTURE_BINDING,
-                },
-                image.as_raw(),
-            );
-
-        // create texture view
-        let texture_view = texture
-            .create_view(&TextureViewDescriptor {
-                label: Some("image texture view"),
-                ..Default::default()
-            });
-
-        // create bind group
-        let texture_bind_group = device
-            .create_bind_group(&BindGroupDescriptor {
-                label: Some("image texture bind group"),
-                layout: &self.image_texture_bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&texture_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&self.image_sampler),
-                    },
-                ],
-            });
-
-        // done
-        GpuImage(Arc::new(GpuImageInner {
-            texture_bind_group,
-            size: Extent2::new(image.width(), image.height()),
-        }))
     }
 }

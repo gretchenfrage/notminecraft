@@ -13,7 +13,7 @@ use super::simple_gui_block::{
     simple_blocks_cursor_impl,
 };
 use graphics::frame_content::{
-    GpuImage,
+    GpuImageArray,
     Canvas2,
 };
 use vek::*;
@@ -47,7 +47,7 @@ impl<I> Tile9Parts<I> {
 
 pub fn tile_9_crop(
     cfg: &Tile9CropConfig,
-) -> Tile9Parts<GpuImage>
+) -> Tile9Parts<GpuImageArray>
 {
     // assert ranges possible
     assert!(cfg.top + cfg.bottom < cfg.extent.h);
@@ -81,7 +81,7 @@ pub fn tile_9_crop(
 // ==== GUI block ====
 
 pub fn tile_9<'a, I: Into<Extent2<f32>>>(
-    images: &'a Tile9Parts<GpuImage>,
+    images: &'a Tile9Parts<GpuImageArray>,
     logical_tile_size: I,
     frac_top: f32,
     frac_bottom: f32,
@@ -100,7 +100,7 @@ pub fn tile_9<'a, I: Into<Extent2<f32>>>(
 
 #[derive(Debug)]
 struct Tile9<'a> {
-    images: &'a Tile9Parts<GpuImage>,
+    images: &'a Tile9Parts<GpuImageArray>,
     /// Size of the whole (unsliced) image before scaling and tiling.
     logical_tile_size: Extent2<f32>,
     /// Fraction of the whole (unsliced) image taken by the top edge.
@@ -177,6 +177,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<Tile9<'a>> {
                     .translate([x_translate, y_translate])
                     .draw_image_uv(
                         &self.inner.images.0[i][j],
+                        0,
                         [w, h],
                         0.0,
                         [tex_w, tex_h],
