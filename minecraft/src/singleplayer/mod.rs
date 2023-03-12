@@ -95,6 +95,15 @@ pub struct Singleplayer {
     //_human_mesh: Mesh,
 
     time_since_step_sound: f32,
+
+    particles: Vec<Particle>,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Particle {
+    pos: Vec3<f32>,
+    vel: Vec3<f32>,
+    age: f32,
 }
 
 #[derive(Debug)]
@@ -384,6 +393,7 @@ impl Singleplayer {
             _debug_cube_mesh: debug_cube_mesh,
 
             time_since_step_sound: 0.0,
+            particles: Vec::new(),
         }
     }
 
@@ -403,6 +413,7 @@ impl Singleplayer {
                 tile_blocks: &self.tile_blocks,
                 reach: self.reach,
                 debug_cube_mesh: &self._debug_cube_mesh,
+                particles: &self.particles,
             },
             /*
             align([1.1, 1.1],
@@ -625,7 +636,7 @@ impl GuiStateFrame for Singleplayer {
         use physics::{
             do_physics::do_physics,
             collision::aa_box::AaBoxCollisionObject,
-            //collision::point::PointCollisionObject,
+            collision::point::PointCollisionObject,
             world_geometry::WorldPhysicsGeometry,
         };
 
@@ -650,6 +661,27 @@ impl GuiStateFrame for Singleplayer {
         if did_physics.on_ground && (vel.x != 0.0 || vel.z != 0.0) && self.time_since_step_sound >= 0.5 {
             ctx.sound_player().play(&ctx.assets().grass_step_sound);
             self.time_since_step_sound = 0.0;
+        }
+
+        for i in (0..self.particles.len()).rev() {
+            self.particles[i].age += elapsed;
+            if self.particles[i].age > 3.0 {
+                self.particles.swap_remove(i);
+                continue;
+            }
+            let particle = &mut self.particles[i];
+            particle.vel.y -= 18.0 * elapsed;
+            do_physics(
+                elapsed,
+                &mut particle.pos,
+                &mut particle.vel,
+                &PointCollisionObject,
+                &WorldPhysicsGeometry {
+                    getter: &getter,
+                    tile_blocks: &self.tile_blocks,
+                    game: ctx.game(),
+                },
+            );
         }
     }
 
@@ -720,6 +752,13 @@ impl GuiStateFrame for Singleplayer {
                         &mut self.block_updates,
                     );
                     ctx.sound_player().play(&ctx.assets().grass_dig_sound);
+                    for i in 0..4 {
+                        self.particles.push(Particle {
+                            pos: looking_at.tile.gtc().map(|n| n as f32) + i as f32 / 4.0,
+                            vel: (i as f32).into(),
+                            age: 0.0,
+                        });
+                    }
                 }
                 MouseButton::Right => {
                     let tile1 = looking_at.tile;
@@ -766,6 +805,7 @@ struct WorldGuiBlock<'a> {
     tile_blocks: &'a PerChunk<ChunkBlocks>,
     reach: f32,
     debug_cube_mesh: &'a Mesh,
+    particles: &'a Vec<Particle>,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -785,6 +825,18 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 .scale(self.size)
                 .begin_3d(view_proj);
 
+            for particle in state.particles {
+                canvas.reborrow()
+                    .translate(particle.pos)
+                    .scale(1.0 / 8.0)
+                    .rotate(state.movement.cam_rot())
+                    .draw_image(
+                        &ctx.assets().blocks,
+                        1,
+                        0.0,
+                        0.1,
+                    );
+            }
 
 
             // patch all tile meshes
