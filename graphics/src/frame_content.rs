@@ -17,26 +17,28 @@ use std::borrow::{
 use vek::*;
 
 
-pub use crate::pipelines::{
-    image::{
-        GpuImage,
-        DrawImage,
-    },
-    text::{
-        TextBlock,
-        TextSpan,
-        HAlign,
-        VAlign,
-        LayedOutTextBlock,
-        FontId,
-    },
-    mesh::{
-        GpuVec,
-        GpuVecElem,
-        GpuImageArray,
-        Mesh,
-        Vertex,
-        DrawMesh,
+pub use crate::{
+    resources::gpu_image::GpuImageArray,
+    pipelines::{
+        image::{
+            GpuImage,
+            DrawImage,
+        },
+        text::{
+            TextBlock,
+            TextSpan,
+            HAlign,
+            VAlign,
+            LayedOutTextBlock,
+            FontId,
+        },
+        mesh::{
+            GpuVec,
+            GpuVecElem,
+            Mesh,
+            Vertex,
+            DrawMesh,
+        },
     },
 };
 

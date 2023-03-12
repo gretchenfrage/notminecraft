@@ -1,5 +1,9 @@
 
 use crate::{
+    resources::gpu_image::{
+        GpuImageManager,
+        GpuImageArray,
+    },
     vertex::{
         VertexStruct,
         vertex_struct,
@@ -9,9 +13,7 @@ use crate::{
     DEPTH_FORMAT,
 };
 use std::{
-    sync::Arc,
     marker::PhantomData,
-    borrow::Borrow,
     iter::once,
     mem::size_of,
 };
@@ -20,13 +22,6 @@ use wgpu::{
     util::{
         DeviceExt,
         BufferInitDescriptor,
-    },
-};
-use image::{
-    DynamicImage,
-    imageops::{
-        self,
-        FilterType,
     },
 };
 use vek::*;
@@ -81,37 +76,6 @@ pub trait GpuVecElem: Copy {
 }
 
 
-// ==== gpu image array ====
-
-/// Array of 2D RGBA images of the same size loaded into a GPU texture.
-///
-/// Internally reference-counted.
-#[derive(Debug, Clone)]
-pub struct GpuImageArray(Arc<GpuImageArrayInner>);
-
-#[derive(Debug)]
-struct GpuImageArrayInner {
-    size: Extent2<u32>,
-    len: usize,
-    texture_bind_group: Option<BindGroup>,
-
-}
-
-impl GpuImageArray {
-    /// Get image size in pixels.
-    ///
-    /// Guaranteed to not have 0 components.
-    pub fn size(&self) -> Extent2<u32> {
-        self.0.size
-    }
-
-    /// Get length of array.
-    pub fn len(&self) -> usize {
-        self.0.len
-    }
-}
-
-
 // ==== mesh ====
 
 /// Vertex and index data for a mesh, stored on the GPU.
@@ -155,8 +119,6 @@ pub struct DrawMesh<'a> {
 
 pub struct MeshPipeline {
     mesh_pipeline: RenderPipeline,
-    mesh_texture_bind_group_layout: BindGroupLayout,
-    mesh_texture_sampler: Sampler,
 }
 
 struct MeshVertex {
@@ -176,36 +138,14 @@ impl MeshPipeline {
         device: &Device,
         modifier_uniform_bind_group_layout: &BindGroupLayout,
         clip_texture_bind_group_layout: &BindGroupLayout,
+        gpu_image_manager: &GpuImageManager,
     ) -> Result<Self>
     {
         let mesh_vs_module = device
             .create_shader_module(load_shader!("mesh.vert")?);
         let mesh_fs_module = device
             .create_shader_module(load_shader!("mesh.frag")?);
-        let mesh_texture_bind_group_layout = device
-            .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("mesh texture bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float {
-                                filterable: false,
-                            },
-                            view_dimension: TextureViewDimension::D2Array,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                        count: None,
-                    }
-                ],
-            });
+        
         let mesh_pipeline_layout = device
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("mesh pipeline layout"),
@@ -213,7 +153,7 @@ impl MeshPipeline {
                     modifier_uniform_bind_group_layout,
                     clip_texture_bind_group_layout,
                     clip_texture_bind_group_layout,
-                    &mesh_texture_bind_group_layout,
+                    &gpu_image_manager.gpu_image_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -259,18 +199,10 @@ impl MeshPipeline {
                 multisample: MultisampleState::default(),
                 multiview: None,
             });
-        let mesh_texture_sampler = device
-            .create_sampler(&SamplerDescriptor {
-                label: Some("mesh sampler"),
-                address_mode_u: AddressMode::Repeat,
-                address_mode_v: AddressMode::Repeat,
-                ..Default::default()
-            });
+        
 
         Ok(MeshPipeline {
             mesh_pipeline,
-            mesh_texture_bind_group_layout,
-            mesh_texture_sampler,
         })
     }
 
@@ -359,94 +291,6 @@ impl MeshPipeline {
                     0..1,
                 );
         }
-    }
-
-    pub fn load_image_array<I>(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        size: Extent2<u32>,
-        images: I,
-    ) -> GpuImageArray
-    where
-        I: IntoIterator,
-        <I as IntoIterator>::Item: Borrow<DynamicImage>,
-    {
-        let mut len = 0;
-        let mut image_data = Vec::new();
-        
-        for image in images {
-            len += 1;
-
-            let mut image = image
-                .borrow()
-                .to_rgba8();
-            if Extent2::new(image.width(), image.height()) != size {
-                image = imageops::resize(
-                    &image,
-                    size.w,
-                    size.h,
-                    FilterType::Nearest,
-                );
-            }
-            image_data.extend(image.as_raw());
-        }
-
-        if len == 0 {
-            return GpuImageArray(Arc::new(GpuImageArrayInner {
-                size,
-                len,
-                texture_bind_group: None,
-            }));
-        }
-
-        let texture = device
-            .create_texture_with_data(
-                queue,
-                &TextureDescriptor {
-                    label: Some("image array"),
-                    size: Extent3d {
-                        width: size.w,
-                        height: size.h,
-                        depth_or_array_layers: len as u32,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format: TextureFormat::Rgba8Unorm,
-                    usage: TextureUsages::TEXTURE_BINDING,
-                },
-                &image_data,
-            );
-
-        let texture_view = texture
-            .create_view(&TextureViewDescriptor {
-                label: Some("image array texture view"),
-                dimension: Some(TextureViewDimension::D2Array),
-                ..Default::default()
-            });
-
-        let texture_bind_group = device
-            .create_bind_group(&BindGroupDescriptor {
-                label: Some("image array texture bind group"),
-                layout: &self.mesh_texture_bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&texture_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&self.mesh_texture_sampler),
-                    },
-                ],
-            });
-
-        GpuImageArray(Arc::new(GpuImageArrayInner {
-            size,
-            len,
-            texture_bind_group: Some(texture_bind_group),
-        }))
     }
 
     pub(crate) fn create_gpu_vec<T: GpuVecElem>() -> GpuVec<T> {

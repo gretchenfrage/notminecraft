@@ -1,5 +1,6 @@
 
 use crate::{
+    resources::gpu_image::GpuImageManager,
     pipelines::{
         clear::{
             ClearPipelineCreator,
@@ -60,6 +61,7 @@ use glyph_brush::ab_glyph::FontArc;
 use opentype437::Font437;
 
 
+mod resources;
 mod pipelines;
 mod std140;
 mod shader;
@@ -85,6 +87,7 @@ pub struct Renderer {
     config: SurfaceConfiguration,
     uniform_buffer: UniformBuffer,
     modifier_uniform_bind_group_layout: BindGroupLayout,
+    gpu_image_manager: GpuImageManager,
     clear_color_pipeline: ClearPipeline,
     clear_clip_pipeline: ClearPipeline,
     clear_depth_pipeline: ClearDepthPipeline,
@@ -216,7 +219,11 @@ impl Renderer {
             DEPTH_FORMAT,
         );
 
-        // create the clear pipeline
+        // create the gpu image manager
+        trace!("creating gpu image manager");
+        let gpu_image_manager = GpuImageManager::new(&device);
+
+        // create the clear pipelines
         trace!("creating clear pipelines");
         let clear_pipeline_creator = ClearPipelineCreator::new(&device)?;
         let clear_color_pipeline = clear_pipeline_creator
@@ -269,6 +276,7 @@ impl Renderer {
             &device,
             &modifier_uniform_bind_group_layout,
             &clip_pipeline.clip_texture_bind_group_layout,
+            &gpu_image_manager,
         )?;
 
         // set up the swapchain
@@ -293,6 +301,7 @@ impl Renderer {
             config,
             uniform_buffer,
             modifier_uniform_bind_group_layout,
+            gpu_image_manager,
             clear_color_pipeline,
             clear_clip_pipeline,
             clear_depth_pipeline,
@@ -730,7 +739,7 @@ impl Renderer {
     {
         trace!("loading image array");
         self
-            .mesh_pipeline
+            .gpu_image_manager
             .load_image_array(
                 &self.device,
                 &self.queue,
