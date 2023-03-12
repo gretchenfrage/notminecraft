@@ -51,8 +51,6 @@ graph TD
 
 ## Next steps
 
-- fix physics bug
-- fix windowing bug
 - GpuImage(Array) unification
 - deconfuse chirality
 - particles
