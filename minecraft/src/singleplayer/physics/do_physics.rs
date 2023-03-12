@@ -36,6 +36,8 @@ where
             }
 
             *pos += *vel * collision.dt;
+            pos[collision.barrier_face.to_axis() as usize] +=
+                EPSILON * collision.barrier_face.to_pole().to_int() as f32;
             vel[collision.barrier_face.to_axis() as usize] = 0.0;
             if collision.dt > 0.0 {
                 dt -= collision.dt;

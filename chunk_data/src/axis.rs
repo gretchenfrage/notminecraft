@@ -528,6 +528,10 @@ impl Face {
         self.to_axis_pole().0
     }
 
+    pub const fn to_pole(self) -> Pole {
+        self.to_axis_pole().1
+    }
+
     pub const fn from_axis_pole(axis: Axis, pole: Pole) -> Self {
         match (axis, pole) {
             (Axis::X, Pole::Pos) => Face::PosX,
