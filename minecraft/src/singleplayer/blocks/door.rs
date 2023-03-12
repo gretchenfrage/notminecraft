@@ -12,7 +12,7 @@ use crate::{
 	},
 	singleplayer::{
 		put_block,
-		looking_at::LookingAt,
+		physics::looking_at::LookingAt,
 		block_update_queue::BlockUpdateQueue,
 	},
 };

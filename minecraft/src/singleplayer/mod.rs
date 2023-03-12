@@ -4,8 +4,6 @@ mod block_update_queue;
 mod chunk_loader;
 mod movement;
 mod tile_meshing;
-mod looking_at;
-//mod physics;
 mod physics;
 
 use self::{
@@ -19,7 +17,7 @@ use self::{
         MovementController,
     },
     tile_meshing::mesh_tile,
-    looking_at::compute_looking_at,
+    physics::looking_at::compute_looking_at,
 };
 use crate::{
     game_data::{
