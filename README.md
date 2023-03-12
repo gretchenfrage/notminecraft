@@ -51,9 +51,8 @@ graph TD
 
 ## Next steps
 
-- GpuImage(Array) unification
-- deconfuse chirality
 - particles
+- deconfuse chirality
 - fog and sky
 - factor out main menu components
 
