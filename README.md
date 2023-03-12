@@ -54,6 +54,7 @@ graph TD
 - fix physics bug
 - fix windowing bug
 - GpuImage(Array) unification
+- deconfuse chirality
 - particles
 - fog and sky
 - factor out main menu components

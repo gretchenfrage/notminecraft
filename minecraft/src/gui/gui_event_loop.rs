@@ -266,6 +266,8 @@ impl GuiEventLoop {
 
 		
 		self.event_loop.run(move |event, _target, control_flow| {
+			trace!(?event, "winit event");
+
 			if *control_flow == ControlFlow::Exit {
 				return;
 			}
@@ -275,8 +277,6 @@ impl GuiEventLoop {
 					WindowEvent::Resized(winit_size) => {
 						state.size.w = winit_size.width;
 						state.size.h = winit_size.height;
-
-						//state.renderer.borrow_mut().resize(state.size);
 					}
 					WindowEvent::CloseRequested => {
 						stack.0.clear();

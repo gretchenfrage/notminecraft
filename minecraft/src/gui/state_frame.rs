@@ -63,42 +63,6 @@ pub trait GuiStateFrame: Debug {
     #[allow(unused_variables)]
     fn on_focus_change(&mut self, ctx: &GuiWindowContext) {}
 
-    /*
-    /// Called upon a key being pressed, if window focused.
-    ///
-    /// The context's `pressed_keys` sets are empty when the window is
-    /// unfocused, but "virtual" `on_key_press` calls will _not_ be made when
-    /// the window comes into focus. This is usually not a problem.
-    ///
-    /// Context guarantees:
-    /// - `pressed_keys` sets will contain these respective key identifiers.
-    /// - `focus_level` >= `Focused`.
-    fn on_key_press(
-        &mut self,
-        ctx: &GuiWindowContext,
-        key_semantic: Option<VirtualKeyCode>,
-        key_physical: ScanCode,
-    );
-
-    /// Called upon a key being released, if window focused.
-    ///
-    /// The context's `pressed_keys` sets are empty when the window is
-    /// unfocused, but "virtual" `on_key_release` calls will _not_ be made when
-    /// the window goes out of focus. **This means that, when one is putting
-    /// logic in `on_key_release`, they often should also put logic in
-    /// `on_focus_change` to handle "cancellations."**
-    ///
-    /// Context guarantees:
-    /// - `pressed_keys` sets will not contain these respective key identifiers.
-    /// - `focus_level` >= `Focused`.
-    fn on_key_release(
-        &mut self,
-        ctx: &GuiWindowContext,
-        key_semantic: Option<VirtualKeyCode>,
-        key_physical: ScanCode,
-    );
-    */
-
     /// Called upon a key being pressed, if window focused.
     ///
     /// The context's `pressed_keys` sets are empty when the window is
