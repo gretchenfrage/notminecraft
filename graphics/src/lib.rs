@@ -165,6 +165,7 @@ impl Renderer {
             .ok_or_else(|| anyhow::Error::msg(
                 "failed to find an appropriate adapter"
             ))?;
+        info!("using backend {:?}", adapter.get_info().backend);
 
         // create the device and queue
         trace!("creating device and queue");

@@ -92,7 +92,7 @@ impl Default for MovementController {
             cam_pos: [0.0, 80.0, 0.0].into(),
             cam_pitch: f32::to_radians(-30.0),
             cam_yaw: 0.0,
-            cam_fov: f32::to_radians(90.0),
+            cam_fov: f32::to_radians(120.0),
 
             on_ground: false,
         }
@@ -145,7 +145,7 @@ impl MovementController {
 
     pub fn view_proj(&self, size: Extent2<f32>) -> ViewProj {      
         ViewProj::perspective(
-            self.cam_pos - self.cam_dir() * 5.0,
+            self.cam_pos/* - self.cam_dir() * 5.0,*/,
             self.cam_rot(),
             self.cam_fov,
             size.w / size.h,

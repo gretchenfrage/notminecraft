@@ -694,7 +694,7 @@ impl GuiStateFrame for Singleplayer {
             ctx.global().pop_state_frame();
         } else if key == VirtualKeyCode::Space {
             if self.movement.on_ground {
-                self.movement.vel_v += 10.0;
+                self.movement.vel_v += 6.5;
                 self.movement.on_ground = false;
             }
         } else if let Some(n) = num_row_key(key) {
@@ -903,13 +903,14 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 }
             }
 
+            /*
             let body_extent = Extent3::new(0.5, 1.98, 0.5);
             canvas.reborrow()
                 .translate(state.movement.cam_pos)
                 .scale(body_extent)
                 .translate([-0.5, -1.0, -0.5])
                 .color([1.0, 1.0, 1.0, 0.6])
-                .draw_mesh(state.debug_cube_mesh, &ctx.assets().blocks);
+                .draw_mesh(state.debug_cube_mesh, &ctx.assets().blocks);*/
         }
 
         // render the crosshair
