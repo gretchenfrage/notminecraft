@@ -131,8 +131,15 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
 impl GuiStateFrame for MainMenu {
 	impl_visit_nodes!();
 
-    fn update(&mut self, _ctx: &GuiWindowContext, elapsed: f32) {
+    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         self.title.update(elapsed);
         self.splash_text.update(elapsed);
+
+        let big = ctx.size.w >= 1930 && ctx.size.h >= 1450;
+        if big {
+            ctx.global().set_scale(1.5);
+        } else {
+            ctx.global().set_scale(1.0);
+        }
     }
 }

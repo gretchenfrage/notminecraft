@@ -557,7 +557,8 @@ impl GuiEventLoop {
 						stack.0.push(state_frame);
 					}
 					EventLoopEffect::SetScale(scale) => {
-						state.app_scale = scale / state.os_scale;
+						//state.app_scale = scale / state.os_scale;
+						state.app_scale = scale;
 					}
 					EventLoopEffect::CaptureMouse => {
 						if state.focus_level < FocusLevel::MouseCaptured {
