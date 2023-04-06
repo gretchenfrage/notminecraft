@@ -2,6 +2,9 @@
 
 mod splash_text;
 mod title;
+mod on_click;
+mod button_bg;
+mod menu_button;
 
 
 pub use self::{
@@ -9,5 +12,19 @@ pub use self::{
     title::{
         GuiTitleBlock,
         GuiTitleNode,
+    },
+    on_click::{
+        on_left_click,
+        on_right_click,
+        on_middle_click,
+        on_click,
+        on_any_click,
+        click_sound,
+    },
+    button_bg::button_bg,
+    menu_button::{
+        MenuButton,
+        MenuButtonBuilder,
+        menu_button,
     },
 };

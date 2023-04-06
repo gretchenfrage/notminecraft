@@ -18,6 +18,7 @@ pub async fn match_assets(base: &DataDir, glob: &str) -> Option<Vec<Vec<u8>>> {
     let (dir_path, file_glob) = glob.split_dir_file();
 
     let mut regex = String::new();
+    regex.push_str("^");
     let mut char_buf = [0; 4];
     for c in file_glob.chars() {
         match c {
@@ -25,6 +26,7 @@ pub async fn match_assets(base: &DataDir, glob: &str) -> Option<Vec<Vec<u8>>> {
             _ => regex.push_str(&escape(c.encode_utf8(&mut char_buf))),
         }
     }
+    regex.push_str("$");
     let regex = Regex::new(&regex).unwrap();
 
     let dir_path = base.assets_subdir().join(dir_path);
