@@ -1,9 +1,17 @@
 
 pub mod per_block;
+pub mod per_item;
 pub mod blocks;
 
 
-use self::per_block::PerBlock;
+use self::{
+    per_block::PerBlock,
+    per_item::PerItem,
+};
+use crate::item::{
+    ItemId,
+    ItemRegistry,
+};
 use chunk_data::{
     AIR,
     BlockRegistry,
@@ -32,6 +40,8 @@ pub struct GameData {
     pub bid_glass: BlockId<()>,
     pub bid_log: BlockId<()>,
     pub bid_door: BlockId<blocks::door::DoorMeta>,
+
+    pub iid_stone: ItemId<()>,
 }
 
 #[derive(Debug)]
@@ -156,6 +166,10 @@ impl GameData {
         blocks_physics_logic.set(bid_door, BlockPhysicsLogic::Door);
         blocks_break_logic.set(bid_door, BlockBreakLogic::Door);
 
+        let mut items = ItemRegistry::new();
+
+        let iid_stone = items.register();
+
         GameData {
             blocks: blocks.finalize(),
 
@@ -173,6 +187,8 @@ impl GameData {
             bid_glass,
             bid_log,
             bid_door,
+
+            iid_stone,
         }
     }
 }
