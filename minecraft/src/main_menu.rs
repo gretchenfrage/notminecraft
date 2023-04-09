@@ -135,9 +135,9 @@ impl GuiStateFrame for MainMenu {
         self.title.update(elapsed);
         self.splash_text.update(elapsed);
 
-        let big = ctx.size.w >= 1930 && ctx.size.h >= 1450;
+        let big = ctx.size.w >= 960 && ctx.size.h >= 720;
         if big {
-            ctx.global().set_scale(1.5);
+            ctx.global().set_scale(2.0);
         } else {
             ctx.global().set_scale(1.0);
         }

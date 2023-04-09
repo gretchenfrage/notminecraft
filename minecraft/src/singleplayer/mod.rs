@@ -86,7 +86,7 @@ pub struct Singleplayer {
 
     reach: f32,
 
-    hotbar_items: [Option<HotbarItem>; 9],
+    //hotbar_items: [Option<HotbarItem>; 9],
     hotbar_selected: usize,
 
     evil_animation: f32,
@@ -106,17 +106,7 @@ struct Particle {
     age: f32,
 }
 
-#[derive(Debug)]
-enum HotbarItem {
-    SimpleBlock {
-        bid: BlockId<()>,
-        hud_mesh: Mesh,
-    },
-    Door {
-        hud_mesh: Mesh,
-    }
-}
-
+/*
 fn simple_hud_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
     let mut mesh_buf = MeshData::new();
     let shade = 0.5;
@@ -177,7 +167,7 @@ fn door_hud_mesh(renderer: &Renderer) -> Mesh {
         });
     mesh_buf.upload(renderer)
 }
-
+*/
 fn insert_chunk(
     chunk: ReadyChunk,
     chunks: &mut LoadedChunks,
@@ -351,7 +341,7 @@ impl Singleplayer {
             chunk_loader,
 
             reach: 12.0,
-
+            /*
             hotbar_items: [
                 Some(HotbarItem::SimpleBlock {
                     bid: game.bid_stone,
@@ -385,7 +375,7 @@ impl Singleplayer {
                     hud_mesh: door_hud_mesh(renderer),
                 }),
                 None,
-            ],
+            ],*/
             hotbar_selected: 0,
 
             evil_animation: 0.0,
@@ -453,6 +443,7 @@ impl Singleplayer {
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(0.0, (
+                                    /*
                                     logical_width(40.0,
                                         HotbarItemGuiBlock {
                                             item: &self.hotbar_items[0],
@@ -499,6 +490,7 @@ impl Singleplayer {
                                         },
                                     ),
                                      // TODO not be this is how it needs to be made by me
+                                    */
                                 )),
                             )
                         ),
@@ -518,7 +510,7 @@ impl Singleplayer {
         ))
     }
 }
-
+/*
 #[derive(Debug)]
 struct HotbarItemGuiBlock<'a> {
     item: &'a Option<HotbarItem>,
@@ -576,7 +568,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
             None => (),
         }
     }
-}
+}*/
 
  /*
         let crosshair_size = 30.0 * self.scale;
@@ -767,6 +759,7 @@ impl GuiStateFrame for Singleplayer {
                         .face
                         .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
                     {
+                        /*
                         match self.hotbar_items[self.hotbar_selected] {
                             Some(HotbarItem::SimpleBlock { bid, .. }) => {
                                 put_block(
@@ -789,6 +782,7 @@ impl GuiStateFrame for Singleplayer {
                             ),
                             None => (),
                         }
+                        */
                     }
                 }
                 _ => (),

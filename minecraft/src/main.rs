@@ -11,6 +11,7 @@ pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
 pub mod singleplayer;
+pub mod item;
 
 
 use crate::{
