@@ -1,10 +1,12 @@
 
 pub mod erased;
+pub mod slots;
 
 
 use std::{
     marker::PhantomData,
     fmt::{self, Formatter, Debug},
+    num::NonZeroU16,
 };
 
 pub use self::erased::ItemMeta;
@@ -124,5 +126,5 @@ impl ItemInstance {
 #[derive(Debug)]
 pub struct ItemStack {
     pub item: ItemInstance,
-    pub count: u16,
+    pub count: NonZeroU16,
 }
