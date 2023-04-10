@@ -1,7 +1,11 @@
 
 pub mod loader;
+pub mod meshes;
 
-use self::loader::AssetLoader;
+use self::{
+    loader::AssetLoader,
+    meshes::block_item_mesh,
+};
 use crate::{
     sound::SoundEffect,
     gui::blocks::{
@@ -13,11 +17,12 @@ use crate::{
 use graphics::frame_content::{
     FontId,
     GpuImageArray,
+    Mesh,
 };
 use vek::*;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Assets {
     pub font: FontId,
 
@@ -64,6 +69,8 @@ pub struct Assets {
     pub fog_night_rain: Rgb<f32>,
     /// Baseline color of sunset fog (fog with sun behind it during sunset).
     pub sky_sunset: Rgb<f32>,
+
+    pub block_item_mesh: Mesh,
 }
 
 impl Assets {
@@ -134,6 +141,7 @@ impl Assets {
             fog_day_rain:   [0.48, 0.52, 0.60].into(),
             fog_night_rain: [0.02, 0.04, 0.07].into(),
             sky_sunset:     [1.00, 0.35, 0.10].into(),
+            block_item_mesh: loader.load_mesh_data(&block_item_mesh()),
         };
         assets
     }

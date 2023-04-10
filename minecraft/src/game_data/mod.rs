@@ -41,6 +41,8 @@ pub struct GameData {
     pub bid_log: BlockId<()>,
     pub bid_door: BlockId<blocks::door::DoorMeta>,
 
+    //pub items_mesh: PerItem<Mesh>,
+
     pub iid_stone: ItemId<()>,
 }
 
@@ -109,7 +111,43 @@ pub enum BlockPhysicsLogic {
     BasicCube,
     Door,
 }
-
+/*
+fn block_item_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
+    let mut mesh_buf = MeshData::new();
+    let shade = 0.5;
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.0, 0.0, 0.0].into(),
+            pos_ext_1: [0.0, 1.0, 0.0].into(),
+            pos_ext_2: [1.0, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
+            tex_index,
+        });
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [1.0, 0.0, 0.0].into(),
+            pos_ext_1: [0.0, 1.0, 0.0].into(),
+            pos_ext_2: [0.0, 0.0, 1.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
+            tex_index,
+        });
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start: [0.0, 1.0, 0.0].into(),
+            pos_ext_1: [0.0, 0.0, 1.0].into(),
+            pos_ext_2: [1.0, 0.0, 0.0].into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors: [Rgba::white(); 4],
+            tex_index,
+        });
+    mesh_buf.upload(renderer)
+}
+*/
 // block tex indexes (BTIs):
 
 pub const BTI_STONE: usize = 0;
@@ -168,7 +206,10 @@ impl GameData {
 
         let mut items = ItemRegistry::new();
 
+        //let mut items_mesh = PerItem::new_no_default();
+
         let iid_stone = items.register();
+        //items_mesh.set(iid_stone, )
 
         GameData {
             blocks: blocks.finalize(),
@@ -187,6 +228,8 @@ impl GameData {
             bid_glass,
             bid_log,
             bid_door,
+
+            //items_mesh,
 
             iid_stone,
         }

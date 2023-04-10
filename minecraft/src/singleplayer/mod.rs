@@ -35,7 +35,11 @@ use crate::{
         },
         *,
     },
-    util::number_key::num_row_key,
+    util::{
+        number_key::num_row_key,
+        array::array_each_mut,
+    },
+    item::slots::ItemSlot,
 };
 use chunk_data::{
     FACES,
@@ -67,6 +71,7 @@ use std::{
     ops::Range,
     sync::Arc,
     f32::consts::PI,
+    iter,
 };
 use vek::*;
 
@@ -87,6 +92,7 @@ pub struct Singleplayer {
     reach: f32,
 
     //hotbar_items: [Option<HotbarItem>; 9],
+    hotbar_slots: Box<[ItemSlot; 9]>,
     hotbar_selected: usize,
 
     evil_animation: f32,
@@ -341,6 +347,7 @@ impl Singleplayer {
             chunk_loader,
 
             reach: 12.0,
+
             /*
             hotbar_items: [
                 Some(HotbarItem::SimpleBlock {
@@ -376,6 +383,10 @@ impl Singleplayer {
                 }),
                 None,
             ],*/
+            hotbar_slots: iter::from_fn(|| Some(ItemSlot::default()))
+                .take(9)
+                .collect::<Box<[_]>>()
+                .try_into().unwrap(),
             hotbar_selected: 0,
 
             evil_animation: 0.0,
@@ -442,7 +453,11 @@ impl Singleplayer {
                         &ctx.assets().hud_hotbar,
                         align(0.5,
                             logical_height(40.0,
-                                h_stack(0.0, (
+                                h_stack(0.0,
+                                    array_each_mut(&mut *self.hotbar_slots)
+                                        .map(|slot| v_align(0.5,
+                                            slot.gui()
+                                        ))
                                     /*
                                     logical_width(40.0,
                                         HotbarItemGuiBlock {
@@ -491,7 +506,7 @@ impl Singleplayer {
                                     ),
                                      // TODO not be this is how it needs to be made by me
                                     */
-                                )),
+                                ),
                             )
                         ),
                         align([self.hotbar_selected as f32 / 8.0, 0.5],

@@ -10,8 +10,8 @@ use std::fmt::Debug;
 /// is passed as the constraint, and `Self::Out` is returned as remaining size
 /// determination within that constraint.
 pub trait DimConstraint {
-    type In: Debug;
-    type Out: Debug;
+    type In: Debug + Default + Copy;
+    type Out: Debug + Default + Copy;
 }
 
 

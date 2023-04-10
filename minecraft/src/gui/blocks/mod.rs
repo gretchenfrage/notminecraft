@@ -17,6 +17,7 @@ mod tile_image;
 mod tile_9;
 mod text;
 mod either;
+//mod array_map_gui_block_seq;
 
 
 pub use self::{

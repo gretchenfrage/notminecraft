@@ -8,8 +8,10 @@ use graphics::{
     frame_content::{
         GpuImageArray,
         FontId,
+        Mesh,
     },
 };
+use mesh_data::MeshData;
 use get_assets::DataDir;
 use std::{
     borrow::Borrow,
@@ -172,6 +174,10 @@ impl<'a> AssetLoader<'a> {
                     line[i + 1..].to_owned(),
                 )))
             .collect())
+    }
+
+    pub fn load_mesh_data(&self, mesh_data: &MeshData) -> Mesh {
+        mesh_data.upload(&*self.renderer.borrow())
     }
 }
 

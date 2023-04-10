@@ -57,7 +57,7 @@ pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
         scale_seq: ScaleSeq,
     ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq);
 }
-/* TODO
+
 impl<
     'a,
     W: DimConstraint,
@@ -86,14 +86,28 @@ impl<
         let mut h_in_iter = h_in_seq.into_iter();
         let mut scale_iter = scale_seq.into_iter();
 
-        self.map(|block| block.size(
+        let mut w_out_seq = [W::Out::default(); LEN];
+        let mut h_out_seq = [H::Out::default(); LEN];
+        let mut i = 0;
+
+        let sized_seq = self.map(|block| {
+            let (w_out, h_out, sized) = block.size(
                 ctx,
                 w_in_iter.next().unwrap(),
                 h_in_iter.next().unwrap(),
-                scale_seq.next().unwrap(),
-            ))
+                scale_iter.next().unwrap(),
+            );
+
+            w_out_seq[i] = w_out;
+            h_out_seq[i] = h_out;
+            i += 1;
+            
+            sized
+        });
+
+        (w_out_seq, h_out_seq, sized_seq)
     }
-}*/
+}
 
 /// Sequence version of `SizedGuiBlock`. Essentially a compile-time
 /// heterogenous tuple of `SizedGuiBlock` implementations.
