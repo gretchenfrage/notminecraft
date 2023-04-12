@@ -37,7 +37,10 @@ use crate::{
     },
     util::{
         number_key::num_row_key,
-        array::array_each_mut,
+        array::{
+            array_each_mut,
+            array_const_slice_mut,
+        },
     },
     item::slots::ItemSlot,
 };
@@ -92,8 +95,10 @@ pub struct Singleplayer {
     reach: f32,
 
     //hotbar_items: [Option<HotbarItem>; 9],
-    hotbar_slots: Box<[ItemSlot; 9]>,
+    inventory_slots: Box<[ItemSlot; 36]>,
     hotbar_selected: usize,
+
+    inventory_open: bool,
 
     evil_animation: f32,
  
@@ -347,6 +352,7 @@ impl Singleplayer {
             chunk_loader,
 
             reach: 12.0,
+            inventory_open: false,
 
             /*
             hotbar_items: [
@@ -383,8 +389,8 @@ impl Singleplayer {
                 }),
                 None,
             ],*/
-            hotbar_slots: iter::from_fn(|| Some(ItemSlot::default()))
-                .take(9)
+            inventory_slots: iter::from_fn(|| Some(ItemSlot::default()))
+                .take(36)
                 .collect::<Box<[_]>>()
                 .try_into().unwrap(),
             hotbar_selected: 0,
@@ -454,7 +460,9 @@ impl Singleplayer {
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(0.0,
-                                    array_each_mut(&mut *self.hotbar_slots)
+                                    array_each_mut(
+                                        array_const_slice_mut::<_, 9>(&mut *self.inventory_slots, 0)
+                                    )
                                         .map(|slot| v_align(0.5,
                                             slot.gui()
                                         ))
@@ -522,6 +530,17 @@ impl Singleplayer {
                 ),
             ),
             CaptureMouseGuiBlock,
+            if self.inventory_open {
+                GuiEither::A(
+                    align(0.5,
+                        logical_size([352.0, 331.0],
+                            &ctx.assets().gui_inventory,
+                        )
+                    )
+                )
+            } else {
+                GuiEither::B(gap())
+            },
         ))
     }
 }
@@ -708,6 +727,8 @@ impl GuiStateFrame for Singleplayer {
             if n >= 1 && n <= 9 {
                 self.hotbar_selected = n as usize - 1;
             }
+        } else if key == VirtualKeyCode::E {
+            self.inventory_open = !self.inventory_open;
         }
     }
 

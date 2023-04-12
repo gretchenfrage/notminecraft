@@ -18,3 +18,14 @@ pub fn array_each_mut<
         array2.assume_init()
     }
 }
+
+
+pub fn array_const_slice_mut<
+    T,
+    const LEN: usize,
+>(array: &mut [T], start: usize) -> &mut [T; LEN]
+{
+    unsafe {
+        &mut *((&mut array[start..start + LEN]) as *mut [T] as *mut [T; LEN])
+    }
+}
