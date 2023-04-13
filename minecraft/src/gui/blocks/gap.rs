@@ -7,7 +7,7 @@ use crate::gui::{
 };
 use super::simple_gui_block::{
     SimpleGuiBlock,
-    simple_blocks_cursor_impl,
+    never_blocks_cursor_impl,
 };
 
 
@@ -23,5 +23,5 @@ pub fn gap<'a>() -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
 struct GuiGapBlock;
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<GuiGapBlock> {
-    simple_blocks_cursor_impl!();
+    never_blocks_cursor_impl!();
 }

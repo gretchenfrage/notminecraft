@@ -38,8 +38,8 @@ use crate::{
     util::{
         number_key::num_row_key,
         array::{
-            array_each_mut,
-            array_const_slice_mut,
+            array_each,
+            array_const_slice,
         },
     },
     item::slots::ItemSlot,
@@ -460,60 +460,12 @@ impl Singleplayer {
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(0.0,
-                                    array_each_mut(
-                                        array_const_slice_mut::<_, 9>(&mut *self.inventory_slots, 0)
+                                    array_each(
+                                        array_const_slice::<_, 9>(&*self.inventory_slots, 0)
                                     )
                                         .map(|slot| v_align(0.5,
                                             slot.gui()
                                         ))
-                                    /*
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[0],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[1],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[2],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[3],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[4],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[5],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[6],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[7],
-                                        },
-                                    ),
-                                    logical_width(40.0,
-                                        HotbarItemGuiBlock {
-                                            item: &self.hotbar_items[8],
-                                        },
-                                    ),
-                                     // TODO not be this is how it needs to be made by me
-                                    */
                                 ),
                             )
                         ),
@@ -534,7 +486,21 @@ impl Singleplayer {
                 GuiEither::A(
                     align(0.5,
                         logical_size([352.0, 331.0],
-                            &ctx.assets().gui_inventory,
+                            layer((
+                                &ctx.assets().gui_inventory,
+                                align(0.5,
+                                    logical_height(40.0,
+                                        h_stack(0.0,
+                                            array_each(
+                                                array_const_slice::<_, 9>(&*self.inventory_slots, 0)
+                                            )
+                                                .map(|slot| v_align(0.5,
+                                                    slot.gui()
+                                                ))
+                                        ),
+                                    ),
+                                ),
+                            ))
                         )
                     )
                 )

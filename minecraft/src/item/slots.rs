@@ -18,7 +18,7 @@ pub const DEFAULT_SLOT_SIZE: f32 = 40.0;
 
 #[derive(Debug)]
 pub struct ItemSlot {
-    pub content: Option<ItemStack>,
+    pub content: RefCell<Option<ItemStack>>,
     /// Makes the slot larger, but not the item model.
     pub slot_scale: f32,
 }
@@ -26,14 +26,14 @@ pub struct ItemSlot {
 impl Default for ItemSlot {
     fn default() -> Self {
         ItemSlot {
-            content: None,
+            content: RefCell::new(None),
             slot_scale: 1.0,
         }
     }
 }
 
 impl ItemSlot {
-    pub fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+    pub fn gui<'a>(&'a self) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
         ItemSlotGuiBlock { inner: self }
     }
 }
@@ -41,12 +41,12 @@ impl ItemSlot {
 
 #[derive(Debug)]
 struct ItemSlotGuiBlock<'a> {
-    inner: &'a mut ItemSlot,
+    inner: &'a ItemSlot,
 }
 
 #[derive(Debug)]
 struct ItemSlotSizedGuiBlock<'a> {
-    inner: &'a mut ItemSlot,
+    inner: &'a ItemSlot,
     ui_scale: f32,
 }
 
