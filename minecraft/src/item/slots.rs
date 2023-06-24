@@ -14,7 +14,7 @@ use std::{
 use vek::*;
 
 
-pub const DEFAULT_SLOT_SIZE: f32 = 40.0;
+pub const DEFAULT_SLOT_SIZE: f32 = 36.0;
 
 #[derive(Debug)]
 pub struct ItemSlot {
@@ -93,6 +93,11 @@ impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
                 &ctx.assets().block_item_mesh,
                 &ctx.assets().blocks,
             );
+        if ctx.cursor_in_area(0.0, size) {
+            canvas.reborrow()
+                .color([0.0, 0.0, 0.0, 0.25])
+                .draw_solid(size);
+        }
     }
 }
 

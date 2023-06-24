@@ -30,6 +30,9 @@ pub use self::{
         align,
         h_align,
         v_align,
+        align_start,
+        h_align_start,
+        v_align_start,
     },
     layer::layer,
     margin::{
