@@ -2,6 +2,7 @@
 
 
 pub mod simple_gui_block;
+pub mod identity_maperator;
 pub mod mc;
 
 mod gap;
@@ -17,6 +18,8 @@ mod tile_image;
 mod tile_9;
 mod text;
 mod either;
+mod relative;
+mod logical_translate;
 //mod array_map_gui_block_seq;
 
 
@@ -30,9 +33,6 @@ pub use self::{
         align,
         h_align,
         v_align,
-        align_start,
-        h_align_start,
-        v_align_start,
     },
     layer::layer,
     margin::{
@@ -62,4 +62,6 @@ pub use self::{
         GuiTextBlock, 
     },
     either::GuiEither,
+    relative::relative,
+    logical_translate::logical_translate,
 };

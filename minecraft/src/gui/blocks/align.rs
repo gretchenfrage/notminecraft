@@ -35,7 +35,7 @@ pub fn h_align<
     H: DimConstraint,
     I: GuiBlock<'a, DimChildSets, H>,
 >(frac: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
-    HAlign::<_, true> {
+    HAlign {
         frac,
         inner,
     }
@@ -54,62 +54,19 @@ pub fn v_align<
 }
 
 
-/// Gui block that aligns its child's top-left corner.
-pub fn align_start<
-    'a,
-    A: Into<Vec2<f32>>,
-    I: GuiBlock<'a, DimChildSets, DimChildSets>,
->(frac: A, inner: I) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
-    let Vec2 { x, y } = frac.into();
-    h_align_start(x,
-        v_align_start(y,
-            inner,
-        )
-    )
-}
-
-
-/// Gui block that aligns its child's left edge.
-pub fn h_align_start<
-    'a,
-    H: DimConstraint,
-    I: GuiBlock<'a, DimChildSets, H>,
->(frac: f32, inner: I) -> impl GuiBlock<'a, DimParentSets, H> {
-    HAlign::<_, false> {
-        frac,
-        inner,
-    }
-}
-
-
-/// Gui block that aligns its child's top edge.
-pub fn v_align_start<
-    'a,
-    W: DimConstraint,
-    I: GuiBlock<'a, W, DimChildSets>,
->(frac: f32, inner: I) -> impl GuiBlock<'a, W, DimParentSets> {
-    axis_swap(h_align_start(frac, axis_swap(inner)))
-}
-
-
 #[derive(Debug)]
-struct HAlign<I, const ALIGN_CENTER: bool> {
+struct HAlign<I> {
     frac: f32,
     inner: I,
 }
 
-impl<
-    'a,
-    H: DimConstraint,
-    I: GuiBlock<'a, DimChildSets, H>,
-    const ALIGN_CENTER: bool,
-> GuiBlock<'a, DimParentSets, H> for HAlign<I, ALIGN_CENTER> {
+impl<'a, H: DimConstraint, I: GuiBlock<'a, DimChildSets, H>> GuiBlock<'a, DimParentSets, H> for HAlign<I> {
     type Sized = HAlignSized<I::Sized>;
 
     fn size(self, ctx: &GuiGlobalContext<'a>, w: f32, h_in: H::In, scale: f32) -> ((), H::Out, Self::Sized) {
         let (inner_w, h_out, inner_sized) = self.inner.size(ctx, (), h_in, scale);
         let sized = HAlignSized {
-            x_translate: if ALIGN_CENTER { w - inner_w } else { w } * self.frac,
+            x_translate: (w - inner_w) * self.frac,
             inner: inner_sized,
         };
         ((), h_out, sized)
