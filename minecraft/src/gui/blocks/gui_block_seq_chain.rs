@@ -11,6 +11,21 @@ use crate::gui::{
 use std::ops::Index;
 
 
+#[macro_export]
+macro_rules! gui_seq_flatten {
+    ()=>{ () };
+    ($a:expr $(,)?)=>{ $a };
+    ($a:expr, $($tail:tt)*)=>{
+        gui_chain(
+            $a,
+            gui_seq_flatten!($($tail)*),
+        )
+    };
+}
+
+pub use gui_seq_flatten;
+
+
 pub fn gui_chain<'a, W, H, A, B>(
     a: A,
     b: B,

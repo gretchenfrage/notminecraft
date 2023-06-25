@@ -82,17 +82,17 @@ impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
             0.0,  0.0, 0.01, 0.5,
             0.0,  0.0,  0.0, 1.0,
         );
-        canvas.reborrow()
-            .scale(size)
-            .begin_3d(view_proj)
-            .scale(0.5)
-            .rotate(Quaternion::rotation_x(-PI / 5.0))
-            .rotate(Quaternion::rotation_y(PI / 4.0))
-            .translate(-0.5)
-            .draw_mesh(
-                &ctx.assets().block_item_mesh,
-                &ctx.assets().blocks,
-            );
+        //canvas.reborrow()
+        //    .scale(size)
+        //    .begin_3d(view_proj)
+        //    .scale(0.5)
+        //    .rotate(Quaternion::rotation_x(-PI / 5.0))
+        //    .rotate(Quaternion::rotation_y(PI / 4.0))
+        //    .translate(-0.5)
+        //    .draw_mesh(
+        //        &ctx.assets().block_item_mesh,
+        //        &ctx.assets().blocks,
+        //    );
         if ctx.cursor_in_area(0.0, size) {
             canvas.reborrow()
                 .color([0.0, 0.0, 0.0, 0.25])

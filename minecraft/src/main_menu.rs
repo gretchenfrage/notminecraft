@@ -134,12 +134,5 @@ impl GuiStateFrame for MainMenu {
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         self.title.update(elapsed);
         self.splash_text.update(elapsed);
-
-        let big = ctx.size.w >= 960 && ctx.size.h >= 720;
-        if big {
-            ctx.global().set_scale(2.0);
-        } else {
-            ctx.global().set_scale(1.0);
-        }
     }
 }

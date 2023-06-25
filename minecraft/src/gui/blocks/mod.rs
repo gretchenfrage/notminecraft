@@ -65,5 +65,8 @@ pub use self::{
     either::GuiEither,
     relative::relative,
     logical_translate::logical_translate,
-    gui_block_seq_chain::gui_chain,
+    gui_block_seq_chain::{
+        gui_chain,
+        gui_seq_flatten,
+    },
 };

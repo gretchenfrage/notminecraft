@@ -575,33 +575,56 @@ impl Singleplayer {
                             logical_size([352.0, 332.0],
                                 &ctx.assets().gui_inventory,
                             ),
-                            array_each(
-                                array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 0)
-                            )
-                                .map({
-                                    let mut col = 0;
-                                    let mut row = 0;
-                                    move |slot| {
-                                        let trans =
+                            gui_seq_flatten!(
+                                array_each(
+                                    array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 9)
+                                )
+                                    .map({
+                                        let mut col = 0;
+                                        let mut row = 0;
+                                        move |slot| {
+                                            let trans =
+                                                (
+                                                    Vec2::from([7.0, 83.0])
+                                                    + (
+                                                        Extent2::from(18.0)
+                                                        * Vec2::from([col, row])
+                                                            .map(|n: u32| n as f32)
+                                                    )
+                                                ) * 2.0;
+
+                                            col += 1;
+                                            debug_assert!(col <= 9);
+                                            if col == 9 {
+                                                col = 0;
+                                                row += 1;
+                                            }
+
+                                            logical_translate(trans, slot.gui())
+                                        }
+                                    }),
+                                array_each(
+                                    array_const_slice::<_, 9>(&*self.inventory_slots, 0)
+                                )
+                                    .map({
+                                        let mut col = 0;
+                                        move |slot| {
+                                            let trans =
                                             (
-                                                Vec2::from([7.0, 83.0])
+                                                Vec2::from([7.0, 141.0])
                                                 + (
                                                     Extent2::from(18.0)
-                                                    * Vec2::from([col, row])
+                                                    * Vec2::from([col, 0])
                                                         .map(|n: u32| n as f32)
                                                 )
                                             ) * 2.0;
 
-                                        col += 1;
-                                        debug_assert!(col <= 9);
-                                        if col == 9 {
-                                            col = 0;
-                                            row += 1;
-                                        }
+                                            col += 1;
 
-                                        logical_translate(trans, slot.gui())
-                                    }
-                                }),
+                                            logical_translate(trans, slot.gui())
+                                        }
+                                    })
+                            ),
                         )
                         
                     )
@@ -796,7 +819,13 @@ impl GuiStateFrame for Singleplayer {
                 self.hotbar_selected = n as usize - 1;
             }
         } else if key == VirtualKeyCode::E {
-            self.inventory_open = !self.inventory_open;
+            if !self.inventory_open {
+                self.inventory_open = true;
+                ctx.global().uncapture_mouse();
+            } else {
+                self.inventory_open = false;
+                ctx.global().capture_mouse();
+            }
         }
     }
 

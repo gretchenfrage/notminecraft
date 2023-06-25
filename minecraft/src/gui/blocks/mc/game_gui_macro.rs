@@ -15,9 +15,9 @@ macro_rules! game_gui {
                 ),
                 $bg_image,
             ),
-            ($(
+            gui_seq_flatten!(
                 
-            )*)
+            ),
         )
     /*{
         /*

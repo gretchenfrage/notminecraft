@@ -473,6 +473,14 @@ impl GuiEventLoop {
 					_ => (),
 				}
 				Event::MainEventsCleared => state.with_ctx(|ctx| {
+					// TODO: kinda awkward to just have this right here
+					let big = ctx.size.w >= 960 && ctx.size.h >= 720;
+			        if big {
+			            ctx.global().set_scale(2.0);
+			        } else {
+			            ctx.global().set_scale(1.0);
+			        }
+
 					let curr_update_time = Instant::now();
 
 					if let Some(prev_update_time) = prev_update_time {
