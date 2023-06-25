@@ -96,6 +96,16 @@ pub struct ItemInstance {
 }
 
 impl ItemInstance {
+    pub fn new<M>(iid: ItemId<M>, meta: M) -> Self
+    where
+        M: Debug + Send + Sync + 'static,
+    {
+        ItemInstance {
+            iid: iid.iid,
+            meta: ItemMeta::new(meta),
+        }
+    }
+
     pub fn meta<M: 'static>(&self, iid: ItemId<M>) -> &M {
         assert_eq!(self.iid, iid);
         self.meta.cast()
@@ -127,4 +137,13 @@ impl ItemInstance {
 pub struct ItemStack {
     pub item: ItemInstance,
     pub count: NonZeroU16,
+}
+
+impl ItemStack {
+    pub fn one(item: ItemInstance) -> Self {
+        ItemStack {
+            item,
+            count: 1.try_into().unwrap(),
+        }
+    }
 }

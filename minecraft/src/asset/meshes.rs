@@ -6,7 +6,7 @@ use mesh_data::{
 use vek::*;
 
 
-pub fn block_item_mesh() -> MeshData {
+pub fn block_item_mesh(tex_index: usize) -> MeshData {
     let mut mesh_buf = MeshData::new();
     let shade = 0.5;
     mesh_buf
@@ -17,7 +17,7 @@ pub fn block_item_mesh() -> MeshData {
             tex_start: 0.0.into(),
             tex_extent: 1.0.into(),
             vert_colors: [[shade, shade, shade, 1.0].into(); 4],
-            tex_index: 0,
+            tex_index,
         });
     mesh_buf
         .add_quad(&Quad {
@@ -27,7 +27,7 @@ pub fn block_item_mesh() -> MeshData {
             tex_start: 0.0.into(),
             tex_extent: 1.0.into(),
             vert_colors: [[shade, shade, shade, 1.0].into(); 4],
-            tex_index: 0,
+            tex_index,
         });
     mesh_buf
         .add_quad(&Quad {
@@ -37,7 +37,7 @@ pub fn block_item_mesh() -> MeshData {
             tex_start: 0.0.into(),
             tex_extent: 1.0.into(),
             vert_colors: [Rgba::white(); 4],
-            tex_index: 0,
+            tex_index,
         });
     mesh_buf
 }

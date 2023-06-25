@@ -1,8 +1,7 @@
 
 use crate::{
+    asset::consts::*,
 	game_data::{
-		BTI_DOOR_UPPER,
-		BTI_DOOR_LOWER,
 		GameData,
 		blocks::door::{
 			DoorMeta,

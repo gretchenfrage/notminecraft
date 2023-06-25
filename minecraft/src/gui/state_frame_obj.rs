@@ -231,9 +231,7 @@ impl<'a, F: CursorCallback<'a>> GuiVisitorTarget<'a> for CursorTarget<'a, F> {
         let ctx = self.top.ctx;
         let hits = self.unblocked && self.top.unclipped;
 
-        //if let Some(pos) = ctx.cursor_pos {
         self.unblocked = self.unblocked && !node.blocks_cursor(ctx);
-        //}
 
         self.callback.call(node, ctx, hits);
     }

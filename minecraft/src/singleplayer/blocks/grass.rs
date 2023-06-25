@@ -1,11 +1,7 @@
 
 use crate::{
-	game_data::{
-		BTI_GRASS_SIDE,
-		BTI_GRASS_TOP,
-		BTI_DIRT,
-		GameData,
-	},
+    asset::consts::*,
+	game_data::GameData,
 	singleplayer::tile_meshing::mesh_simple_face,
 	util::hex_color::hex_color,
 };

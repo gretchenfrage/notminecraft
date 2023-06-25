@@ -8,9 +8,12 @@ use self::{
     per_block::PerBlock,
     per_item::PerItem,
 };
-use crate::item::{
-    ItemId,
-    ItemRegistry,
+use crate::{
+    item::{
+        ItemId,
+        ItemRegistry,
+    },
+    asset::consts::*,
 };
 use chunk_data::{
     AIR,
@@ -41,7 +44,7 @@ pub struct GameData {
     pub bid_log: BlockId<()>,
     pub bid_door: BlockId<blocks::door::DoorMeta>,
 
-    //pub items_mesh: PerItem<Mesh>,
+    pub items_mesh_index: PerItem<usize>,
 
     pub iid_stone: ItemId<()>,
 }
@@ -148,19 +151,7 @@ fn block_item_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
     mesh_buf.upload(renderer)
 }
 */
-// block tex indexes (BTIs):
 
-pub const BTI_STONE: usize = 0;
-pub const BTI_DIRT: usize = 1;
-pub const BTI_GRASS_SIDE: usize = 2;
-pub const BTI_GRASS_TOP: usize = 3;
-pub const BTI_PLANKS: usize = 4;
-pub const BTI_BRICK: usize = 5;
-pub const BTI_GLASS: usize = 6;
-pub const BTI_LOG_SIDE: usize = 7;
-pub const BTI_LOG_TOP: usize = 8;
-pub const BTI_DOOR_UPPER: usize = 9;
-pub const BTI_DOOR_LOWER: usize = 10;
 
 impl GameData {
     pub fn new() -> Self {
@@ -206,9 +197,11 @@ impl GameData {
 
         let mut items = ItemRegistry::new();
 
-        //let mut items_mesh = PerItem::new_no_default();
+        let mut items_mesh_index = PerItem::new_no_default();
 
         let iid_stone = items.register();
+        items_mesh_index.set(iid_stone, IMI_STONE);
+        //items_mesh_logic.set(iid_stone, ItemMeshLogic::BlockMesh())
         //items_mesh.set(iid_stone, )
 
         GameData {
@@ -229,7 +222,7 @@ impl GameData {
             bid_log,
             bid_door,
 
-            //items_mesh,
+            items_mesh_index,
 
             iid_stone,
         }

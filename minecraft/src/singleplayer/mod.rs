@@ -468,7 +468,6 @@ impl Singleplayer {
                 logical_size([364.0, 44.0],
                     layer((
                         &ctx.assets().hud_hotbar,
-                        /*
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(0.0,
@@ -481,7 +480,6 @@ impl Singleplayer {
                                 ),
                             )
                         ),
-                        */
                         align([self.hotbar_selected as f32 / 8.0, 0.5],
                             logical_size([44.0, 44.0],
                                 align(0.5,
@@ -498,77 +496,6 @@ impl Singleplayer {
             if self.inventory_open {
                 GuiEither::A(
                     align(0.5,
-                        /*
-                        game_gui!(
-                            bg_image: &ctx.assets().gui_inventory,
-                            bg_image_size: [176, 166],
-                            [7, 83] => layer(
-                                array_each(
-                                    array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 0)
-                                )
-                                    .map({
-                                        let mut col = 0;
-                                        let mut row = 0;
-                                        move |slot| {
-                                            let frac =
-                                                (
-                                                    Vec2::from([7.0, 83.0])
-                                                    + (
-                                                        Extent2::from(18.0)
-                                                        * Vec2::from([col, row])
-                                                            .map(|n: u32| n as f32)
-                                                    )
-                                                ) / Extent2::from([176.0, 166.0]);
-
-                                            col += 1;
-                                            debug_assert!(col <= 9);
-                                            if col == 9 {
-                                                col = 0;
-                                                row += 1;
-                                            }
-
-                                            align_start(frac, slot.gui())
-                                        }
-                                    }),
-                            ),
-                        )
-                        */
-                        /*
-                        logical_size([352.0, 332.0],
-                            layer((
-                                &ctx.assets().gui_inventory,
-                                layer(
-                                    array_each(
-                                        array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 0)
-                                    )
-                                        .map({
-                                            let mut col = 0;
-                                            let mut row = 0;
-                                            move |slot| {
-                                                let frac =
-                                                    (
-                                                        Vec2::from([7.0, 83.0])
-                                                        + (
-                                                            Extent2::from(18.0)
-                                                            * Vec2::from([col, row])
-                                                                .map(|n: u32| n as f32)
-                                                        )
-                                                    ) / Extent2::from([176.0, 166.0]);
-
-                                                col += 1;
-                                                debug_assert!(col <= 9);
-                                                if col == 9 {
-                                                    col = 0;
-                                                    row += 1;
-                                                }
-
-                                                align_start(frac, slot.gui())
-                                            }
-                                        }),
-                                ),
-                            ))
-                        )
-                        */
                         
                         relative(
                             (),

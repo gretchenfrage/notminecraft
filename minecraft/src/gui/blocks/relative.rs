@@ -102,9 +102,9 @@ impl<
             self.item.visit_nodes(visitor, true);
             self.after.visit_items_nodes(visitor, IdentityMaperator, true);
         } else {
-            self.before.visit_items_nodes(visitor, IdentityMaperator, false);
-            self.item.visit_nodes(visitor, false);
             self.after.visit_items_nodes(visitor, IdentityMaperator, false);
+            self.item.visit_nodes(visitor, false);
+            self.before.visit_items_nodes(visitor, IdentityMaperator, false);
         }
     }
 }

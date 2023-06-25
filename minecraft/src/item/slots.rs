@@ -1,6 +1,9 @@
 
 use crate::{
-    item::ItemStack,
+    item::{
+        ItemStack,
+        ItemInstance,
+    },
     gui::{
         blocks::*,
         *,
@@ -68,20 +71,35 @@ impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for ItemSlotGuiBlock<'a> {
     }
 }
 
+impl<'a> ItemSlotSizedGuiBlock<'a> {
+    fn size(&self) -> f32 {
+        DEFAULT_SLOT_SIZE * self.ui_scale * self.inner.slot_scale
+    }
+}
+
 impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
     fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>) -> bool {
-        let size = DEFAULT_SLOT_SIZE * self.ui_scale * self.inner.slot_scale;
-        ctx.cursor_in_area(0.0, size)
+        ctx.cursor_in_area(0.0, self.size())
     }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>) {
-        let size = DEFAULT_SLOT_SIZE * self.ui_scale * self.inner.slot_scale;
+        let size = self.size();
         let view_proj = Mat4::new(
             1.0,  0.0,  0.0, 0.5,
             0.0, -1.0,  0.0, 0.5,
             0.0,  0.0, 0.01, 0.5,
             0.0,  0.0,  0.0, 1.0,
         );
+        if let Some(stack) = self.inner.content.borrow().as_ref() {
+            let imi = *ctx.game().items_mesh_index.get(stack.item.iid);
+            canvas.reborrow()
+                .scale(size)
+                .begin_3d(view_proj)
+                .draw_mesh(
+                    &ctx.assets().item_meshes[imi],
+                    &ctx.assets().blocks,
+                );
+        }
         //canvas.reborrow()
         //    .scale(size)
         //    .begin_3d(view_proj)
@@ -98,6 +116,20 @@ impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
                 .color([0.0, 0.0, 0.0, 0.25])
                 .draw_solid(size);
         }
+    }
+
+    fn on_cursor_click(
+        self,
+        ctx: GuiSpatialContext,
+        hits: bool,
+        button: MouseButton,
+    ) {
+        if !hits { return }
+        if !ctx.cursor_in_area(0.0, self.size()) { return }
+        if button != MouseButton::Middle { return }
+
+        let mut slot = self.inner.content.borrow_mut();
+        *slot = Some(ItemStack::one(ItemInstance::new(ctx.game().iid_stone, ())));
     }
 }
 

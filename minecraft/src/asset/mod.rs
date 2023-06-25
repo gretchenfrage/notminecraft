@@ -5,6 +5,7 @@ pub mod meshes;
 use self::{
     loader::AssetLoader,
     meshes::block_item_mesh,
+    consts::*,
 };
 use crate::{
     sound::SoundEffect,
@@ -20,6 +21,28 @@ use graphics::frame_content::{
     Mesh,
 };
 use vek::*;
+
+
+pub mod consts {
+    // block tex indexes (BTIs):
+
+    pub const BTI_STONE: usize = 0;
+    pub const BTI_DIRT: usize = 1;
+    pub const BTI_GRASS_SIDE: usize = 2;
+    pub const BTI_GRASS_TOP: usize = 3;
+    pub const BTI_PLANKS: usize = 4;
+    pub const BTI_BRICK: usize = 5;
+    pub const BTI_GLASS: usize = 6;
+    pub const BTI_LOG_SIDE: usize = 7;
+    pub const BTI_LOG_TOP: usize = 8;
+    pub const BTI_DOOR_UPPER: usize = 9;
+    pub const BTI_DOOR_LOWER: usize = 10;
+
+
+    // item mesh indexes (IMIs):
+
+    pub const IMI_STONE: usize = 0;
+}
 
 
 #[derive(Debug)]
@@ -70,7 +93,9 @@ pub struct Assets {
     /// Baseline color of sunset fog (fog with sun behind it during sunset).
     pub sky_sunset: Rgb<f32>,
 
-    pub block_item_mesh: Mesh,
+    //pub block_item_mesh: Mesh,
+    pub item_meshes: Vec<Mesh>,
+
     pub gui_inventory: GpuImageArray,
 }
 
@@ -142,7 +167,10 @@ impl Assets {
             fog_day_rain:   [0.48, 0.52, 0.60].into(),
             fog_night_rain: [0.02, 0.04, 0.07].into(),
             sky_sunset:     [1.00, 0.35, 0.10].into(),
-            block_item_mesh: loader.load_mesh_data(&block_item_mesh()),
+            //block_item_mesh: loader.load_mesh_data(&block_item_mesh()),
+            item_meshes: vec![
+                loader.load_mesh_data(&block_item_mesh(BTI_STONE)), // 0: stone
+            ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };
         assets
