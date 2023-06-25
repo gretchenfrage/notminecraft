@@ -179,6 +179,23 @@ pub trait GuiVisitorMaperator<'a>: Debug {
     ) -> GuiVisitor<'a, 'b, T>;
 }
 
+
+impl<
+    'c,
+    'a,
+    M: GuiVisitorMaperator<'a>,
+> GuiVisitorMaperator<'a> for &'c mut M
+{
+    fn next<'b, T: GuiVisitorTarget<'a>>(
+        &'b mut self,
+        visitor: &'b mut GuiVisitor<'a, '_, T>,
+    ) -> GuiVisitor<'a, 'b, T>
+    {
+        M::next(*self, visitor)
+    }
+}
+
+
 macro_rules! reverse_visit_nodes {
     (
         $maperator:ident,

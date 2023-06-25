@@ -5,7 +5,22 @@ macro_rules! game_gui {
         bg_image: $bg_image:expr,
         bg_image_size: [$bg_image_size_x:expr, $bg_image_size_y:expr],
         $( [$x:expr, $y:expr] => $elem:expr ),*$(,)?
-    )=>{{
+    )=>{
+        relative(
+            (),
+            logical_size(
+                Extent2::new(
+                    $bg_image_size_x as f32,
+                    $bg_image_size_y as f32,
+                ),
+                $bg_image,
+            ),
+            ($(
+                
+            )*)
+        )
+    /*{
+        /*
         let bg_image_size = Extent2::new(
             $bg_image_size_x as f32,
             $bg_image_size_y as f32,
@@ -21,8 +36,9 @@ macro_rules! game_gui {
                     },
                 )*))
             ))
-        )
-    }};
+        )*/
+    }*/
+    };
 }
 
 pub use game_gui;

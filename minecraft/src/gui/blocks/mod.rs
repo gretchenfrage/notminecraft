@@ -20,6 +20,7 @@ mod text;
 mod either;
 mod relative;
 mod logical_translate;
+mod gui_block_seq_chain;
 //mod array_map_gui_block_seq;
 
 
@@ -64,4 +65,5 @@ pub use self::{
     either::GuiEither,
     relative::relative,
     logical_translate::logical_translate,
+    gui_block_seq_chain::gui_chain,
 };
