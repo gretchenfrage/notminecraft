@@ -17,27 +17,71 @@ use std::{
 use vek::*;
 
 
+/*
+pub fn gui_slot_grid<F, E, const LEN: usize>(
+    slots: &[ItemSlot; LEN],
+    dims: E,
+    config: F,
+) -> impl GuiBlockSeq<DimChildSets, DimParentSets>
+where
+    F: FnMut() -> SlotGuiConfig,
+    E: Into<Extent2<u32>>,
+{
+    let dims = dims.into();
+    slots
+}*/
+//pub struct ItemGridBuilder<
+
+
 pub const DEFAULT_SLOT_SIZE: f32 = 36.0;
 
-#[derive(Debug)]
-pub struct ItemSlot {
-    pub content: RefCell<Option<ItemStack>>,
-    /// Makes the slot larger, but not the item model.
-    pub slot_scale: f32,
-}
 
-impl Default for ItemSlot {
-    fn default() -> Self {
-        ItemSlot {
-            content: RefCell::new(None),
-            slot_scale: 1.0,
+#[derive(Debug)]
+pub struct ItemSlot(pub RefCell<Option<ItemStack>>);
+
+impl ItemSlot {
+    pub fn gui<'a>(
+        &'a self,
+        config: SlotGuiConfig,
+    ) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+        ItemSlotGuiBlock {
+            inner: self,
+            size: config.logical_size,
+            interactable: config.interactable,
         }
     }
 }
 
-impl ItemSlot {
-    pub fn gui<'a>(&'a self) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
-        ItemSlotGuiBlock { inner: self }
+impl Default for ItemSlot {
+    fn default() -> Self {
+        ItemSlot(RefCell::new(None))
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct SlotGuiConfig {
+    pub logical_size: f32,
+    pub interactable: bool,
+}
+
+impl SlotGuiConfig {
+    pub fn new() -> Self {
+        SlotGuiConfig {
+            logical_size: DEFAULT_SLOT_SIZE,
+            interactable: true,
+        }
+    }
+
+    pub fn non_interactable(mut self) -> Self {
+        self.interactable = false;
+        self
+    }
+}
+
+impl Default for SlotGuiConfig {
+    fn default() -> Self {
+        SlotGuiConfig::new()
     }
 }
 
@@ -45,55 +89,41 @@ impl ItemSlot {
 #[derive(Debug)]
 struct ItemSlotGuiBlock<'a> {
     inner: &'a ItemSlot,
-}
-
-#[derive(Debug)]
-struct ItemSlotSizedGuiBlock<'a> {
-    inner: &'a ItemSlot,
-    ui_scale: f32,
+    size: f32,
+    interactable: bool,
 }
 
 impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for ItemSlotGuiBlock<'a> {
-    type Sized = ItemSlotSizedGuiBlock<'a>;
+    type Sized = Self;
 
     fn size(
-        self,
+        mut self,
         _: &GuiGlobalContext<'a>,
         _w_in: (),
         _h_in: (),
-        ui_scale: f32,
+        scale: f32,
     ) -> (f32, f32, Self::Sized) {
-        let size = DEFAULT_SLOT_SIZE * ui_scale * self.inner.slot_scale;
-        (size, size, ItemSlotSizedGuiBlock {
-            inner: self.inner,
-            ui_scale,
-        })
+        self.size *= scale;
+        (self.size, self.size, self)
     }
 }
 
-impl<'a> ItemSlotSizedGuiBlock<'a> {
-    fn size(&self) -> f32 {
-        DEFAULT_SLOT_SIZE * self.ui_scale * self.inner.slot_scale
-    }
-}
-
-impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
+impl<'a> GuiNode<'a> for ItemSlotGuiBlock<'a> {
     fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>) -> bool {
-        ctx.cursor_in_area(0.0, self.size())
+        ctx.cursor_in_area(0.0, self.size)
     }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>) {
-        let size = self.size();
         let view_proj = Mat4::new(
             1.0,  0.0,  0.0, 0.5,
             0.0, -1.0,  0.0, 0.5,
             0.0,  0.0, 0.01, 0.5,
             0.0,  0.0,  0.0, 1.0,
         );
-        if let Some(stack) = self.inner.content.borrow().as_ref() {
+        if let Some(stack) = self.inner.0.borrow().as_ref() {
             let imi = *ctx.game().items_mesh_index.get(stack.item.iid);
             canvas.reborrow()
-                .scale(size)
+                .scale(self.size)
                 .begin_3d(view_proj)
                 .draw_mesh(
                     &ctx.assets().item_meshes[imi],
@@ -111,10 +141,12 @@ impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
         //        &ctx.assets().block_item_mesh,
         //        &ctx.assets().blocks,
         //    );
-        if ctx.cursor_in_area(0.0, size) {
-            canvas.reborrow()
-                .color([0.0, 0.0, 0.0, 0.25])
-                .draw_solid(size);
+        if self.interactable {
+            if ctx.cursor_in_area(0.0, self.size) {
+                canvas.reborrow()
+                    .color([0.0, 0.0, 0.0, 0.25])
+                    .draw_solid(self.size);
+            }
         }
     }
 
@@ -125,10 +157,10 @@ impl<'a> GuiNode<'a> for ItemSlotSizedGuiBlock<'a> {
         button: MouseButton,
     ) {
         if !hits { return }
-        if !ctx.cursor_in_area(0.0, self.size()) { return }
+        if !ctx.cursor_in_area(0.0, self.size) { return }
         if button != MouseButton::Middle { return }
 
-        let mut slot = self.inner.content.borrow_mut();
+        let mut slot = self.inner.0.borrow_mut();
         *slot = Some(ItemStack::one(ItemInstance::new(ctx.game().iid_stone, ())));
     }
 }

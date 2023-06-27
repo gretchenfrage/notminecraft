@@ -43,7 +43,10 @@ use crate::{
             array_const_slice,
         },
     },
-    item::slots::ItemSlot,
+    item::slots::{
+        ItemSlot,
+        SlotGuiConfig,
+    },
 };
 use chunk_data::{
     FACES,
@@ -97,6 +100,9 @@ pub struct Singleplayer {
 
     //hotbar_items: [Option<HotbarItem>; 9],
     inventory_slots: Box<[ItemSlot; 36]>,
+    armor_slots: Box<[ItemSlot; 4]>,
+    crafting_input_slots: Box<[ItemSlot; 4]>,
+    crafting_output_slot: ItemSlot,
     hotbar_selected: usize,
 
     inventory_open: bool,
@@ -303,6 +309,9 @@ macro_rules! game_gui {
     };
 }*/
 
+
+
+
 impl Singleplayer {
     pub fn new(game: &Arc<GameData>, renderer: &Renderer) -> Self {
         let chunk_loader = ChunkLoader::new(game, renderer);
@@ -404,6 +413,15 @@ impl Singleplayer {
                 .take(36)
                 .collect::<Box<[_]>>()
                 .try_into().unwrap(),
+            armor_slots: iter::from_fn(|| Some(ItemSlot::default()))
+                .take(4)
+                .collect::<Box<[_]>>()
+                .try_into().unwrap(),
+            crafting_input_slots: iter::from_fn(|| Some(ItemSlot::default()))
+                .take(4)
+                .collect::<Box<[_]>>()
+                .try_into().unwrap(),
+            crafting_output_slot: ItemSlot::default(),
             hotbar_selected: 0,
 
             evil_animation: 0.0,
@@ -470,12 +488,12 @@ impl Singleplayer {
                         &ctx.assets().hud_hotbar,
                         align(0.5,
                             logical_height(40.0,
-                                h_stack(0.0,
+                                h_stack(4.0,
                                     array_each(
                                         array_const_slice::<_, 9>(&*self.inventory_slots, 0)
                                     )
                                         .map(|slot| v_align(0.5,
-                                            slot.gui()
+                                            slot.gui(SlotGuiConfig::new().non_interactable())
                                         ))
                                 ),
                             )
@@ -527,7 +545,7 @@ impl Singleplayer {
                                                 row += 1;
                                             }
 
-                                            logical_translate(trans, slot.gui())
+                                            logical_translate(trans, slot.gui(Default::default()))
                                         }
                                     }),
                                 array_each(
@@ -548,9 +566,59 @@ impl Singleplayer {
 
                                             col += 1;
 
-                                            logical_translate(trans, slot.gui())
+                                            logical_translate(trans, slot.gui(Default::default()))
                                         }
-                                    })
+                                    }),
+                                array_each(&*self.armor_slots)
+                                    .map({
+                                        let mut row = 0;
+                                        move |slot| {
+                                            let trans =
+                                            (
+                                                Vec2::from([7.0, 7.0])
+                                                + (
+                                                    Extent2::from(18.0)
+                                                    * Vec2::from([0, row])
+                                                        .map(|n: u32| n as f32)
+                                                )
+                                            ) * 2.0;
+
+                                            row += 1;
+
+                                            logical_translate(trans, slot.gui(Default::default()))
+                                        }
+                                    }),
+                                array_each(&*self.crafting_input_slots)
+                                    .map({
+                                        let mut col = 0;
+                                        let mut row = 0;
+                                        move |slot| {
+                                            let trans =
+                                                (
+                                                    Vec2::from([87.0, 25.0])
+                                                    + (
+                                                        Extent2::from(18.0)
+                                                        * Vec2::from([col, row])
+                                                            .map(|n: u32| n as f32)
+                                                    )
+                                                ) * 2.0;
+
+                                            col += 1;
+                                            debug_assert!(col <= 9);
+                                            if col == 4 {
+                                                col = 0;
+                                                row += 1;
+                                            }
+
+                                            logical_translate(trans, slot.gui(Default::default()))
+                                        }
+                                    }),
+                                (
+                                    {
+                                        let trans = Vec2::from([143.0, 35.0]) * 2.0;
+                                        logical_translate(trans, self.crafting_output_slot.gui(Default::default()))
+                                    },
+                                ),
                             ),
                         )
                         

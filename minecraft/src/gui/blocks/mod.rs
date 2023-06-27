@@ -10,6 +10,7 @@ mod axis_swap;
 mod align;
 mod layer;
 mod margin;
+mod pad;
 mod modify;
 mod logical_size;
 mod stack;
@@ -40,6 +41,11 @@ pub use self::{
         margin,
         h_margin,
         v_margin,
+    },
+    pad::{
+        pad,
+        h_pad,
+        v_pad,
     },
     modify::modify,
     logical_size::{
