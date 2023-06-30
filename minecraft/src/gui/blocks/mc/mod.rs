@@ -27,5 +27,8 @@ pub use self::{
         MenuButtonBuilder,
         menu_button,
     },
-    game_gui_macro::game_gui,
+    game_gui_macro::{
+        game_gui,
+        item_grid,
+    },
 };

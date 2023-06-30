@@ -44,6 +44,7 @@ use crate::{
         },
     },
     item::slots::{
+        DEFAULT_SLOT_SIZE,
         ItemSlot,
         SlotGuiConfig,
     },
@@ -486,6 +487,7 @@ impl Singleplayer {
                 logical_size([364.0, 44.0],
                     layer((
                         &ctx.assets().hud_hotbar,
+                        /*
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(4.0,
@@ -498,6 +500,7 @@ impl Singleplayer {
                                 ),
                             )
                         ),
+                        */
                         align([self.hotbar_selected as f32 / 8.0, 0.5],
                             logical_size([44.0, 44.0],
                                 align(0.5,
@@ -514,13 +517,50 @@ impl Singleplayer {
             if self.inventory_open {
                 GuiEither::A(
                     align(0.5,
-                        
+                        game_gui!(
+                            [176, 166],
+                            &ctx.assets().gui_inventory,
+                            [
+                                ([7, 83], item_grid!(9, 3, &self.inventory_slots[9..])),
+                                ([7, 141], item_grid!(9, 1, &self.inventory_slots[..9])),
+                                ([7, 7], item_grid!(1, 4, &self.armor_slots[..])),
+                                ([87, 25], item_grid!(2, 2, &self.crafting_input_slots[..])),
+                                ([143, 35],
+                                    logical_size(DEFAULT_SLOT_SIZE,
+                                        self.crafting_output_slot.gui(Default::default())
+                                    )
+                                ),
+                            ]
+                        )
+                        /*
+                        logical_size([352.0, 332.0],
+                            layer((
+                                &ctx.assets().gui_inventory,
+                                logical_translate([7.0 * 2.0, 83.0 * 2.0],
+                                    v_align(0.0,
+                                        v_stack(0.0,
+                                            item_grid!(9, 3, &self.inventory_slots[9..])
+                                        )
+                                    )
+                                ),
+                            )),
+                        )
+                        */
+                        /*
                         relative(
                             (),
                             logical_size([352.0, 332.0],
                                 &ctx.assets().gui_inventory,
                             ),
+                            (
+                                logical_translate([7.0 * 2.0, 83.0 * 2.0],
+                                    item_grid!(9, 3, &self.inventory_slots[9..])
+                                ),
+                            ),
+                            /*
                             gui_seq_flatten!(
+
+                                /*
                                 array_each(
                                     array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 9)
                                 )
@@ -619,8 +659,10 @@ impl Singleplayer {
                                         logical_translate(trans, self.crafting_output_slot.gui(Default::default()))
                                     },
                                 ),
+                                */
                             ),
-                        )
+                            */
+                        )*/
                         
                     )
                 )
