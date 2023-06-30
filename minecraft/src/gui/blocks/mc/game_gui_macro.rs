@@ -51,19 +51,15 @@ macro_rules! item_grid {
             *n = i;
         }
         let array = $array;
-        logical_width(0.0, // lol
-            v_stack(0.0,
-                row_nums.map(|n|
-                    h_align(0.0,
-                        logical_height(DEFAULT_SLOT_SIZE,
-                            h_stack(0.0,
-                                array_each(
-                                    array_const_slice::<_, $cols>(array, n * $cols)
-                                ).map(|slot|
-                                    logical_width(DEFAULT_SLOT_SIZE,
-                                        slot.gui(Default::default())
-                                    )
-                                )
+        v_stack_auto(0.0,
+            row_nums.map(|n|
+                logical_height(DEFAULT_SLOT_SIZE,
+                    h_stack(0.0,
+                        array_each(
+                            array_const_slice::<_, $cols>(array, n * $cols)
+                        ).map(|slot|
+                            logical_width(DEFAULT_SLOT_SIZE,
+                                slot.gui(Default::default())
                             )
                         )
                     )

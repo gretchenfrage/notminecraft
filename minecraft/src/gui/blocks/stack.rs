@@ -8,6 +8,7 @@ use crate::gui::{
     SizedGuiBlockFlatten,
     DimParentSets,
     DimChildSets,
+    DimConstraint,
     GuiBlock,
     GuiBlockSeq,
 };
@@ -44,6 +45,54 @@ pub fn h_stack<'a, I: GuiBlockSeq<'a, DimChildSets, DimParentSets>>(
 }
 
 
+pub fn v_stack_auto<'a, I: GuiBlockSeq<'a, DimChildSets, DimChildSets>>(
+    logical_gap: f32,
+    items: I,
+) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+    VStack {
+        logical_gap,
+        items,
+    }
+}
+
+pub fn h_stack_auto<'a, I: GuiBlockSeq<'a, DimChildSets, DimChildSets>>(
+    logical_gap: f32,
+    items: I,
+) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+    axis_swap(v_stack_auto(logical_gap, axis_swap_seq(items)))
+}
+
+
+/// For abstracting over:
+/// - Stack of elements with parent-set width, that sets them all to the same.
+/// - Stack of elements with child-set width, which sets its own width to their
+///   max.
+trait WidthLogic: DimConstraint {
+    fn w_out<Seq>(num_items: usize, item_w_outs: Seq) -> Self::Out
+    where
+        Seq: Index<usize, Output=Self::Out> + Debug;
+}
+
+impl WidthLogic for DimParentSets {
+    fn w_out<Seq>(_num_items: usize, _: Seq) -> ()
+    where
+        Seq: Index<usize, Output=()> + Debug
+    {}
+}
+
+impl WidthLogic for DimChildSets {
+    fn w_out<Seq>(num_items: usize, item_widths: Seq) -> f32
+    where
+        Seq: Index<usize, Output=f32> + Debug
+    {
+        (0..num_items)
+            .map(|i| item_widths[i])
+            .max_by(|a, b| a.total_cmp(&b))
+            .unwrap_or(0.0)
+    }
+}
+
+
 #[derive(Debug)]
 struct VStack<I> {
     logical_gap: f32,
@@ -52,8 +101,9 @@ struct VStack<I> {
 
 impl<
     'a,
-    I: GuiBlockSeq<'a, DimParentSets, DimChildSets>,
-> GuiBlock<'a, DimParentSets, DimChildSets> for VStack<I>
+    W: DimConstraint + WidthLogic,
+    I: GuiBlockSeq<'a, W, DimChildSets>,
+> GuiBlock<'a, W, DimChildSets> for VStack<I>
 {
     type Sized = SizedGuiBlockFlatten<
         I::SizedSeq,
@@ -63,24 +113,26 @@ impl<
     fn size(
         self,
         ctx: &GuiGlobalContext<'a>,
-        w: f32,
+        w_in: W::In,
         (): (),
         scale: f32,
-    ) -> ((), f32, Self::Sized)
+    ) -> (W::Out, f32, Self::Sized)
     {
         let len = self.items.len();
 
         let scaled_gap = self.logical_gap * scale;
 
-        let w_in_seq = repeat(w);
+        let w_in_seq = repeat(w_in);
         let h_in_seq = repeat(());
         let scale_seq = repeat(scale);
 
         let (
-            _,
+            item_w_outs,
             item_heights,
             sized_seq,
         ) = self.items.size_all(ctx, w_in_seq, h_in_seq, scale_seq);
+
+        let w_out = W::w_out(len, item_w_outs);
 
         let mut height = 0.0;
         for i in 0..len {
@@ -96,7 +148,7 @@ impl<
             len,
         };
 
-        ((), height, SizedGuiBlockFlatten(sized_seq, maperator))
+        (w_out, height, SizedGuiBlockFlatten(sized_seq, maperator))
     }
 }
 

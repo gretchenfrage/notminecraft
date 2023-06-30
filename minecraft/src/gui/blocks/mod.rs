@@ -10,10 +10,11 @@ mod axis_swap;
 mod align;
 mod layer;
 mod margin;
-mod pad;
+//mod pad;
 mod modify;
 mod logical_size;
 mod stack;
+//mod stack_auto;
 mod image;
 mod tile_image;
 mod tile_9;
@@ -42,11 +43,11 @@ pub use self::{
         h_margin,
         v_margin,
     },
-    pad::{
-        pad,
-        h_pad,
-        v_pad,
-    },
+    //pad::{
+    //    pad,
+    //    h_pad,
+    //    v_pad,
+    //},
     modify::modify,
     logical_size::{
     	logical_width,
@@ -56,6 +57,8 @@ pub use self::{
     stack::{
         v_stack,
         h_stack,
+        v_stack_auto,
+        h_stack_auto,
     },
     tile_image::tile_image,
     tile_9::{
