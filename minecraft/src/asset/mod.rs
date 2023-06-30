@@ -4,7 +4,7 @@ pub mod meshes;
 
 use self::{
     loader::AssetLoader,
-    meshes::block_item_mesh,
+    meshes::ItemMesh,
     consts::*,
 };
 use crate::{
@@ -94,10 +94,11 @@ pub struct Assets {
     pub sky_sunset: Rgb<f32>,
 
     //pub block_item_mesh: Mesh,
-    pub item_meshes: Vec<Mesh>,
+    pub item_meshes: Vec<ItemMesh>,
 
     pub gui_inventory: GpuImageArray,
 }
+
 
 impl Assets {
     pub async fn load(loader: &mut AssetLoader<'_>) -> Self {
@@ -169,7 +170,7 @@ impl Assets {
             sky_sunset:     [1.00, 0.35, 0.10].into(),
             //block_item_mesh: loader.load_mesh_data(&block_item_mesh()),
             item_meshes: vec![
-                loader.load_mesh_data(&block_item_mesh(BTI_STONE)), // 0: stone
+                ItemMesh::load_basic_block(&loader, BTI_STONE), // 0: stone
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };

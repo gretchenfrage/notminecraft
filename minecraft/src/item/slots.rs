@@ -106,11 +106,23 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<ItemSlotGuiBlock<'a>> {
         );
         if let Some(stack) = self.inner.slot.0.borrow().as_ref() {
             let imi = *ctx.game().items_mesh_index.get(stack.item.iid);
-            canvas.reborrow()
+            let item_mesh = &ctx.assets().item_meshes[imi];
+
+            let mut canvas = canvas.reborrow()
                 .scale(self.size)
-                .begin_3d(view_proj)
+                .begin_3d(view_proj);
+
+            if item_mesh.block {
+                canvas = canvas
+                    .scale(0.56)
+                    .rotate(Quaternion::rotation_x(-PI * 0.17))
+                    .rotate(Quaternion::rotation_y(PI / 4.0))
+                    .translate(-0.5);
+            }
+
+            canvas.reborrow()
                 .draw_mesh(
-                    &ctx.assets().item_meshes[imi],
+                    &item_mesh.mesh,
                     &ctx.assets().blocks,
                 );
         }

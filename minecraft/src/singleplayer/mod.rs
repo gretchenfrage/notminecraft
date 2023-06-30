@@ -487,7 +487,7 @@ impl Singleplayer {
                 logical_size([364.0, 44.0],
                     layer((
                         &ctx.assets().hud_hotbar,
-                        /*
+                        
                         align(0.5,
                             logical_height(40.0,
                                 h_stack(4.0,
@@ -495,12 +495,14 @@ impl Singleplayer {
                                         array_const_slice::<_, 9>(&*self.inventory_slots, 0)
                                     )
                                         .map(|slot| v_align(0.5,
-                                            slot.gui(SlotGuiConfig::new().non_interactable())
+                                            logical_size(DEFAULT_SLOT_SIZE,
+                                                slot.gui(Default::default())
+                                            )
                                         ))
                                 ),
                             )
                         ),
-                        */
+                        
                         align([self.hotbar_selected as f32 / 8.0, 0.5],
                             logical_size([44.0, 44.0],
                                 align(0.5,
@@ -863,6 +865,19 @@ impl GuiStateFrame for Singleplayer {
                 self.inventory_open = false;
                 ctx.global().capture_mouse();
             }
+        }
+    }
+
+    fn on_captured_mouse_scroll(
+        &mut self,
+        _: &GuiWindowContext,
+        amount: ScrolledAmount,
+    ) {
+        if let ScrolledAmount::Lines(amount) = amount {
+            let mut i = self.hotbar_selected as i32;
+            i -= amount.y.round() as i32;
+            i = ((i % 9) + 9) % 9;
+            self.hotbar_selected = i as usize;
         }
     }
 

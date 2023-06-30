@@ -620,7 +620,7 @@ fn try_capture_mouse(window: &Window) -> bool {
 				true
 			}
 			Err(e) => {
-				warn!("error on Window::set_cursor_grab({:?}): {}", mode, e);
+				trace!("error on Window::set_cursor_grab({:?}): {}", mode, e);
 				false
 			}
 		})
