@@ -125,68 +125,6 @@ struct Particle {
     age: f32,
 }
 
-/*
-fn simple_hud_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
-    let mut mesh_buf = MeshData::new();
-    let shade = 0.5;
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start: [0.0, 0.0, 0.0].into(),
-            pos_ext_1: [0.0, 1.0, 0.0].into(),
-            pos_ext_2: [1.0, 0.0, 0.0].into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
-            tex_index,
-        });
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start: [1.0, 0.0, 0.0].into(),
-            pos_ext_1: [0.0, 1.0, 0.0].into(),
-            pos_ext_2: [0.0, 0.0, 1.0].into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors: [[shade, shade, shade, 1.0].into(); 4],
-            tex_index,
-        });
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start: [0.0, 1.0, 0.0].into(),
-            pos_ext_1: [0.0, 0.0, 1.0].into(),
-            pos_ext_2: [1.0, 0.0, 0.0].into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors: [Rgba::white(); 4],
-            tex_index,
-        });
-    mesh_buf.upload(renderer)
-}
-
-fn door_hud_mesh(renderer: &Renderer) -> Mesh {
-    let mut mesh_buf = MeshData::new();
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start: [0.25, 0.0, 0.5].into(),
-            pos_ext_1: [0.0, 0.5, 0.0].into(),
-            pos_ext_2: [0.5, 0.0, 0.0].into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors: [Rgba::white(); 4],
-            tex_index: 10,
-        });
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start: [0.25, 0.5, 0.5].into(),
-            pos_ext_1: [0.0, 0.5, 0.0].into(),
-            pos_ext_2: [0.5, 0.0, 0.0].into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors: [Rgba::white(); 4],
-            tex_index: 9,
-        });
-    mesh_buf.upload(renderer)
-}
-*/
 fn insert_chunk(
     chunk: ReadyChunk,
     chunks: &mut LoadedChunks,
@@ -299,18 +237,6 @@ fn put_block<M: 'static>(
         block_updates.enqueue(gtc + face.to_vec(), getter);
     }
 }
-/*
-macro_rules! game_gui {
-    (
-        $logical_size:expr,
-        $background_img:expr,
-        $( ($elem_pos:expr, $elem:expr) ),*$(,)?
-    )=>{
-
-    };
-}*/
-
-
 
 
 impl Singleplayer {
@@ -375,41 +301,6 @@ impl Singleplayer {
             reach: 12.0,
             inventory_open: false,
 
-            /*
-            hotbar_items: [
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_stone,
-                    hud_mesh: simple_hud_mesh(0, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_dirt,
-                    hud_mesh: simple_hud_mesh(1, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_grass,
-                    hud_mesh: simple_hud_mesh(2, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_planks,
-                    hud_mesh: simple_hud_mesh(4, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_brick,
-                    hud_mesh: simple_hud_mesh(5, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_glass,
-                    hud_mesh: simple_hud_mesh(6, renderer),
-                }),
-                Some(HotbarItem::SimpleBlock {
-                    bid: game.bid_log,
-                    hud_mesh: simple_hud_mesh(7, renderer),
-                }),
-                Some(HotbarItem::Door {
-                    hud_mesh: door_hud_mesh(renderer),
-                }),
-                None,
-            ],*/
             inventory_slots: iter::from_fn(|| Some(ItemSlot::default()))
                 .take(36)
                 .collect::<Box<[_]>>()
@@ -452,32 +343,6 @@ impl Singleplayer {
                 debug_cube_mesh: &self._debug_cube_mesh,
                 particles: &self.particles,
             },
-            /*
-            align([1.1, 1.1],
-                modify(Transform2::translate(hand_size),
-                    modify(Transform2::rotate(PI * 0.10 * self.evil_animation.sin()),
-                        modify(Transform2::translate(-hand_size),
-                            logical_size(hand_size,
-                                layer((
-                                    align([0.25, 0.25],
-                                        logical_size(0.0,
-                                            align(0.5,
-                                                logical_size(hand_w * 0.75,
-                                                    HotbarItemGuiBlock {
-                                                        item: &self.hotbar_items[self.hotbar_selected],
-                                                    },
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                    &self.evil_jpg,
-                                )),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-            */
             align(0.5,
                 logical_size(30.0,
                     &ctx.assets().hud_crosshair,
@@ -534,137 +399,6 @@ impl Singleplayer {
                                 ),
                             ]
                         )
-                        /*
-                        logical_size([352.0, 332.0],
-                            layer((
-                                &ctx.assets().gui_inventory,
-                                logical_translate([7.0 * 2.0, 83.0 * 2.0],
-                                    v_align(0.0,
-                                        v_stack(0.0,
-                                            item_grid!(9, 3, &self.inventory_slots[9..])
-                                        )
-                                    )
-                                ),
-                            )),
-                        )
-                        */
-                        /*
-                        relative(
-                            (),
-                            logical_size([352.0, 332.0],
-                                &ctx.assets().gui_inventory,
-                            ),
-                            (
-                                logical_translate([7.0 * 2.0, 83.0 * 2.0],
-                                    item_grid!(9, 3, &self.inventory_slots[9..])
-                                ),
-                            ),
-                            /*
-                            gui_seq_flatten!(
-
-                                /*
-                                array_each(
-                                    array_const_slice::<_, { 9 * 3 }>(&*self.inventory_slots, 9)
-                                )
-                                    .map({
-                                        let mut col = 0;
-                                        let mut row = 0;
-                                        move |slot| {
-                                            let trans =
-                                                (
-                                                    Vec2::from([7.0, 83.0])
-                                                    + (
-                                                        Extent2::from(18.0)
-                                                        * Vec2::from([col, row])
-                                                            .map(|n: u32| n as f32)
-                                                    )
-                                                ) * 2.0;
-
-                                            col += 1;
-                                            debug_assert!(col <= 9);
-                                            if col == 9 {
-                                                col = 0;
-                                                row += 1;
-                                            }
-
-                                            logical_translate(trans, slot.gui(Default::default()))
-                                        }
-                                    }),
-                                array_each(
-                                    array_const_slice::<_, 9>(&*self.inventory_slots, 0)
-                                )
-                                    .map({
-                                        let mut col = 0;
-                                        move |slot| {
-                                            let trans =
-                                            (
-                                                Vec2::from([7.0, 141.0])
-                                                + (
-                                                    Extent2::from(18.0)
-                                                    * Vec2::from([col, 0])
-                                                        .map(|n: u32| n as f32)
-                                                )
-                                            ) * 2.0;
-
-                                            col += 1;
-
-                                            logical_translate(trans, slot.gui(Default::default()))
-                                        }
-                                    }),
-                                array_each(&*self.armor_slots)
-                                    .map({
-                                        let mut row = 0;
-                                        move |slot| {
-                                            let trans =
-                                            (
-                                                Vec2::from([7.0, 7.0])
-                                                + (
-                                                    Extent2::from(18.0)
-                                                    * Vec2::from([0, row])
-                                                        .map(|n: u32| n as f32)
-                                                )
-                                            ) * 2.0;
-
-                                            row += 1;
-
-                                            logical_translate(trans, slot.gui(Default::default()))
-                                        }
-                                    }),
-                                array_each(&*self.crafting_input_slots)
-                                    .map({
-                                        let mut col = 0;
-                                        let mut row = 0;
-                                        move |slot| {
-                                            let trans =
-                                                (
-                                                    Vec2::from([87.0, 25.0])
-                                                    + (
-                                                        Extent2::from(18.0)
-                                                        * Vec2::from([col, row])
-                                                            .map(|n: u32| n as f32)
-                                                    )
-                                                ) * 2.0;
-
-                                            col += 1;
-                                            debug_assert!(col <= 9);
-                                            if col == 4 {
-                                                col = 0;
-                                                row += 1;
-                                            }
-
-                                            logical_translate(trans, slot.gui(Default::default()))
-                                        }
-                                    }),
-                                (
-                                    {
-                                        let trans = Vec2::from([143.0, 35.0]) * 2.0;
-                                        logical_translate(trans, self.crafting_output_slot.gui(Default::default()))
-                                    },
-                                ),
-                                */
-                            ),
-                            */
-                        )*/
                         
                     )
                 )
@@ -674,73 +408,6 @@ impl Singleplayer {
         ))
     }
 }
-/*
-#[derive(Debug)]
-struct HotbarItemGuiBlock<'a> {
-    item: &'a Option<HotbarItem>,
-}
-
-impl<'a> GuiNode<'a> for SimpleGuiBlock<HotbarItemGuiBlock<'a>> {
-    simple_blocks_cursor_impl!();
-
-    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a ,'_>)
-    {
-        match self.inner.item {
-            Some(HotbarItem::SimpleBlock { hud_mesh, .. }) => {
-                let view_proj = Mat4::new(
-                    1.0, 0.0, 0.0, 0.5,
-                    0.0, -1.0, 0.0, 0.5,
-                    0.0, 0.0, 0.01, 0.5,
-                    0.0, 0.0, 0.0, 1.0,
-                );
-                canvas.reborrow()
-                    .scale(self.size)
-                    .begin_3d(view_proj)
-                    .scale(0.5)
-                    .rotate(Quaternion::rotation_x(-PI / 5.0))
-                    .rotate(Quaternion::rotation_y(PI / 4.0))
-                    .translate(-0.5)
-                    .draw_mesh(hud_mesh, &ctx.assets().blocks);
-                /*
-                let view_proj =
-                    Mat4::<f32>::translation_3d([0.0, 0.0, 0.5])
-                    * Mat4::<f32>::scaling_3d([0.5, 0.5, 0.01])
-                    * Mat4::<f32>::rotation_z(PI / 4.0)
-                    * Mat4::<f32>::rotation_y(PI / 4.0);
-                canvas.reborrow()
-                    .scale(self.size)
-                    .begin_3d(view_proj)
-                    .draw_mesh(self.inner.cube_mesh, &ctx.assets().blocks);
-                    */
-            },
-            Some(HotbarItem::Door { hud_mesh }) => {
-                let view_proj = Mat4::new(
-                    1.0, 0.0, 0.0, 0.5,
-                    0.0, -1.0, 0.0, 0.5,
-                    0.0, 0.0, 0.01, 0.5,
-                    0.0, 0.0, 0.0, 1.0,
-                );
-                canvas.reborrow()
-                    .scale(self.size)
-                    .begin_3d(view_proj)
-                    .scale(0.75)
-                    .rotate(Quaternion::rotation_x(-PI / 5.0))
-                    .rotate(Quaternion::rotation_y(PI / 4.0))
-                    .translate(-0.5)
-                    .draw_mesh(hud_mesh, &ctx.assets().blocks);
-            }
-            None => (),
-        }
-    }
-}*/
-
- /*
-        let crosshair_size = 30.0 * self.scale;
-        canvas.reborrow()
-            .translate(-crosshair_size / 2.0)
-            .translate(self.size / 2.0)
-            .draw_image(&ctx.assets().hud_crosshair, crosshair_size);
-            */
 impl GuiStateFrame for Singleplayer {
     impl_visit_nodes!();
 
@@ -944,30 +611,6 @@ impl GuiStateFrame for Singleplayer {
                         .face
                         .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
                     {
-                        /*
-                        match self.hotbar_items[self.hotbar_selected] {
-                            Some(HotbarItem::SimpleBlock { bid, .. }) => {
-                                put_block(
-                                    tile2,
-                                    &getter,
-                                    bid,
-                                    (),
-                                    &mut self.tile_blocks,
-                                    &mut self.block_updates,
-                                );
-                                ctx.sound_player().play(&ctx.assets().grass_dig_sound);
-                            }
-                            Some(HotbarItem::Door { .. }) => blocks::door::on_place_door(
-                                self.movement.cam_yaw,
-                                tile2,
-                                &getter,
-                                &mut self.tile_blocks,
-                                &mut self.block_updates,
-                                ctx.game(),
-                            ),
-                            None => (),
-                        }
-                        */
                     }
                 }
                 _ => (),
@@ -1082,24 +725,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 }
             }
 
-            /*
-            let body_extent = Extent3::new(0.5, 1.98, 0.5);
-            canvas.reborrow()
-                .translate(state.movement.cam_pos)
-                .scale(body_extent)
-                .translate([-0.5, -1.0, -0.5])
-                .color([1.0, 1.0, 1.0, 0.6])
-                .draw_mesh(state.debug_cube_mesh, &ctx.assets().blocks);*/
         }
-
-        // render the crosshair
-        /*
-        let crosshair_size = 30.0 * self.scale;
-        canvas.reborrow()
-            .translate(-crosshair_size / 2.0)
-            .translate(self.size / 2.0)
-            .draw_image(&ctx.assets().hud_crosshair, crosshair_size);
-            */
     }
 }
 
