@@ -355,6 +355,20 @@ impl Singleplayer {
                     layer((
                         &ctx.assets().hud_hotbar,
                         
+                        align(0.5,
+                            item_grid(
+                                9,
+                                &self.inventory_slots[..9],
+                                &mut self.hotbar_slots_guis,
+                                ItemGridConfig {
+                                    logical_gap: 4.0,
+                                    scale_mesh: 0.97,
+                                    interactable: false,
+                                    ..Default::default()
+                                },
+                            )
+                        ),
+
                         //align(0.5,
                         //    logical_height(40.0,
                         //        h_stack(4.0,
@@ -394,26 +408,31 @@ impl Singleplayer {
                                     9,
                                     &self.inventory_slots[9..],
                                     &mut self.inventory_center_slots_guis,
+                                    Default::default(),
                                 )),
                                 ([7, 141], item_grid(
                                     9,
                                     &self.inventory_slots[..9],
                                     &mut self.inventory_bottom_slots_guis,
+                                    Default::default(),
                                 )),
                                 ([7, 7], item_grid(
                                     1,
                                     &self.armor_slots,
                                     &mut self.armor_slots_guis,
+                                    Default::default(),
                                 )),
                                 ([87, 25], item_grid(
                                     2,
                                     &self.crafting_input_slots,
                                     &mut self.crafting_input_slots_guis,
+                                    Default::default(),
                                 )),
                                 ([143, 35], item_grid(
                                     1,
                                     &self.crafting_output_slot,
                                     &mut self.crafting_output_slot_gui,
+                                    Default::default(),
                                 )),
                             ]
                         )

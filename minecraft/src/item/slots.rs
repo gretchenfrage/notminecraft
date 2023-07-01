@@ -66,19 +66,39 @@ pub fn item_grid<'a>(
     cols: u32,
     slots: &'a [ItemSlot],
     guis: &'a mut [ItemSlotGui],
+    config: ItemGridConfig,
 ) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
     assert_ne!(cols, 0, "item grid must have positive number of cols");
     assert_eq!(slots.len(), guis.len(), "item grid must equal num slots and guis");
     ItemGridGuiBlock {
         layout: Layout {
             slot_size: DEFAULT_LOGICAL_SLOT_SIZE,
-            gap: 0.0,
+            gap: config.logical_gap,
             border: 2.0,
             cols,
             slots: slots.len() as u32,
         },
         slots,
         guis,
+        scale_mesh: config.scale_mesh,
+        interactable: config.interactable,
+    }
+}
+
+#[derive(Debug)]
+pub struct ItemGridConfig {
+    pub logical_gap: f32,
+    pub scale_mesh: f32,
+    pub interactable: bool,
+}
+
+impl Default for ItemGridConfig {
+    fn default() -> Self {
+        ItemGridConfig {
+            logical_gap: 0.0,
+            scale_mesh: 1.0,
+            interactable: true,
+        }
     }
 }
 
@@ -88,6 +108,8 @@ struct ItemGridGuiBlock<'a> {
     layout: Layout,
     slots: &'a [ItemSlot],
     guis: &'a mut [ItemSlotGui],
+    scale_mesh: f32,
+    interactable: bool,
 }
 
 // factored out for borrowing reasons
@@ -232,7 +254,12 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
                 draw_item_mesh(
                     &stack.item,
                     self.layout.slot_size,
-                    &mut canvas.reborrow().modify(transf),
+                    &mut canvas.reborrow()
+                        .modify(transf)
+                        .translate(self.layout.slot_size * 0.5)
+                        .scale(self.scale_mesh)
+                        .translate(self.layout.slot_size * -0.5)
+                        ,
                     ctx.game(),
                     ctx.assets(),
                 );
@@ -245,23 +272,25 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
             }
         }
 
-        // 0xff*a + 0x8b*(1 - a) = 0xc5
-        // 0xff*a + 0x8b - 0x8b*a = 0xc5
-        // 0xff*a - 0x8b*a = 0xc5 - 0x8b
-        // (0xff - 0x8b)*a = 0xc5 - 0x8b
-        // a = (0xc5 - 0x8b) / (0xff - 0x8b)
+        if self.interactable {
+            // 0xff*a + 0x8b*(1 - a) = 0xc5
+            // 0xff*a + 0x8b - 0x8b*a = 0xc5
+            // 0xff*a - 0x8b*a = 0xc5 - 0x8b
+            // (0xff - 0x8b)*a = 0xc5 - 0x8b
+            // a = (0xc5 - 0x8b) / (0xff - 0x8b)
 
-        if let Some((_, coords)) = self.layout.slot_cursor_at(ctx) {
-            let transf = self.layout.slot_transform(coords);
+            if let Some((_, coords)) = self.layout.slot_cursor_at(ctx) {
+                let transf = self.layout.slot_transform(coords);
 
-            canvas.reborrow()
-                .modify(transf)
-                .color([
-                    1.0, 1.0, 1.0,
-                    (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32),
-                ])
-                .translate(self.layout.border)
-                .draw_solid(self.layout.slot_size - self.layout.border);
+                canvas.reborrow()
+                    .modify(transf)
+                    .color([
+                        1.0, 1.0, 1.0,
+                        (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32),
+                    ])
+                    .translate(self.layout.border)
+                    .draw_solid(self.layout.slot_size - self.layout.border);
+            }
         }
     }
 
