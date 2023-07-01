@@ -15,7 +15,11 @@ use crate::{
     asset::Assets,
 };
 use graphics::{
-    frame_content::Canvas2,
+    frame_content::{
+        Canvas2,
+        HAlign,
+        VAlign,
+    },
     modifier::Transform2,
 };
 use std::{
@@ -82,6 +86,7 @@ pub fn item_grid<'a>(
         guis,
         scale_mesh: config.scale_mesh,
         interactable: config.interactable,
+        font_scale: 1.0,
     }
 }
 
@@ -110,6 +115,7 @@ struct ItemGridGuiBlock<'a> {
     guis: &'a mut [ItemSlotGui],
     scale_mesh: f32,
     interactable: bool,
+    font_scale: f32, // TODO: janky
 }
 
 // factored out for borrowing reasons
@@ -202,6 +208,7 @@ impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for ItemGridGuiBlock<'a> {
         self.layout.slot_size *= scale;
         self.layout.gap *= scale;
         self.layout.border *= scale;
+        self.font_scale *= scale;
 
         (self.layout.width(), self.layout.height(), self)
     }
@@ -258,11 +265,39 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
                         .modify(transf)
                         .translate(self.layout.slot_size * 0.5)
                         .scale(self.scale_mesh)
-                        .translate(self.layout.slot_size * -0.5)
-                        ,
+                        .translate(self.layout.slot_size * -0.5),
                     ctx.game(),
                     ctx.assets(),
                 );
+
+
+                if slot_gui.count_text.as_ref()
+                    .map(|&(cached_count, _)| cached_count != stack.count.get())
+                    .unwrap_or(true)
+                {
+                    slot_gui.count_text = Some((
+                        stack.count.get(),
+                        GuiTextBlock::new(&GuiTextBlockConfig {
+                            text: &stack.count.get().to_string(),
+                            font: ctx.assets().font,
+                            logical_font_size: 16.0,
+                            color: Rgba::white(),
+                            h_align: HAlign::Right,
+                            v_align: VAlign::Bottom,
+                            wrap: false,
+                        }),
+                    ));
+                }
+
+                slot_gui.count_text.as_mut().unwrap()
+                    .1
+                    .draw(
+                        self.layout.slot_size,
+                        self.font_scale,
+                        &mut canvas.reborrow()
+                            .modify(transf),
+                        &ctx.global.renderer.borrow(),
+                    );
             }
 
             coords.x += 1;

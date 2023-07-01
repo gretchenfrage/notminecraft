@@ -135,38 +135,47 @@ impl GuiTextBlock {
             self.cache = Some((cache_key, content));
         }  
     }
-}
 
-impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
-    fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
+    /// This is exposed as an alternative way to render directly without
+    /// going through the conventional gui block logic.
+    pub fn draw<'a, E>(
+        &'a mut self,
+        size: E,
+        scale: f32,
+        canvas: &mut Canvas2<'a, '_>,
+        renderer: &Renderer,
+    )
+    where
+        E: Into<Extent2<f32>>,
+    {
+        let size = size.into();
 
-    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let cache_key = CacheKey {
-            wrap_width: Some(self.size.w).filter(|_| self.inner.wrap),
-            scale: self.scale,
+            wrap_width: Some(size.w).filter(|_| self.wrap),
+            scale: scale,
         };
 
-        self.inner.validate_cache(&ctx.global.renderer.borrow(), cache_key);
-        let layed_out = self.inner.cache
+        self.validate_cache(renderer, cache_key);
+        let layed_out = self.cache
             .as_ref()
             .map(|&(_, ref content)| content)
             .unwrap();
 
         let align_sign = Vec2 {
-            x: self.inner.h_align.sign(),
-            y: self.inner.v_align.sign(),
+            x: self.h_align.sign(),
+            y: self.v_align.sign(),
         };
         let align_translate_fractional = align_sign
             .map(|n| n as f32 / 2.0 + 0.5);
-        let align_translate = align_translate_fractional * self.size;
+        let align_translate = align_translate_fractional * size;
 
         let mystery_gap_adjust_translate =
             align_translate_fractional
-            * self.inner.logical_font_size
-            * self.scale
+            * self.logical_font_size
+            * scale
             * BOTTOM_RIGHT_MYSTERY_GAP;
         
-        let shadow_drop = self.inner.logical_font_size / SHADOW_DROP_DIVISOR * self.scale;
+        let shadow_drop = self.logical_font_size / SHADOW_DROP_DIVISOR * scale;
         let text_shadow_translate = align_sign
             .map(|n| (n as f32 / -2.0 + 0.5) * shadow_drop);
         let text_main_translate = align_sign
@@ -182,5 +191,18 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
         canvas.reborrow()
             .translate(text_main_translate)
             .draw_text(&layed_out);
+    }
+}
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
+    fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        self.inner.draw(
+            self.size,
+            self.scale,
+            canvas,
+            &ctx.global.renderer.borrow(),
+        );
     }
 }
