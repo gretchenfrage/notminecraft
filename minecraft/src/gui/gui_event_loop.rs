@@ -193,7 +193,8 @@ impl State {
 							&self.pressed_mouse_buttons
 						} else { &self.pressed_mouse_buttons_empty },
 				},
-				cursor_pos: self.cursor_pos,
+				cursor_pos: self.cursor_pos
+					.filter(|_| self.focus_level < FocusLevel::MouseCaptured),
 			},
 			size: self.size,
 			scale: self.os_scale * self.app_scale,
