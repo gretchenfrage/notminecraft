@@ -43,11 +43,7 @@ use crate::{
             array_const_slice,
         },
     },
-    item::slots::{
-        DEFAULT_SLOT_SIZE,
-        ItemSlot,
-        SlotGuiConfig,
-    },
+    item::slots::*,
 };
 use chunk_data::{
     FACES,
@@ -79,7 +75,7 @@ use std::{
     ops::Range,
     sync::Arc,
     f32::consts::PI,
-    iter,
+    iter::from_fn,
 };
 use vek::*;
 
@@ -98,12 +94,19 @@ pub struct Singleplayer {
     chunk_loader: ChunkLoader,
 
     reach: f32,
+    
+    inventory_slots: Vec<ItemSlot>,
+    armor_slots: Vec<ItemSlot>,
+    crafting_input_slots: Vec<ItemSlot>,
+    crafting_output_slot: [ItemSlot; 1],
 
-    //hotbar_items: [Option<HotbarItem>; 9],
-    inventory_slots: Box<[ItemSlot; 36]>,
-    armor_slots: Box<[ItemSlot; 4]>,
-    crafting_input_slots: Box<[ItemSlot; 4]>,
-    crafting_output_slot: ItemSlot,
+    inventory_center_slots_guis: Vec<ItemSlotGui>,
+    inventory_bottom_slots_guis: Vec<ItemSlotGui>,
+    hotbar_slots_guis: Vec<ItemSlotGui>,
+    armor_slots_guis: Vec<ItemSlotGui>,
+    crafting_input_slots_guis: Vec<ItemSlotGui>,
+    crafting_output_slot_gui: [ItemSlotGui; 1],
+
     hotbar_selected: usize,
 
     inventory_open: bool,
@@ -301,19 +304,18 @@ impl Singleplayer {
             reach: 12.0,
             inventory_open: false,
 
-            inventory_slots: iter::from_fn(|| Some(ItemSlot::default()))
-                .take(36)
-                .collect::<Box<[_]>>()
-                .try_into().unwrap(),
-            armor_slots: iter::from_fn(|| Some(ItemSlot::default()))
-                .take(4)
-                .collect::<Box<[_]>>()
-                .try_into().unwrap(),
-            crafting_input_slots: iter::from_fn(|| Some(ItemSlot::default()))
-                .take(4)
-                .collect::<Box<[_]>>()
-                .try_into().unwrap(),
-            crafting_output_slot: ItemSlot::default(),
+            inventory_slots: ItemSlot::new_vec(36),
+            armor_slots: ItemSlot::new_vec(4),
+            crafting_input_slots: ItemSlot::new_vec(4),
+            crafting_output_slot: [ItemSlot::new()],
+
+            inventory_center_slots_guis: ItemSlotGui::new_vec(27),
+            inventory_bottom_slots_guis: ItemSlotGui::new_vec(9),
+            hotbar_slots_guis: ItemSlotGui::new_vec(9),
+            armor_slots_guis: ItemSlotGui::new_vec(4),
+            crafting_input_slots_guis: ItemSlotGui::new_vec(4),
+            crafting_output_slot_gui: [ItemSlotGui::new()],
+
             hotbar_selected: 0,
 
             evil_animation: 0.0,
@@ -353,20 +355,20 @@ impl Singleplayer {
                     layer((
                         &ctx.assets().hud_hotbar,
                         
-                        align(0.5,
-                            logical_height(40.0,
-                                h_stack(4.0,
-                                    array_each(
-                                        array_const_slice::<_, 9>(&*self.inventory_slots, 0)
-                                    )
-                                        .map(|slot| v_align(0.5,
-                                            logical_size(DEFAULT_SLOT_SIZE,
-                                                slot.gui(Default::default())
-                                            )
-                                        ))
-                                ),
-                            )
-                        ),
+                        //align(0.5,
+                        //    logical_height(40.0,
+                        //        h_stack(4.0,
+                        //            array_each(
+                        //                array_const_slice::<_, 9>(&*self.inventory_slots, 0)
+                        //            )
+                        //                .map(|slot| v_align(0.5,
+                        //                    logical_size(DEFAULT_SLOT_SIZE,
+                        //                        slot.gui(Default::default())
+                        //                    )
+                        //                ))
+                        //        ),
+                        //    )
+                        //),
                         
                         align([self.hotbar_selected as f32 / 8.0, 0.5],
                             logical_size([44.0, 44.0],
@@ -388,15 +390,31 @@ impl Singleplayer {
                             [176, 166],
                             &ctx.assets().gui_inventory,
                             [
-                                ([7, 83], item_grid!(9, 3, &self.inventory_slots[9..])),
-                                ([7, 141], item_grid!(9, 1, &self.inventory_slots[..9])),
-                                ([7, 7], item_grid!(1, 4, &self.armor_slots[..])),
-                                ([87, 25], item_grid!(2, 2, &self.crafting_input_slots[..])),
-                                ([143, 35],
-                                    logical_size(DEFAULT_SLOT_SIZE,
-                                        self.crafting_output_slot.gui(Default::default())
-                                    )
-                                ),
+                                ([7, 83], item_grid(
+                                    9,
+                                    &self.inventory_slots[9..],
+                                    &mut self.inventory_center_slots_guis,
+                                )),
+                                ([7, 141], item_grid(
+                                    9,
+                                    &self.inventory_slots[..9],
+                                    &mut self.inventory_bottom_slots_guis,
+                                )),
+                                ([7, 7], item_grid(
+                                    1,
+                                    &self.armor_slots,
+                                    &mut self.armor_slots_guis,
+                                )),
+                                ([87, 25], item_grid(
+                                    2,
+                                    &self.crafting_input_slots,
+                                    &mut self.crafting_input_slots_guis,
+                                )),
+                                ([143, 35], item_grid(
+                                    1,
+                                    &self.crafting_output_slot,
+                                    &mut self.crafting_output_slot_gui,
+                                )),
                             ]
                         )
                         

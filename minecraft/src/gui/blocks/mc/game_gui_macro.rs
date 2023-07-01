@@ -42,7 +42,7 @@ macro_rules! game_gui {
     };
 }
 
-
+/*
 #[macro_export]
 macro_rules! item_grid {
     ($cols:expr, $rows:expr, $array:expr $(,)?)=>{{
@@ -68,7 +68,7 @@ macro_rules! item_grid {
         )
     }};
 }
-
+*/
 
 pub use game_gui;
-pub use item_grid;
+//pub use item_grid;
