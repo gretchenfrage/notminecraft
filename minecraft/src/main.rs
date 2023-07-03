@@ -12,6 +12,7 @@ pub mod chunk_mesh;
 pub mod game_data;
 pub mod singleplayer;
 pub mod item;
+pub mod text_test;
 
 
 use crate::{
@@ -158,10 +159,19 @@ fn main() {
     let game = GameData::new();
     let game = Arc::new(game);
 
+    
     let gui_state = MainMenu::new(
         &event_loop.renderer,
         &assets
     );
+    
+    /*
+    use text_test::*;
+    let gui_state = TextTest::new(
+        &event_loop.renderer,
+        &assets,
+    );
+    */
 
     // enter window event loop
     event_loop.run(Box::new(gui_state), assets, game);

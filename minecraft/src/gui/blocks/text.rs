@@ -136,6 +136,28 @@ impl GuiTextBlock {
         }  
     }
 
+    pub fn content_bounds<E>(
+        &mut self,
+        size: E,
+        scale: f32,
+        renderer: &Renderer,
+    ) -> [Vec2<f32>; 2]
+    where
+        E: Into<Extent2<f32>>,
+    {
+        let size = size.into();
+        let cache_key = CacheKey {
+            wrap_width: Some(size.w).filter(|_| self.wrap),
+            scale: scale,
+        };
+        self.validate_cache(renderer, cache_key);
+        let layed_out = self.cache
+            .as_ref()
+            .map(|&(_, ref content)| content)
+            .unwrap();
+        layed_out.content_bounds()
+    }
+
     /// This is exposed as an alternative way to render directly without
     /// going through the conventional gui block logic.
     pub fn draw<'a, E>(

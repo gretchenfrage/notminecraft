@@ -1,6 +1,9 @@
 
 use crate::{
-    asset::loader::AssetLoader,
+    asset::loader::{
+        AssetLoader,
+        Properties,
+    },
     util::hex_color::hex_color,
 };
 use mesh_data::{
@@ -8,6 +11,7 @@ use mesh_data::{
     Quad,
 };
 use graphics::frame_content::Mesh;
+use std::borrow::Borrow;
 use vek::*;
 
 
@@ -54,13 +58,20 @@ pub fn block_item_mesh(tex_index: usize) -> MeshData {
 pub struct ItemMesh {
     pub mesh: Mesh,
     pub block: bool,
+    pub name: String,
 }
 
 impl ItemMesh {
-    pub fn load_basic_block(loader: &AssetLoader, tex_index: usize) -> Self {
+    pub fn load_basic_block<S: Borrow<str>>(
+        loader: &AssetLoader,
+        tex_index: usize,
+        lang: &Properties,
+        lang_key: S,
+    ) -> Self {
         ItemMesh {
             mesh: loader.load_mesh_data(&block_item_mesh(tex_index)),
             block: true,
+            name: lang[lang_key].to_owned(),
         }
     }
 }

@@ -11,7 +11,11 @@ use crate::{
 use std::sync::Arc;
 use glyph_brush::{
     self as gb,
-    ab_glyph::FontArc,
+    ab_glyph::{
+        FontArc,
+        Font,
+        ScaleFont,
+    },
     GlyphBrush,
     GlyphBrushBuilder,
     GlyphPositioner,
@@ -202,15 +206,22 @@ impl<'a> gb::ToSectionText for TextSpan<'a> {
 pub struct LayedOutTextBlock(Arc<LayedOutTextBlockInner>);
 
 #[derive(Debug, Clone)]
-struct LayedOutTextBlockInner {
+pub struct LayedOutTextBlockInner {
     glyphs: Vec<LayedOutGlyph>,
     bounds: gb::ab_glyph::Rect,
+    content_bounds: [Vec2<f32>; 2],
 }
 
 #[derive(Debug, Clone)]
 struct LayedOutGlyph {
     section_glyph: gb::SectionGlyph,
     color: Rgba<u8>,
+}
+
+impl LayedOutTextBlock {
+    pub fn content_bounds(&self) -> [Vec2<f32>; 2] {
+        self.0.content_bounds
+    }
 }
 
 
@@ -710,6 +721,41 @@ impl TextPipeline {
             );
         let bounds = layout.bounds_rect(&section_geometry);
 
+        let mut content_bounds = [
+            Vec2::from(f32::INFINITY),
+            Vec2::from(f32::NEG_INFINITY),
+        ];
+        for sec_glyph in section_glyphs.iter() {
+            let pos = sec_glyph.glyph.position;
+            let pos = Vec2::new(pos.x, pos.y);
+
+            let font = &self.fonts[sec_glyph.font_id.0];
+
+            if let Some(outline) = font.outline(sec_glyph.glyph.id)
+            {
+                let bounds = outline.bounds;
+
+                let mut rel_min = Vec2::new(bounds.min.x, bounds.min.y);
+                let mut rel_max = Vec2::new(bounds.max.x, bounds.max.y);
+
+                for rel in [&mut rel_min, &mut rel_max] {
+                    rel.y *= -1.0;
+                    *rel /= font.units_per_em().unwrap_or(1.0);
+                    *rel *= text.spans[sec_glyph.section_index].font_size;
+                }
+
+                let glyph_min = pos + rel_min;
+                let glyph_max = pos + rel_max;
+
+                content_bounds[0] = content_bounds[0]
+                    .zip(glyph_min)
+                    .map(|(a, b)| f32::min(a, b));
+                content_bounds[1] = content_bounds[1]
+                    .zip(glyph_max)
+                    .map(|(a, b)| f32::max(a, b));
+            }
+        }
+
         // re-associate the color data
         let glyphs = section_glyphs
             .into_iter()
@@ -722,10 +768,13 @@ impl TextPipeline {
             })
             .collect();
 
+
+
         // done
         LayedOutTextBlock(Arc::new(LayedOutTextBlockInner {
             glyphs,
             bounds,
+            content_bounds,
         }))
     }
 }
