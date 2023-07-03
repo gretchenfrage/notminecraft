@@ -1,4 +1,34 @@
-# v0.2.15
+# Unreleased (0.2.22)
+* Improve `OutlinedGlyph::draw` documentation.
+
+# 0.2.21
+* Update _ttf-parser_ to `0.19`.
+* Add `GlyphImageFormat` variants `BitmapMono`, `BitmapMonoPacked`, `BitmapGray2`, `BitmapGray2Packed`,
+  `BitmapGray4`, `BitmapGray4Packed`, `BitmapGray8`, `BitmapPremulBgra32`.
+* `Font::h_advance_unscaled`, `h_side_bearing_unscaled`, `v_advance_unscaled`, `v_side_bearing_unscaled`
+  and related `ScaleFont` methods now return `0.0` if the font does not define that value. 
+  Previously calls would panic when fonts lacked support.
+* Use edition 2021.
+
+# 0.2.20
+* Add `FontVec::as_slice`, `FontVec::into_vec`.
+
+# 0.2.19
+* Update _ttf-parser_ to `0.18`.
+
+# 0.2.18
+* Update _ttf-parser_ to `0.17`.
+
+# 0.2.17
+* Add `VariableFont` trait implemented by `FontRef` & `FontVec`.
+  Provides `variations` & `set_variation` functions.
+* Add default enabled feature `variable-fonts`.
+
+# 0.2.16
+* Add `Font::pt_to_px_scale` to ease converting point size to `PxScale`.
+* Add `PxScale::round`.
+
+# 0.2.15
 * Fix some font outlines by always trying to "close" them at the end. Fixes _Cantarell-VF.otf_ outlining.
 
 # 0.2.14

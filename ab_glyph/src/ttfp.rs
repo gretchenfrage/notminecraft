@@ -1,11 +1,12 @@
 //! ttf-parser crate specific code. ttf-parser types should not be leaked publicly.
 mod outliner;
+#[cfg(feature = "variable-fonts")]
+mod variable;
 
 use crate::{point, Font, GlyphId, InvalidFont, Outline, Point, Rect};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-use core::convert::TryFrom;
 use core::fmt;
 use owned_ttf_parser::{self as ttfp, AsFaceRef};
 
@@ -39,6 +40,14 @@ impl<'a> From<ttfp::RasterGlyphImage<'a>> for GlyphImage<'a> {
             data: img.data,
             format: match img.format {
                 ttfp::RasterImageFormat::PNG => GlyphImageFormat::Png,
+                ttfp::RasterImageFormat::BitmapMono => GlyphImageFormat::BitmapMono,
+                ttfp::RasterImageFormat::BitmapMonoPacked => GlyphImageFormat::BitmapMonoPacked,
+                ttfp::RasterImageFormat::BitmapGray2 => GlyphImageFormat::BitmapGray2,
+                ttfp::RasterImageFormat::BitmapGray2Packed => GlyphImageFormat::BitmapGray2Packed,
+                ttfp::RasterImageFormat::BitmapGray4 => GlyphImageFormat::BitmapGray4,
+                ttfp::RasterImageFormat::BitmapGray4Packed => GlyphImageFormat::BitmapGray4Packed,
+                ttfp::RasterImageFormat::BitmapGray8 => GlyphImageFormat::BitmapGray8,
+                ttfp::RasterImageFormat::BitmapPremulBgra32 => GlyphImageFormat::BitmapPremulBgra32,
             },
         }
     }
@@ -50,6 +59,62 @@ impl<'a> From<ttfp::RasterGlyphImage<'a>> for GlyphImage<'a> {
 #[derive(Debug, Clone)]
 pub enum GlyphImageFormat {
     Png,
+
+    /// A monochrome bitmap.
+    ///
+    /// The most significant bit of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. The data for each row is padded to a byte
+    /// boundary, so the next row begins with the most significant bit of a new byte. 1 corresponds
+    /// to black, and 0 to white.
+    BitmapMono,
+
+    /// A packed monochrome bitmap.
+    ///
+    /// The most significant bit of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. Data is tightly packed with no padding. 1
+    /// corresponds to black, and 0 to white.
+    BitmapMonoPacked,
+
+    /// A grayscale bitmap with 2 bits per pixel.
+    ///
+    /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. The data for each row is padded to a byte
+    /// boundary, so the next row begins with the most significant bit of a new byte.
+    BitmapGray2,
+
+    /// A packed grayscale bitmap with 2 bits per pixel.
+    ///
+    /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. Data is tightly packed with no padding.
+    BitmapGray2Packed,
+
+    /// A grayscale bitmap with 4 bits per pixel.
+    ///
+    /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. The data for each row is padded to a byte
+    /// boundary, so the next row begins with the most significant bit of a new byte.
+    BitmapGray4,
+
+    /// A packed grayscale bitmap with 4 bits per pixel.
+    ///
+    /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+    /// through succeeding bits moving left to right. Data is tightly packed with no padding.
+    BitmapGray4Packed,
+
+    /// A grayscale bitmap with 8 bits per pixel.
+    ///
+    /// The first byte corresponds to the top-left pixel, proceeding through succeeding bytes
+    /// moving left to right.
+    BitmapGray8,
+
+    /// A color bitmap with 32 bits per pixel.
+    ///
+    /// The first group of four bytes corresponds to the top-left pixel, proceeding through
+    /// succeeding pixels moving left to right. Each byte corresponds to a color channel and the
+    /// channels within a pixel are in blue, green, red, alpha order. Color values are
+    /// pre-multiplied by the alpha. For example, the color "full-green with half translucency"
+    /// is encoded as `\x00\x80\x00\x80`, and not `\x00\xFF\x00\x80`.
+    BitmapPremulBgra32,
 }
 
 /// Font data handle stored as a `&[u8]` + parsed data.
@@ -110,7 +175,7 @@ impl<'font> FontRef<'font> {
     #[inline]
     pub fn try_from_slice_and_index(data: &'font [u8], index: u32) -> Result<Self, InvalidFont> {
         Ok(Self(ttfp::PreParsedSubtables::from(
-            ttfp::Face::from_slice(data, index).map_err(|_| InvalidFont)?,
+            ttfp::Face::parse(data, index).map_err(|_| InvalidFont)?,
         )))
     }
 }
@@ -177,6 +242,39 @@ impl FontVec {
             ttfp::OwnedFace::from_vec(data, index).map_err(|_| InvalidFont)?,
         )))
     }
+
+    /// Extracts a slice containing the data passed into e.g. [`FontVec::try_from_vec`].
+    ///
+    /// # Example
+    /// ```
+    /// # use ab_glyph::*;
+    /// # fn main() -> Result<(), InvalidFont> {
+    /// # let owned_font_data = include_bytes!("../../dev/fonts/Exo2-Light.otf").to_vec();
+    /// let font_data_clone = owned_font_data.clone();
+    /// let font = FontVec::try_from_vec(owned_font_data)?;
+    /// assert_eq!(font.as_slice(), font_data_clone);
+    /// # Ok(()) }
+    /// ```
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.face.as_slice()
+    }
+
+    /// Unwraps the data passed into e.g. [`FontVec::try_from_vec`].
+    ///
+    /// # Example
+    /// ```
+    /// # use ab_glyph::*;
+    /// # fn main() -> Result<(), InvalidFont> {
+    /// # let owned_font_data = include_bytes!("../../dev/fonts/Exo2-Light.otf").to_vec();
+    /// let font_data_clone = owned_font_data.clone();
+    /// let font = FontVec::try_from_vec(owned_font_data)?;
+    /// assert_eq!(font.into_vec(), font_data_clone);
+    /// # Ok(()) }
+    /// ```
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0.face.into_vec()
+    }
 }
 
 /// Implement `Font` for `Self(AsFontRef)` types.
@@ -216,7 +314,7 @@ macro_rules! impl_font {
                 self.0
                     .as_face_ref()
                     .glyph_hor_advance(id.into())
-                    .expect("Invalid glyph_hor_advance")
+                    .unwrap_or_default()
                     .into()
             }
 
@@ -225,7 +323,7 @@ macro_rules! impl_font {
                 self.0
                     .as_face_ref()
                     .glyph_hor_side_bearing(id.into())
-                    .expect("Invalid glyph_hor_side_bearing")
+                    .unwrap_or_default()
                     .into()
             }
 
@@ -234,7 +332,7 @@ macro_rules! impl_font {
                 self.0
                     .as_face_ref()
                     .glyph_ver_advance(id.into())
-                    .expect("Invalid glyph_ver_advance")
+                    .unwrap_or_default()
                     .into()
             }
 
@@ -243,7 +341,7 @@ macro_rules! impl_font {
                 self.0
                     .as_face_ref()
                     .glyph_ver_side_bearing(id.into())
-                    .expect("Invalid glyph_ver_side_bearing")
+                    .unwrap_or_default()
                     .into()
             }
 
@@ -286,7 +384,7 @@ macro_rules! impl_font {
                 self.0.as_face_ref().number_of_glyphs() as _
             }
 
-            fn codepoint_ids<'a>(&'a self) -> crate::CodepointIdIter<'a> {
+            fn codepoint_ids(&self) -> crate::CodepointIdIter<'_> {
                 let face_ref = self.0.as_face_ref();
 
                 #[cfg(feature = "std")]

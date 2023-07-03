@@ -8,7 +8,9 @@ pub struct CodepointIdIter<'a> {
 
 impl<'a> CodepointIdIter<'a> {
     pub fn new(inner: Box<dyn Iterator<Item = (GlyphId, char)> + 'a>) -> Self {
-        CodepointIdIter { inner }
+        CodepointIdIter {
+            inner
+        }
     }
 }
 
