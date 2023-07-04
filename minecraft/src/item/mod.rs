@@ -89,7 +89,7 @@ impl ItemRegistry {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ItemInstance {
     pub iid: RawItemId,
     pub meta: ItemMeta,
@@ -98,7 +98,7 @@ pub struct ItemInstance {
 impl ItemInstance {
     pub fn new<M>(iid: ItemId<M>, meta: M) -> Self
     where
-        M: Debug + Send + Sync + 'static,
+        M: Debug + Clone + Send + Sync + 'static,
     {
         ItemInstance {
             iid: iid.iid,
@@ -133,7 +133,7 @@ impl ItemInstance {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ItemStack {
     pub item: ItemInstance,
     pub count: NonZeroU16,

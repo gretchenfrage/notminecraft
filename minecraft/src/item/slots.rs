@@ -421,7 +421,6 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
         button: MouseButton,
     ) {
         if !hits { return }
-
         if let Some((index, _)) = self.layout.slot_cursor_at(ctx) {
             let mut slot = self.slots[index].0.borrow_mut();
             if button == MouseButton::Middle {
@@ -437,10 +436,78 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
                 }
             } else if button == MouseButton::Left {
                 if let Some(ref held_item_slot) = self.held_item {
-                    swap(
-                        &mut *slot,
-                        &mut *held_item_slot.0.borrow_mut(),
-                    );
+                    let mut transferred = false;
+
+                    let mut opt_held_stack = held_item_slot.0.borrow_mut();
+                    if let (
+                        Some(stack),
+                        Some(held_stack),
+                    ) = (
+                        slot.as_mut(),
+                        opt_held_stack.as_mut(),
+                    ) {
+                        if stack.item.iid == held_stack.item.iid {
+                            let transfer = u16::min(
+                                64 - stack.count.get(),
+                                held_stack.count.get(),
+                            );
+                            stack.count = (stack.count.get() + transfer).try_into().unwrap();
+                            if let Ok(n) = (held_stack.count.get() - transfer).try_into() {
+                                held_stack.count = n;
+                            } else {
+                                *opt_held_stack = None;
+                            }
+                            transferred = true;
+                        }
+                    }
+
+                    if !transferred {
+                        swap(
+                            &mut *slot,
+                            &mut *opt_held_stack,
+                        );
+                    }
+                }
+            } else if button == MouseButton::Right {
+                if let Some(ref held_item_slot) = self.held_item {
+                    let mut opt_held_stack = held_item_slot.0.borrow_mut();
+                    if let Some(held_stack) = opt_held_stack.as_mut() {
+                        let mut deposited = false;
+
+                        if let Some(stack) = slot.as_mut() {
+                            if stack.item.iid == held_stack.item.iid && stack.count.get() < 64 {
+                                stack.count = (stack.count.get() + 1).try_into().unwrap();
+                                deposited = true;
+                            }
+                        } else {
+                            *slot = Some(ItemStack::one(ItemInstance {
+                                iid: held_stack.item.iid,
+                                meta: held_stack.item.meta.clone(),
+                            }));
+                            deposited = true;
+                        }
+
+                        if deposited {
+                            if let Ok(n) = (held_stack.count.get() - 1).try_into() {
+                                held_stack.count = n;
+                            } else {
+                                *opt_held_stack = None;
+                            }
+                        }
+                    } else {
+                        if let Some(stack) = slot.as_mut() {
+                            let split_off = (stack.count.get() / 2)
+                                .try_into()
+                                .ok()
+                                .map(|count| ItemStack {
+                                    item: stack.item.clone(),
+                                    count,
+                                });
+                            stack.count = (stack.count.get() / 2 + stack.count.get() % 2).try_into().unwrap();
+                            *opt_held_stack = slot.take();
+                            *slot = split_off;
+                        }
+                    }
                 }
             }
         }

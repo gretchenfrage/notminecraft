@@ -1,8 +1,9 @@
 //! Erased item metadata.
 //!
-//! Basically a `Box<dyn Any + Debug>` but:
+//! Basically a `Box<dyn Any + Debug + Clone>` but:
 //!
 //! - Debug-formatting actually works.
+//! - Cloning works, also.
 //! - The inner type `()` is represented as a null pointer.
 
 use std::{
@@ -18,9 +19,11 @@ unsafe trait MetaTrait {
     fn type_info(&self) -> (TypeId, &'static str);
 
     fn debug_fmt(&self, f: &mut Formatter) -> fmt::Result;
+
+    fn clone(&self) -> ItemMeta;
 }
 
-unsafe impl<T: Debug + 'static> MetaTrait for T {
+unsafe impl<T: Debug + Clone + Send + Sync + 'static> MetaTrait for T {
     fn type_info(&self) -> (TypeId, &'static str) {
         (TypeId::of::<T>(), type_name::<T>())
     }
@@ -28,12 +31,16 @@ unsafe impl<T: Debug + 'static> MetaTrait for T {
     fn debug_fmt(&self, f: &mut Formatter) -> fmt::Result {
         <T as Debug>::fmt(self, f)
     }
+
+    fn clone(&self) -> ItemMeta {
+        ItemMeta::new(<T as Clone>::clone(self))
+    }
 }
 
 
 pub struct ItemMeta(Option<Box<dyn MetaTrait + Send + Sync>>);
 
-impl<M: Debug + Send + Sync + 'static> From<Box<M>> for ItemMeta {
+impl<M: Debug + Clone + Send + Sync + 'static> From<Box<M>> for ItemMeta {
     fn from(b: Box<M>) -> Self {
         ItemMeta(Some(b as _))
     }
@@ -42,7 +49,7 @@ impl<M: Debug + Send + Sync + 'static> From<Box<M>> for ItemMeta {
 impl ItemMeta {
     pub fn new<M>(meta: M) -> Self
     where
-        M: Debug + Send + Sync + 'static,
+        M: Debug + Clone + Send + Sync + 'static,
     {
         if TypeId::of::<M>() == TypeId::of::<()>() {
             ItemMeta(None)
@@ -160,6 +167,16 @@ impl Debug for ItemMeta {
             inner.debug_fmt(f)
         } else {
             f.write_str("()")
+        }
+    }
+}
+
+impl Clone for ItemMeta {
+    fn clone(&self) -> Self {
+        if let Some(ref inner) = self.0 {
+            (**inner).clone()
+        } else {
+            ItemMeta::new(())
         }
     }
 }
