@@ -45,7 +45,12 @@ pub mod consts {
     // item mesh indexes (IMIs):
 
     pub const IMI_STONE: usize = 0;
-    pub const IMI_STICK: usize = 1;
+    pub const IMI_DIRT: usize = 1;
+    pub const IMI_GRASS: usize = 2;
+    pub const IMI_PLANKS: usize = 3;
+    pub const IMI_BRICK: usize = 4;
+    pub const IMI_GLASS: usize = 5;
+    pub const IMI_STICK: usize = 6;
 }
 
 
@@ -180,8 +185,13 @@ impl Assets {
             fog_night_rain: [0.02, 0.04, 0.07].into(),
             sky_sunset:     [1.00, 0.35, 0.10].into(),
             item_meshes: vec![
-                ItemMesh::load_basic_block(&loader, BTI_STONE, &lang, "tile.stone.name"), // 0: stone
-                ItemMesh::load_basic_item(&loader, ITI_STICK, &lang, "item.stick.name"), // 1: stone
+                ItemMesh::load_basic_block(&loader, BTI_STONE, &lang, "tile.stone.name"),
+                ItemMesh::load_basic_block(&loader, BTI_DIRT, &lang, "tile.dirt.name"),
+                ItemMesh::load_grass_block(&loader, &lang),
+                ItemMesh::load_basic_block(&loader, BTI_PLANKS, &lang, "tile.planks.name"),
+                ItemMesh::load_basic_block(&loader, BTI_BRICK, &lang, "tile.brick.name"),
+                ItemMesh::load_basic_block(&loader, BTI_GLASS, &lang, "tile.glass.name"),
+                ItemMesh::load_basic_item(&loader, ITI_STICK, &lang, "item.stick.name"),
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };

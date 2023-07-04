@@ -48,6 +48,13 @@ pub struct GameData {
     pub items_use_behavior: PerItem<Option<ItemUseBehavior>>,
 
     pub iid_stone: ItemId<()>,
+    pub iid_dirt: ItemId<()>,
+    pub iid_grass: ItemId<()>,
+    pub iid_planks: ItemId<()>,
+    pub iid_brick: ItemId<()>,
+    pub iid_glass: ItemId<()>,
+    //pub iid_log: ItemId<()>,
+    //pub iid_door: ItemId<blocks::door::DoorMeta>,
     pub iid_stick: ItemId<()>,
 }
 
@@ -83,7 +90,7 @@ impl BlockMeshLogic {
     pub fn basic_cube_transparent(tex_index: usize) -> Self {
         BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
             tex_indices: PerFace::repeat(tex_index),
-            transparent: false,
+            transparent: true,
         })
     }
 
@@ -190,7 +197,7 @@ impl GameData {
         blocks_mesh_logic.set(bid_brick, BlockMeshLogic::basic_cube(BTI_BRICK));
 
         let bid_glass = blocks.register();
-        blocks_mesh_logic.set(bid_glass, BlockMeshLogic::basic_cube(BTI_GLASS));
+        blocks_mesh_logic.set(bid_glass, BlockMeshLogic::basic_cube_transparent(BTI_GLASS));
 
         let bid_log = blocks.register();
         blocks_mesh_logic.set(bid_log, blocks::log::log_mesh_logic());
@@ -209,6 +216,26 @@ impl GameData {
         let iid_stone = items.register();
         items_mesh_index.set(iid_stone, IMI_STONE);
         items_use_behavior.set(iid_stone, Some(ItemUseBehavior::Place(bid_stone)));
+
+        let iid_dirt = items.register();
+        items_mesh_index.set(iid_dirt, IMI_DIRT);
+        items_use_behavior.set(iid_dirt, Some(ItemUseBehavior::Place(bid_dirt)));
+
+        let iid_grass = items.register();
+        items_mesh_index.set(iid_grass, IMI_GRASS);
+        items_use_behavior.set(iid_grass, Some(ItemUseBehavior::Place(bid_grass)));
+
+        let iid_planks = items.register();
+        items_mesh_index.set(iid_planks, IMI_PLANKS);
+        items_use_behavior.set(iid_planks, Some(ItemUseBehavior::Place(bid_planks)));
+
+        let iid_brick = items.register();
+        items_mesh_index.set(iid_brick, IMI_BRICK);
+        items_use_behavior.set(iid_brick, Some(ItemUseBehavior::Place(bid_brick)));
+
+        let iid_glass = items.register();
+        items_mesh_index.set(iid_glass, IMI_GLASS);
+        items_use_behavior.set(iid_glass, Some(ItemUseBehavior::Place(bid_glass)));
 
         let iid_stick = items.register();
         items_mesh_index.set(iid_stick, IMI_STICK);
@@ -235,6 +262,11 @@ impl GameData {
             items_use_behavior,
 
             iid_stone,
+            iid_dirt,
+            iid_grass,
+            iid_planks,
+            iid_brick,
+            iid_glass,
             iid_stick,
         }
     }

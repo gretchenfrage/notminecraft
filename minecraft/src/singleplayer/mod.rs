@@ -45,6 +45,7 @@ use crate::{
         },
     },
     item::slots::*,
+    item::*,
 };
 use chunk_data::{
     FACES,
@@ -308,7 +309,40 @@ impl Singleplayer {
             reach: 12.0,
             inventory_open: false,
 
-            inventory_slots: ItemSlot::new_vec(36),
+            inventory_slots: {
+                let mut slots = ItemSlot::new_vec(36);
+
+                *slots[0].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_stone, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[1].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_dirt, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[2].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_grass, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[3].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_planks, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[4].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_brick, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[5].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_glass, ()),
+                    count: 64.try_into().unwrap(),
+                });
+                *slots[6].0.borrow_mut() = Some(ItemStack {
+                    item: ItemInstance::new(game.iid_stick, ()),
+                    count: 64.try_into().unwrap(),
+                });
+
+                slots
+            },
             armor_slots: ItemSlot::new_vec(4),
             crafting_input_slots: ItemSlot::new_vec(4),
             crafting_output_slot: [ItemSlot::new()],
