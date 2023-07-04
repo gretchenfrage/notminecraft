@@ -10,11 +10,11 @@ To run, `cargo run`. Is simple :)
 |thing|to it|
 |---|---|
 |graphics|core systems good, need enhancements|
-|physics|core systems good, but FP precision-related problems|
+|physics|core systems good|
 |blocks|core systems good|
 |GUI|core systems good|
 |sound|core systems good|
-|items|not started|
+|items|core systems good|
 |mobs|not started|
 |save file|not started|
 |multiplayer|not started|
