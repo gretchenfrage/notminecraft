@@ -23,6 +23,7 @@ use crate::{
     game_data::{
         GameData,
         BlockBreakLogic,
+        ItemUseBehavior,
     },
     chunk_mesh::ChunkMesh,
     gui::{
@@ -662,6 +663,24 @@ impl GuiStateFrame for Singleplayer {
                         .face
                         .and_then(|face| getter.gtc_get(gtc1 + face.to_vec()))
                     {
+                        let mut held = self.inventory_slots[self.hotbar_selected].0.borrow_mut();
+
+                        if let Some(held_stack) = held.as_ref() {
+                            match &ctx.game().items_use_behavior.get(held_stack.item.iid) {
+                                &None => (),
+                                &Some(ItemUseBehavior::Place(bid)) => {
+                                    *held = held.take().unwrap().subtract(1);
+                                    put_block(
+                                        tile2,
+                                        &getter,
+                                        *bid,
+                                        (),
+                                        &mut self.tile_blocks,
+                                        &mut self.block_updates,
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
                 _ => (),

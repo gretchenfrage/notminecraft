@@ -146,4 +146,13 @@ impl ItemStack {
             count: 1.try_into().unwrap(),
         }
     }
+
+    pub fn subtract(mut self, n: u16) -> Option<Self> {
+        if let Some(count) = NonZeroU16::new(self.count.get().saturating_sub(n)) {
+            self.count = count;
+            Some(self)
+        } else {
+            None
+        }
+    }
 }

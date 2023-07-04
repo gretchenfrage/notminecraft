@@ -260,31 +260,6 @@ fn draw_item_mesh<'a>(
         }
     }
 
-    /*
-    let mut canvas = canvas.reborrow()
-        .scale(size)
-        .begin_3d(Mat4::new(
-            1.0,  0.0,  0.0, 0.5,
-            0.0, -1.0,  0.0, 0.5,
-            0.0,  0.0, 0.01, 0.5,
-            0.0,  0.0,  0.0, 1.0,
-        ));
-    if item_mesh.block {
-        canvas = canvas
-            .scale(0.56)
-            .rotate(Quaternion::rotation_x(-PI * 0.17))
-            .rotate(Quaternion::rotation_y(PI / 4.0))
-            .translate(-0.5);
-    } else {
-        canvas = canvas
-            .translate(-0.5);
-    }
-    canvas.reborrow()
-        .draw_mesh(
-            &item_mesh.mesh,
-            if item_mesh.block { &assets.blocks } else { &assets.items },
-        );
-        */
 }
 
 impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
@@ -366,7 +341,9 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
                     .draw_solid(self.layout.slot_size - self.layout.border);
 
                 // draw item name afterwards
-                name_text = Some(&mut slot_gui.name_text);
+                if self.held_item.as_ref().unwrap().0.borrow().is_none() {
+                    name_text = Some(&mut slot_gui.name_text);
+                }
             }
 
             coords.x += 1;
@@ -578,12 +555,13 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<HeldItemGuiBlock<'a>> {
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         if let (
             Some(stack),
-            Some(cursor_pos),
+            Some(mut cursor_pos),
         ) = (
             self.inner.slot.0.borrow().as_ref(),
             ctx.cursor_pos,
         ) {
             let slot_size = DEFAULT_LOGICAL_SLOT_SIZE * self.scale;
+            cursor_pos -= cursor_pos % (2.0 * self.scale);
 
             // draw item
             draw_item_mesh(

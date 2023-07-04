@@ -45,6 +45,7 @@ pub struct GameData {
     pub bid_door: BlockId<blocks::door::DoorMeta>,
 
     pub items_mesh_index: PerItem<usize>,
+    pub items_use_behavior: PerItem<Option<ItemUseBehavior>>,
 
     pub iid_stone: ItemId<()>,
     pub iid_stick: ItemId<()>,
@@ -153,6 +154,10 @@ fn block_item_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
 }
 */
 
+#[derive(Debug)]
+pub enum ItemUseBehavior {
+    Place(BlockId<()>),
+}
 
 impl GameData {
     pub fn new() -> Self {
@@ -199,11 +204,11 @@ impl GameData {
         let mut items = ItemRegistry::new();
 
         let mut items_mesh_index = PerItem::new_no_default();
+        let mut items_use_behavior = PerItem::new(None);
 
         let iid_stone = items.register();
         items_mesh_index.set(iid_stone, IMI_STONE);
-        //items_mesh_logic.set(iid_stone, ItemMeshLogic::BlockMesh())
-        //items_mesh.set(iid_stone, )
+        items_use_behavior.set(iid_stone, Some(ItemUseBehavior::Place(bid_stone)));
 
         let iid_stick = items.register();
         items_mesh_index.set(iid_stick, IMI_STICK);
@@ -227,6 +232,7 @@ impl GameData {
             bid_door,
 
             items_mesh_index,
+            items_use_behavior,
 
             iid_stone,
             iid_stick,
