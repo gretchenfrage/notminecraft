@@ -56,9 +56,14 @@ pub fn block_item_mesh(tex_index: usize) -> MeshData {
 
 #[derive(Debug)]
 pub struct ItemMesh {
-    pub mesh: Mesh,
-    pub block: bool,
+    pub mesh: ItemMeshMesh,
     pub name: String,
+}
+
+#[derive(Debug)]
+pub enum ItemMeshMesh {
+    Block(Mesh),
+    Item(usize),
 }
 
 impl ItemMesh {
@@ -69,8 +74,21 @@ impl ItemMesh {
         lang_key: S,
     ) -> Self {
         ItemMesh {
-            mesh: loader.load_mesh_data(&block_item_mesh(tex_index)),
-            block: true,
+            mesh: ItemMeshMesh::Block(
+                loader.load_mesh_data(&block_item_mesh(tex_index))
+            ),
+            name: lang[lang_key].to_owned(),
+        }
+    }
+
+    pub fn load_basic_item<S: Borrow<str>>(
+        loader: &AssetLoader,
+        tex_index: usize,
+        lang: &Properties,
+        lang_key: S,
+    ) -> Self {
+        ItemMesh {
+            mesh: ItemMeshMesh::Item(tex_index),
             name: lang[lang_key].to_owned(),
         }
     }

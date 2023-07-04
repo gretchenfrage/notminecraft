@@ -47,6 +47,7 @@ pub struct GameData {
     pub items_mesh_index: PerItem<usize>,
 
     pub iid_stone: ItemId<()>,
+    pub iid_stick: ItemId<()>,
 }
 
 #[derive(Debug)]
@@ -204,6 +205,9 @@ impl GameData {
         //items_mesh_logic.set(iid_stone, ItemMeshLogic::BlockMesh())
         //items_mesh.set(iid_stone, )
 
+        let iid_stick = items.register();
+        items_mesh_index.set(iid_stick, IMI_STICK);
+
         GameData {
             blocks: blocks.finalize(),
 
@@ -225,6 +229,7 @@ impl GameData {
             items_mesh_index,
 
             iid_stone,
+            iid_stick,
         }
     }
 }

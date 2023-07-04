@@ -13,7 +13,10 @@ use crate::{
         *,
     },
     game_data::GameData,
-    asset::Assets,
+    asset::{
+        Assets,
+        meshes::ItemMeshMesh,
+    },
 };
 use graphics::{
     frame_content::{
@@ -226,6 +229,38 @@ fn draw_item_mesh<'a>(
 ) {
     let imi = *game.items_mesh_index.get(item.iid);
     let item_mesh = &assets.item_meshes[imi];
+
+    match item_mesh.mesh {
+        ItemMeshMesh::Block(ref mesh) => {
+            canvas.reborrow()
+                .scale(size)
+                .begin_3d(Mat4::new(
+                    1.0,  0.0,  0.0, 0.5,
+                    0.0, -1.0,  0.0, 0.5,
+                    0.0,  0.0, 0.01, 0.5,
+                    0.0,  0.0,  0.0, 1.0,
+                ))
+                .scale(0.56)
+                .rotate(Quaternion::rotation_x(-PI * 0.17))
+                .rotate(Quaternion::rotation_y(PI / 4.0))
+                .translate(-0.5)
+                .draw_mesh(
+                    mesh,
+                    &assets.blocks,
+                );
+        }
+        ItemMeshMesh::Item(tex_index) => {
+            canvas.reborrow()
+                .translate(size / 18.0)
+                .draw_image(
+                    &assets.items,
+                    tex_index,
+                    size * (16.0 / 18.0),
+                );
+        }
+    }
+
+    /*
     let mut canvas = canvas.reborrow()
         .scale(size)
         .begin_3d(Mat4::new(
@@ -240,12 +275,16 @@ fn draw_item_mesh<'a>(
             .rotate(Quaternion::rotation_x(-PI * 0.17))
             .rotate(Quaternion::rotation_y(PI / 4.0))
             .translate(-0.5);
+    } else {
+        canvas = canvas
+            .translate(-0.5);
     }
     canvas.reborrow()
         .draw_mesh(
             &item_mesh.mesh,
-            &assets.blocks,
+            if item_mesh.block { &assets.blocks } else { &assets.items },
         );
+        */
 }
 
 impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
@@ -424,13 +463,19 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
         if let Some((index, _)) = self.layout.slot_cursor_at(ctx) {
             let mut slot = self.slots[index].0.borrow_mut();
             if button == MouseButton::Middle {
+                let iid =
+                    if ctx.global.pressed_keys_semantic.contains(&VirtualKeyCode::G) {
+                        ctx.game().iid_stick
+                    } else {
+                        ctx.game().iid_stone
+                    };
                 if let Some(stack) = slot.as_mut() {
-                    if stack.item.iid == ctx.game().iid_stone && stack.count.get() < 64 {
+                    if stack.item.iid == iid && stack.count.get() < 64 {
                         stack.count = (stack.count.get() + 1).try_into().unwrap();
                     }
                 } else {
                     *slot = Some(ItemStack::one(ItemInstance::new(
-                        ctx.game().iid_stone,
+                        iid,
                         (),
                     )));
                 }

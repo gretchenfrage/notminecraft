@@ -38,10 +38,14 @@ pub mod consts {
     pub const BTI_DOOR_UPPER: usize = 9;
     pub const BTI_DOOR_LOWER: usize = 10;
 
+    // item texture indexes (ITIs):
+
+    pub const ITI_STICK: usize = 0; 
 
     // item mesh indexes (IMIs):
 
     pub const IMI_STONE: usize = 0;
+    pub const IMI_STICK: usize = 1;
 }
 
 
@@ -59,6 +63,7 @@ pub struct Assets {
     pub hud_hotbar_selected: GpuImageArray,
 
     pub blocks: GpuImageArray,
+    pub items: GpuImageArray,
 
     pub click_sound: SoundEffect,
     pub grass_step_sound: SoundEffect,
@@ -105,6 +110,7 @@ pub struct Assets {
 impl Assets {
     pub async fn load(loader: &mut AssetLoader<'_>) -> Self {
         let terrain = loader.load_image_atlas("terrain.png", 16).await;
+        let items = loader.load_image_atlas("gui/items.png", 16).await;
         let gui = loader.load_image_clipper("gui/gui.png", 256).await;
         let icons = loader.load_image_clipper("gui/icons.png", 256).await;
         let lang = loader.load_properties("lang/en_US.lang").await;
@@ -151,6 +157,9 @@ impl Assets {
                 [1, 5], // 9: door upper
                 [1, 6], // 10: door lower
             ]),
+            items: items.load_sprite_array([
+                [5, 3], // 0: stick
+            ]),
             click_sound: loader.load_sound_effect("sound3/random/click.ogg").await,
             grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
             grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,
@@ -170,9 +179,9 @@ impl Assets {
             fog_day_rain:   [0.48, 0.52, 0.60].into(),
             fog_night_rain: [0.02, 0.04, 0.07].into(),
             sky_sunset:     [1.00, 0.35, 0.10].into(),
-            //block_item_mesh: loader.load_mesh_data(&block_item_mesh()),
             item_meshes: vec![
                 ItemMesh::load_basic_block(&loader, BTI_STONE, &lang, "tile.stone.name"), // 0: stone
+                ItemMesh::load_basic_item(&loader, ITI_STICK, &lang, "item.stick.name"), // 1: stone
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };
