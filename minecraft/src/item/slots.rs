@@ -7,7 +7,7 @@ use crate::{
     },
     gui::{
         blocks::{
-            simple_gui_block::SimpleGuiBlock,
+            simple_gui_block::*,
             *,
         },
         *,
@@ -27,6 +27,7 @@ use std::{
     cell::RefCell,
     f32::consts::PI,
     iter::from_fn,
+    mem::swap,
 };
 use vek::*;
 
@@ -73,6 +74,7 @@ pub fn item_grid<'a>(
     cols: u32,
     slots: &'a [ItemSlot],
     guis: &'a mut [ItemSlotGui],
+    held_item: Option<&'a ItemSlot>,
     config: ItemGridConfig,
 ) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
     assert_ne!(cols, 0, "item grid must have positive number of cols");
@@ -88,7 +90,7 @@ pub fn item_grid<'a>(
         slots,
         guis,
         scale_mesh: config.scale_mesh,
-        interactable: config.interactable,
+        held_item,
         font_scale: 1.0,
     }
 }
@@ -97,7 +99,6 @@ pub fn item_grid<'a>(
 pub struct ItemGridConfig {
     pub logical_gap: f32,
     pub scale_mesh: f32,
-    pub interactable: bool,
 }
 
 impl Default for ItemGridConfig {
@@ -105,7 +106,6 @@ impl Default for ItemGridConfig {
         ItemGridConfig {
             logical_gap: 0.0,
             scale_mesh: 1.0,
-            interactable: true,
         }
     }
 }
@@ -117,7 +117,7 @@ struct ItemGridGuiBlock<'a> {
     slots: &'a [ItemSlot],
     guis: &'a mut [ItemSlotGui],
     scale_mesh: f32,
-    interactable: bool,
+    held_item: Option<&'a ItemSlot>,
     font_scale: f32, // TODO: janky
 }
 
@@ -309,7 +309,7 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
                 }
             }
 
-            if self.interactable && slot_cursor_at == Some(coords) {
+            if self.held_item.is_some() && slot_cursor_at == Some(coords) {
                 // 0xff*a + 0x8b*(1 - a) = 0xc5
                 // 0xff*a + 0x8b - 0x8b*a = 0xc5
                 // 0xff*a - 0x8b*a = 0xc5 - 0x8b
@@ -421,19 +421,100 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
         button: MouseButton,
     ) {
         if !hits { return }
-        if button != MouseButton::Middle { return }
 
         if let Some((index, _)) = self.layout.slot_cursor_at(ctx) {
             let mut slot = self.slots[index].0.borrow_mut();
-            if let Some(stack) = slot.as_mut() {
-                if stack.item.iid == ctx.game().iid_stone && stack.count.get() < 64 {
-                    stack.count = (stack.count.get() + 1).try_into().unwrap();
+            if button == MouseButton::Middle {
+                if let Some(stack) = slot.as_mut() {
+                    if stack.item.iid == ctx.game().iid_stone && stack.count.get() < 64 {
+                        stack.count = (stack.count.get() + 1).try_into().unwrap();
+                    }
+                } else {
+                    *slot = Some(ItemStack::one(ItemInstance::new(
+                        ctx.game().iid_stone,
+                        (),
+                    )));
                 }
-            } else {
-                *slot = Some(ItemStack::one(ItemInstance::new(
-                    ctx.game().iid_stone,
-                    (),
-                )));
+            } else if button == MouseButton::Left {
+                if let Some(ref held_item_slot) = self.held_item {
+                    swap(
+                        &mut *slot,
+                        &mut *held_item_slot.0.borrow_mut(),
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn held_item_gui<'a>(
+    slot: &'a ItemSlot,
+    slot_gui: &'a mut ItemSlotGui,
+) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+    HeldItemGuiBlock { slot, slot_gui }
+}
+
+#[derive(Debug)]
+struct HeldItemGuiBlock<'a> {
+    slot: &'a ItemSlot,
+    slot_gui: &'a mut ItemSlotGui,
+}
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<HeldItemGuiBlock<'a>> {
+    never_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        if let (
+            Some(stack),
+            Some(cursor_pos),
+        ) = (
+            self.inner.slot.0.borrow().as_ref(),
+            ctx.cursor_pos,
+        ) {
+            let slot_size = DEFAULT_LOGICAL_SLOT_SIZE * self.scale;
+
+            // draw item
+            draw_item_mesh(
+                &stack.item,
+                slot_size,
+                &mut canvas.reborrow()
+                    .translate(-slot_size / 2.0)
+                    .translate(cursor_pos),
+                ctx.game(),
+                ctx.assets(),
+            );
+
+            if stack.count.get() > 1 {
+                // draw item count
+                // TODO: this should be deduplicated
+                if self.inner.slot_gui.count_text.as_ref()
+                    .map(|&(cached_count, _)| cached_count != stack.count.get())
+                    .unwrap_or(true)
+                {
+                    self.inner.slot_gui.count_text = Some((
+                        stack.count.get(),
+                        GuiTextBlock::new(&GuiTextBlockConfig {
+                            text: &stack.count.get().to_string(),
+                            font: ctx.assets().font,
+                            logical_font_size: DEFAULT_LOGICAL_FONT_SIZE,
+                            color: Rgba::white(),
+                            h_align: HAlign::Right,
+                            v_align: VAlign::Bottom,
+                            wrap: false,
+                        }),
+                    ));
+                }
+
+                self.inner.slot_gui.count_text.as_mut().unwrap()
+                    .1
+                    .draw(
+                        slot_size,
+                        self.scale,
+                        &mut canvas.reborrow()
+                            .translate(-slot_size / 2.0)
+                            .translate(cursor_pos),
+                        &ctx.global.renderer.borrow(),
+                    );
             }
         }
     }

@@ -107,6 +107,9 @@ pub struct Singleplayer {
     crafting_input_slots_guis: Vec<ItemSlotGui>,
     crafting_output_slot_gui: [ItemSlotGui; 1],
 
+    held_item_slot: ItemSlot,
+    held_item_slot_gui: ItemSlotGui,
+
     hotbar_selected: usize,
 
     inventory_open: bool,
@@ -316,6 +319,9 @@ impl Singleplayer {
             crafting_input_slots_guis: ItemSlotGui::new_vec(4),
             crafting_output_slot_gui: [ItemSlotGui::new()],
 
+            held_item_slot: ItemSlot::new(),
+            held_item_slot_gui: ItemSlotGui::new(),
+
             hotbar_selected: 0,
 
             evil_animation: 0.0,
@@ -360,10 +366,10 @@ impl Singleplayer {
                                 9,
                                 &self.inventory_slots[..9],
                                 &mut self.hotbar_slots_guis,
+                                None,
                                 ItemGridConfig {
                                     logical_gap: 4.0,
                                     scale_mesh: 0.97,
-                                    interactable: false,
                                     ..Default::default()
                                 },
                             )
@@ -399,45 +405,53 @@ impl Singleplayer {
             CaptureMouseGuiBlock,
             if self.inventory_open {
                 GuiEither::A(
-                    align(0.5,
-                        game_gui!(
-                            [176, 166],
-                            &ctx.assets().gui_inventory,
-                            [
-                                ([7, 83], item_grid(
-                                    9,
-                                    &self.inventory_slots[9..],
-                                    &mut self.inventory_center_slots_guis,
-                                    Default::default(),
-                                )),
-                                ([7, 141], item_grid(
-                                    9,
-                                    &self.inventory_slots[..9],
-                                    &mut self.inventory_bottom_slots_guis,
-                                    Default::default(),
-                                )),
-                                ([7, 7], item_grid(
-                                    1,
-                                    &self.armor_slots,
-                                    &mut self.armor_slots_guis,
-                                    Default::default(),
-                                )),
-                                ([87, 25], item_grid(
-                                    2,
-                                    &self.crafting_input_slots,
-                                    &mut self.crafting_input_slots_guis,
-                                    Default::default(),
-                                )),
-                                ([143, 35], item_grid(
-                                    1,
-                                    &self.crafting_output_slot,
-                                    &mut self.crafting_output_slot_gui,
-                                    Default::default(),
-                                )),
-                            ]
-                        )
-                        
-                    )
+                    layer((
+                        align(0.5,
+                            game_gui!(
+                                [176, 166],
+                                &ctx.assets().gui_inventory,
+                                [
+                                    ([7, 83], item_grid(
+                                        9,
+                                        &self.inventory_slots[9..],
+                                        &mut self.inventory_center_slots_guis,
+                                    Some(&self.held_item_slot),
+                                        Default::default(),
+                                    )),
+                                    ([7, 141], item_grid(
+                                        9,
+                                        &self.inventory_slots[..9],
+                                        &mut self.inventory_bottom_slots_guis,
+                                    Some(&self.held_item_slot),
+                                        Default::default(),
+                                    )),
+                                    ([7, 7], item_grid(
+                                        1,
+                                        &self.armor_slots,
+                                        &mut self.armor_slots_guis,
+                                    Some(&self.held_item_slot),
+                                        Default::default(),
+                                    )),
+                                    ([87, 25], item_grid(
+                                        2,
+                                        &self.crafting_input_slots,
+                                        &mut self.crafting_input_slots_guis,
+                                    Some(&self.held_item_slot),
+                                        Default::default(),
+                                    )),
+                                    ([143, 35], item_grid(
+                                        1,
+                                        &self.crafting_output_slot,
+                                        &mut self.crafting_output_slot_gui,
+                                    Some(&self.held_item_slot),
+                                        Default::default(),
+                                    )),
+                                ]
+                            )
+                            
+                        ),
+                        held_item_gui(&self.held_item_slot, &mut self.held_item_slot_gui),
+                    ))
                 )
             } else {
                 GuiEither::B(gap())
