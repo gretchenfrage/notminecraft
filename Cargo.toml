@@ -6,6 +6,8 @@ members = [
     "mesh_data",
     "get_assets",
     "minecraft",
+    "binschema",
+    "binschema_derive"
 ]
 resolver = "2"
 
