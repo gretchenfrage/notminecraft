@@ -1,9 +1,6 @@
 
 use crate::{
-    asset::loader::{
-        AssetLoader,
-        Properties,
-    },
+    asset::loader::AssetLoader,
     util::hex_color::hex_color,
 };
 use mesh_data::{
@@ -11,7 +8,6 @@ use mesh_data::{
     Quad,
 };
 use graphics::frame_content::Mesh;
-use std::borrow::Borrow;
 
 
 pub fn block_item_mesh(tex_index: usize) -> MeshData {
@@ -54,46 +50,23 @@ pub fn block_item_mesh(tex_index: usize) -> MeshData {
 
 
 #[derive(Debug)]
-pub struct ItemMesh {
-    pub mesh: ItemMeshMesh,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub enum ItemMeshMesh {
+pub enum ItemMesh {
     Block(Mesh),
     Item(usize),
 }
 
 impl ItemMesh {
-    pub fn load_basic_block<S: Borrow<str>>(
+    pub fn load_basic_block(
         loader: &AssetLoader,
         tex_index: usize,
-        lang: &Properties,
-        lang_key: S,
     ) -> Self {
-        ItemMesh {
-            mesh: ItemMeshMesh::Block(
-                loader.load_mesh_data(&block_item_mesh(tex_index))
-            ),
-            name: lang[lang_key].to_owned(),
-        }
-    }
-
-    pub fn load_basic_item<S: Borrow<str>>(
-        tex_index: usize,
-        lang: &Properties,
-        lang_key: S,
-    ) -> Self {
-        ItemMesh {
-            mesh: ItemMeshMesh::Item(tex_index),
-            name: lang[lang_key].to_owned(),
-        }
+        ItemMesh::Block(
+            loader.load_mesh_data(&block_item_mesh(tex_index))
+        )
     }
 
     pub fn load_grass_block(
         loader: &AssetLoader,
-        lang: &Properties,
     ) -> Self {
         use crate::asset::*;
         let mut mesh_buf = MeshData::new();
@@ -132,11 +105,8 @@ impl ItemMesh {
                 tex_index: BTI_GRASS_SIDE,
             });
 
-        ItemMesh {
-            mesh: ItemMeshMesh::Block(
-                loader.load_mesh_data(&mesh_buf)
-            ),
-            name: lang["tile.grass.name"].to_owned(),
-        }
+        ItemMesh::Block(
+            loader.load_mesh_data(&mesh_buf)
+        )
     }
 }

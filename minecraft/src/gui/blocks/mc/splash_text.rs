@@ -102,7 +102,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiSplashText> {
         self.inner
             .validate_cache(
                 &ctx.global.renderer.borrow(),
-                &ctx.assets().menu_splash_text,
+                &ctx.assets().lang.menu_splash,
                 ctx.assets().font,
                 self.scale,
             );

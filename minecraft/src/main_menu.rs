@@ -41,7 +41,7 @@ impl MainMenu {
 	{
         let title = GuiTitleBlock::new(renderer, &mut thread_rng());
 		let version_text = GuiTextBlock::new(&GuiTextBlockConfig {
-			text: &assets.menu_version,
+			text: &assets.lang.menu_version,
 			font: assets.font,
 			logical_font_size: 16.0,
 			color: hex_color(0x505050FF),
@@ -50,7 +50,7 @@ impl MainMenu {
 			wrap: true,
 		});
 		let uncopyright_text = GuiTextBlock::new(&GuiTextBlockConfig {
-			text: &assets.menu_uncopyright,
+			text: &assets.lang.menu_uncopyright,
 			font: assets.font,
 			logical_font_size: 16.0,
 			color: Rgba::white(),
@@ -58,7 +58,7 @@ impl MainMenu {
 			v_align: VAlign::Bottom,
 			wrap: true,
 		});
-        let singleplayer_button = menu_button(&assets.menu_singleplayer)
+        let singleplayer_button = menu_button(&assets.lang.menu_singleplayer)
             .build(assets);
         let exit_game_button = menu_button("Quit")
             .build(assets);

@@ -281,7 +281,18 @@ impl<'a, 'b> ImageClipper<'a, 'b> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Properties(HashMap<String, String>);
+pub struct Properties(pub HashMap<String, String>);
+
+impl Properties {
+    pub fn with_default<B1, B2>(mut self, key: B1, val: B2) -> Self
+    where
+        B1: Borrow<str>,
+        B2: Borrow<str>,
+    {
+        self.0.entry(key.borrow().to_owned()).or_insert(val.borrow().to_owned());
+        self
+    }
+}
 
 impl<K: Borrow<str>> Index<K> for Properties {
     type Output = str;

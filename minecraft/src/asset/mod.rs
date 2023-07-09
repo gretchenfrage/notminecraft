@@ -3,7 +3,10 @@ pub mod loader;
 pub mod meshes;
 
 use self::{
-    loader::AssetLoader,
+    loader::{
+        AssetLoader,
+        Properties,
+    },
     meshes::ItemMesh,
     consts::*,
 };
@@ -53,8 +56,54 @@ pub mod consts {
 }
 
 
+macro_rules! lang {
+    ($( $item:ident, )*)=>{
+        #[derive(Debug, Clone)]
+        pub struct Lang {$(
+            pub $item: String,
+        )*}
+
+        #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[allow(non_camel_case_types)]
+        pub enum LangKey {$(
+            $item,
+        )*}
+
+        impl Lang {
+            pub fn new(properties: &Properties) -> Self {
+                Lang {$(
+                    $item: properties[stringify!($item).replace("_", ".")].to_owned(),
+                )*}
+            }
+        }
+    };
+}
+
+lang!(
+    menu_version,
+    menu_uncopyright,
+    menu_singleplayer,
+    menu_multiplayer,
+    menu_mods,
+    menu_options,
+    menu_quit,
+    menu_splash,
+
+    tile_stone_name,
+    tile_grass_name,
+    tile_dirt_name,
+    tile_planks_name,
+    tile_brick_name,
+    tile_glass_name,
+
+    item_stick_name,
+);
+
+
 #[derive(Debug)]
 pub struct Assets {
+    pub lang: Lang,
+
     pub font: FontId,
 
     pub menu_title_pixel: GpuImageArray,
@@ -72,18 +121,6 @@ pub struct Assets {
     pub click_sound: SoundEffect,
     pub grass_step_sound: SoundEffect,
     pub grass_dig_sound: SoundEffect,
-
-    pub menu_splash_text: String,
-
-    pub menu_version: String,
-    pub menu_uncopyright: String,
-
-    pub menu_singleplayer: String,
-    pub menu_multiplayer: String,
-    pub menu_mods: String,
-    pub menu_options: String,
-
-
 
     /// Baseline sky color at no-rain daytime.
     pub sky_day: Rgb<f32>,
@@ -117,9 +154,15 @@ impl Assets {
         let items = loader.load_image_atlas("gui/items.png", 16).await;
         let gui = loader.load_image_clipper("gui/gui.png", 256).await;
         let icons = loader.load_image_clipper("gui/icons.png", 256).await;
-        let lang = loader.load_properties("lang/en_US.lang").await;
+
+        let lang = loader.load_properties("lang/en_US.lang").await
+            .with_default("menu.splash", "Now it's YOUR craft!")
+            .with_default("menu.version", "Not Minecraft Beta 1.0.2")
+            .with_default("menu.uncopyright", "Everything in the universe is in the public domain.");
+        let lang = Lang::new(&lang);
 
         let assets = Assets {
+            lang,
             font: loader.load_font_437("font/default.png").await,
             menu_title_pixel: terrain.load_sprite_array([[1, 0]]),
             menu_button: tile_9_crop(&Tile9CropConfig {
@@ -167,13 +210,7 @@ impl Assets {
             click_sound: loader.load_sound_effect("sound3/random/click.ogg").await,
             grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
             grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,
-            menu_splash_text: "Now it's YOUR craft!".to_owned(),
-            menu_version: "Not Minecraft Beta 1.0.2".to_owned(),
-            menu_uncopyright: "Everything in the universe is in the public domain.".to_owned(),
-            menu_singleplayer: lang["menu.singleplayer"].to_owned(),
-            menu_multiplayer: lang["menu.multiplayer"].to_owned(),
-            menu_mods: lang["menu.mods"].to_owned(),
-            menu_options: lang["menu.options"].to_owned(),
+            
             sky_day:        [0.45, 0.62, 1.00].into(),
             sky_night:      [0.00, 0.02, 0.05].into(),
             sky_day_rain:   [0.24, 0.26, 0.32].into(),
@@ -184,13 +221,13 @@ impl Assets {
             fog_night_rain: [0.02, 0.04, 0.07].into(),
             sky_sunset:     [1.00, 0.35, 0.10].into(),
             item_meshes: vec![
-                ItemMesh::load_basic_block(&loader, BTI_STONE, &lang, "tile.stone.name"),
-                ItemMesh::load_basic_block(&loader, BTI_DIRT, &lang, "tile.dirt.name"),
-                ItemMesh::load_grass_block(&loader, &lang),
-                ItemMesh::load_basic_block(&loader, BTI_PLANKS, &lang, "tile.planks.name"),
-                ItemMesh::load_basic_block(&loader, BTI_BRICK, &lang, "tile.brick.name"),
-                ItemMesh::load_basic_block(&loader, BTI_GLASS, &lang, "tile.glass.name"),
-                ItemMesh::load_basic_item(ITI_STICK, &lang, "item.stick.name"),
+                ItemMesh::load_basic_block(&loader, BTI_STONE),
+                ItemMesh::load_basic_block(&loader, BTI_DIRT),
+                ItemMesh::load_grass_block(&loader),
+                ItemMesh::load_basic_block(&loader, BTI_PLANKS),
+                ItemMesh::load_basic_block(&loader, BTI_BRICK),
+                ItemMesh::load_basic_block(&loader, BTI_GLASS),
+                ItemMesh::Item(ITI_STICK),
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };
