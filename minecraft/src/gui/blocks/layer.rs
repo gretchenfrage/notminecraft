@@ -1,13 +1,10 @@
 
 use crate::gui::{
     blocks::identity_maperator::IdentityMaperator,
-    GuiVisitor,
-    GuiVisitorTarget,
     DimParentSets,
     GuiBlock,
     GuiBlockSeq,
     SizedGuiBlockFlatten,
-    GuiVisitorMaperator,
     DirSymMaperator,
     GuiGlobalContext,
 };

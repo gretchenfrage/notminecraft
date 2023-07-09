@@ -151,10 +151,6 @@ impl Layout {
             + rows.saturating_sub(1) as f32 * self.gap
     }
 
-    fn size(&self) -> Extent2<f32> {
-        Extent2::new(self.width(), self.height())
-    }
-
     fn slot_transform(&self, coords: Vec2<u32>) -> Transform2 {
         let transl = coords.map(|n| n as f32) * (self.slot_size + self.gap);
         let transf = Transform2::translate(transl);
@@ -205,7 +201,7 @@ impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for ItemGridGuiBlock<'a> {
 
     fn size(
         mut self,
-        ctx: &GuiGlobalContext<'a>,
+        _: &GuiGlobalContext<'a>,
         (): (),
         (): (),
         scale: f32,
@@ -380,7 +376,7 @@ impl<'a> GuiNode<'a> for ItemGridGuiBlock<'a> {
 
                 // layout
                 let [
-                    mut name_text_min,
+                    name_text_min,
                     mut name_text_max,
                 ] = name_text.as_mut().unwrap()
                     .1

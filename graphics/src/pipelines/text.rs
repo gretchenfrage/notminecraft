@@ -14,7 +14,6 @@ use glyph_brush::{
     ab_glyph::{
         FontArc,
         Font,
-        ScaleFont,
     },
     GlyphBrush,
     GlyphBrushBuilder,

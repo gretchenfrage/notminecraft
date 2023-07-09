@@ -12,7 +12,6 @@ use mesh_data::{
 };
 use graphics::frame_content::Mesh;
 use std::borrow::Borrow;
-use vek::*;
 
 
 pub fn block_item_mesh(tex_index: usize) -> MeshData {
@@ -82,7 +81,6 @@ impl ItemMesh {
     }
 
     pub fn load_basic_item<S: Borrow<str>>(
-        loader: &AssetLoader,
         tex_index: usize,
         lang: &Properties,
         lang_key: S,

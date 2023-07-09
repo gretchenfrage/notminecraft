@@ -1,11 +1,5 @@
 
-use std::{
-    mem::{
-        self,
-        MaybeUninit,
-    },
-    ptr,
-};
+use std::mem::MaybeUninit;
 
 
 // TODO: the version of this in the stdlib is unstable

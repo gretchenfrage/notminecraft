@@ -18,7 +18,6 @@ use crate::{
 use graphics::frame_content::{
     FontId,
     GpuImageArray,
-    Mesh,
 };
 use vek::*;
 
@@ -191,7 +190,7 @@ impl Assets {
                 ItemMesh::load_basic_block(&loader, BTI_PLANKS, &lang, "tile.planks.name"),
                 ItemMesh::load_basic_block(&loader, BTI_BRICK, &lang, "tile.brick.name"),
                 ItemMesh::load_basic_block(&loader, BTI_GLASS, &lang, "tile.glass.name"),
-                ItemMesh::load_basic_item(&loader, ITI_STICK, &lang, "item.stick.name"),
+                ItemMesh::load_basic_item(ITI_STICK, &lang, "item.stick.name"),
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
         };

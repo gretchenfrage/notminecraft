@@ -11,10 +11,7 @@ use crate::gui::{
     GuiVisitorTarget,
     GuiVisitor,
 };
-use std::{
-    iter::repeat,
-    mem::swap,
-};
+use std::iter::repeat;
 
 
 pub fn relative<'a, W, H, B, I, A>(
@@ -93,7 +90,7 @@ impl<
 > SizedGuiBlock<'a> for Relative<B, I, A>
 {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
-        mut self,
+        self,
         visitor: &mut GuiVisitor<'a, '_, T>,
         forward: bool,
     ) {
