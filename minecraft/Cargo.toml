@@ -25,6 +25,7 @@ serde = "1"
 bincode = "1"
 rodio = "0.16"
 spin = "0.9"
+rocksdb = "0.21"
 
 [dependencies.graphics]
 path = "../graphics"
@@ -37,6 +38,9 @@ path = "../mesh_data"
 
 [dependencies.get_assets]
 path = "../get_assets"
+
+[dependencies.binschema]
+path = "../binschema"
 
 [dependencies.anyhow]
 version = "1"

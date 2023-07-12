@@ -11,6 +11,7 @@ pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
 pub mod item;
+pub mod game;
 //pub mod singleplayer;
 //pub mod text_test;
 

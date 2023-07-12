@@ -202,6 +202,8 @@ pub use self::{
         BlockId,
         BlockRegistry,
         ChunkBlocks,
+        ErasedBlockMeta,
+        MaybeBoxed,
     },
     per_tile::PerTile,
     per_tile_packed::{

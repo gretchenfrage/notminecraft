@@ -9,6 +9,7 @@ use crate::{
         },
     },
 	util::hex_color::hex_color,
+    //game::Game,
 };
 use graphics::{
 	Renderer,
@@ -117,13 +118,12 @@ impl MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    let _ = ctx;
     /*
-    ctx.push_state_frame(Singleplayer::new(
-        ctx.game,
-        &ctx.renderer.borrow(),
+    ctx.push_state_frame(Game::new(
+        &ctx.game,
     ));
     */
+    let _ = ctx;
 }
 
 fn on_exit_game_click(ctx: &GuiGlobalContext) {
