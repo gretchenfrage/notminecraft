@@ -8,6 +8,7 @@ use crate::{
         ChunkBlocks,
         RawBlockId,
         BlockId,
+        ErasedBlockMeta,
     },
     per_tile::PerTile,
     per_tile_sparse::PerTileSparse,
@@ -228,6 +229,11 @@ impl<'a> TileBlockWrite<'a> {
         }
     }
 
+    pub fn erased_set(&mut self, bid: RawBlockId, meta: ErasedBlockMeta)
+    {
+        self.chunk.erased_set(self.lti, bid, meta);
+    }
+
     /// Set the block ID and metadata at this tile, by `RawBlockId`.
     ///
     /// Panics if `M` is not the meta type for `bid`.
@@ -247,6 +253,37 @@ impl<'a> TileBlockWrite<'a> {
         M: 'static,
     {
         self.chunk.set(self.lti, bid, meta);
+    }
+
+    pub fn erased_replace(
+        &mut self,
+        bid: RawBlockId,
+        meta: ErasedBlockMeta,
+    ) -> (RawBlockId, ErasedBlockMeta)
+    {
+        self.chunk.erased_replace(self.lti, bid, meta)
+    }
+
+    pub fn raw_replace<M>(
+        &mut self,
+        bid: RawBlockId,
+        meta: M,
+    ) -> (RawBlockId, ErasedBlockMeta)
+    where
+        M: 'static,
+    {
+        self.chunk.raw_replace(self.lti, bid, meta)
+    }
+
+    pub fn replace<M>(
+        &mut self,
+        bid: BlockId<M>,
+        meta: M,
+    ) -> (RawBlockId, ErasedBlockMeta)
+    where
+        M: 'static,
+    {
+        self.chunk.replace(self.lti, bid, meta)
     }
 
     /// Get the block metadata, mutably, without checking block ID.
