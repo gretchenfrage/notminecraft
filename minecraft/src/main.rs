@@ -9,6 +9,7 @@ pub mod gui;
 pub mod util;
 pub mod main_menu;
 pub mod chunk_mesh;
+pub mod block_update_queue;
 pub mod game_data;
 pub mod item;
 pub mod client_server;
@@ -35,10 +36,14 @@ use std::{
         Write,
         stdout,
     },
+    env::args,
 };
 use backtrace::Backtrace;
 use tokio::{
-    runtime::Runtime,
+    runtime::{
+        Runtime,
+        Handle,
+    },
     io::{
         stdin,
         BufReader,
@@ -141,11 +146,36 @@ fn main() {
     }));
     trace!("installed custom panic hook");
 
-    // start server in a background thread
-    std::thread::spawn(|| client_server::server::server_main());
+    // initialize things that'll be used even if it's server only
+    let rt = Runtime::new().unwrap();
+    let game = GameData::new();
+    let game = Arc::new(game);
+
+    // maybe run headless
+    let args = args().collect::<Vec<_>>();
+    match &args.iter().map(|s| s.as_str()).collect::<Vec<_>>()[..] {
+        &[_] => (),
+        &[_, "--headless"] => {
+            info!("running headless");
+            let result = client_server::server::run_server(rt.handle(), &game);
+            match result {
+                Ok(()) => {
+                    info!("server shutting down");
+                    return;
+                }
+                Err(e) => {
+                    error!(%e, "server shutting down");
+                    std::process::exit(1);
+                },
+            };
+        }
+        _ => {
+            error!("invalid CLI args");
+            std::process::exit(2);
+        }
+    };
 
     // download assets, maybe
-    let rt = Runtime::new().unwrap();
     let base = DataDir::new();
     let _ = rt
         .block_on(asset_download_prompt(&base))
@@ -160,9 +190,16 @@ fn main() {
             Assets::load(&mut loader).await
         });
 
-    let game = GameData::new();
-    let game = Arc::new(game);
-
+    // start server in a background thread
+    let rt_handle = Handle::clone(&rt.handle());
+    let game_2 = Arc::clone(&game);
+    std::thread::spawn(move || {
+        let result = client_server::server::run_server(&rt_handle, &game_2);
+        match result {
+            Ok(()) => info!("server shutting down"),
+            Err(e) => error!(%e, "server shutting down"),
+        };
+    });
     
     let gui_state = MainMenu::new(
         &event_loop.renderer,

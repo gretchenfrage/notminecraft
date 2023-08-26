@@ -1,7 +1,6 @@
 
 pub mod message;
 pub mod server;
-pub mod block_update_queue;
 
 
 /*
