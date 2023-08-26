@@ -59,3 +59,6 @@ impl Clone for CoderStateAlloc {
         CoderStateAlloc::new()
     }
 }
+
+unsafe impl Send for CoderStateAlloc {}
+unsafe impl Sync for CoderStateAlloc {}

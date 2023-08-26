@@ -1,5 +1,6 @@
 
 use crate::CiGet;
+use std::ops::{Index, IndexMut};
 use slab::Slab;
 use vek::*;
 
@@ -64,5 +65,19 @@ impl<'a, T> CiGet for &'a mut PerChunk<T> {
 
     fn get(self, cc: Vec3<i64>, ci: usize) -> Self::Output {
         PerChunk::get_mut(self, cc, ci)
+    }
+}
+
+impl<T> Index<usize> for PerChunk<T> {
+    type Output = T;
+
+    fn index(&self, i: usize) -> &T {
+        &self.0[i].1
+    }
+}
+
+impl<T> IndexMut<usize> for PerChunk<T> {
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        &mut self.0[i].1
     }
 }

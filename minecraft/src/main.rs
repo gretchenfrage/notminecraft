@@ -11,7 +11,7 @@ pub mod main_menu;
 pub mod chunk_mesh;
 pub mod game_data;
 pub mod item;
-pub mod game;
+pub mod client_server;
 //pub mod singleplayer;
 //pub mod text_test;
 
@@ -141,6 +141,9 @@ fn main() {
     }));
     trace!("installed custom panic hook");
 
+    // start server in a background thread
+    std::thread::spawn(|| client_server::server::server_main());
+
     // download assets, maybe
     let rt = Runtime::new().unwrap();
     let base = DataDir::new();
@@ -165,14 +168,6 @@ fn main() {
         &event_loop.renderer,
         &assets
     );
-    
-    /*
-    use text_test::*;
-    let gui_state = TextTest::new(
-        &event_loop.renderer,
-        &assets,
-    );
-    */
 
     // enter window event loop
     event_loop.run(Box::new(gui_state), assets, game);

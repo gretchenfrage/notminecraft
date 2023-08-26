@@ -34,7 +34,7 @@ pub struct CoderState<'a> {
 }
 
 struct DbgLog<'a> {
-    write: &'a mut (dyn Write + 'a),
+    write: &'a mut (dyn Write + Send + 'a),
     indent: usize,
 }
 
@@ -165,7 +165,7 @@ impl<'a> CoderState<'a> {
     pub fn new(
         schema: &'a Schema,
         alloc: CoderStateAlloc,
-        dbg_log: Option<&'a mut (dyn Write + 'a)>,
+        dbg_log: Option<&'a mut (dyn Write + Send + 'a)>,
     ) -> Self {
         let mut stack = alloc.into_stack();
         stack.push(StackFrame {
