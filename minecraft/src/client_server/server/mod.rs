@@ -9,12 +9,15 @@ use self::{
         NetworkEvent,
         spawn_network_stuff,
     },
-    chunk_loader::ChunkLoader,
+    chunk_loader::{
+        ChunkLoader,
+        ReadyChunk,
+    },
 };
 use super::message::*;
 use crate::{
     game_data::GameData,
-    block_update_queue::BlockUpdateQueue,
+//    block_update_queue::BlockUpdateQueue,
 };
 use chunk_data::*;
 use std::{
@@ -42,7 +45,7 @@ pub fn run_server(
     info!("initializing server data structures");
     let mut chunks: LoadedChunks = LoadedChunks::new();
     let mut tile_blocks: PerChunk<ChunkBlocks> = PerChunk::new();
-    let mut block_updates: BlockUpdateQueue = BlockUpdateQueue::new();
+    //let mut block_updates: BlockUpdateQueue = BlockUpdateQueue::new();
     let mut connections: Slab<Connection> = Slab::new();
 
     let chunk_loader = ChunkLoader::new(game);
@@ -53,7 +56,13 @@ pub fn run_server(
     let network_events = spawn_network_stuff("127.0.0.1:35565", rt);
     loop {
         trace!("doing tick");
-        do_tick();
+        do_tick(
+            &chunk_loader,
+            &mut chunks,
+            &connections,
+            &mut tile_blocks,
+            game,
+        );
 
         next_tick += TICK;
         let now = Instant::now();
@@ -65,7 +74,7 @@ pub fn run_server(
                 _ => behind_nanos / TICK.as_nanos() + 1,
             };
             let behind_ticks = u32::try_from(behind_ticks).expect("time broke");
-            warn!("running to slow, skipping {behind_ticks} ticks");
+            warn!("running too slow, skipping {behind_ticks} ticks");
             next_tick += TICK * behind_ticks;
         }
 
@@ -80,6 +89,13 @@ pub fn run_server(
                 NetworkEvent::NewConnection(conn_key_1, conn) => {
                     let conn_key_2 = connections.insert(conn);
                     debug_assert_eq!(conn_key_1, conn_key_2);
+                    on_new_connection(
+                        conn_key_1,
+                        &chunks,
+                        game,
+                        &connections,
+                        &tile_blocks,
+                    );
                 }
                 NetworkEvent::Disconnected(conn_key) => {
                     connections.remove(conn_key);
@@ -92,17 +108,79 @@ pub fn run_server(
     }
 }
 
-fn do_tick() {
+fn do_tick(
+    chunk_loader: &ChunkLoader,
+    chunks: &mut LoadedChunks,
+    connections: &Slab<Connection>,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    game: &Arc<GameData>,
+) {
+    while let Some(ready_chunk) = chunk_loader.poll_ready() {
+        let ReadyChunk {
+            cc,
+            chunk_tile_blocks,
+        } = ready_chunk;
 
+        let ci = chunks.add(cc);
+
+        for (_, conn) in connections {
+            send_load_chunk_message(
+                cc,
+                ci,
+                &chunk_tile_blocks,
+                game,
+                conn,
+            );
+        }
+
+        tile_blocks.add(cc, ci, chunk_tile_blocks);
+    }
 }
 
 fn on_network_message(
-    conn_key: usize,
+    _conn_key: usize,
     msg: UpMessage,
 ) {
     match msg {
 
     }
+}
+
+fn on_new_connection(
+    conn_key: usize,
+    chunks: &LoadedChunks,
+    game: &Arc<GameData>,
+    connections: &Slab<Connection>,
+    tile_blocks: &PerChunk<ChunkBlocks>,
+) {
+    for (cc, ci) in chunks.iter() {
+        send_load_chunk_message(
+            cc,
+            ci,
+            tile_blocks.get(cc, ci),
+            game,
+            &connections[conn_key],
+        );
+    }
+}
+
+fn send_load_chunk_message(
+    cc: Vec3<i64>,
+    ci: usize,
+    chunk_tile_blocks: &ChunkBlocks,
+    game: &Arc<GameData>,
+    connection: &Connection,
+) {
+    let mut chunk_tile_blocks_clone = ChunkBlocks::new(&game.blocks);
+    for lti in 0..=MAX_LTI {
+        chunk_tile_blocks.raw_meta::<()>(lti);
+        chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
+    }
+    connection.send(DownMessage::LoadChunk(DownMessageLoadChunk {
+        cc,
+        ci,
+        chunk_tile_blocks: chunk_tile_blocks_clone,
+    }));
 }
 
 fn request_load_chunks(chunk_loader: &ChunkLoader) {
