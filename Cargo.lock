@@ -1773,7 +1773,6 @@ dependencies = [
  "rodio",
  "serde",
  "slab",
- "smallvec",
  "spin",
  "std-semaphore",
  "tokio",

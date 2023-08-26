@@ -1,13 +1,14 @@
 //! Server-side connection handling system.
 
+use crate::client_server::message::{
+    UpMessage,
+    DownMessage,
+};
 use binschema::{
-    error::Result as BinschemaResult,
-    Schema,
     CoderStateAlloc,
     CoderState,
     Encoder,
     Decoder,
-    schema,
 };
 use std::{
     time::Duration,
@@ -34,7 +35,6 @@ use tokio::{
         UnboundedReceiver as TokioUnboundedReceiver,
         unbounded_channel as tokio_unbounded_channel,
     },
-    task::JoinHandle,
 };
 use tokio_tungstenite::{
     accept_async,
@@ -48,52 +48,6 @@ use futures::{
     select,
 };
 use slab::Slab;
-use smallvec::SmallVec;
-
-
-/// Message sent from client to server.
-#[derive(Debug)]
-pub enum UpMessage {
-
-}
-
-impl UpMessage {
-    pub fn schema() -> Schema {
-        schema!(
-            enum {
-
-            }
-        )
-    }
-
-    pub fn decode(decoder: &mut Decoder<&[u8]>) -> BinschemaResult<Self> {
-        match decoder.begin_enum()? {
-            _ => unreachable!()
-        }
-    }
-}
-
-/// Message sent from server to client.
-#[derive(Debug)]
-pub enum DownMessage {
-
-}
-
-impl DownMessage {
-    pub fn schema() -> Schema {
-        schema!(
-            enum {
-                
-            }
-        )
-    }
-
-    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> BinschemaResult<()> {
-        match *self {
-
-        }
-    }
-}
 
 
 /// Event delivered to the server thread that something network-y happened.
@@ -111,8 +65,9 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// Queues message to be transmitted to client and returns immediately.
     pub fn send(&self, msg: DownMessage) {
-        unimplemented!()
+        let _ = self.send.send(msg);
     }
 }
 
@@ -124,6 +79,7 @@ pub fn spawn_network_stuff(
 
     let rt_2 = Handle::clone(&rt);
     rt.spawn(async move {
+        // TCP bind with exponential backoff
         let mut backoff = Duration::from_millis(100);
         let listener = loop {
             match TcpListener::bind(&bind_to).await {
@@ -142,6 +98,7 @@ pub fn spawn_network_stuff(
 
         let slab = Arc::new(Mutex::new(Slab::new()));
 
+        // accept connections
         loop {
             match listener.accept().await {
                 Ok((tcp, _)) => {
@@ -190,7 +147,7 @@ async fn handle_tcp_connection(
         let connection = Connection {
             send: send_to_transmit,
         };
-        send_event.send(NetworkEvent::NewConnection(key, connection));
+        let _ = send_event.send(NetworkEvent::NewConnection(key, connection));
     }
 
     // split it into sink half and stream half
@@ -221,9 +178,14 @@ async fn handle_tcp_connection(
         Ok(())
     }
 
+    // send task returns Ok if ends due to user dropping handle for sending
+    // messages, returns Err if ends due to connection actually closing.
     let send_task = rt.spawn(async move {
         if let Err(e) = try_do_send_half(recv_to_transmit, ws_send).await {
             error!(%e, "connection send half error");
+            Err(())
+        } else {
+            Ok(())
         }
     });
     let abort_send_task = send_task.abort_handle();
@@ -233,7 +195,7 @@ async fn handle_tcp_connection(
     //
     // also, this task will be the only task that generates network events for
     // this connection. this prevents race conditions where an event could be
-    // presented to the user event the event that removes this connection from
+    // presented to the user after the event that removes this connection from
     // existence was already sent to the user.
     let schema = UpMessage::schema();
     let mut coder_state_alloc = CoderStateAlloc::new();
@@ -274,14 +236,17 @@ async fn handle_tcp_connection(
                     };
 
                     // deliver
-                    send_event.send(NetworkEvent::Received(key, msg));
+                    let _ = send_event.send(NetworkEvent::Received(key, msg));
 
                     // reset
                     coder_state_alloc = coder_state.into_alloc();
                 }
             },
-            // shut down if the send half shuts down
-            _ = send_task => break,
+            // shut down if the send half shuts down with error
+            send_task_result = send_task => match send_task_result {
+                Ok(Ok(())) => (),
+                _ => break,
+            },
         }
     }
 
@@ -293,7 +258,7 @@ async fn handle_tcp_connection(
         // this lock must be held at least until the event is sent.
         let mut slab_guard = slab.lock();
         slab_guard.remove(key);
-        send_event.send(NetworkEvent::Disconnected(key));
+        let _ = send_event.send(NetworkEvent::Disconnected(key));
     }
 
     Ok(())
