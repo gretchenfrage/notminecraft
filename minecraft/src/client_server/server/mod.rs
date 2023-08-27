@@ -9,15 +9,12 @@ use self::{
         NetworkEvent,
         spawn_network_stuff,
     },
-    chunk_loader::{
-        ChunkLoader,
-        ReadyChunk,
-    },
+    chunk_loader::ChunkLoader,
 };
 use super::message::*;
 use crate::{
     game_data::GameData,
-//    block_update_queue::BlockUpdateQueue,
+    util::sparse_vec::SparseVec,
 };
 use chunk_data::*;
 use std::{
@@ -30,7 +27,6 @@ use std::{
 use tokio::runtime::Handle;
 use anyhow::{Result, bail};
 use crossbeam_channel::RecvTimeoutError;
-use slab::Slab;
 use vek::*;
 
 
@@ -45,8 +41,12 @@ pub fn run_server(
     info!("initializing server data structures");
     let mut chunks: LoadedChunks = LoadedChunks::new();
     let mut tile_blocks: PerChunk<ChunkBlocks> = PerChunk::new();
-    //let mut block_updates: BlockUpdateQueue = BlockUpdateQueue::new();
-    let mut connections: Slab<Connection> = Slab::new();
+    let mut connections: SparseVec<Connection> = SparseVec::new();
+
+    // mapping from connection to clientside ci spaces
+    let mut client_loaded_chunks: SparseVec<LoadedChunks> = SparseVec::new();
+    // mapping from chunk to connection to clientside ci
+    let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
 
     let chunk_loader = ChunkLoader::new(game);
     request_load_chunks(&chunk_loader);
@@ -62,6 +62,8 @@ pub fn run_server(
             &connections,
             &mut tile_blocks,
             game,
+            &mut client_loaded_chunks,
+            &mut chunk_client_cis,
         );
 
         next_tick += TICK;
@@ -86,19 +88,21 @@ pub fn run_server(
             },
         } {
             match event {
-                NetworkEvent::NewConnection(conn_key_1, conn) => {
-                    let conn_key_2 = connections.insert(conn);
-                    debug_assert_eq!(conn_key_1, conn_key_2);
+                NetworkEvent::NewConnection(conn_key, conn) => {
+                    connections.set(conn_key, conn);
                     on_new_connection(
-                        conn_key_1,
+                        conn_key,
                         &chunks,
                         game,
                         &connections,
                         &tile_blocks,
+                        &mut client_loaded_chunks,
+                        &mut chunk_client_cis,
                     );
                 }
                 NetworkEvent::Disconnected(conn_key) => {
                     connections.remove(conn_key);
+                    client_loaded_chunks.remove(conn_key);
                 }
                 NetworkEvent::Received(conn_key, msg) => {
                     on_network_message(conn_key, msg);
@@ -111,29 +115,39 @@ pub fn run_server(
 fn do_tick(
     chunk_loader: &ChunkLoader,
     chunks: &mut LoadedChunks,
-    connections: &Slab<Connection>,
+    connections: &SparseVec<Connection>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     game: &Arc<GameData>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
 ) {
-    while let Some(ready_chunk) = chunk_loader.poll_ready() {
-        let ReadyChunk {
-            cc,
-            chunk_tile_blocks,
-        } = ready_chunk;
+    while let Some(chunk) = chunk_loader.poll_ready() {
+        // oh boy, chunk ready to load
+        // assign it ci in server chunk space
+        let ci = chunks.add(chunk.cc);
 
-        let ci = chunks.add(cc);
+        let mut client_cis = SparseVec::new();
 
-        for (_, conn) in connections {
+        for (conn_key, conn) in connections.iter() {
+            // for each connection, assign it ci in that client chunk space
+            let client_ci = client_loaded_chunks[conn_key].add(chunk.cc);
+
+            // backlink it in this chunk's new chunk_client_cis entry
+            client_cis.set(conn_key, client_ci);
+
+            // and send to that client
             send_load_chunk_message(
-                cc,
-                ci,
-                &chunk_tile_blocks,
+                chunk.cc,
+                client_ci,
+                &chunk.chunk_tile_blocks,
                 game,
                 conn,
             );
         }
 
-        tile_blocks.add(cc, ci, chunk_tile_blocks);
+        // insert into server data structures
+        tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
+        chunk_client_cis.add(chunk.cc, ci, client_cis);
     }
 }
 
@@ -150,18 +164,33 @@ fn on_new_connection(
     conn_key: usize,
     chunks: &LoadedChunks,
     game: &Arc<GameData>,
-    connections: &Slab<Connection>,
+    connections: &SparseVec<Connection>,
     tile_blocks: &PerChunk<ChunkBlocks>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
 ) {
+    let mut loaded_chunks = LoadedChunks::new();
+
+    // for each chunk already loaded
     for (cc, ci) in chunks.iter() {
+        // add it to the client's loaded chunks set
+        let client_ci = loaded_chunks.add(cc);
+
+        // backlink it in the chunk's chunk_client_cis entry
+        chunk_client_cis.get_mut(cc, ci).set(conn_key, client_ci);
+        
+        // send the chunk to the client
         send_load_chunk_message(
             cc,
-            ci,
+            client_ci,
             tile_blocks.get(cc, ci),
             game,
             &connections[conn_key],
         );
     }
+
+    // insert the client's new loaded_chunks set into the server's data structures
+    client_loaded_chunks.set(conn_key, loaded_chunks);
 }
 
 fn send_load_chunk_message(

@@ -20,6 +20,7 @@ use std::{
     sync::Arc,
 };
 use vek::*;
+use tokio::runtime::Handle;
 
 
 pub use winit::event::{
@@ -35,6 +36,7 @@ pub use winit::event::{
 pub struct GuiGlobalContext<'c> {
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
     pub renderer: &'c RefCell<Renderer>,
+    pub tokio: &'c Handle,
     pub sound_player: &'c SoundPlayer,
     pub assets: &'c Assets,
     pub game: &'c Arc<GameData>,

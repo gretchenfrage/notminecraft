@@ -155,8 +155,8 @@ fn main() {
     let args = args().collect::<Vec<_>>();
     match &args.iter().map(|s| s.as_str()).collect::<Vec<_>>()[..] {
         &[_] => (),
-        &[_, "--headless"] => {
-            info!("running headless");
+        &[_, "--server"] => {
+            info!("running server");
             let result = client_server::server::run_server(rt.handle(), &game);
             match result {
                 Ok(()) => {
@@ -182,7 +182,7 @@ fn main() {
         .map_err(|e| error!(%e, "unable to acquire assets"));
 
     // initialize rest of game runtime, including actually loading assets
-    let mut event_loop = GuiEventLoop::new();
+    let mut event_loop = GuiEventLoop::new(rt.handle());
 
     let assets = rt
         .block_on(async {
@@ -191,6 +191,7 @@ fn main() {
         });
 
     // start server in a background thread
+    /*
     let rt_handle = Handle::clone(&rt.handle());
     let game_2 = Arc::clone(&game);
     std::thread::spawn(move || {
@@ -200,6 +201,7 @@ fn main() {
             Err(e) => error!(%e, "server shutting down"),
         };
     });
+    */
     
     let gui_state = MainMenu::new(
         &event_loop.renderer,

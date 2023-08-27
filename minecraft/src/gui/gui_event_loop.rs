@@ -62,6 +62,7 @@ use winit::{
 		PhysicalPosition,
 	},
 };
+use tokio::runtime::Handle;
 use pollster::FutureExt;
 use vek::*;
 
@@ -114,6 +115,7 @@ impl EventLoopEffectQueue {
 struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
     renderer: RefCell<Renderer>,
+    tokio: Handle,
     sound_player: SoundPlayer,
     assets: Assets,
     game: Arc<GameData>,
@@ -137,6 +139,7 @@ impl State {
 	fn new(
 		window: &Window,
 		renderer: Renderer,
+		tokio: Handle,
 		sound_player: SoundPlayer,
 		assets: Assets,
 		game: Arc<GameData>,
@@ -146,6 +149,7 @@ impl State {
 		State {
 			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
 			renderer: RefCell::new(renderer),
+			tokio,
 			sound_player,
 			assets,
 			game,
@@ -176,6 +180,7 @@ impl State {
 				global: &GuiGlobalContext {
 					event_loop: &self.effect_queue,
 					renderer: &self.renderer,
+					tokio: &self.tokio,
 					sound_player: &self.sound_player,
 					assets: &self.assets,
 					game: &self.game,
@@ -220,11 +225,12 @@ pub struct GuiEventLoop {
 	event_loop: EventLoop<()>,
 	window: Arc<Window>,
 	pub renderer: Renderer,
+	tokio: Handle,
 	sound_player: SoundPlayer,
 }
 
 impl GuiEventLoop {
-	pub fn new() -> Self {
+	pub fn new(tokio: &Handle) -> Self {
 		let event_loop = EventLoop::new();
 		let window = WindowBuilder::new()
 			.with_inner_size(LogicalSize::new(854, 480))
@@ -243,6 +249,7 @@ impl GuiEventLoop {
 			event_loop,
 			window,
 			renderer,
+			tokio: Handle::clone(&tokio),
 			sound_player,
 		}		
 	}
@@ -257,6 +264,7 @@ impl GuiEventLoop {
 		let mut state = State::new(
 			&self.window,
 			self.renderer,
+			self.tokio,
 			self.sound_player,
 			assets,
 			game,

@@ -16,6 +16,7 @@ use binschema::{
 use std::{
     sync::Arc,
     marker::Unpin,
+    time::Duration,
 };
 use anyhow::{Result, anyhow, bail};
 use crossbeam_channel::{
@@ -51,6 +52,7 @@ use futures::{
 };
 
 
+#[derive(Debug)]
 pub struct Connection {
     send_up: TokioUnboundedSender<UpMessage>,
     recv_down: Receiver<Result<DownMessage>>,
@@ -132,6 +134,9 @@ async fn try_run_connection(
     send_down: Sender<Result<DownMessage>>,
     recv_up: TokioUnboundedReceiver<UpMessage>,
 ) -> Result<()> {
+    // TODO this is temporary
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
     // connect
     let (ws, _) = connect_async(connect_to?).await?;
     let (ws_send, mut ws_recv) = ws.split();
@@ -142,7 +147,7 @@ async fn try_run_connection(
     let mut send_task = send_task.fuse();
 
     // just make this task be the receive half
-    let schema = UpMessage::schema();
+    let schema = DownMessage::schema();
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     loop {

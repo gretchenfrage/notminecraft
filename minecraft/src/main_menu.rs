@@ -9,7 +9,7 @@ use crate::{
         },
     },
 	util::hex_color::hex_color,
-    //game::Game,
+    client_server::client::Client,
 };
 use graphics::{
 	Renderer,
@@ -123,7 +123,10 @@ fn on_singleplayer_click(ctx: &GuiGlobalContext) {
         &ctx.game,
     ));
     */
-    let _ = ctx;
+    ctx.push_state_frame(Client::new(
+        ctx.game,
+        ctx.tokio,
+    ));
 }
 
 fn on_exit_game_click(ctx: &GuiGlobalContext) {
