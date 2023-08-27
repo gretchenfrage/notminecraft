@@ -4,6 +4,7 @@ pub mod transcode_vek;
 
 
 use self::transcode_vek::*;
+use super::client::edit::Edit;
 use crate::game_data::GameData;
 use binschema::{
     error::Result,
@@ -97,7 +98,8 @@ impl UpMessageSetTileBlock {
 #[derive(Debug)]
 pub enum DownMessage {
     LoadChunk(DownMessageLoadChunk),
-    SetTileBlock(DownMessageSetTileBlock),
+    //SetTileBlock(DownMessageSetTileBlock),
+    ApplyEdit(DownMessageApplyEdit),
 }
 
 impl DownMessage {
@@ -105,20 +107,25 @@ impl DownMessage {
         schema!(
             enum {
                 LoadChunk(%DownMessageLoadChunk::schema()),
-                SetTileBlock(%DownMessageSetTileBlock::schema()),
+                //SetTileBlock(%DownMessageSetTileBlock::schema()),
+                ApplyEdit(%DownMessageApplyEdit::schema()),
             }
         )
     }
 
-    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> Result<()> {
+    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
         match self {
             &DownMessage::LoadChunk(ref inner) => {
                 encoder.begin_enum(0, "LoadChunk")?;
                 inner.encode(encoder)
             }
-            &DownMessage::SetTileBlock(ref inner) => {
+            /*&DownMessage::SetTileBlock(ref inner) => {
                 encoder.begin_enum(1, "SetTileBlock")?;
                 inner.encode(encoder)
+            }*/
+            &DownMessage::ApplyEdit(ref inner) => {
+                encoder.begin_enum(1, "ApplyEdit")?;
+                inner.encode(encoder, game)
             }
         }
     }
@@ -129,9 +136,13 @@ impl DownMessage {
                 decoder.begin_enum_variant("LoadChunk")?;
                 DownMessage::LoadChunk(DownMessageLoadChunk::decode(decoder, game)?)
             }
-            1 => {
+            /*1 => {
                 decoder.begin_enum_variant("SetTileBlock")?;
                 DownMessage::SetTileBlock(DownMessageSetTileBlock::decode(decoder)?)
+            }*/
+            1 => {
+                decoder.begin_enum_variant("ApplyEdit")?;
+                DownMessage::ApplyEdit(DownMessageApplyEdit::decode(decoder, game)?)
             }
             _ => unreachable!()
         })
@@ -248,6 +259,48 @@ impl DownMessageSetTileBlock {
             bid: {
                 decoder.begin_struct_field("bid")?;
                 RawBlockId(decoder.decode_u16()?)
+            },
+        };
+        decoder.finish_struct()?;
+        Ok(value)
+    }
+}
+
+#[derive(Debug)]
+pub struct DownMessageApplyEdit {
+    pub ci: usize,
+    pub edit: Edit,
+}
+
+impl DownMessageApplyEdit {
+    pub fn schema() -> Schema {
+        schema!(
+            struct {
+                (ci: %usize::schema(Default::default())),
+                (edit: %Edit::schema()),
+            }
+        )
+    }
+
+    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        encoder.begin_struct()?;
+        encoder.begin_struct_field("ci")?;
+        self.ci.serialize(&mut *encoder)?;
+        encoder.begin_struct_field("edit")?;
+        self.edit.encode(&mut *encoder, game)?;
+        encoder.finish_struct()
+    }
+
+    pub fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+        decoder.begin_struct()?;
+        let value = DownMessageApplyEdit {
+            ci: {
+                decoder.begin_struct_field("ci")?;
+                usize::deserialize(&mut *decoder)?
+            },
+            edit: {
+                decoder.begin_struct_field("edit")?;
+                Edit::decode(decoder, game)?
             },
         };
         decoder.finish_struct()?;

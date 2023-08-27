@@ -1,8 +1,11 @@
 //! Server-side connection handling system.
 
-use crate::client_server::message::{
-    UpMessage,
-    DownMessage,
+use crate::{
+    game_data::GameData,
+    client_server::message::{
+        UpMessage,
+        DownMessage,
+    },
 };
 use binschema::{
     CoderStateAlloc,
@@ -74,10 +77,12 @@ impl Connection {
 pub fn spawn_network_stuff(
     bind_to: impl ToSocketAddrs + Send + Sync + 'static,
     rt: &Handle,
+    game: &Arc<GameData>,
 ) -> Receiver<NetworkEvent> {
     let (send_event, recv_event) = unbounded();
 
     let rt_2 = Handle::clone(&rt);
+    let game = Arc::clone(&game);
     rt.spawn(async move {
         // TCP bind with exponential backoff
         let mut backoff = Duration::from_millis(100);
@@ -105,6 +110,7 @@ pub fn spawn_network_stuff(
                     let slab = Arc::clone(&slab);
                     let rt = Handle::clone(&rt_2);
                     let send_event = Sender::clone(&send_event);
+                    let game = Arc::clone(&game);
                     rt_2.spawn(async move {
                         // new task just to handle this TCP connection
                         let result = handle_tcp_connection(
@@ -112,6 +118,7 @@ pub fn spawn_network_stuff(
                             slab,
                             &rt,
                             send_event,
+                            game,
                         ).await;
                         if let Err(e) = result {
                             warn!(%e, "connection error");
@@ -131,6 +138,7 @@ async fn handle_tcp_connection(
     slab: Arc<Mutex<Slab<()>>>,
     rt: &Handle,
     send_event: Sender<NetworkEvent>,
+    game: Arc<GameData>,
 ) -> Result<()> {
     // do the handshake to upgrade it to websocket
     let ws = accept_async(tcp).await?;
@@ -157,6 +165,7 @@ async fn handle_tcp_connection(
     async fn try_do_send_half(
         mut recv_to_transmit: TokioUnboundedReceiver<DownMessage>,
         mut ws_send: impl Sink<WsMessage, Error=WsError> + Unpin,
+        game: Arc<GameData>,
     ) -> Result<()> {
         let schema = DownMessage::schema();
         let mut coder_state_alloc = CoderStateAlloc::new();
@@ -165,7 +174,7 @@ async fn handle_tcp_connection(
             // encode message
             let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
             let mut buf = Vec::new();
-            msg.encode(&mut Encoder::new(&mut coder_state, &mut buf))?;
+            msg.encode(&mut Encoder::new(&mut coder_state, &mut buf), &game)?;
             coder_state.is_finished_or_err()?;
 
             // send message
@@ -181,7 +190,7 @@ async fn handle_tcp_connection(
     // send task returns Ok if ends due to user dropping handle for sending
     // messages, returns Err if ends due to connection actually closing.
     let send_task = rt.spawn(async move {
-        if let Err(e) = try_do_send_half(recv_to_transmit, ws_send).await {
+        if let Err(e) = try_do_send_half(recv_to_transmit, ws_send, game).await {
             error!(%e, "connection send half error");
             Err(())
         } else {

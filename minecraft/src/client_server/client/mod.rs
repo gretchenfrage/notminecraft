@@ -1,10 +1,12 @@
 
+pub mod edit;
 mod connection;
 mod tile_meshing;
 
 use self::{
     connection::Connection,
     tile_meshing::mesh_tile,
+    edit::EditCtx,
 };
 use super::message::*;
 use crate::{
@@ -138,6 +140,7 @@ impl Client {
                 }
 
             }
+            /*
             DownMessage::SetTileBlock(DownMessageSetTileBlock {
                 ci,
                 lti,
@@ -156,6 +159,21 @@ impl Client {
                     self.block_updates.enqueue(gtc + face.to_vec(), &getter);
                 }
 
+            }*/
+            DownMessage::ApplyEdit(DownMessageApplyEdit {
+                ci,
+                edit,
+            }) => {
+                let cc = self.ci_reverse_lookup[ci];
+                let getter = self.chunks.getter_pre_cached(cc, ci);
+
+                edit.apply(EditCtx {
+                    cc,
+                    ci,
+                    getter,
+                    tile_blocks: &mut self.tile_blocks,
+                    block_updates: &mut self.block_updates,
+                });
             }
         }
         Ok(())

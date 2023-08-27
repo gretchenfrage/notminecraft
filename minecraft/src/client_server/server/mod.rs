@@ -11,7 +11,10 @@ use self::{
     },
     chunk_loader::ChunkLoader,
 };
-use super::message::*;
+use super::{
+    message::*,
+    client::edit::*,
+};
 use crate::{
     game_data::GameData,
     util::sparse_vec::SparseVec,
@@ -53,7 +56,7 @@ pub fn run_server(
 
     info!("beginning server tick loop");
     let mut next_tick = Instant::now();
-    let network_events = spawn_network_stuff("127.0.0.1:35565", rt);
+    let network_events = spawn_network_stuff("127.0.0.1:35565", rt, game);
     loop {
         trace!("doing tick");
         do_tick(
@@ -202,10 +205,12 @@ fn on_network_message(
 
             // send update to all clients with that chunk loaded
             for (conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
-                connections[conn_key].send(DownMessage::SetTileBlock(DownMessageSetTileBlock {
+                connections[conn_key].send(DownMessage::ApplyEdit(DownMessageApplyEdit {
                     ci: client_ci,
-                    lti: tile.lti,
-                    bid,
+                    edit: EditSetTileBlock {
+                        lti: tile.lti,
+                        bid,
+                    }.into(),
                 }));
             }
         }
