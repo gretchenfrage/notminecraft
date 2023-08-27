@@ -18,53 +18,86 @@ use vek::*;
 /// Message sent from client to server.
 #[derive(Debug)]
 pub enum UpMessage {
-    /*
-    SetTileBlock {
-        gtc: Vec3<i64>,
-        bid: RawBlockId,
-    },
-    */
+    SetTileBlock(UpMessageSetTileBlock),
 }
 
 impl UpMessage {
     pub fn schema() -> Schema {
         schema!(
             enum {
+                SetTileBlock(%UpMessageSetTileBlock::schema()),
             }
         )
     }
 
-    pub fn decode(decoder: &mut Decoder<&[u8]>) -> Result<Self> {
-        match decoder.begin_enum()? {
-            _ => unreachable!()
+    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> Result<()> {
+        match self {
+            &UpMessage::SetTileBlock(ref inner) => {
+                encoder.begin_enum(0, "SetTileBlock")?;
+                inner.encode(encoder)
+            }
         }
     }
 
-    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> Result<()> {
-        match *self {
-            
-        }
+    pub fn decode(decoder: &mut Decoder<&[u8]>) -> Result<Self> {
+        Ok(match decoder.begin_enum()? {
+            0 => {
+                decoder.begin_enum_variant("SetTileBlock")?;
+                UpMessage::SetTileBlock(UpMessageSetTileBlock::decode(decoder)?)
+            }
+            _ => unreachable!()
+        })
     }
 }
+
+#[derive(Debug)]
+pub struct UpMessageSetTileBlock {
+    pub gtc: Vec3<i64>,
+    pub bid: RawBlockId,
+}
+
+impl UpMessageSetTileBlock {
+    pub fn schema() -> Schema {
+        schema!(
+            struct {
+                (gtc: %vec3_schema::<i64>()),
+                (bid: u16),
+            }
+        )
+    }
+
+    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> Result<()> {
+        encoder.begin_struct()?;
+        encoder.begin_struct_field("gtc")?;
+        vec3_encode::<i64, _>(self.gtc, &mut *encoder)?;
+        encoder.begin_struct_field("bid")?;
+        encoder.encode_u16(self.bid.0)?;
+        encoder.finish_struct()
+    }
+
+    pub fn decode(decoder: &mut Decoder<&[u8]>) -> Result<Self> {
+        decoder.begin_struct()?;
+        let value = UpMessageSetTileBlock {
+            gtc: {
+                decoder.begin_struct_field("gtc")?;
+                vec3_decode(&mut *decoder)?
+            },
+            bid: {
+                decoder.begin_struct_field("bid")?;
+                RawBlockId(decoder.decode_u16()?)
+            },
+        };
+        decoder.finish_struct()?;
+        Ok(value)
+    }
+}
+
 
 /// Message sent from server to client.
 #[derive(Debug)]
 pub enum DownMessage {
     LoadChunk(DownMessageLoadChunk),
-    /*
-    SetTileBlock {
-        ci: usize,
-        lti: u16,
-        bid: RawBlockId,
-    },
-    */
-}
-
-#[derive(Debug)]
-pub struct DownMessageLoadChunk {
-    pub cc: Vec3<i64>,
-    pub ci: usize,
-    pub chunk_tile_blocks: ChunkBlocks,
+    SetTileBlock(DownMessageSetTileBlock),
 }
 
 impl DownMessage {
@@ -72,6 +105,7 @@ impl DownMessage {
         schema!(
             enum {
                 LoadChunk(%DownMessageLoadChunk::schema()),
+                SetTileBlock(%DownMessageSetTileBlock::schema()),
             }
         )
     }
@@ -80,6 +114,10 @@ impl DownMessage {
         match self {
             &DownMessage::LoadChunk(ref inner) => {
                 encoder.begin_enum(0, "LoadChunk")?;
+                inner.encode(encoder)
+            }
+            &DownMessage::SetTileBlock(ref inner) => {
+                encoder.begin_enum(1, "SetTileBlock")?;
                 inner.encode(encoder)
             }
         }
@@ -91,9 +129,20 @@ impl DownMessage {
                 decoder.begin_enum_variant("LoadChunk")?;
                 DownMessage::LoadChunk(DownMessageLoadChunk::decode(decoder, game)?)
             }
+            1 => {
+                decoder.begin_enum_variant("SetTileBlock")?;
+                DownMessage::SetTileBlock(DownMessageSetTileBlock::decode(decoder)?)
+            }
             _ => unreachable!()
         })
     }
+}
+
+#[derive(Debug)]
+pub struct DownMessageLoadChunk {
+    pub cc: Vec3<i64>,
+    pub ci: usize,
+    pub chunk_tile_blocks: ChunkBlocks,
 }
 
 impl DownMessageLoadChunk {
@@ -150,6 +199,56 @@ impl DownMessageLoadChunk {
                 decoder.finish_seq()?;
                 chunk_tile_blocks
             }
+        };
+        decoder.finish_struct()?;
+        Ok(value)
+    }
+}
+
+#[derive(Debug)]
+pub struct DownMessageSetTileBlock {
+    pub ci: usize,
+    pub lti: u16,
+    pub bid: RawBlockId,
+}
+
+impl DownMessageSetTileBlock {
+    pub fn schema() -> Schema {
+        schema!(
+            struct {
+                (ci: %usize::schema(Default::default())),
+                (lti: u16),
+                (bid: u16),
+            }
+        )
+    }
+
+    pub fn encode(&self, encoder: &mut Encoder<Vec<u8>>) -> Result<()> {
+        encoder.begin_struct()?;
+        encoder.begin_struct_field("ci")?;
+        self.ci.serialize(&mut *encoder)?;
+        encoder.begin_struct_field("lti")?;
+        encoder.encode_u16(self.lti)?;
+        encoder.begin_struct_field("bid")?;
+        encoder.encode_u16(self.bid.0)?;
+        encoder.finish_struct()
+    }
+
+    pub fn decode(decoder: &mut Decoder<&[u8]>) -> Result<Self> {
+        decoder.begin_struct()?;
+        let value = DownMessageSetTileBlock {
+            ci: {
+                decoder.begin_struct_field("ci")?;
+                usize::deserialize(&mut *decoder)?
+            },
+            lti: {
+                decoder.begin_struct_field("lti")?;
+                decoder.decode_u16()?
+            },
+            bid: {
+                decoder.begin_struct_field("bid")?;
+                RawBlockId(decoder.decode_u16()?)
+            },
         };
         decoder.finish_struct()?;
         Ok(value)

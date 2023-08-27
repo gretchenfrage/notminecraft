@@ -50,6 +50,16 @@ impl<T> PerChunk<T> {
         debug_assert_eq!(cc, cc2);
         val
     }
+
+    /// Get by ci, without checking cc.
+    pub fn get_checkless(&self, ci: usize) -> &T {
+        &self.0[ci].1
+    }
+
+    /// Mutably get by ci, without checking cc.
+    pub fn get_mut_checkless(&mut self, ci: usize) -> &mut T {
+        &mut self.0[ci].1
+    }
 }
 
 impl<'a, T> CiGet for &'a PerChunk<T> {

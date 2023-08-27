@@ -18,6 +18,8 @@ use crate::{
             simple_gui_block::*,
         },
     },
+    util::sparse_vec::SparseVec,
+    physics::looking_at::compute_looking_at,
 };
 use chunk_data::*;
 use mesh_data::MeshData;
@@ -47,6 +49,7 @@ pub struct Client {
     yaw: f32,
 
     chunks: LoadedChunks,
+    ci_reverse_lookup: SparseVec<Vec3<i64>>,
     tile_blocks: PerChunk<ChunkBlocks>,
     tile_meshes: PerChunk<ChunkMesh>,
     block_updates: BlockUpdateQueue,
@@ -65,6 +68,7 @@ impl Client {
             yaw: f32::to_radians(0.0),
 
             chunks: LoadedChunks::new(),
+            ci_reverse_lookup: SparseVec::new(),
             tile_blocks: PerChunk::new(),
             tile_meshes: PerChunk::new(),
             block_updates: BlockUpdateQueue::new(),
@@ -100,6 +104,7 @@ impl Client {
                     self.chunks.add(cc) == ci,
                     "DownMessage::load_chunk ci did not correspond to slab behavior"
                 );
+                self.ci_reverse_lookup.set(ci, cc);
 
                 self.tile_blocks.add(cc, ci, chunk_tile_blocks);
                 self.tile_meshes.add(cc, ci, ChunkMesh::new());
@@ -130,6 +135,25 @@ impl Client {
                             }
                         }
                     }
+                }
+
+            }
+            DownMessage::SetTileBlock(DownMessageSetTileBlock {
+                ci,
+                lti,
+                bid
+            }) => {
+                // modify local world
+                self.tile_blocks.get_mut_checkless(ci).raw_set(lti, bid, ());
+
+                // enqueue block updates
+                let cc = self.ci_reverse_lookup[ci];
+                let getter = self.chunks.getter_pre_cached(cc, ci);
+                let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
+
+                self.block_updates.enqueue(gtc, &getter);
+                for face in FACES {
+                    self.block_updates.enqueue(gtc + face.to_vec(), &getter);
                 }
 
             }
@@ -217,6 +241,34 @@ impl GuiStateFrame for Client {
         
         self.pitch = (self.pitch - amount.y * sensitivity).clamp(-PI / 2.0, PI / 2.0);
         self.yaw = (self.yaw - amount.x * sensitivity) % (PI * 2.0);
+    }
+
+    fn on_captured_mouse_click(&mut self, ctx: &GuiWindowContext, button: MouseButton) {
+        let getter = self.chunks.getter();
+        if let Some(looking_at) = compute_looking_at(
+            // position
+            self.pos,
+            // direction
+            Quaternion::rotation_y(-self.yaw)
+                * Quaternion::rotation_x(-self.pitch)
+                * Vec3::new(0.0, 0.0, 1.0), // what? wtf does this part do?
+            // reach
+            50.0,
+            // geometry
+            &getter,
+            &self.tile_blocks,
+            ctx.game(),
+        ) {
+            match button {
+                MouseButton::Left => {
+                    self.connection.send(UpMessage::SetTileBlock(UpMessageSetTileBlock {
+                        gtc: looking_at.tile.gtc(),
+                        bid: AIR.bid,
+                    }));
+                }
+                _ => (),
+            }
+        }
     }
 }
 

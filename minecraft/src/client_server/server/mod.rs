@@ -101,11 +101,28 @@ pub fn run_server(
                     );
                 }
                 NetworkEvent::Disconnected(conn_key) => {
+                    // remove from list of connections
                     connections.remove(conn_key);
+
+                    // remove client's clientside ci from all chunks
+                    for (cc, _) in client_loaded_chunks[conn_key].iter() {
+                        let ci = chunks.getter().get(cc).unwrap();
+                        chunk_client_cis.get_mut(cc, ci).remove(conn_key);
+                    }
+
+                    // remove client's ci space
                     client_loaded_chunks.remove(conn_key);
                 }
                 NetworkEvent::Received(conn_key, msg) => {
-                    on_network_message(conn_key, msg);
+                    on_network_message(
+                        conn_key,
+                        msg,
+                        game,
+                        &mut tile_blocks,
+                        &chunk_client_cis,
+                        &connections,
+                        &chunks,
+                    );
                 }
             }
         }
@@ -154,9 +171,44 @@ fn do_tick(
 fn on_network_message(
     _conn_key: usize,
     msg: UpMessage,
+    game: &Arc<GameData>,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    chunk_client_cis: &PerChunk<SparseVec<usize>>,
+    connections: &SparseVec<Connection>,
+    chunks: &LoadedChunks,
 ) {
     match msg {
+        UpMessage::SetTileBlock(UpMessageSetTileBlock {
+            gtc,
+            bid,
+        }) => {
+            // lookup tile
+            let tile = match chunks.getter().gtc_get(gtc) {
+                Some(tile) => tile,
+                None => {
+                    info!("client tried SetTileBlock on non-present gtc");
+                    return;
+                }
+            };
 
+            // bit of validation (logic will very change in future)
+            if !(bid == AIR || bid == game.bid_stone) {
+                warn!("client tried to place illegal bid {:?}", bid);
+                return;
+            }
+
+            // set tile block
+            tile.get(tile_blocks).raw_set(bid, ());
+
+            // send update to all clients with that chunk loaded
+            for (conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
+                connections[conn_key].send(DownMessage::SetTileBlock(DownMessageSetTileBlock {
+                    ci: client_ci,
+                    lti: tile.lti,
+                    bid,
+                }));
+            }
+        }
     }
 }
 
