@@ -1,18 +1,19 @@
 
 pub mod per_block;
 pub mod per_item;
-pub mod blocks;
+//pub mod blocks;
 
 
 use self::{
     per_block::PerBlock,
-    per_item::PerItem,
+    //per_item::PerItem,
 };
 use crate::{
+    /*
     item::{
         ItemId,
         ItemRegistry,
-    },
+    },*/
     asset::consts::*,
 };
 use chunk_data::{
@@ -29,13 +30,15 @@ use std::sync::Arc;
 pub struct GameData {
     pub blocks: Arc<BlockRegistry>,
 
+    pub blocks_machine_name: PerBlock<String>,
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
-    pub blocks_break_logic: PerBlock<BlockBreakLogic>,
+    //pub blocks_break_logic: PerBlock<BlockBreakLogic>,
 
     pub bid_stone: BlockId<()>,
+    /*
     pub bid_dirt: BlockId<()>,
     pub bid_grass: BlockId<()>,
     pub bid_planks: BlockId<()>,
@@ -43,7 +46,9 @@ pub struct GameData {
     pub bid_glass: BlockId<()>,
     pub bid_log: BlockId<()>,
     pub bid_door: BlockId<blocks::door::DoorMeta>,
+    */
 
+    /*
     pub items_mesh_index: PerItem<usize>,
     pub items_use_behavior: PerItem<Option<ItemUseBehavior>>,
 
@@ -56,14 +61,36 @@ pub struct GameData {
     //pub iid_log: ItemId<()>,
     //pub iid_door: ItemId<blocks::door::DoorMeta>,
     pub iid_stick: ItemId<()>,
+    */
 }
-
+/*
+pub enum Color {
+    White,
+    Orange,
+    Magenta,
+    LightBlue,
+    Yellow,
+    Lime,
+    Pink,
+    DarkGray,
+    LightGray,
+    Cyan,
+    Purple,
+    Blue,
+    Brown,
+    Green,
+    Red,
+    Black,
+}
+*/
 #[derive(Debug)]
 pub enum BlockMeshLogic {
     NoMesh,
     FullCube(BlockMeshLogicFullCube),
+    /*
     Grass,
     Door,
+    */
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -98,8 +125,10 @@ impl BlockMeshLogic {
         match self {
             &BlockMeshLogic::NoMesh => false,
             &BlockMeshLogic::FullCube(mesh_logic) => !mesh_logic.transparent,
+            /*
             &BlockMeshLogic::Grass => true,
             &BlockMeshLogic::Door => false,
+            */
         }
     }
 }
@@ -108,20 +137,20 @@ impl BlockMeshLogic {
 pub enum BlockHitscanLogic {
     Vacuous,
     BasicCube,
-    Door,
+    //Door,
 }
-
+/*
 #[derive(Debug)]
 pub enum BlockBreakLogic {
     Null,
-    Door,
+    //Door,
 }
-
+*/
 #[derive(Debug)]
 pub enum BlockPhysicsLogic {
     NoClip,
     BasicCube,
-    Door,
+    //Door,
 }
 /*
 fn block_item_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
@@ -160,30 +189,33 @@ fn block_item_mesh(tex_index: usize, renderer: &Renderer) -> Mesh {
     mesh_buf.upload(renderer)
 }
 */
-
+/*
 #[derive(Debug)]
 pub enum ItemUseBehavior {
     Place(BlockId<()>),
 }
-
+*/
 impl GameData {
     pub fn new() -> Self {
         let mut blocks = BlockRegistry::new();
 
+        let mut blocks_machine_name = PerBlock::new_no_default();
         let mut blocks_mesh_logic = PerBlock::new_no_default();
         let mut blocks_hitscan_logic = PerBlock::new(BlockHitscanLogic::BasicCube);
         let mut blocks_physics_logic = PerBlock::new(BlockPhysicsLogic::BasicCube);
         let mut blocks_can_place_over = PerBlock::new(false);
-        let mut blocks_break_logic = PerBlock::new(BlockBreakLogic::Null);
+        //let mut blocks_break_logic = PerBlock::new(BlockBreakLogic::Null);
 
+        blocks_machine_name.set(AIR, "air".into());
         blocks_mesh_logic.set(AIR, BlockMeshLogic::NoMesh);
         blocks_hitscan_logic.set(AIR, BlockHitscanLogic::Vacuous);
         blocks_physics_logic.set(AIR, BlockPhysicsLogic::NoClip);
         blocks_can_place_over.set(AIR, true);
 
         let bid_stone = blocks.register();
+        blocks_machine_name.set(bid_stone, "stone".into());
         blocks_mesh_logic.set(bid_stone, BlockMeshLogic::basic_cube(BTI_STONE));
-
+        /*
         let bid_dirt = blocks.register();
         blocks_mesh_logic.set(bid_dirt, BlockMeshLogic::basic_cube(BTI_DIRT));
 
@@ -207,7 +239,9 @@ impl GameData {
         blocks_hitscan_logic.set(bid_door, BlockHitscanLogic::Door);
         blocks_physics_logic.set(bid_door, BlockPhysicsLogic::Door);
         blocks_break_logic.set(bid_door, BlockBreakLogic::Door);
+        */
 
+        /*
         let mut items = ItemRegistry::new();
 
         let mut items_mesh_index = PerItem::new_no_default();
@@ -239,17 +273,20 @@ impl GameData {
 
         let iid_stick = items.register();
         items_mesh_index.set(iid_stick, IMI_STICK);
+        */
 
         GameData {
             blocks: blocks.finalize(),
 
+            blocks_machine_name,
             blocks_mesh_logic,
             blocks_hitscan_logic,
             blocks_physics_logic,
             blocks_can_place_over,
-            blocks_break_logic,
+            //blocks_break_logic,
 
             bid_stone,
+            /*
             bid_dirt,
             bid_grass,
             bid_planks,
@@ -257,7 +294,9 @@ impl GameData {
             bid_glass,
             bid_log,
             bid_door,
+            */
 
+            /*
             items_mesh_index,
             items_use_behavior,
 
@@ -268,6 +307,7 @@ impl GameData {
             iid_brick,
             iid_glass,
             iid_stick,
+            */
         }
     }
 }

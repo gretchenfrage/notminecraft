@@ -70,7 +70,7 @@ impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
             .unwrap_or(&BlockPhysicsLogic::BasicCube);
         match physics_logic {
             &BlockPhysicsLogic::NoClip => (),
-            &BlockPhysicsLogic::BasicCube | &BlockPhysicsLogic::Door => {
+            &BlockPhysicsLogic::BasicCube => {
                 visit(
                     AaBox::UNIT_BOX,
                     (),
@@ -103,7 +103,7 @@ impl<'a> WorldGeometry for WorldHitscanGeometry<'a> {
                 .get(bid);
             match hitscan_logic {
                 &BlockHitscanLogic::Vacuous => (),
-                &BlockHitscanLogic::BasicCube | &BlockHitscanLogic::Door => {
+                &BlockHitscanLogic::BasicCube => {
                     visit(
                         AaBox::UNIT_BOX,
                         tile,

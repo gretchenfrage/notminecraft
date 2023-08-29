@@ -148,41 +148,20 @@ impl Client {
                     }
                 }
             }
-            DownMessage::ApplyEdit(msg) => {
-                /*
-                let cc = self.ci_reverse_lookup[ci];
-                let getter = self.chunks.getter_pre_cached(cc, ci);
-
-                apply_edit(
-                    edit,
-                    cc,
-                    ci,
-                    &getter,
-                    &mut self.tile_blocks,
-                    &mut self.block_updates,
-                );
-                */
-                self.prediction.process_apply_edit_msg(
-                    msg,
-                    &self.chunks,
-                    &self.ci_reverse_lookup,
-                    &mut self.tile_blocks,
-                    &mut self.block_updates,
-                );
-            }
-            DownMessage::Ack(msg) => {
-                self.prediction.process_ack_msg(
-                    msg,
-                    &self.chunks,
-                    &self.ci_reverse_lookup,
-                    &mut self.tile_blocks,
-                    &mut self.block_updates,
-                );
-                /*
-                debug!(%processed_before, "ack received");
-                let _ = processed_before;
-                */
-            }
+            DownMessage::ApplyEdit(msg) => self.prediction.process_apply_edit_msg(
+                msg,
+                &self.chunks,
+                &self.ci_reverse_lookup,
+                &mut self.tile_blocks,
+                &mut self.block_updates,
+            ),
+            DownMessage::Ack(down::Ack { last_processed }) => self.prediction.process_ack(
+                last_processed,
+                &self.chunks,
+                &self.ci_reverse_lookup,
+                &mut self.tile_blocks,
+                &mut self.block_updates,
+            ),
         }
         Ok(())
     }

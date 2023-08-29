@@ -18,7 +18,7 @@ pub struct PredictionManager {
     // as predictions are made, they're pushed to the back
     predictions: VecDeque<Option<Prediction>>,
     // as serversides are received, they're pushed to the back
-    serversides: VecDeque<Option<down::ApplyEdit>>,
+    serversides: VecDeque<Option<Serverside>>,
     // true for tiles iff there's an active prediction for that tile
     tile_has_prediction: PerChunk<PerTileBool>,
     
@@ -33,6 +33,12 @@ struct Prediction {
     reverser: Edit,
     ci: usize,
     up_msg_idx: u64,
+}
+
+#[derive(Debug)]
+struct Serverside {
+    edit: Edit,
+    ci: usize,
 }
 
 impl PredictionManager {
@@ -66,7 +72,7 @@ impl PredictionManager {
         block_updates: &mut BlockUpdateQueue,
     ) {
         let lti = edit_lti(&edit);
-        trace!(gtc=?cc_ltc_to_gtc(cc, lti_to_ltc(lti)), ?edit, "making prediction");
+        trace!(?cc, ?ci, ?edit, "making prediction");
         let reverser = apply_edit(
             edit,
             cc,
@@ -91,17 +97,31 @@ impl PredictionManager {
         tile_blocks: &mut PerChunk<ChunkBlocks>,
         block_updates: &mut BlockUpdateQueue,
     ) {
-        let &down::ApplyEdit { ci, edit: _ } = &msg;
+        let down::ApplyEdit { ack, ci, edit } = msg;
+
+        if let Some(last_processed) = ack {
+            self.process_ack(
+                last_processed,
+                chunks,
+                ci_reverse_lookup,
+                tile_blocks,
+                block_updates,
+            );
+        }
+
         let cc = ci_reverse_lookup[ci];
-        let lti = edit_lti(&msg.edit);
+        let lti = edit_lti(&edit);
         if self.tile_has_prediction.get_mut(cc, ci).get(lti) {
-            trace!(gtc=?cc_ltc_to_gtc(cc, lti_to_ltc(lti)), edit=?msg.edit, "stashing serverside");
-            self.serversides.push_back(Some(msg));
+            trace!(?cc, ?ci, edit=?edit, "stashing serverside");
+            self.serversides.push_back(Some(Serverside {
+                edit,
+                ci,
+            }));
         } else {
-            trace!(gtc=?cc_ltc_to_gtc(cc, lti_to_ltc(lti)), edit=?msg.edit, "applying server edit");
+            trace!(?cc, ?ci, edit=?edit, "applying server edit");
             let getter = chunks.getter_pre_cached(cc, ci);
             apply_edit(
-                msg.edit,
+                edit,
                 cc,
                 ci,
                 &getter,
@@ -111,19 +131,14 @@ impl PredictionManager {
         }
     }
 
-    pub fn process_ack_msg(
+    pub fn process_ack(
         &mut self,
-        msg: down::Ack,
+        last_processed: u64,
         chunks: &LoadedChunks,
         ci_reverse_lookup: &SparseVec<Vec3<i64>>,
         tile_blocks: &mut PerChunk<ChunkBlocks>,
         block_updates: &mut BlockUpdateQueue,
-    ) {
-        // TODO there should also be a way to attach this to the beginning of an
-        //      apply edit message so it can be processed beforehand, which would
-        //      be mas efficient
-        let down::Ack { processed_before } = msg;
-        
+    ) {        
         // sweep through predictions backwards, from most recently predicted to least
         for opt_prediction in self.predictions.iter_mut().rev() {
             if let &mut Some(ref prediction) = opt_prediction {
@@ -133,7 +148,7 @@ impl PredictionManager {
 
                 // if the prediction is a prediction of the consequences of sent messages
                 // which we haven't received acknowledgement of the server processing
-                if !(prediction.up_msg_idx < processed_before) {
+                if prediction.up_msg_idx > last_processed {
                     // make sure we don't stop those predictions
 
                     if !self.tile_dont_stop_prediction.get_mut(cc, ci).get(lti) {
@@ -148,7 +163,7 @@ impl PredictionManager {
                     continue;
                 }
 
-                trace!(gtc=?cc_ltc_to_gtc(cc, lti_to_ltc(lti)), reverser=?prediction.reverser, "rolling back prediction");
+                trace!(?cc, ?ci, reverser=?prediction.reverser, "rolling back prediction");
 
                 // but if neither of the above apply here, we can roll it back
                 // (note: this sets the item in the queue to none)
@@ -180,10 +195,10 @@ impl PredictionManager {
                 let lti = edit_lti(&serverside.edit);
 
                 if !self.tile_has_prediction.get(cc, ci).get(lti) {
-                    trace!(gtc=?cc_ltc_to_gtc(cc, lti_to_ltc(lti)), edit=?serverside.edit, "applying serverside");
+                    trace!(?cc, ?ci, edit=?serverside.edit, "applying serverside");
 
                     // (note: this sets the item in the queue to none)
-                    let down::ApplyEdit { ci: _, edit } = opt_prediction.take().unwrap();
+                    let Serverside { ci: _, edit } = opt_prediction.take().unwrap();
                     let getter = chunks.getter_pre_cached(cc, ci);
                     apply_edit(
                         edit,

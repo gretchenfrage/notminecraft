@@ -54,9 +54,9 @@ pub fn run_server(
     // mapping from chunk to connection to clientside ci
     let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
     // mapping from connection to highest up message number processed
-    let mut client_processed_before: SparseVec<u64> = SparseVec::new();
+    let mut client_last_processed: SparseVec<u64> = SparseVec::new();
     // remains all false except when used
-    let mut client_processed_before_increased: SparseVec<bool> = SparseVec::new();
+    let mut client_last_processed_increased: SparseVec<bool> = SparseVec::new();
 
     let chunk_loader = ChunkLoader::new(game);
     request_load_chunks(&chunk_loader);
@@ -87,8 +87,8 @@ pub fn run_server(
             &mut tile_blocks,
             &mut client_loaded_chunks,
             &mut chunk_client_cis,
-            &mut client_processed_before,
-            &mut client_processed_before_increased,
+            &mut client_last_processed,
+            &mut client_last_processed_increased,
         );
     }
 }
@@ -157,8 +157,8 @@ fn process_network_events_until_next_tick(
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
 ) {
     while let Ok(event) = network_events
         .recv_deadline(next_tick)
@@ -172,8 +172,8 @@ fn process_network_events_until_next_tick(
             tile_blocks,
             client_loaded_chunks,
             chunk_client_cis,
-            client_processed_before,
-            client_processed_before_increased,
+            client_last_processed,
+            client_last_processed_increased,
         );
 
         while let Ok(event) = network_events
@@ -188,15 +188,15 @@ fn process_network_events_until_next_tick(
                 tile_blocks,
                 client_loaded_chunks,
                 chunk_client_cis,
-                client_processed_before,
-                client_processed_before_increased,
+                client_last_processed,
+                client_last_processed_increased,
             );                
         }
 
         after_process_available_network_events(
             connections,
-            client_processed_before,
-            client_processed_before_increased,
+            client_last_processed,
+            client_last_processed_increased,
         )
     }
 }
@@ -209,8 +209,8 @@ fn on_network_event(
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
 ) {
     match event {
         NetworkEvent::NewConnection(conn_key, conn) => on_new_connection(
@@ -222,15 +222,15 @@ fn on_network_event(
             tile_blocks,
             client_loaded_chunks,
             chunk_client_cis,
-            client_processed_before,
-            client_processed_before_increased,
+            client_last_processed,
+            client_last_processed_increased,
         ),
         NetworkEvent::Disconnected(conn_key) => on_disconnected(
             conn_key,
             connections,
             client_loaded_chunks,
-            client_processed_before,
-            client_processed_before_increased,
+            client_last_processed,
+            client_last_processed_increased,
             chunks,
             chunk_client_cis,
         ),
@@ -242,8 +242,8 @@ fn on_network_event(
             chunk_client_cis,
             connections,
             chunks,
-            client_processed_before,
-            client_processed_before_increased,
+            client_last_processed,
+            client_last_processed_increased,
         ),
     }
 }
@@ -257,8 +257,8 @@ fn on_new_connection(
     tile_blocks: &PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
 ) {
     connections.set(conn_key, conn);
 
@@ -286,16 +286,18 @@ fn on_new_connection(
     client_loaded_chunks.set(conn_key, loaded_chunks);
 
     // insert other things into the server's data structures
-    client_processed_before.set(conn_key, 1);
-    client_processed_before_increased.set(conn_key, false);
+    // (up msg indices starts at 1, so setting last_processed to 0 indicates that
+    // no messages from that client have been processed)
+    client_last_processed.set(conn_key, 0);
+    client_last_processed_increased.set(conn_key, false);
 }
 
 fn on_disconnected(
     conn_key: usize,
     connections: &mut SparseVec<Connection>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
     chunks: &LoadedChunks,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
 ) {
@@ -312,8 +314,8 @@ fn on_disconnected(
     client_loaded_chunks.remove(conn_key);
 
     // remove from other data structures
-    client_processed_before.remove(conn_key);
-    client_processed_before_increased.remove(conn_key);
+    client_last_processed.remove(conn_key);
+    client_last_processed_increased.remove(conn_key);
 }
 
 fn on_received(
@@ -324,11 +326,11 @@ fn on_received(
     chunk_client_cis: &PerChunk<SparseVec<usize>>,
     connections: &SparseVec<Connection>,
     chunks: &LoadedChunks,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
 ) {
-    client_processed_before[conn_key] += 1;
-    client_processed_before_increased[conn_key] = true;
+    client_last_processed[conn_key] += 1;
+    client_last_processed_increased[conn_key] = true;
 
     match msg {
         UpMessage::SetTileBlock(up::SetTileBlock {
@@ -355,13 +357,21 @@ fn on_received(
 
             // send update to all clients with that chunk loaded
             for (conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
+                let ack = if client_last_processed_increased[conn_key] {
+                    client_last_processed_increased[conn_key] = false;
+                    Some(client_last_processed[conn_key])
+                } else {
+                    None
+                };
                 connections[conn_key].send(down::ApplyEdit {
+                    ack,
                     ci: client_ci,
                     edit: edit::SetTileBlock {
                         lti: tile.lti,
                         bid,
                     }.into(),
                 });
+                client_last_processed_increased[conn_key] = false;
             }
         }
     }
@@ -369,15 +379,15 @@ fn on_received(
 
 fn after_process_available_network_events(
     connections: &SparseVec<Connection>,
-    client_processed_before: &mut SparseVec<u64>,
-    client_processed_before_increased: &mut SparseVec<bool>,
+    client_last_processed: &mut SparseVec<u64>,
+    client_last_processed_increased: &mut SparseVec<bool>,
 ) {
     for (conn_key, conn) in connections.iter() {
-        if client_processed_before_increased[conn_key] {
+        if client_last_processed_increased[conn_key] {
             conn.send(down::Ack {
-                processed_before: client_processed_before[conn_key],
+                last_processed: client_last_processed[conn_key],
             });
-            client_processed_before_increased[conn_key] = false;
+            client_last_processed_increased[conn_key] = false;
         }
     }
 }

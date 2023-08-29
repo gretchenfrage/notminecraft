@@ -59,11 +59,11 @@ message_enum!(down DownMessage {
         chunk_tile_blocks: ChunkBlocks,
     }
     ApplyEdit {
+        ack: Option<u64>,
         ci: usize,
         edit: Edit,
     }
     Ack {
-        // TODO: could just change this to latest processed
-        processed_before: u64,
+        last_processed: u64,
     }
 });

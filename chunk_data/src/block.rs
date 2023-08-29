@@ -450,6 +450,10 @@ impl BlockRegistry {
     pub fn finalize(self) -> Arc<Self> {
         Arc::new(self)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item=RawBlockId> {
+        (0..self.items.len()).map(|n| RawBlockId(n as u16))
+    }
 }
 
 

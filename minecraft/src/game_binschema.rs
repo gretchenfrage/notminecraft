@@ -361,16 +361,25 @@ use chunk_data::{
 };
 
 impl GameBinschema for RawBlockId {
-    fn schema(_: &Arc<GameData>) -> Schema {
-        schema!(u16)
+    fn schema(game: &Arc<GameData>) -> Schema {
+        Schema::Enum(game.blocks.iter()
+            .map(|bid| EnumSchemaVariant {
+                name: game.blocks_machine_name.get(bid).clone(),
+                inner: schema!(unit),
+            })
+            .collect())
     }
     
-    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, _: &Arc<GameData>) -> Result<()> {
-        encoder.encode_u16(self.0)
+    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        encoder.begin_enum(self.0 as usize, &game.blocks_machine_name.get(*self))?;
+        encoder.encode_unit()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, _: &Arc<GameData>) -> Result<Self> {
-        decoder.decode_u16().map(RawBlockId)
+    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+        let bid = RawBlockId(decoder.begin_enum()? as u16);
+        decoder.begin_enum_variant(&game.blocks_machine_name.get(bid))?;
+        decoder.decode_unit()?;
+        Ok(bid)
     }
 }
 

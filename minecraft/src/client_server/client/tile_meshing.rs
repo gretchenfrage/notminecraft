@@ -40,7 +40,6 @@ pub fn mesh_tile(
                 );
             }
         }
-        _ => unimplemented!()
     }
 }
 
