@@ -5,7 +5,10 @@ pub mod transcode_vek;
 
 use self::transcode_vek::*;
 use super::client::edit::Edit;
-use crate::game_data::GameData;
+use crate::{
+    game_data::GameData,
+    game_binschema::GameBinschema,
+};
 use binschema::{
     error::Result,
     *,
@@ -17,11 +20,12 @@ use vek::*;
 
 
 /// Message sent from client to server.
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub enum UpMessage {
     SetTileBlock(UpMessageSetTileBlock),
 }
 
+/*
 impl UpMessage {
     pub fn schema() -> Schema {
         schema!(
@@ -50,13 +54,14 @@ impl UpMessage {
         })
     }
 }
+*/
 
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub struct UpMessageSetTileBlock {
     pub gtc: Vec3<i64>,
     pub bid: RawBlockId,
 }
-
+/*
 impl UpMessageSetTileBlock {
     pub fn schema() -> Schema {
         schema!(
@@ -92,16 +97,16 @@ impl UpMessageSetTileBlock {
         Ok(value)
     }
 }
-
+*/
 
 /// Message sent from server to client.
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub enum DownMessage {
     LoadChunk(DownMessageLoadChunk),
     //SetTileBlock(DownMessageSetTileBlock),
     ApplyEdit(DownMessageApplyEdit),
 }
-
+/*
 impl DownMessage {
     pub fn schema() -> Schema {
         schema!(
@@ -147,15 +152,15 @@ impl DownMessage {
             _ => unreachable!()
         })
     }
-}
+}*/
 
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub struct DownMessageLoadChunk {
     pub cc: Vec3<i64>,
     pub ci: usize,
     pub chunk_tile_blocks: ChunkBlocks,
 }
-
+/*
 impl DownMessageLoadChunk {
     pub fn schema() -> Schema {
         schema!(
@@ -214,15 +219,15 @@ impl DownMessageLoadChunk {
         decoder.finish_struct()?;
         Ok(value)
     }
-}
+}*/
 
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub struct DownMessageSetTileBlock {
     pub ci: usize,
     pub lti: u16,
     pub bid: RawBlockId,
 }
-
+/*
 impl DownMessageSetTileBlock {
     pub fn schema() -> Schema {
         schema!(
@@ -265,13 +270,13 @@ impl DownMessageSetTileBlock {
         Ok(value)
     }
 }
-
-#[derive(Debug)]
+*/
+#[derive(Debug, GameBinschema)]
 pub struct DownMessageApplyEdit {
     pub ci: usize,
     pub edit: Edit,
 }
-
+/*
 impl DownMessageApplyEdit {
     pub fn schema() -> Schema {
         schema!(
@@ -307,3 +312,4 @@ impl DownMessageApplyEdit {
         Ok(value)
     }
 }
+*/

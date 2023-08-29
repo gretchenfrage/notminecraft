@@ -2,6 +2,7 @@
 use crate::{
     block_update_queue::BlockUpdateQueue,
     game_data::GameData,
+    game_binschema::GameBinschema,
 };
 use binschema::{error::Result, *};
 use chunk_data::*;
@@ -13,7 +14,7 @@ macro_rules! edit_enum {
     ($(
         $ordinal:expr => $variant:ident($struct:ident),
     )*)=>{
-        #[derive(Debug)]
+        #[derive(Debug, GameBinschema)]
         pub enum Edit {$(
             $variant($struct),
         )*}
@@ -24,7 +25,7 @@ macro_rules! edit_enum {
                     Edit::$variant(inner) => inner.apply(ctx)
                 )*}
             }
-
+            /*
             pub fn schema() -> Schema {
                 schema!(
                     enum {$(
@@ -53,6 +54,7 @@ macro_rules! edit_enum {
                     _ => unreachable!()
                 })
             }
+            */
         }
 
         $(
@@ -79,7 +81,7 @@ pub struct EditCtx<'a> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, GameBinschema)]
 pub struct EditSetTileBlock {
     pub lti: u16,
     pub bid: RawBlockId,
@@ -101,7 +103,7 @@ impl EditSetTileBlock {
             bid: old_bid,
         }.into()
     }
-
+/*
     pub fn schema() -> Schema {
         schema!(
             struct {
@@ -134,5 +136,5 @@ impl EditSetTileBlock {
         };
         decoder.finish_struct()?;
         Ok(value)
-    }
+    }*/
 }

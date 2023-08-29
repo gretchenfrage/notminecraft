@@ -14,6 +14,7 @@ pub mod game_data;
 pub mod item;
 pub mod physics;
 pub mod client_server;
+pub mod game_binschema;
 //pub mod singleplayer;
 //pub mod text_test;
 

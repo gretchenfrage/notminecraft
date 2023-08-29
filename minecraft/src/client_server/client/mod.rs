@@ -2,11 +2,13 @@
 pub mod edit;
 mod connection;
 mod tile_meshing;
+mod prediction;
 
 use self::{
     connection::Connection,
     tile_meshing::mesh_tile,
     edit::EditCtx,
+    prediction::PredictionManager,
 };
 use super::message::*;
 use crate::{
@@ -52,9 +54,12 @@ pub struct Client {
 
     chunks: LoadedChunks,
     ci_reverse_lookup: SparseVec<Vec3<i64>>,
+
     tile_blocks: PerChunk<ChunkBlocks>,
     tile_meshes: PerChunk<ChunkMesh>,
     block_updates: BlockUpdateQueue,
+
+    prediction: PredictionManager,
 }
 
 impl Client {
@@ -71,9 +76,12 @@ impl Client {
 
             chunks: LoadedChunks::new(),
             ci_reverse_lookup: SparseVec::new(),
+
             tile_blocks: PerChunk::new(),
             tile_meshes: PerChunk::new(),
             block_updates: BlockUpdateQueue::new(),
+
+            prediction: PredictionManager::new(),
         }
     }
 

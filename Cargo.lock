@@ -1041,6 +1041,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "game_binschema_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,6 +1767,7 @@ dependencies = [
  "crossbeam-channel",
  "futures",
  "futures-util",
+ "game_binschema_derive",
  "get_assets",
  "graphics",
  "image",

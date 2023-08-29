@@ -6,6 +6,7 @@ use crate::{
         UpMessage,
         DownMessage,
     },
+    game_binschema::GameBinschema,
 };
 use binschema::{
     CoderStateAlloc,
@@ -167,7 +168,7 @@ async fn handle_tcp_connection(
         mut ws_send: impl Sink<WsMessage, Error=WsError> + Unpin,
         game: Arc<GameData>,
     ) -> Result<()> {
-        let schema = DownMessage::schema();
+        let schema = DownMessage::schema(&game);
         let mut coder_state_alloc = CoderStateAlloc::new();
 
         while let Some(msg) = recv_to_transmit.recv().await {
@@ -189,8 +190,9 @@ async fn handle_tcp_connection(
 
     // send task returns Ok if ends due to user dropping handle for sending
     // messages, returns Err if ends due to connection actually closing.
+    let game_2 = Arc::clone(&game);
     let send_task = rt.spawn(async move {
-        if let Err(e) = try_do_send_half(recv_to_transmit, ws_send, game).await {
+        if let Err(e) = try_do_send_half(recv_to_transmit, ws_send, game_2).await {
             error!(%e, "connection send half error");
             Err(())
         } else {
@@ -206,7 +208,7 @@ async fn handle_tcp_connection(
     // this connection. this prevents race conditions where an event could be
     // presented to the user after the event that removes this connection from
     // existence was already sent to the user.
-    let schema = UpMessage::schema();
+    let schema = UpMessage::schema(&game);
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     loop {
@@ -235,7 +237,8 @@ async fn handle_tcp_connection(
                     // decode message
                     let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
                     let msg = match UpMessage::decode(
-                        &mut Decoder::new(&mut coder_state, &mut &buf[..])
+                        &mut Decoder::new(&mut coder_state, &mut &buf[..]),
+                        &game,
                     ) {
                         Ok(msg) => msg,
                         Err(e) => {

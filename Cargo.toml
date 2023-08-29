@@ -7,7 +7,8 @@ members = [
     "get_assets",
     "minecraft",
     "binschema",
-    "binschema_derive"
+    "binschema_derive",
+    "game_binschema_derive"
 ]
 resolver = "2"
 

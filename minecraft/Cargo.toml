@@ -45,6 +45,9 @@ path = "../get_assets"
 [dependencies.binschema]
 path = "../binschema"
 
+[dependencies.game_binschema_derive]
+path = "../game_binschema_derive"
+
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]

@@ -1,5 +1,8 @@
 
-use std::mem::MaybeUninit;
+use std::{
+    mem::MaybeUninit,
+    ptr::drop_in_place,
+};
 
 
 // TODO: the version of this in the stdlib is unstable
@@ -54,6 +57,47 @@ pub fn array_const_slice_mut<
     }
 }
 
+/// Safely building a constant size array.
+pub struct ArrayBuilder<T, const N: usize> {
+    array: MaybeUninit<[T; N]>,
+    i: usize, // index of next element to initialize
+}
+
+impl<T, const N: usize> ArrayBuilder<T, N> {
+    pub fn new() -> Self {
+        ArrayBuilder {
+            array: MaybeUninit::uninit(),
+            i: 0,
+        }
+    }
+
+    pub fn push(&mut self, elem: T) {
+        unsafe {
+            assert!(self.i < N, "push to fully filled ArrayBuilder");
+            *(self.array.as_mut_ptr() as *mut T).add(self.i) = elem;
+            self.i += 1;
+        }
+    }
+
+    pub fn build(mut self) -> [T; N] {
+        unsafe {
+            assert!(self.i == N, "unfinished ArrayBuilder.build");
+            self.i = 0; // do this so destructor won't drop any elements
+            self.array.as_ptr().read()
+        }
+    }
+}
+
+impl<T, const N: usize> Drop for ArrayBuilder<T, N> {
+    fn drop(&mut self) {
+        unsafe {
+            // drop only initialized elements
+            for j in 0..self.i {
+                drop_in_place((self.array.as_mut_ptr() as *mut T).add(j));
+            }
+        }
+    }
+}
 
 /*
 

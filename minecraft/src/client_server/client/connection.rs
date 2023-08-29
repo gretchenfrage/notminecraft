@@ -6,6 +6,7 @@ use crate::{
         DownMessage,
     },
     game_data::GameData,
+    game_binschema::GameBinschema,
 };
 use binschema::{
     CoderStateAlloc,
@@ -142,12 +143,12 @@ async fn try_run_connection(
     let (ws_send, mut ws_recv) = ws.split();
 
     // spawn task to handle the send half
-    let send_task = rt.spawn(try_do_send_half(recv_up, ws_send));
+    let send_task = rt.spawn(try_do_send_half(recv_up, ws_send, Arc::clone(&game)));
     *abort_send_task = Some(send_task.abort_handle());
     let mut send_task = send_task.fuse();
 
     // just make this task be the receive half
-    let schema = DownMessage::schema();
+    let schema = DownMessage::schema(&game);
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     loop {
@@ -192,15 +193,16 @@ async fn try_run_connection(
 async fn try_do_send_half(
     mut recv_up: TokioUnboundedReceiver<UpMessage>,
     mut ws_send: impl Sink<WsMessage, Error=WsError> + Unpin,
+    game: Arc<GameData>,
 ) -> Result<()> {
-    let schema = UpMessage::schema();
+    let schema = UpMessage::schema(&game);
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     while let Some(msg) = recv_up.recv().await {
         // encode message
         let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
         let mut buf = Vec::new();
-        msg.encode(&mut Encoder::new(&mut coder_state, &mut buf))?;
+        msg.encode(&mut Encoder::new(&mut coder_state, &mut buf), &game)?;
         coder_state.is_finished_or_err()?;
 
         // send message
