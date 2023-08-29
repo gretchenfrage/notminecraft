@@ -29,6 +29,7 @@ use std::{
 use tokio::runtime::Handle;
 use anyhow::Result;
 use crossbeam_channel::{
+    Receiver,
     RecvTimeoutError,
     TryRecvError,
 };
@@ -75,62 +76,20 @@ pub fn run_server(
             &mut chunk_client_cis,
         );
 
-        next_tick += TICK;
-        let now = Instant::now();
-        if next_tick < now {
-            let behind_nanos = (now - next_tick).as_nanos();
-            // poor man's div_ceil
-            let behind_ticks = match behind_nanos % TICK.as_nanos() {
-                0 => behind_nanos / TICK.as_nanos(),
-                _ => behind_nanos / TICK.as_nanos() + 1,
-            };
-            let behind_ticks = u32::try_from(behind_ticks).expect("time broke");
-            warn!("running too slow, skipping {behind_ticks} ticks");
-            next_tick += TICK * behind_ticks;
-        }
+        update_time_stuff_after_doing_tick(&mut next_tick);
 
-        while let Ok(event) = network_events
-            .recv_deadline(next_tick)
-            .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
-        {
-            on_network_event(
-                event,
-                &chunks,
-                &game,
-                &mut connections,
-                &mut tile_blocks,
-                &mut client_loaded_chunks,
-                &mut chunk_client_cis,
-                &mut client_processed_before,
-                &mut client_processed_before_increased,
-            );
-
-            while let Ok(event) = network_events
-                .try_recv()
-                .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
-            {
-                on_network_event(
-                    event,
-                    &chunks,
-                    &game,
-                    &mut connections,
-                    &mut tile_blocks,
-                    &mut client_loaded_chunks,
-                    &mut chunk_client_cis,
-                    &mut client_processed_before,
-                    &mut client_processed_before_increased,
-                );                
-            }
-
-            for (conn_key, conn) in connections.iter() {
-                if client_processed_before_increased[conn_key] {
-                    conn.send(down::Ack {
-                        processed_before: client_processed_before[conn_key],
-                    });
-                    client_processed_before_increased[conn_key] = false;
-                }
-            }
-        }
+        process_network_events_until_next_tick(
+            next_tick,
+            &network_events,
+            &chunks,
+            &game,
+            &mut connections,
+            &mut tile_blocks,
+            &mut client_loaded_chunks,
+            &mut chunk_client_cis,
+            &mut client_processed_before,
+            &mut client_processed_before_increased,
+        );
     }
 }
 
@@ -170,6 +129,75 @@ fn do_tick(
         // insert into server data structures
         tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
         chunk_client_cis.add(chunk.cc, ci, client_cis);
+    }
+}
+
+fn update_time_stuff_after_doing_tick(next_tick: &mut Instant) {
+    *next_tick += TICK;
+    let now = Instant::now();
+    if *next_tick < now {
+        let behind_nanos = (now - *next_tick).as_nanos();
+        // poor man's div_ceil
+        let behind_ticks = match behind_nanos % TICK.as_nanos() {
+            0 => behind_nanos / TICK.as_nanos(),
+            _ => behind_nanos / TICK.as_nanos() + 1,
+        };
+        let behind_ticks = u32::try_from(behind_ticks).expect("time broke");
+        warn!("running too slow, skipping {behind_ticks} ticks");
+        *next_tick += TICK * behind_ticks;
+    }
+}
+
+fn process_network_events_until_next_tick(
+    next_tick: Instant,
+    network_events: &Receiver<NetworkEvent>,
+    chunks: &LoadedChunks,
+    game: &Arc<GameData>,
+    connections: &mut SparseVec<Connection>,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
+) {
+    while let Ok(event) = network_events
+        .recv_deadline(next_tick)
+        .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
+    {
+        on_network_event(
+            event,
+            chunks,
+            game,
+            connections,
+            tile_blocks,
+            client_loaded_chunks,
+            chunk_client_cis,
+            client_processed_before,
+            client_processed_before_increased,
+        );
+
+        while let Ok(event) = network_events
+            .try_recv()
+            .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
+        {
+            on_network_event(
+                event,
+                chunks,
+                game,
+                connections,
+                tile_blocks,
+                client_loaded_chunks,
+                chunk_client_cis,
+                client_processed_before,
+                client_processed_before_increased,
+            );                
+        }
+
+        after_process_available_network_events(
+            connections,
+            client_processed_before,
+            client_processed_before_increased,
+        )
     }
 }
 
@@ -335,6 +363,21 @@ fn on_received(
                     }.into(),
                 });
             }
+        }
+    }
+}
+
+fn after_process_available_network_events(
+    connections: &SparseVec<Connection>,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
+) {
+    for (conn_key, conn) in connections.iter() {
+        if client_processed_before_increased[conn_key] {
+            conn.send(down::Ack {
+                processed_before: client_processed_before[conn_key],
+            });
+            client_processed_before_increased[conn_key] = false;
         }
     }
 }
