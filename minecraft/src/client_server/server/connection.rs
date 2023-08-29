@@ -185,7 +185,7 @@ async fn handle_tcp_connection(
   
             if buf.len() < 16 {
                 //debug!("sending down {} bytes:\n{}", buf.len(), str::from_utf8(&dbg_buf).unwrap());
-                trace!("sending down {} bytes:\n{:?}", buf.len(), msg);
+                trace!(?msg, "sending down {} bytes", buf.len());
             } else {
                 trace!("sending down {} bytes", buf.len());
             }

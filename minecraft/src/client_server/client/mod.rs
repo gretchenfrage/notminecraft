@@ -1,5 +1,5 @@
 
-pub mod edit;
+mod apply_edit;
 mod connection;
 mod tile_meshing;
 mod prediction;
@@ -7,7 +7,6 @@ mod prediction;
 use self::{
     connection::Connection,
     tile_meshing::mesh_tile,
-    edit::apply_edit,
     prediction::PredictionManager,
 };
 use super::message::*;
@@ -120,6 +119,8 @@ impl Client {
                 self.tile_meshes.add(cc, ci, ChunkMesh::new());
                 self.block_updates.add_chunk(cc, ci);
 
+                self.prediction.add_chunk(cc, ci);
+
                 // enqueue block updates
                 let getter = self.chunks.getter();
                 for lti in 0..=MAX_LTI {
@@ -147,10 +148,8 @@ impl Client {
                     }
                 }
             }
-            DownMessage::ApplyEdit(down::ApplyEdit {
-                ci,
-                edit,
-            }) => {
+            DownMessage::ApplyEdit(msg) => {
+                /*
                 let cc = self.ci_reverse_lookup[ci];
                 let getter = self.chunks.getter_pre_cached(cc, ci);
 
@@ -162,12 +161,27 @@ impl Client {
                     &mut self.tile_blocks,
                     &mut self.block_updates,
                 );
+                */
+                self.prediction.process_apply_edit_msg(
+                    msg,
+                    &self.chunks,
+                    &self.ci_reverse_lookup,
+                    &mut self.tile_blocks,
+                    &mut self.block_updates,
+                );
             }
-            DownMessage::Ack(down::Ack {
-                processed_before,
-            }) => {
+            DownMessage::Ack(msg) => {
+                self.prediction.process_ack_msg(
+                    msg,
+                    &self.chunks,
+                    &self.ci_reverse_lookup,
+                    &mut self.tile_blocks,
+                    &mut self.block_updates,
+                );
+                /*
                 debug!(%processed_before, "ack received");
                 let _ = processed_before;
+                */
             }
         }
         Ok(())
@@ -277,6 +291,18 @@ impl GuiStateFrame for Client {
                         gtc: looking_at.tile.gtc(),
                         bid: AIR.bid,
                     });
+                    self.prediction.make_prediction(
+                        edit::SetTileBlock {
+                            lti: looking_at.tile.lti,
+                            bid: AIR.bid,
+                        }.into(),
+                        looking_at.tile.cc,
+                        looking_at.tile.ci,
+                        &getter,
+                        &self.connection,
+                        &mut self.tile_blocks,
+                        &mut self.block_updates,
+                    );
                 }
                 _ => (),
             }

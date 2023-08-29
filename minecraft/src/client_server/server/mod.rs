@@ -286,7 +286,7 @@ fn on_new_connection(
     client_loaded_chunks.set(conn_key, loaded_chunks);
 
     // insert other things into the server's data structures
-    client_processed_before.set(conn_key, 0);
+    client_processed_before.set(conn_key, 1);
     client_processed_before_increased.set(conn_key, false);
 }
 

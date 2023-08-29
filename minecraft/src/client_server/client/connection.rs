@@ -57,6 +57,7 @@ use futures::{
 pub struct Connection {
     send_up: TokioUnboundedSender<UpMessage>,
     recv_down: Receiver<Result<DownMessage>>,
+    up_msg_idx: u64,
 }
 
 impl Connection {
@@ -103,12 +104,14 @@ impl Connection {
         Connection {
             send_up,
             recv_down,
+            up_msg_idx: 0,
         }
     }
 
     /// Asynchronously queue a message for sending, return immediately.
-    pub fn send(&self, msg: impl Into<UpMessage>) {
+    pub fn send(&mut self, msg: impl Into<UpMessage>) {
         let _ = self.send_up.send(msg.into());
+        self.up_msg_idx += 1;
     }
 
     /// Check for an asynchronously received message or error without blocking,
@@ -122,6 +125,13 @@ impl Connection {
                 panic!("unexpected ws client recv_down disconnection");
             }
         }
+    }
+
+    /// Index of the last message sent up to the server, wherein the first message
+    /// sent up to the server has an index of 1. (That avoids annoying edge cases
+    /// in cases where no messages have been sent to the server).
+    pub fn up_msg_idx(&self) -> u64 {
+        self.up_msg_idx
     }
 }
 
@@ -212,7 +222,7 @@ async fn try_do_send_half(
 
         if buf.len() < 16 {
             //debug!("sending up {} bytes:\n{}", buf.len(), str::from_utf8(&dbg_buf).unwrap());
-            trace!("sending up {} bytes:\n{:?}", buf.len(), msg);
+            trace!(?msg, "sending up {} bytes", buf.len());
         } else {
             trace!("sending up {} bytes", buf.len());
         }

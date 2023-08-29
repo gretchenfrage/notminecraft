@@ -73,3 +73,25 @@ pub type PerTileU2 = PerTilePacked<{NUM_LTIS / 4}, 0b11>;
 ///
 /// Consumes 2^13 bytes = 8 KiB.
 pub type PerTileU1 = PerTilePacked<{NUM_LTIS / 8}, 0b1>;
+
+
+/// Wrapper around `PerTileU1`.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct PerTileBool(pub PerTileU1);
+
+impl PerTileBool {
+    /// Construct with all false.
+    pub fn new() -> Self {
+        PerTileBool(PerTileU1::new())
+    }
+
+    /// Get the value at some index.
+    pub fn get(&self, lti: u16) -> bool {
+        self.0.get(lti) != 0
+    }
+
+    /// Set the value at some index. Panics if value out of range.
+    pub fn set(&mut self, lti: u16, val: bool) {
+        self.0.set(lti, if val { 1 } else { 0 })
+    }
+}

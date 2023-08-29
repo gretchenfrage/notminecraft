@@ -12,7 +12,10 @@ use crate::{
     },
     per_tile::PerTile,
     per_tile_sparse::PerTileSparse,
-    per_tile_packed::PerTilePacked,
+    per_tile_packed::{
+        PerTilePacked,
+        PerTileBool,
+    },
 };
 use std::fmt::Debug;
 use vek::*;
@@ -131,6 +134,20 @@ impl<
 > LtiSet<u8> for &'a mut PerTilePacked<BYTES, MASK> {
     fn set(self, lti: u16, val: u8) {
         PerTilePacked::set(self, lti, val)
+    }
+}
+
+impl<'a> LtiGet for &'a PerTileBool {
+    type Output = bool;
+
+    fn get(self, lti: u16) -> Self::Output {
+        PerTileBool::get(self, lti)
+    }
+}
+
+impl<'a> LtiSet<bool> for &'a mut PerTileBool {
+    fn set(self, lti: u16, val: bool) {
+        PerTileBool::set(self, lti, val)
     }
 }
 

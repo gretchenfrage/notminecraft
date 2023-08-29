@@ -63,6 +63,7 @@ message_enum!(down DownMessage {
         edit: Edit,
     }
     Ack {
+        // TODO: could just change this to latest processed
         processed_before: u64,
     }
 });

@@ -211,6 +211,7 @@ pub use self::{
         PerTileU4,
         PerTileU2,
         PerTileU1,
+        PerTileBool,
     },
     per_tile_sparse::PerTileSparse,
     per_tile_option::PerTileOption,
