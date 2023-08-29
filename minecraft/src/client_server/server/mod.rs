@@ -27,8 +27,11 @@ use std::{
     },
 };
 use tokio::runtime::Handle;
-use anyhow::{Result, bail};
-use crossbeam_channel::RecvTimeoutError;
+use anyhow::Result;
+use crossbeam_channel::{
+    RecvTimeoutError,
+    TryRecvError,
+};
 use vek::*;
 
 
@@ -49,6 +52,10 @@ pub fn run_server(
     let mut client_loaded_chunks: SparseVec<LoadedChunks> = SparseVec::new();
     // mapping from chunk to connection to clientside ci
     let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
+    // mapping from connection to highest up message number processed
+    let mut client_processed_before: SparseVec<u64> = SparseVec::new();
+    // remains all false except when used
+    let mut client_processed_before_increased: SparseVec<bool> = SparseVec::new();
 
     let chunk_loader = ChunkLoader::new(game);
     request_load_chunks(&chunk_loader);
@@ -82,49 +89,45 @@ pub fn run_server(
             next_tick += TICK * behind_ticks;
         }
 
-        while let Some(event) = match network_events.recv_deadline(next_tick) {
-            Ok(event) => Some(event),
-            Err(RecvTimeoutError::Timeout) => None,
-            Err(RecvTimeoutError::Disconnected) => {
-                bail!("unexpected disconnection of network events channel");
-            },
-        } {
-            match event {
-                NetworkEvent::NewConnection(conn_key, conn) => {
-                    connections.set(conn_key, conn);
-                    on_new_connection(
-                        conn_key,
-                        &chunks,
-                        game,
-                        &connections,
-                        &tile_blocks,
-                        &mut client_loaded_chunks,
-                        &mut chunk_client_cis,
-                    );
-                }
-                NetworkEvent::Disconnected(conn_key) => {
-                    // remove from list of connections
-                    connections.remove(conn_key);
+        while let Ok(event) = network_events
+            .recv_deadline(next_tick)
+            .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
+        {
+            on_network_event(
+                event,
+                &chunks,
+                &game,
+                &mut connections,
+                &mut tile_blocks,
+                &mut client_loaded_chunks,
+                &mut chunk_client_cis,
+                &mut client_processed_before,
+                &mut client_processed_before_increased,
+            );
 
-                    // remove client's clientside ci from all chunks
-                    for (cc, _) in client_loaded_chunks[conn_key].iter() {
-                        let ci = chunks.getter().get(cc).unwrap();
-                        chunk_client_cis.get_mut(cc, ci).remove(conn_key);
-                    }
+            while let Ok(event) = network_events
+                .try_recv()
+                .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
+            {
+                on_network_event(
+                    event,
+                    &chunks,
+                    &game,
+                    &mut connections,
+                    &mut tile_blocks,
+                    &mut client_loaded_chunks,
+                    &mut chunk_client_cis,
+                    &mut client_processed_before,
+                    &mut client_processed_before_increased,
+                );                
+            }
 
-                    // remove client's ci space
-                    client_loaded_chunks.remove(conn_key);
-                }
-                NetworkEvent::Received(conn_key, msg) => {
-                    on_network_message(
-                        conn_key,
-                        msg,
-                        game,
-                        &mut tile_blocks,
-                        &chunk_client_cis,
-                        &connections,
-                        &chunks,
-                    );
+            for (conn_key, conn) in connections.iter() {
+                if client_processed_before_increased[conn_key] {
+                    conn.send(down::Ack {
+                        processed_before: client_processed_before[conn_key],
+                    });
+                    client_processed_before_increased[conn_key] = false;
                 }
             }
         }
@@ -170,15 +173,135 @@ fn do_tick(
     }
 }
 
-fn on_network_message(
-    _conn_key: usize,
+fn on_network_event(
+    event: NetworkEvent,
+    chunks: &LoadedChunks,
+    game: &Arc<GameData>,
+    connections: &mut SparseVec<Connection>,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
+) {
+    match event {
+        NetworkEvent::NewConnection(conn_key, conn) => on_new_connection(
+            conn_key,
+            conn,
+            chunks,
+            game,
+            connections,
+            tile_blocks,
+            client_loaded_chunks,
+            chunk_client_cis,
+            client_processed_before,
+            client_processed_before_increased,
+        ),
+        NetworkEvent::Disconnected(conn_key) => on_disconnected(
+            conn_key,
+            connections,
+            client_loaded_chunks,
+            client_processed_before,
+            client_processed_before_increased,
+            chunks,
+            chunk_client_cis,
+        ),
+        NetworkEvent::Received(conn_key, msg) => on_received(
+            conn_key,
+            msg,
+            game,
+            tile_blocks,
+            chunk_client_cis,
+            connections,
+            chunks,
+            client_processed_before,
+            client_processed_before_increased,
+        ),
+    }
+}
+
+fn on_new_connection(
+    conn_key: usize,
+    conn: Connection,
+    chunks: &LoadedChunks,
+    game: &Arc<GameData>,
+    connections: &mut SparseVec<Connection>,
+    tile_blocks: &PerChunk<ChunkBlocks>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
+) {
+    connections.set(conn_key, conn);
+
+    let mut loaded_chunks = LoadedChunks::new();
+
+    // for each chunk already loaded
+    for (cc, ci) in chunks.iter() {
+        // add it to the client's loaded chunks set
+        let client_ci = loaded_chunks.add(cc);
+
+        // backlink it in the chunk's chunk_client_cis entry
+        chunk_client_cis.get_mut(cc, ci).set(conn_key, client_ci);
+        
+        // send the chunk to the client
+        send_load_chunk_message(
+            cc,
+            client_ci,
+            tile_blocks.get(cc, ci),
+            game,
+            &connections[conn_key],
+        );
+    }
+
+    // insert the client's new loaded_chunks set into the server's data structures
+    client_loaded_chunks.set(conn_key, loaded_chunks);
+
+    // insert other things into the server's data structures
+    client_processed_before.set(conn_key, 0);
+    client_processed_before_increased.set(conn_key, false);
+}
+
+fn on_disconnected(
+    conn_key: usize,
+    connections: &mut SparseVec<Connection>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
+    chunks: &LoadedChunks,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+) {
+    // remove from list of connections
+    connections.remove(conn_key);
+
+    // remove client's clientside ci from all chunks
+    for (cc, _) in client_loaded_chunks[conn_key].iter() {
+        let ci = chunks.getter().get(cc).unwrap();
+        chunk_client_cis.get_mut(cc, ci).remove(conn_key);
+    }
+
+    // remove client's ci space
+    client_loaded_chunks.remove(conn_key);
+
+    // remove from other data structures
+    client_processed_before.remove(conn_key);
+    client_processed_before_increased.remove(conn_key);
+}
+
+fn on_received(
+    conn_key: usize,
     msg: UpMessage,
     game: &Arc<GameData>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     chunk_client_cis: &PerChunk<SparseVec<usize>>,
     connections: &SparseVec<Connection>,
     chunks: &LoadedChunks,
+    client_processed_before: &mut SparseVec<u64>,
+    client_processed_before_increased: &mut SparseVec<bool>,
 ) {
+    client_processed_before[conn_key] += 1;
+    client_processed_before_increased[conn_key] = true;
+
     match msg {
         UpMessage::SetTileBlock(up::SetTileBlock {
             gtc,
@@ -214,39 +337,6 @@ fn on_network_message(
             }
         }
     }
-}
-
-fn on_new_connection(
-    conn_key: usize,
-    chunks: &LoadedChunks,
-    game: &Arc<GameData>,
-    connections: &SparseVec<Connection>,
-    tile_blocks: &PerChunk<ChunkBlocks>,
-    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
-    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-) {
-    let mut loaded_chunks = LoadedChunks::new();
-
-    // for each chunk already loaded
-    for (cc, ci) in chunks.iter() {
-        // add it to the client's loaded chunks set
-        let client_ci = loaded_chunks.add(cc);
-
-        // backlink it in the chunk's chunk_client_cis entry
-        chunk_client_cis.get_mut(cc, ci).set(conn_key, client_ci);
-        
-        // send the chunk to the client
-        send_load_chunk_message(
-            cc,
-            client_ci,
-            tile_blocks.get(cc, ci),
-            game,
-            &connections[conn_key],
-        );
-    }
-
-    // insert the client's new loaded_chunks set into the server's data structures
-    client_loaded_chunks.set(conn_key, loaded_chunks);
 }
 
 fn send_load_chunk_message(

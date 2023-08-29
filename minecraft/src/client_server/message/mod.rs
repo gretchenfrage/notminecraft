@@ -62,4 +62,7 @@ message_enum!(down DownMessage {
         ci: usize,
         edit: Edit,
     }
+    Ack {
+        processed_before: u64,
+    }
 });

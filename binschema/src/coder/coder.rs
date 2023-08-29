@@ -45,11 +45,7 @@ macro_rules! dbg_log {
                 let _ = write!(dbg_log.write, "  ")
                     .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
             }
-            let _ = write!(dbg_log.write, "<")
-                    .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            let _ = write!(dbg_log.write, $($t)*)
-                .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            let _ = writeln!(dbg_log.write, "/>")
+            let _ = writeln!(dbg_log.write, $($t)*)
                 .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
         }
     };
@@ -62,11 +58,9 @@ macro_rules! dbg_log_push {
                 let _ = write!(dbg_log.write, "  ")
                     .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
             }
-            let _ = write!(dbg_log.write, "<")
-                    .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
             let _ = write!(dbg_log.write, $($t)*)
                 .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            let _ = writeln!(dbg_log.write, ">")
+            let _ = writeln!(dbg_log.write, " {{")
                 .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
             dbg_log.indent += 1;
         }
@@ -76,17 +70,15 @@ macro_rules! dbg_log_push {
 macro_rules! dbg_log_pop {
     ($self:ident, $($t:tt)*)=>{
         if let Some(ref mut dbg_log) = $self.dbg_log {
+            dbg_log.indent -= 1;
             for _ in 0..dbg_log.indent {
                 let _ = write!(dbg_log.write, "  ")
                     .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
             }
-            let _ = write!(dbg_log.write, "</")
-                    .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            let _ = write!(dbg_log.write, $($t)*)
+            let _ = writeln!(dbg_log.write, "}}")
                 .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            let _ = writeln!(dbg_log.write, ">")
-                .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
-            dbg_log.indent -= 1;
+            //let _ = writeln!(dbg_log.write, $($t)*)
+            //    .map_err(|e| eprintln!("IO error in coder dbg log: {}", e));
         }
     };
 }

@@ -146,7 +146,6 @@ impl Client {
                         }
                     }
                 }
-
             }
             DownMessage::ApplyEdit(down::ApplyEdit {
                 ci,
@@ -163,6 +162,12 @@ impl Client {
                     &mut self.tile_blocks,
                     &mut self.block_updates,
                 );
+            }
+            DownMessage::Ack(down::Ack {
+                processed_before,
+            }) => {
+                debug!(%processed_before, "ack received");
+                let _ = processed_before;
             }
         }
         Ok(())

@@ -196,7 +196,9 @@ async fn try_do_send_half(
     game: Arc<GameData>,
 ) -> Result<()> {
     let schema = UpMessage::schema(&game);
+    info!("UpMessage schema:\n{}", schema.pretty_fmt());
     let mut coder_state_alloc = CoderStateAlloc::new();
+    //let mut dbg_buf = Vec::new();
 
     while let Some(msg) = recv_up.recv().await {
         // encode message
@@ -205,11 +207,21 @@ async fn try_do_send_half(
         msg.encode(&mut Encoder::new(&mut coder_state, &mut buf), &game)?;
         coder_state.is_finished_or_err()?;
 
+        // reset coder state
+        coder_state_alloc = coder_state.into_alloc();
+
+        if buf.len() < 16 {
+            //debug!("sending up {} bytes:\n{}", buf.len(), str::from_utf8(&dbg_buf).unwrap());
+            trace!("sending up {} bytes:\n{:?}", buf.len(), msg);
+        } else {
+            trace!("sending up {} bytes", buf.len());
+        }
+
+        //dbg_buf.clear();
+
         // send message
         ws_send.send(WsMessage::Binary(buf)).await?;
 
-        // reset
-        coder_state_alloc = coder_state.into_alloc();
     }
 
     Ok(())
