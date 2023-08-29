@@ -127,14 +127,14 @@ impl Client {
                     self.block_updates.enqueue(gtc, &getter);
                 }
 
-                for fec in FACES_EDGES_CORNERS {
-                    let ranges: Vec3<Range<i64>> = fec
+                for face in FACES {
+                    let ranges: Vec3<Range<i64>> = face
                         .to_signs()
                         .zip(CHUNK_EXTENT)
                         .map(|(sign, extent)| match sign {
-                            Sign::Neg => 0..1,
+                            Sign::Neg => -1..0,
                             Sign::Zero => 0..extent,
-                            Sign::Pos => extent - 1..extent,
+                            Sign::Pos => extent..extent + 1,
                         });
 
                     for x in ranges.x {
