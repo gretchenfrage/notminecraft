@@ -70,8 +70,8 @@ pub struct Connection {
 
 impl Connection {
     /// Queues message to be transmitted to client and returns immediately.
-    pub fn send(&self, msg: DownMessage) {
-        let _ = self.send.send(msg);
+    pub fn send(&self, msg: impl Into<DownMessage>) {
+        let _ = self.send.send(msg.into());
     }
 }
 

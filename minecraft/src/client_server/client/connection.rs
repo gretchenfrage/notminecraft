@@ -107,8 +107,8 @@ impl Connection {
     }
 
     /// Asynchronously queue a message for sending, return immediately.
-    pub fn send(&self, msg: UpMessage) {
-        let _ = self.send_up.send(msg);
+    pub fn send(&self, msg: impl Into<UpMessage>) {
+        let _ = self.send_up.send(msg.into());
     }
 
     /// Check for an asynchronously received message or error without blocking,

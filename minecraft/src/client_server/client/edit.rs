@@ -1,73 +1,36 @@
 
-use crate::{
-    block_update_queue::BlockUpdateQueue,
-    game_binschema::GameBinschema,
-};
+use crate::client_server::message::{Edit, edit};
+use crate::block_update_queue::BlockUpdateQueue;
 use chunk_data::*;
 use vek::*;
 
 
-macro_rules! edit_enum {
-    ($(
-        $variant:ident($struct:ident),
-    )*)=>{
-        #[derive(Debug, GameBinschema)]
-        pub enum Edit {$(
-            $variant($struct),
-        )*}
-
-        impl Edit {
-            pub fn apply(self, ctx: EditCtx) -> Edit {
-                match self {$(
-                    Edit::$variant(inner) => inner.apply(ctx)
-                )*}
+pub fn apply_edit(
+    edit: Edit,
+    cc: Vec3<i64>,
+    ci: usize,
+    getter: &Getter,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    block_updates: &mut BlockUpdateQueue,
+) -> Edit {
+    match edit {
+        Edit::SetTileBlock(edit::SetTileBlock {
+            lti,
+            bid,
+        }) => {
+            let (old_bid, old_meta) = tile_blocks
+                .get(cc, ci)
+                .replace(lti, BlockId::new(bid), ());
+            old_meta.cast::<()>();
+            let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
+            block_updates.enqueue(gtc, getter);
+            for face in FACES {
+                block_updates.enqueue(gtc + face.to_vec(), getter);
             }
+            edit::SetTileBlock {
+                lti: lti,
+                bid: old_bid,
+            }.into()
         }
-
-        $(
-            impl From<$struct> for Edit {
-                fn from(inner: $struct) -> Self {
-                    Edit::$variant(inner)
-                }
-            }
-        )*
-    };
-}
-
-edit_enum!(
-    SetTileBlock(EditSetTileBlock),
-);
-
-
-pub struct EditCtx<'a> {
-    pub cc: Vec3<i64>,
-    pub ci: usize,
-    pub getter: Getter<'a>,
-    pub tile_blocks: &'a mut PerChunk<ChunkBlocks>,
-    pub block_updates: &'a mut BlockUpdateQueue,
-}
-
-
-#[derive(Debug, GameBinschema)]
-pub struct EditSetTileBlock {
-    pub lti: u16,
-    pub bid: RawBlockId,
-}
-
-impl EditSetTileBlock {
-    pub fn apply(self, ctx: EditCtx) -> Edit {
-        let (old_bid, old_meta) = ctx.tile_blocks
-            .get(ctx.cc, ctx.ci)
-            .replace(self.lti, BlockId::new(self.bid), ());
-        old_meta.cast::<()>();
-        let gtc = cc_ltc_to_gtc(ctx.cc, lti_to_ltc(self.lti));
-        ctx.block_updates.enqueue(gtc, &ctx.getter);
-        for face in FACES {
-            ctx.block_updates.enqueue(gtc + face.to_vec(), &ctx.getter);
-        }
-        EditSetTileBlock {
-            lti: self.lti,
-            bid: old_bid,
-        }.into()
     }
 }

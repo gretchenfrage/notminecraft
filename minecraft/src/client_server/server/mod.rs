@@ -13,7 +13,6 @@ use self::{
 };
 use super::{
     message::*,
-    client::edit::*,
 };
 use crate::{
     game_data::GameData,
@@ -181,7 +180,7 @@ fn on_network_message(
     chunks: &LoadedChunks,
 ) {
     match msg {
-        UpMessage::SetTileBlock(UpMessageSetTileBlock {
+        UpMessage::SetTileBlock(up::SetTileBlock {
             gtc,
             bid,
         }) => {
@@ -205,13 +204,13 @@ fn on_network_message(
 
             // send update to all clients with that chunk loaded
             for (conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
-                connections[conn_key].send(DownMessage::ApplyEdit(DownMessageApplyEdit {
+                connections[conn_key].send(down::ApplyEdit {
                     ci: client_ci,
-                    edit: EditSetTileBlock {
+                    edit: edit::SetTileBlock {
                         lti: tile.lti,
                         bid,
                     }.into(),
-                }));
+                });
             }
         }
     }
@@ -262,11 +261,11 @@ fn send_load_chunk_message(
         chunk_tile_blocks.raw_meta::<()>(lti);
         chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
     }
-    connection.send(DownMessage::LoadChunk(DownMessageLoadChunk {
+    connection.send(down::LoadChunk {
         cc,
         ci,
         chunk_tile_blocks: chunk_tile_blocks_clone,
-    }));
+    });
 }
 
 fn request_load_chunks(chunk_loader: &ChunkLoader) {

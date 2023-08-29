@@ -7,7 +7,7 @@ mod prediction;
 use self::{
     connection::Connection,
     tile_meshing::mesh_tile,
-    edit::EditCtx,
+    edit::apply_edit,
     prediction::PredictionManager,
 };
 use super::message::*;
@@ -104,7 +104,7 @@ impl Client {
 
     fn on_network_message(&mut self, msg: DownMessage) -> Result<()> {
         match msg {
-            DownMessage::LoadChunk(DownMessageLoadChunk {
+            DownMessage::LoadChunk(down::LoadChunk {
                 cc,
                 ci,
                 chunk_tile_blocks,
@@ -148,40 +148,21 @@ impl Client {
                 }
 
             }
-            /*
-            DownMessage::SetTileBlock(DownMessageSetTileBlock {
-                ci,
-                lti,
-                bid
-            }) => {
-                // modify local world
-                self.tile_blocks.get_mut_checkless(ci).raw_set(lti, bid, ());
-
-                // enqueue block updates
-                let cc = self.ci_reverse_lookup[ci];
-                let getter = self.chunks.getter_pre_cached(cc, ci);
-                let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
-
-                self.block_updates.enqueue(gtc, &getter);
-                for face in FACES {
-                    self.block_updates.enqueue(gtc + face.to_vec(), &getter);
-                }
-
-            }*/
-            DownMessage::ApplyEdit(DownMessageApplyEdit {
+            DownMessage::ApplyEdit(down::ApplyEdit {
                 ci,
                 edit,
             }) => {
                 let cc = self.ci_reverse_lookup[ci];
                 let getter = self.chunks.getter_pre_cached(cc, ci);
 
-                edit.apply(EditCtx {
+                apply_edit(
+                    edit,
                     cc,
                     ci,
-                    getter,
-                    tile_blocks: &mut self.tile_blocks,
-                    block_updates: &mut self.block_updates,
-                });
+                    &getter,
+                    &mut self.tile_blocks,
+                    &mut self.block_updates,
+                );
             }
         }
         Ok(())
@@ -287,10 +268,10 @@ impl GuiStateFrame for Client {
         ) {
             match button {
                 MouseButton::Left => {
-                    self.connection.send(UpMessage::SetTileBlock(UpMessageSetTileBlock {
+                    self.connection.send(up::SetTileBlock {
                         gtc: looking_at.tile.gtc(),
                         bid: AIR.bid,
-                    }));
+                    });
                 }
                 _ => (),
             }
