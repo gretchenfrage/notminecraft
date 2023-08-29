@@ -1,21 +1,12 @@
 //! Data types for representing a schema, and the macro for constructing them
 //! with syntactic sugar.
 
-use crate::serde_to_writer;
-use serde::{
-    Serialize,
-    Deserialize,
-};
-use sha2::{
-    Digest,
-    Sha256,
-};
 use std::fmt::Write;
 
 
 /// Description of how raw binary data encodes less tedious structures of
 /// semantic primitives.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Schema {
     /// Some scalar data type.
     Scalar(ScalarType),
@@ -262,15 +253,9 @@ impl Schema {
         self.inner_pretty_fmt(&mut lines, 0, None);
         lines.join("\n")
     }
-    
-    pub fn sha256(&self) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        serde_to_writer(self, &mut hasher).unwrap();
-        hasher.finalize().into()
-    }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ScalarType {
     /// Encoded as-is.
     U8,
@@ -323,14 +308,14 @@ impl ScalarType {
 }
 
 /// Value in `Schema::Seq`.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SeqSchema {
     pub len: Option<usize>,
     pub inner: Box<Schema>,
 }
 
 /// Item in `Schema::Struct`.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct StructSchemaField {
     pub name: String,
     pub inner: Schema,
@@ -346,7 +331,7 @@ impl<S: Into<String>> From<(S, Schema)> for StructSchemaField {
 }
 
 /// Item in `Schema::Enum`. 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct EnumSchemaVariant {
     pub name: String,
     pub inner: Schema,

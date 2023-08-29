@@ -47,13 +47,11 @@ pub mod error;
 pub mod value;
 
 mod schema;
-mod known_schema;
 mod do_if_err;
 mod var_len;
 mod coder;
 mod encoder;
 mod decoder;
-mod serde;
 
 pub use crate::{
     coder::{
@@ -62,10 +60,6 @@ pub use crate::{
     },
     encoder::Encoder,
     decoder::Decoder,
-    known_schema::{
-        KnownSchema,
-        RecurseStack,
-    },
     schema::{
         Schema,
         ScalarType,
@@ -74,50 +68,3 @@ pub use crate::{
         EnumSchemaVariant,
     },
 };
-pub use binschema_derive::KnownSchema;
-
-
-use crate::error::Result;
-use std::io::{Write, Read};
-use ::serde::{Serialize, Deserialize};
-
-
-pub fn serde_to_writer<T, W>(val: &T, write: &mut W) -> Result<()>
-where
-    T: KnownSchema + Serialize,
-    W: Write,
-{
-    let schema = T::schema(Default::default());
-    let coder_alloc = CoderStateAlloc::new();
-    let mut coder = CoderState::new(&schema, coder_alloc, None);
-    let mut encoder = Encoder::new(&mut coder, write);
-    val.serialize(&mut encoder)
-}
-
-pub fn serde_to_vec<T>(val: &T) -> Result<Vec<u8>>
-where
-    T: KnownSchema + Serialize,
-{
-    let mut vec = Vec::new();
-    serde_to_writer(val, &mut vec)?;
-    Ok(vec)
-}
-
-pub fn serde_from_reader<T, R>(read: &mut R) -> Result<T>
-where
-    T: KnownSchema + for<'d> Deserialize<'d>,
-    R: Read,
-{
-    let schema = T::schema(Default::default());
-    let coder_alloc = CoderStateAlloc::new();
-    let mut coder = CoderState::new(&schema, coder_alloc, None);
-    let mut decoder = Decoder::new(&mut coder, read);
-    T::deserialize(&mut decoder)
-}
-
-pub fn serde_from_slice<T>(mut slice: &[u8]) -> Result<T>
-where
-    T: KnownSchema + for<'d> Deserialize<'d>,
-{
-    serde_from_reader(&mut slice)
-}

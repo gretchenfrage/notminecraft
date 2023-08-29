@@ -306,20 +306,6 @@ dependencies = [
 [[package]]
 name = "binschema"
 version = "0.1.0"
-dependencies = [
- "binschema_derive",
- "serde",
- "sha2",
-]
-
-[[package]]
-name = "binschema_derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "bit-set"
@@ -1781,7 +1767,6 @@ dependencies = [
  "reqwest",
  "rocksdb",
  "rodio",
- "serde",
  "slab",
  "spin",
  "std-semaphore",

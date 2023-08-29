@@ -2,13 +2,3 @@
 name = "binschema"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-sha2 = "0.10"
-
-[dependencies.serde]
-version = "1"
-features = ["derive"]
-
-[dependencies.binschema_derive]
-path = "../binschema_derive"
