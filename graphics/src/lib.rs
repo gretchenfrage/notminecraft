@@ -288,7 +288,7 @@ impl Renderer {
             format: SWAPCHAIN_FORMAT,
             width: size.w,
             height: size.h,
-            present_mode: PresentMode::AutoVsync,
+            present_mode: PresentMode::AutoNoVsync,
             alpha_mode: CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
