@@ -116,6 +116,7 @@ impl GpuImageArrayManager {
                     dimension: TextureDimension::D2,
                     format: TextureFormat::Rgba8Unorm,
                     usage: TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
                 },
                 &image_data,
             );

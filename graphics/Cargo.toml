@@ -24,7 +24,7 @@ version = "1"
 features = ["backtrace"]
 
 [dependencies.wgpu]
-version = "0.14"
+version = "0.17"
 features = ["spirv"]
 
 [dependencies.shaderc]

@@ -137,6 +137,7 @@ fn create_depth_texture_like(
             dimension: TextureDimension::D2,
             format,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
         })
 }
 
@@ -149,10 +150,10 @@ impl Renderer {
         trace!("creating instance");
         let size = window.inner_size();
         let size = Extent2::new(size.width, size.height);
-        let instance = Instance::new(Backends::PRIMARY);
+        let instance = Instance::new(InstanceDescriptor::default());
         trace!("creating surface");
         // safety: surface must be dropped before window
-        let surface = unsafe { instance.create_surface(&*window) };
+        let surface = unsafe { instance.create_surface(&*window) }?;
 
         trace!("creating adapter");
         let adapter = instance
@@ -289,6 +290,7 @@ impl Renderer {
             height: size.h,
             present_mode: PresentMode::AutoVsync,
             alpha_mode: CompositeAlphaMode::Auto,
+            view_formats: vec![],
         };
         surface.configure(&device, &config);
 

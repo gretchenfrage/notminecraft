@@ -539,7 +539,7 @@ impl<'a> PreRenderer<'a> {
                 );
             match result {
                 // TODO wtf??
-                core::result::Result::Ok(gb::BrushAction::Draw(mut quads)) => {
+                Result::Ok(gb::BrushAction::Draw(mut quads)) => {
                     // successfully produced a list of text quads to draw
                     // so update the text vertex buffer accordingly
 
@@ -641,8 +641,7 @@ impl<'a> PreRenderer<'a> {
                     // break the loop
                     break;
                 },
-                // TODO wtf??
-                core::result::Result::Ok(gb::BrushAction::ReDraw) => break, // reuse existing vertex buffer
+                Result::Ok(gb::BrushAction::ReDraw) => break, // reuse existing vertex buffer
                 Err(gb::BrushError::TextureTooSmall {
                     suggested: (w, h),
                 }) => {
@@ -803,6 +802,7 @@ fn finish_glyph_cache_creation(
             dimension: TextureDimension::D2,
             format: TextureFormat::R8Unorm,
             usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
         });
     let glyph_cache_texture_view = glyph_cache_texture
         .create_view(&TextureViewDescriptor {
