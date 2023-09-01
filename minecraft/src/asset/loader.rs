@@ -177,7 +177,7 @@ impl<'a> AssetLoader<'a> {
     }
 
     pub fn load_mesh_data(&self, mesh_data: &MeshData) -> Mesh {
-        mesh_data.upload(&*self.renderer.borrow())
+        mesh_data.upload(&**self.renderer.borrow())
     }
 }
 

@@ -26,10 +26,7 @@ use crate::{
 };
 use chunk_data::*;
 use mesh_data::MeshData;
-use graphics::{
-    frame_content::*,
-    view_proj::ViewProj,
-};
+use graphics::frame_content::*;
 use std::{
     sync::Arc,
     ops::Range,
@@ -319,17 +316,16 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
 
         // begin 3D perspective
         let mut canvas = canvas.reborrow()
-            .scale(size)
-            .begin_3d(ViewProj::perspective(
+            .begin_3d_perspective(
+                //size
+                size,
                 // position
                 inner.pos,
-                // rotation
+                // direction
                 Quaternion::rotation_x(inner.pitch) * Quaternion::rotation_y(inner.yaw),
                 // field of view
                 f32::to_radians(120.0),
-                // aspect ratio
-                size.w / size.h,
-            ));
+            );
 
         // chunk tile meshes
         for (cc, ci) in inner.chunks.iter() {
@@ -340,5 +336,23 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     &ctx.assets().blocks,
                 );
         }
+
+        /*
+        // uhhhh debug XYZ
+        let dir = Quaternion::rotation_y(-inner.yaw)
+                * Quaternion::rotation_x(-inner.pitch)
+                * Vec3::new(0.0, 0.0, 1.0);
+        let pos = inner.pos + dir * 4.5;
+
+        canvas.reborrow()
+            .color(Rgba::red())
+            .draw_line(pos, pos + Vec3::new(1.0, 0.0, 0.0));
+        canvas.reborrow()
+            .color(Rgba::green())
+            .draw_line(pos, pos + Vec3::new(0.0, 1.0, 0.0));
+        canvas.reborrow()
+            .color(Rgba::blue())
+            .draw_line(pos, pos + Vec3::new(0.0, 0.0, 1.0));
+        */
     }
 }

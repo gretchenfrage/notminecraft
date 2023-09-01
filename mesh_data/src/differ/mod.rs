@@ -216,7 +216,7 @@ impl MeshDiffer {
         }
 
         for submesh_triangle in submesh.triangles() {
-            let mesh_triangle = [0, 1, 2]
+            let mesh_triangle = [2, 1, 0]
                 .map(|rem| {
                     let submesh_index = submesh_triangle[rem];
                     let vertices_writes_queue_index =

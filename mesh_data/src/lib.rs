@@ -9,7 +9,6 @@ mod differ;
 
 
 use graphics::{
-    Renderer,
     GpuVecContext,
     frame_content::{
         Vertex,
@@ -77,10 +76,10 @@ impl MeshData {
         self.extend(quad.to_vertices(), QUAD_INDICES);
     }
 
-    pub fn upload(&self, renderer: &Renderer) -> Mesh {
+    pub fn upload<G: GpuVecContext>(&self, ctx: &G) -> Mesh {
         Mesh {
-            vertices: renderer.create_gpu_vec_init(&self.vertices),
-            indices: renderer.create_gpu_vec_init(&self.indices),
+            vertices: ctx.create_gpu_vec_init(&self.vertices),
+            indices: ctx.create_gpu_vec_init(&self.indices),
         }
     }
 

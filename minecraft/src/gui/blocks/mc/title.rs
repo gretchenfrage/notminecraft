@@ -71,7 +71,7 @@ impl GuiTitleBlock {
                 tex_index: 0,
             });
         }
-        let pixel_mesh = pixle_mesh.upload(&renderer);
+        let pixel_mesh = pixle_mesh.upload(renderer);
 
         let mut pixels = Vec::new();
         let image = image::load_from_memory(include_bytes!("title.png"))

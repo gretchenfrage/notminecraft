@@ -185,8 +185,8 @@ impl MeshPipeline {
                 }),
                 primitive: PrimitiveState {
                     front_face: FrontFace::Cw,
-                    //cull_mode: Some(Face::Back),
-                    cull_mode: None, // TODO: lol I don't understand handedness
+                    cull_mode: Some(Face::Back),
+                    //cull_mode: None, // TODO: lol I don't understand handedness
                     ..Default::default()
                 },
                 depth_stencil: Some(DepthStencilState {
