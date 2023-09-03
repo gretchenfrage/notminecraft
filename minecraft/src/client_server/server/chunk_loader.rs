@@ -1,5 +1,9 @@
 
 use crate::game_data::GameData;
+use super::save_file::{
+    SaveFile,
+    read_key,
+};
 use chunk_data::{
     CHUNK_EXTENT,
     ChunkBlocks,
@@ -53,7 +57,7 @@ enum TaskResult {
 
 
 impl ChunkLoader {
-    pub fn new(game: &Arc<GameData>) -> Self {
+    pub fn new(save: &SaveFile, game: &Arc<GameData>) -> Self {
         let (send_task, recv_task) = crossbeam_channel::unbounded();
         let (
             send_task_result,
@@ -65,11 +69,13 @@ impl ChunkLoader {
         for _ in 0..num_threads {
             let recv_task = Receiver::clone(&recv_task);
             let send_task_result = Sender::clone(&send_task_result);
+            let save = SaveFile::clone(save);
             let game = Arc::clone(&game);
 
             thread::spawn(move || worker_thread_body(
                 recv_task,
                 send_task_result,
+                save,
                 game,
             ));
         }
@@ -108,6 +114,7 @@ impl ChunkLoader {
 fn worker_thread_body(
     recv_task: Receiver<Task>,
     send_task_result: Sender<TaskResult>,
+    mut save: SaveFile,
     game: Arc<GameData>,
 ) {
     let loop_result =
@@ -115,6 +122,7 @@ fn worker_thread_body(
             while let Ok(task) = recv_task.recv() {
                 let task_result = do_task(
                     task,
+                    &mut save,
                     &game,
                 );
                 let send_result = send_task_result.send(task_result);
@@ -151,6 +159,7 @@ fn worker_thread_body(
 
 fn do_task(
     task: Task,
+    save: &mut SaveFile,
     game: &GameData,
 ) -> TaskResult {
     match task {
@@ -158,6 +167,7 @@ fn do_task(
             cc
         } => TaskResult::ChunkReady(get_chunk_ready(
             cc,
+            save,
             game,
         )),
     }
@@ -165,26 +175,36 @@ fn do_task(
 
 fn get_chunk_ready(
     cc: Vec3<i64>,
+    save: &mut SaveFile,
     game: &GameData,
 ) -> ReadyChunk {
-    let mut seed = [0; 32];
-    {
-        let mut target = &mut seed[..];
-        for n in [cc.x, cc.y, cc.z] {
-            for b in n.to_le_bytes() {
-                target[0] = b;
-                target = &mut target[1..];
+    // TODO: figure out a better way to handle IO errors at this point than
+    //       just panicking
+    if let Some(chunk_tile_blocks) = save.read(read_key::Chunk(cc)).unwrap() {
+        ReadyChunk {
+            cc,
+            chunk_tile_blocks,
+        }
+    } else {
+        let mut seed = [0; 32];
+        {
+            let mut target = &mut seed[..];
+            for n in [cc.x, cc.y, cc.z] {
+                for b in n.to_le_bytes() {
+                    target[0] = b;
+                    target = &mut target[1..];
+                }
             }
         }
-    }
 
-    let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
+        let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
 
-    generate_chunk_blocks(cc, &mut chunk_tile_blocks, game);
+        generate_chunk_blocks(cc, &mut chunk_tile_blocks, game);
 
-    ReadyChunk {
-        cc,
-        chunk_tile_blocks,
+        ReadyChunk {
+            cc,
+            chunk_tile_blocks,
+        }
     }
 }
 

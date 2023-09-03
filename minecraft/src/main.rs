@@ -152,6 +152,7 @@ fn main() {
     let rt = Runtime::new().unwrap();
     let game = GameData::new();
     let game = Arc::new(game);
+    let data_dir = DataDir::new();
 
     // maybe run headless
     let args = args().collect::<Vec<_>>();
@@ -160,7 +161,7 @@ fn main() {
         &[_] => (),
         &[_, "--server"] => {
             info!("running server");
-            let result = client_server::server::run_server(rt.handle(), &game);
+            let result = client_server::server::run_server(rt.handle(), &data_dir, &game);
             match result {
                 Ok(()) => {
                     info!("server shutting down");
@@ -182,15 +183,8 @@ fn main() {
     };
 
     // download assets, maybe
-    let base = DataDir::new();
-
-    if let Err(e) = client_server::server::save_file::SaveFile::open("potato69", &base, &game) {
-        error!("{}", e);
-        return;
-    }
-
     let _ = rt
-        .block_on(asset_download_prompt(&base))
+        .block_on(asset_download_prompt(&data_dir))
         .map_err(|e| error!(%e, "unable to acquire assets"));
 
     // initialize rest of game runtime, including actually loading assets
@@ -198,7 +192,7 @@ fn main() {
 
     let assets = rt
         .block_on(async {
-            let mut loader = AssetLoader::new(&base, &mut event_loop.renderer);
+            let mut loader = AssetLoader::new(&data_dir, &mut event_loop.renderer);
             Assets::load(&mut loader).await
         });
 
@@ -207,7 +201,7 @@ fn main() {
         let rt_handle = Handle::clone(&rt.handle());
         let game_2 = Arc::clone(&game);
         std::thread::spawn(move || {
-            let result = client_server::server::run_server(&rt_handle, &game_2);
+            let result = client_server::server::run_server(&rt_handle, &data_dir, &game_2);
             match result {
                 Ok(()) => info!("server shutting down"),
                 Err(e) => error!(%e, "server shutting down"),

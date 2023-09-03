@@ -10,6 +10,10 @@ use self::{
         NetworkEvent,
         spawn_network_stuff,
     },
+    save_file::{
+        SaveFile,
+        WriteEntry,
+    },
     chunk_loader::ChunkLoader,
 };
 use super::{
@@ -20,6 +24,7 @@ use crate::{
     util::sparse_vec::SparseVec,
 };
 use chunk_data::*;
+use get_assets::DataDir;
 use std::{
     sync::Arc,
     time::{
@@ -43,6 +48,7 @@ pub const TICK: Duration = Duration::from_millis(50);
 /// Body of the server thread.
 pub fn run_server(
     rt: &Handle,
+    data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
     info!("initializing server data structures");
@@ -59,10 +65,15 @@ pub fn run_server(
     // remains all false except when used
     let mut client_last_processed_increased: SparseVec<bool> = SparseVec::new();
 
-    let chunk_loader = ChunkLoader::new(game);
+    let mut save = SaveFile::open("server", data_dir, game)?;
+    let mut chunk_unsaved: PerChunk<bool> = PerChunk::new();
+    let mut last_tick_saved = 0;
+
+    let chunk_loader = ChunkLoader::new(&save, game);
     request_load_chunks(&chunk_loader);
 
     info!("beginning server tick loop");
+    let mut tick = 0;
     let mut next_tick = Instant::now();
     let network_events = spawn_network_stuff("127.0.0.1:35565", rt, game);
     loop {
@@ -75,9 +86,20 @@ pub fn run_server(
             game,
             &mut client_loaded_chunks,
             &mut chunk_client_cis,
+            &mut chunk_unsaved,
         );
 
-        update_time_stuff_after_doing_tick(&mut next_tick);
+        update_time_stuff_after_doing_tick(&mut tick, &mut next_tick);
+
+        maybe_save(
+            tick,
+            &mut last_tick_saved,
+            &chunks,
+            &tile_blocks,
+            &mut chunk_unsaved,
+            &mut save,
+            game,
+        );
 
         process_network_events_until_next_tick(
             next_tick,
@@ -90,6 +112,7 @@ pub fn run_server(
             &mut chunk_client_cis,
             &mut client_last_processed,
             &mut client_last_processed_increased,
+            &mut chunk_unsaved,
         );
     }
 }
@@ -102,6 +125,7 @@ fn do_tick(
     game: &Arc<GameData>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    chunk_unsaved: &mut PerChunk<bool>,
 ) {
     while let Some(chunk) = chunk_loader.poll_ready() {
         // oh boy, chunk ready to load
@@ -130,10 +154,14 @@ fn do_tick(
         // insert into server data structures
         tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
         chunk_client_cis.add(chunk.cc, ci, client_cis);
+
+        chunk_unsaved.add(chunk.cc, ci, true);
     }
 }
 
-fn update_time_stuff_after_doing_tick(next_tick: &mut Instant) {
+fn update_time_stuff_after_doing_tick(tick: &mut u64, next_tick: &mut Instant) {
+    *tick += 1;
+
     *next_tick += TICK;
     let now = Instant::now();
     if *next_tick < now {
@@ -149,6 +177,40 @@ fn update_time_stuff_after_doing_tick(next_tick: &mut Instant) {
     }
 }
 
+fn maybe_save(
+    tick: u64,
+    last_tick_saved: &mut u64,
+    chunks: &LoadedChunks,
+    tile_blocks: &PerChunk<ChunkBlocks>,
+    chunk_unsaved: &mut PerChunk<bool>,
+    save: &mut SaveFile,
+    game: &Arc<GameData>,
+) {
+    const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
+
+    if tick - *last_tick_saved < TICKS_BETWEEN_SAVES {
+        return;
+    }
+
+    debug!("saving");
+    
+    *last_tick_saved = tick;
+
+    save.write(chunks.iter()
+        .filter_map(|(cc, ci)| {
+            if *chunk_unsaved.get(cc, ci) {
+                *chunk_unsaved.get_mut(cc, ci) = false;
+                Some(WriteEntry::Chunk(
+                    cc,
+                    clone_chunk_tile_blocks(tile_blocks.get(cc, ci), game),
+                ))
+            } else {
+                None
+            }
+        }))
+        .unwrap(); // TODO: don't panic
+}
+
 fn process_network_events_until_next_tick(
     next_tick: Instant,
     network_events: &Receiver<NetworkEvent>,
@@ -160,6 +222,7 @@ fn process_network_events_until_next_tick(
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
     client_last_processed: &mut SparseVec<u64>,
     client_last_processed_increased: &mut SparseVec<bool>,
+    chunk_unsaved: &mut PerChunk<bool>,
 ) {
     while let Ok(event) = network_events
         .recv_deadline(next_tick)
@@ -175,6 +238,7 @@ fn process_network_events_until_next_tick(
             chunk_client_cis,
             client_last_processed,
             client_last_processed_increased,
+            chunk_unsaved,
         );
 
         while let Ok(event) = network_events
@@ -191,6 +255,7 @@ fn process_network_events_until_next_tick(
                 chunk_client_cis,
                 client_last_processed,
                 client_last_processed_increased,
+                chunk_unsaved,
             );                
         }
 
@@ -212,6 +277,7 @@ fn on_network_event(
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
     client_last_processed: &mut SparseVec<u64>,
     client_last_processed_increased: &mut SparseVec<bool>,
+    chunk_unsaved: &mut PerChunk<bool>,
 ) {
     match event {
         NetworkEvent::NewConnection(conn_key, conn) => on_new_connection(
@@ -244,6 +310,7 @@ fn on_network_event(
             chunks,
             client_last_processed,
             client_last_processed_increased,
+            chunk_unsaved,
         ),
     }
 }
@@ -327,6 +394,7 @@ fn on_received(
     chunks: &LoadedChunks,
     client_last_processed: &mut SparseVec<u64>,
     client_last_processed_increased: &mut SparseVec<bool>,
+    chunk_unsaved: &mut PerChunk<bool>,
 ) {
     client_last_processed[conn_key] += 1;
     client_last_processed_increased[conn_key] = true;
@@ -365,6 +433,7 @@ fn on_received(
                     }.into(),
                 });
                 client_last_processed_increased[conn_key] = false;
+                *chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
             }
         }
     }
@@ -392,16 +461,23 @@ fn send_load_chunk_message(
     game: &Arc<GameData>,
     connection: &Connection,
 ) {
+    connection.send(down::LoadChunk {
+        cc,
+        ci,
+        chunk_tile_blocks: clone_chunk_tile_blocks(chunk_tile_blocks, game),
+    });
+}
+
+fn clone_chunk_tile_blocks(
+    chunk_tile_blocks: &ChunkBlocks,
+    game: &Arc<GameData>,
+) -> ChunkBlocks {
     let mut chunk_tile_blocks_clone = ChunkBlocks::new(&game.blocks);
     for lti in 0..=MAX_LTI {
         chunk_tile_blocks.raw_meta::<()>(lti);
         chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
     }
-    connection.send(down::LoadChunk {
-        cc,
-        ci,
-        chunk_tile_blocks: chunk_tile_blocks_clone,
-    });
+    chunk_tile_blocks_clone
 }
 
 fn request_load_chunks(chunk_loader: &ChunkLoader) {

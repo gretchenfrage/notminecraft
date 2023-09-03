@@ -38,7 +38,7 @@ macro_rules! read_key_types {
     )=>{
         /// Macro-generated type for reading this key type from the save file.
         #[derive(Debug)]
-        pub struct $key($key_ty);
+        pub struct $key(pub $key_ty);
 
         impl ReadKey for $key {
             type Val = $val_ty;
