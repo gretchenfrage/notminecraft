@@ -26,10 +26,7 @@ use crate::{
 };
 use chunk_data::*;
 use mesh_data::MeshData;
-use graphics::{
-    frame_content::*,
-    view_proj::ViewProj,
-};
+use graphics::prelude::*;
 use std::{
     sync::Arc,
     ops::Range,
@@ -326,18 +323,21 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             // field of view
             f32::to_radians(120.0),
             // aspect ratio
-            size.w / size.h,
+            aspect_ratio(size),
         );
         let mut canvas = canvas.reborrow()
             .scale(self.size)
             .begin_3d(view_proj);
 
-        // chunk tile meshes
+        // chunks
         for (cc, ci) in inner.chunks.iter() {
+            // frustum culling
             let pos = (cc * CHUNK_EXTENT).map(|n| n as f32);
             if !view_proj.is_volume_visible(pos, CHUNK_EXTENT.map(|n| n as f32).into()) {
                 continue;
             }
+
+            // blocks
             canvas.reborrow()
                 .translate(pos)
                 .draw_mesh(
@@ -345,23 +345,5 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     &ctx.assets().blocks,
                 );
         }
-
-        /*
-        // uhhhh debug XYZ
-        let dir = Quaternion::rotation_y(-inner.yaw)
-                * Quaternion::rotation_x(-inner.pitch)
-                * Vec3::new(0.0, 0.0, 1.0);
-        let pos = inner.pos + dir * 4.5;
-
-        canvas.reborrow()
-            .color(Rgba::red())
-            .draw_line(pos, pos + Vec3::new(1.0, 0.0, 0.0));
-        canvas.reborrow()
-            .color(Rgba::green())
-            .draw_line(pos, pos + Vec3::new(0.0, 1.0, 0.0));
-        canvas.reborrow()
-            .color(Rgba::blue())
-            .draw_line(pos, pos + Vec3::new(0.0, 0.0, 1.0));
-        */
     }
 }

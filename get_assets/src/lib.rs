@@ -33,12 +33,16 @@ impl DataDir {
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_DATA_DIR)))
     }
 
+    pub fn subdir(&self, subdir: &str) -> PathBuf {
+        self.0.join(subdir)
+    }
+
     pub fn assets_subdir(&self) -> PathBuf {
-        self.0.join(ASSETS_SUBDIR)
+        self.subdir(ASSETS_SUBDIR)
     }
 
     pub fn tmp_subdir(&self) -> PathBuf {
-        self.0.join(TMP_SUBDIR)
+        self.subdir(TMP_SUBDIR)
     }
 
     /// Read asset with the given name.

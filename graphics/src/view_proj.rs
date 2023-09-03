@@ -93,3 +93,8 @@ impl ViewProj {
         true
     }
 }
+
+pub fn aspect_ratio(size: impl Into<Extent2<f32>>) -> f32 {
+    let size = size.into();
+    size.w / size.h
+}

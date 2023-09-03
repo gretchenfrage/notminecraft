@@ -77,6 +77,33 @@ const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Bgra8Unorm;
 const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
 
+pub mod prelude {
+    pub use crate::{
+        Renderer,
+        GpuVecContext,
+        AsyncGpuVecContext,
+        frame_content::{
+            Canvas2,
+            Canvas3,
+            FontId,
+            GpuImageArray,
+            GpuVec,
+            LayedOutTextBlock,
+            Mesh,
+            TextBlock,
+            TextSpan,
+            Vertex,
+            HAlign,
+            VAlign,
+        },
+        view_proj::{
+            ViewProj,
+            aspect_ratio,
+        },
+    };
+}
+
+
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
     surface: Surface,
