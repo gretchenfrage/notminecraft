@@ -60,7 +60,7 @@ pub fn mesh_simple_face(
             let bid2 = tile2.get(tile_blocks).get();
             game.blocks_mesh_logic.get(bid2).obscures(-face)
         })
-        .unwrap_or(false);
+        .unwrap_or(true);
     if !obscured {
         let (
             pos_start,
