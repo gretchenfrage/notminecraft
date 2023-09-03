@@ -183,6 +183,12 @@ fn main() {
 
     // download assets, maybe
     let base = DataDir::new();
+
+    if let Err(e) = client_server::server::save_file::SaveFile::open("potato69", &base, &game) {
+        error!("{}", e);
+        return;
+    }
+
     let _ = rt
         .block_on(asset_download_prompt(&base))
         .map_err(|e| error!(%e, "unable to acquire assets"));

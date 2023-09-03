@@ -1,7 +1,7 @@
 
 mod connection;
 mod chunk_loader;
-mod save_file;
+pub mod save_file; // TODO make private again or like move elsewhere or something
 
 
 use self::{

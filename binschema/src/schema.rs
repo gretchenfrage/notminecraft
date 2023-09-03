@@ -1,7 +1,15 @@
 //! Data types for representing a schema, and the macro for constructing them
 //! with syntactic sugar.
 
-use std::fmt::Write;
+use crate::{
+    error::*,
+    Encoder,
+    Decoder,
+};
+use std::{
+    fmt::Write,
+    io,
+};
 
 
 /// Description of how raw binary data encodes less tedious structures of
@@ -55,6 +63,293 @@ struct ParentNode<'a> {
 }
 
 impl Schema {
+    /// A magic number, chosen at random and committed into the source code, which
+    /// is recommended to be included before encoding a schema itself somewhere,
+    /// and which the developers of binschema should change whenever the schema schema
+    /// changes. This allows schema validity checks to be future compatible for changes
+    /// to the metaschema, as well as decreases the chance of an schema validity check
+    /// passing for data which wasn't encoded with binschema at all.
+    pub fn schema_schema_magic_bytes() -> [u8; 4] {
+        [0xfe, 0x56, 0x6e, 0x71]
+    }
+
+    /// The schema for transcoding a schema itself.
+    pub fn schema_schema() -> Schema {
+        schema!(
+            enum {
+                Scalar(enum {
+                    U8(unit),
+                    U16(unit),
+                    U32(unit),
+                    U64(unit),
+                    U128(unit),
+                    I8(unit),
+                    I16(unit),
+                    I32(unit),
+                    I64(unit),
+                    I128(unit),
+                    F32(unit),
+                    F64(unit),
+                    Char(unit),
+                    Bool(unit),
+                }),
+                Str(unit),
+                Bytes(unit),
+                Unit(unit),
+                Option(recurse(1)),
+                Seq(struct {
+                    (len: option(u64)),
+                    (inner: recurse(2)),
+                }),
+                Tuple(seq(varlen)(recurse(2))),
+                Struct(seq(varlen)(struct {
+                    (name: str),
+                    (inner: recurse(3)),
+                })),
+                Enum(seq(varlen)(struct {
+                    (name: str),
+                    (inner: recurse(3)),
+                })),
+                Recurse(u64),
+            }
+        )
+    }
+
+    /// Encode this schema itself according to the schema schema.
+    pub fn encode_schema<W: io::Write>(&self, encoder: &mut Encoder<W>) -> Result<()> {
+        match self {
+            &Schema::Scalar(st) => {
+                encoder.begin_enum(0, "Scalar")?;
+                let (st_ord, st_name) = match st {
+                    ScalarType::U8 => (0, "U8"),
+                    ScalarType::U16 => (1, "U16"),
+                    ScalarType::U32 => (2, "U32"),
+                    ScalarType::U64 => (3, "U64"),
+                    ScalarType::U128 => (4, "U128"),
+                    ScalarType::I8 => (5, "I8"),
+                    ScalarType::I16 => (6, "I16"),
+                    ScalarType::I32 => (7, "I32"),
+                    ScalarType::I64 => (8, "I64"),
+                    ScalarType::I128 => (9, "I128"),
+                    ScalarType::F32 => (10, "F32"),
+                    ScalarType::F64 => (11, "F64"),
+                    ScalarType::Char => (12, "Char"),
+                    ScalarType::Bool => (13, "Bool"),
+                };
+                encoder.begin_enum(st_ord, st_name)?;
+                encoder.encode_unit()
+            }
+            &Schema::Str => {
+                encoder.begin_enum(1, "Str")?;
+                encoder.encode_unit()
+            }
+            &Schema::Bytes => {
+                encoder.begin_enum(2, "Bytes")?;
+                encoder.encode_unit()
+            }
+            &Schema::Unit => {
+                encoder.begin_enum(3, "Unit")?;
+                encoder.encode_unit()
+            }
+            &Schema::Option(ref inner) => {
+                encoder.begin_enum(4, "Option")?;
+                inner.encode_schema(encoder)
+            }
+            &Schema::Seq(SeqSchema { len, ref inner }) => {
+                encoder.begin_enum(5, "Seq")?;
+                encoder.begin_struct()?;
+                encoder.begin_struct_field("len")?;
+                if let Some(len) = len {
+                    encoder.begin_some()?;
+                    encoder.encode_u64(len as u64)?;
+                } else {
+                    encoder.encode_none()?;
+                }
+                encoder.begin_struct_field("inner")?;
+                inner.encode_schema(encoder)?;
+                encoder.finish_struct()
+            }
+            &Schema::Tuple(ref inners) => {
+                encoder.begin_enum(6, "Tuple")?;
+                encoder.begin_var_len_seq(inners.len())?;
+                for inner in inners {
+                    encoder.begin_seq_elem()?;
+                    inner.encode_schema(encoder)?;
+                }
+                encoder.finish_seq()
+            }
+            &Schema::Struct(ref fields) => {
+                encoder.begin_enum(7, "Struct")?;
+                encoder.begin_var_len_seq(fields.len())?;
+                for field in fields {
+                    encoder.begin_seq_elem()?;
+                    encoder.begin_struct()?;
+                    encoder.begin_struct_field("name")?;
+                    encoder.encode_str(&field.name)?;
+                    encoder.begin_struct_field("inner")?;
+                    field.inner.encode_schema(encoder)?;
+                    encoder.finish_struct()?;
+                }
+                encoder.finish_seq()
+            }
+            &Schema::Enum(ref variants) => {
+                encoder.begin_enum(8, "Enum")?;
+                encoder.begin_var_len_seq(variants.len())?;
+                for variant in variants {
+                    encoder.begin_seq_elem()?;
+                    encoder.begin_struct()?;
+                    encoder.begin_struct_field("name")?;
+                    encoder.encode_str(&variant.name)?;
+                    encoder.begin_struct_field("inner")?;
+                    variant.inner.encode_schema(encoder)?;
+                    encoder.finish_struct()?;
+                }
+                encoder.finish_seq()
+            }
+            &Schema::Recurse(n) => {
+                encoder.begin_enum(9, "Recurse")?;
+                encoder.encode_u64(n as u64)
+            }
+        }
+    }
+
+    /// Decode this schema itself according to the schema schema.
+    pub fn decode_schema<R: io::Read>(decoder: &mut Decoder<R>) -> Result<Self> {
+
+        fn decode_usize<R: io::Read>(decoder: &mut Decoder<R>) -> Result<usize> {
+            decoder.decode_u64()
+                .and_then(|n| usize::try_from(n)
+                    .map_err(|e| Error::new(
+                        ErrorKind::PlatformLimits,
+                        e,
+                        Some(decoder.coder_state()),
+                    )))
+        }
+
+        Ok(match decoder.begin_enum()? {
+            0 => {
+                decoder.begin_enum_variant("Scalar")?;
+                let (st, st_name) = match decoder.begin_enum()? {
+                    0 => (ScalarType::U8, "U8"),
+                    1 => (ScalarType::U16, "U16"),
+                    2 => (ScalarType::U32, "U32"),
+                    3 => (ScalarType::U64, "U64"),
+                    4 => (ScalarType::U128, "U128"),
+                    5 => (ScalarType::I8, "I8"),
+                    6 => (ScalarType::I16, "I16"),
+                    7 => (ScalarType::I32, "I32"),
+                    8 => (ScalarType::I64, "I64"),
+                    9 => (ScalarType::I128, "I128"),
+                    10 => (ScalarType::F32, "F32"),
+                    11 => (ScalarType::F64, "F64"),
+                    12 => (ScalarType::Char, "Char"),
+                    13 => (ScalarType::Bool, "Bool"),
+                    _ => panic!(
+                        "unexpected enum ordinal decoding schema itself \
+                        (this indicates a basic usage error rather than merely bad data)"
+                    ),
+                };
+                decoder.begin_enum_variant(st_name)?;
+                decoder.decode_unit()?;
+                Schema::Scalar(st)
+            }
+            1 => {
+                decoder.begin_enum_variant("Str")?;
+                decoder.decode_unit()?;
+                Schema::Str
+            }
+            2 => {
+                decoder.begin_enum_variant("Bytes")?;
+                decoder.decode_unit()?;
+                Schema::Unit
+            }
+            3 => {
+                decoder.begin_enum_variant("Unit")?;
+                decoder.decode_unit()?;
+                Schema::Unit
+            }
+            4 => {
+                decoder.begin_enum_variant("Option")?;
+                let inner = Schema::decode_schema(decoder)?;
+                Schema::Option(Box::new(inner))
+            }
+            5 => {
+                decoder.begin_enum_variant("Seq")?;
+                decoder.begin_struct()?;
+                decoder.begin_struct_field("len")?;
+                let len = if decoder.begin_option()? {
+                    Some(decode_usize(decoder)?)
+                } else {
+                    None
+                };
+                decoder.begin_struct_field("inner")?;
+                let inner = Schema::decode_schema(decoder)?;
+                decoder.finish_struct()?;
+                Schema::Seq(SeqSchema { len, inner: Box::new(inner) })
+            }
+            6 => {
+                decoder.begin_enum_variant("Tuple")?;
+                let mut fields = Vec::new();
+                for _ in 0..decoder.begin_var_len_seq()? {
+                    decoder.begin_seq_elem()?;
+                    fields.push(Schema::decode_schema(decoder)?);
+                }
+                decoder.finish_seq()?;
+                Schema::Tuple(fields)
+            }
+            7 => {
+                decoder.begin_enum_variant("Struct")?;
+                let mut fields = Vec::new();
+                for _ in 0..decoder.begin_var_len_seq()? {
+                    decoder.begin_seq_elem()?;
+                    decoder.begin_struct()?;
+                    fields.push(StructSchemaField {
+                        name: {
+                            decoder.begin_struct_field("name")?;
+                            decoder.decode_str()?
+                        },
+                        inner: {
+                            decoder.begin_struct_field("inner")?;
+                            Schema::decode_schema(decoder)?
+                        },
+                    });
+                    decoder.finish_struct()?;
+                }
+                decoder.finish_seq()?;
+                Schema::Struct(fields)
+            }
+            8 => {
+                decoder.begin_enum_variant("Enum")?;
+                let mut variants = Vec::new();
+                for _ in 0..decoder.begin_var_len_seq()? {
+                    decoder.begin_seq_elem()?;
+                    decoder.begin_struct()?;
+                    variants.push(EnumSchemaVariant {
+                        name: {
+                            decoder.begin_struct_field("name")?;
+                            decoder.decode_str()?
+                        },
+                        inner: {
+                            decoder.begin_struct_field("inner")?;
+                            Schema::decode_schema(decoder)?
+                        },
+                    });
+                    decoder.finish_struct()?;
+                }
+                decoder.finish_seq()?;
+                Schema::Enum(variants)
+            }
+            9 => {
+                decoder.begin_enum_variant("Recurse")?;
+                Schema::Recurse(decode_usize(decoder)?)
+            }
+            _ => panic!(
+                "unexpected enum ordinal decoding schema itself \
+                (this indicates a basic usage error rather than merely bad data)"
+            ),
+        })
+    }
+
     pub(crate) fn non_recursive_display_str(&self) -> &'static str {
         match self {
             Schema::Scalar(st) => st.display_str(),
