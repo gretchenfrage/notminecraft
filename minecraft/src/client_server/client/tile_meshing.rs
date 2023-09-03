@@ -1,7 +1,7 @@
 
 use crate::game_data::{
     GameData,
-    BlockMeshLogic,
+    mesh_logic::BlockMeshLogic,
 };
 use chunk_data::*;
 use mesh_data::{

@@ -217,9 +217,9 @@ fn generate_chunk_blocks(
                 debug_assert!(depth >= 1);
 
                 if depth == 1 {
-                    chunk_tile_blocks.set(lti, game.bid_stone, ());
+                    chunk_tile_blocks.set(lti, game.content_stone.bid_stone, ());
                 } else {
-                    chunk_tile_blocks.set(lti, game.bid_stone, ());
+                    chunk_tile_blocks.set(lti, game.content_stone.bid_stone, ());
                 }
             }
         }

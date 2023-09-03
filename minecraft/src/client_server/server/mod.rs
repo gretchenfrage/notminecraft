@@ -237,7 +237,6 @@ fn on_network_event(
         NetworkEvent::Received(conn_key, msg) => on_received(
             conn_key,
             msg,
-            game,
             tile_blocks,
             chunk_client_cis,
             connections,
@@ -321,7 +320,6 @@ fn on_disconnected(
 fn on_received(
     conn_key: usize,
     msg: UpMessage,
-    game: &Arc<GameData>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     chunk_client_cis: &PerChunk<SparseVec<usize>>,
     connections: &SparseVec<Connection>,
@@ -345,12 +343,6 @@ fn on_received(
                     return;
                 }
             };
-
-            // bit of validation (logic will very change in future)
-            if !(bid == AIR || bid == game.bid_stone) {
-                warn!("client tried to place illegal bid {:?}", bid);
-                return;
-            }
 
             // set tile block
             tile.get(tile_blocks).raw_set(bid, ());

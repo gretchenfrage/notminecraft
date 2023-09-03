@@ -26,7 +26,10 @@ use crate::{
 };
 use chunk_data::*;
 use mesh_data::MeshData;
-use graphics::frame_content::*;
+use graphics::{
+    frame_content::*,
+    view_proj::ViewProj,
+};
 use std::{
     sync::Arc,
     ops::Range,
@@ -253,7 +256,7 @@ impl GuiStateFrame for Client {
             // direction
             Quaternion::rotation_y(-self.yaw)
                 * Quaternion::rotation_x(-self.pitch)
-                * Vec3::new(0.0, 0.0, 1.0), // what? wtf does this part do?
+                * Vec3::new(0.0, 0.0, 1.0),
             // reach
             50.0,
             // geometry
@@ -315,22 +318,28 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             .draw_solid(size);
 
         // begin 3D perspective
+        let view_proj = ViewProj::perspective(
+            // position
+            inner.pos,
+            // direction
+            Quaternion::rotation_x(inner.pitch) * Quaternion::rotation_y(inner.yaw),
+            // field of view
+            f32::to_radians(120.0),
+            // aspect ratio
+            size.w / size.h,
+        );
         let mut canvas = canvas.reborrow()
-            .begin_3d_perspective(
-                //size
-                size,
-                // position
-                inner.pos,
-                // direction
-                Quaternion::rotation_x(inner.pitch) * Quaternion::rotation_y(inner.yaw),
-                // field of view
-                f32::to_radians(120.0),
-            );
+            .scale(self.size)
+            .begin_3d(view_proj);
 
         // chunk tile meshes
         for (cc, ci) in inner.chunks.iter() {
+            let pos = (cc * CHUNK_EXTENT).map(|n| n as f32);
+            if !view_proj.is_volume_visible(pos, CHUNK_EXTENT.map(|n| n as f32).into()) {
+                continue;
+            }
             canvas.reborrow()
-                .translate((cc * CHUNK_EXTENT).map(|n| n as f32))
+                .translate(pos)
                 .draw_mesh(
                     (&*inner.tile_meshes).get(cc, ci).mesh(),
                     &ctx.assets().blocks,

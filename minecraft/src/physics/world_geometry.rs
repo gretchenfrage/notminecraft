@@ -2,8 +2,8 @@
 use super::aa_box::AaBox;
 use crate::game_data::{
     GameData,
-    BlockPhysicsLogic,
-    BlockHitscanLogic,
+    physics_logic::BlockPhysicsLogic,
+    hitscan_logic::BlockHitscanLogic,
 };
 use chunk_data::{
     Getter,

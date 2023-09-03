@@ -50,4 +50,46 @@ impl ViewProj {
     }
 
     // TODO orthographics
+
+    pub fn extract_frustum_planes(&self) -> [Vec4<f32>; 6] {
+        let rows = self.0.into_row_arrays();
+        let mut planes = [Vec4::zero(); 6];
+
+        for i in 0..6 {
+            let row = if i % 2 == 0 {
+                i / 2
+            } else {
+                3 - (i / 2)
+            };
+
+            planes[i] = Vec4::from(rows[3]) - Vec4::from(rows[row]);
+        }
+
+        // Normalize the planes
+        for plane in planes.iter_mut() {
+            let length = f32::sqrt(plane.x * plane.x + plane.y * plane.y + plane.z * plane.z);
+            *plane /= length;
+        }
+
+        planes
+    }
+
+    pub fn is_volume_visible(&self, min: Vec3<f32>, ext: Extent3<f32>) -> bool {
+        let max = min + ext;
+        let planes = self.extract_frustum_planes();
+        
+        for plane in planes.iter() {
+            let p_vertex = Vec4::new(
+                if plane.x >= 0.0 { max.x } else { min.x },
+                if plane.y >= 0.0 { max.y } else { min.y },
+                if plane.z >= 0.0 { max.z } else { min.z },
+                1.0,
+            );
+
+            if plane.dot(p_vertex) < 0.0 {
+                return false;
+            }
+        }
+        true
+    }
 }
