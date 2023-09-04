@@ -89,6 +89,14 @@ lang!(
     menu_quit,
     menu_splash,
 
+    gui_cancel,
+
+    multiplayer_title,
+    multiplayer_connect,
+    multiplayer_info1,
+    multiplayer_info2,
+    multiplayer_ipinfo,
+
     tile_stone_name,
     tile_grass_name,
     tile_dirt_name,

@@ -7,7 +7,6 @@ pub mod sound;
 pub mod asset;
 pub mod gui;
 pub mod util;
-pub mod main_menu;
 pub mod chunk_mesh;
 pub mod block_update_queue;
 pub mod game_data;
@@ -15,6 +14,7 @@ pub mod item;
 pub mod physics;
 pub mod client_server;
 pub mod game_binschema;
+pub mod menu;
 //pub mod singleplayer;
 //pub mod text_test;
 
@@ -22,7 +22,7 @@ pub mod game_binschema;
 use crate::{
     game_data::GameData,
     gui::GuiEventLoop,
-    main_menu::MainMenu,
+    menu::main_menu::MainMenu,
     asset::{
         loader::AssetLoader,
         Assets,

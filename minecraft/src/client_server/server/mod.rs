@@ -155,7 +155,7 @@ fn do_tick(
         tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
         chunk_client_cis.add(chunk.cc, ci, client_cis);
 
-        chunk_unsaved.add(chunk.cc, ci, true);
+        chunk_unsaved.add(chunk.cc, ci, chunk.unsaved);
     }
 }
 

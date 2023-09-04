@@ -40,6 +40,7 @@ pub struct ChunkLoader {
 pub struct ReadyChunk {
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
+    pub unsaved: bool,
 }
 
 
@@ -184,6 +185,7 @@ fn get_chunk_ready(
         ReadyChunk {
             cc,
             chunk_tile_blocks,
+            unsaved: false,
         }
     } else {
         let mut seed = [0; 32];
@@ -204,6 +206,7 @@ fn get_chunk_ready(
         ReadyChunk {
             cc,
             chunk_tile_blocks,
+            unsaved: true,
         }
     }
 }

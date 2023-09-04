@@ -54,7 +54,7 @@ impl SaveFile {
         let path = data_dir.subdir(SAVES_SUBDIR).join(name);
         let pre_existent = path.join("IDENTITY").try_exists()?;
 
-        info!(?pre_existent, "opening database");
+        trace!(?pre_existent, "opening database");
 
         // open database, creating if doesn't yet exist
         let mut options = Options::default();
@@ -129,6 +129,12 @@ impl SaveFile {
             debug_assert!(coder_state.is_finished());
             coder_state_alloc = coder_state.into_alloc();
         }
+
+        info!(
+            ?pre_existent,
+            "successfully opened save file database with schema:\n{}\n",
+            pretty_fmt_schema_definition(&my_schema_definition),
+        );
 
         // build schema types for later use
         let mut key_schema_variants = Vec::new();

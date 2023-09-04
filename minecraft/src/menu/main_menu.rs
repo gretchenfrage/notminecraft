@@ -1,5 +1,6 @@
 
 use crate::{
+    menu::multiplayer_menu::MultiplayerMenu,
     asset::Assets,
     gui::{
         *,
@@ -29,6 +30,7 @@ pub struct MainMenu {
     uncopyright_text: GuiTextBlock,
 
     singleplayer_button: MenuButton,
+    multiplayer_button: MenuButton,
     exit_game_button: MenuButton,
     
     splash_text: GuiSplashText,
@@ -61,6 +63,8 @@ impl MainMenu {
 		});
         let singleplayer_button = menu_button(&assets.lang.menu_singleplayer)
             .build(assets);
+        let multiplayer_button = menu_button(&assets.lang.menu_multiplayer)
+            .build(assets);
         let exit_game_button = menu_button("Quit")
             .build(assets);
         let splash_text = GuiSplashText::new();
@@ -69,6 +73,7 @@ impl MainMenu {
 			version_text,
 			uncopyright_text,
             singleplayer_button,
+            multiplayer_button,
             exit_game_button,
             splash_text,
 		}
@@ -101,6 +106,8 @@ impl MainMenu {
                                 ),
                                 self.singleplayer_button
                                     .gui(on_singleplayer_click),
+                                self.multiplayer_button
+                                    .gui(on_multiplayer_click),
                                 self.exit_game_button
                                     .gui(on_exit_game_click),
                             )),
@@ -117,22 +124,6 @@ impl MainMenu {
 	}
 }
 
-fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    /*
-    ctx.push_state_frame(Game::new(
-        &ctx.game,
-    ));
-    */
-    ctx.push_state_frame(Client::new(
-        ctx.game,
-        ctx.tokio,
-    ));
-}
-
-fn on_exit_game_click(ctx: &GuiGlobalContext) {
-    ctx.pop_state_frame();
-}
-
 impl GuiStateFrame for MainMenu {
 	impl_visit_nodes!();
 
@@ -140,4 +131,19 @@ impl GuiStateFrame for MainMenu {
         self.title.update(elapsed);
         self.splash_text.update(elapsed);
     }
+}
+
+fn on_singleplayer_click(ctx: &GuiGlobalContext) {
+    ctx.push_state_frame(Client::new(
+        ctx.game,
+        ctx.tokio,
+    ));
+}
+
+fn on_multiplayer_click(ctx: &GuiGlobalContext) {
+    ctx.push_state_frame(MultiplayerMenu::new(ctx));
+}
+
+fn on_exit_game_click(ctx: &GuiGlobalContext) {
+    ctx.pop_state_frame();
 }
