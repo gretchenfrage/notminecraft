@@ -14,6 +14,7 @@ use crate::{
 		state_frame::GuiStateFrame,
 		state_frame_obj::GuiStateFrameObj,
 		fps_overlay::FpsOverlay,
+		clipboard::Clipboard,
 	},
 };
 use graphics::{
@@ -116,6 +117,7 @@ struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
     renderer: RefCell<Renderer>,
     tokio: Handle,
+    clipboard: Clipboard,
     sound_player: SoundPlayer,
     assets: Assets,
     game: Arc<GameData>,
@@ -150,6 +152,7 @@ impl State {
 			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
 			renderer: RefCell::new(renderer),
 			tokio,
+			clipboard: Clipboard::new(),
 			sound_player,
 			assets,
 			game,
@@ -181,6 +184,7 @@ impl State {
 					event_loop: &self.effect_queue,
 					renderer: &self.renderer,
 					tokio: &self.tokio,
+					clipboard: &self.clipboard,
 					sound_player: &self.sound_player,
 					assets: &self.assets,
 					game: &self.game,

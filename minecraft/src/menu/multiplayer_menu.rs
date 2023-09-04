@@ -143,6 +143,9 @@ impl GuiStateFrame for MultiplayerMenu {
     fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
         if key == VirtualKeyCode::Return {
             on_connect_click(&self.address)(ctx.global())
+        } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
+            self.address.push_str(&ctx.global().clipboard.get());
+            self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
         }
     }
 

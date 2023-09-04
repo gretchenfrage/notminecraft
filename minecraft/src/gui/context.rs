@@ -8,6 +8,7 @@ use crate::{
         gui_event_loop::EventLoopEffectQueue,
         state_frame::GuiStateFrame,
         state_frame_obj::GuiStateFrameObj,
+        clipboard::Clipboard,
     },
 };
 use graphics::{
@@ -37,6 +38,7 @@ pub struct GuiGlobalContext<'c> {
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
     pub renderer: &'c RefCell<Renderer>,
     pub tokio: &'c Handle,
+    pub clipboard: &'c Clipboard,
     pub sound_player: &'c SoundPlayer,
     pub assets: &'c Assets,
     pub game: &'c Arc<GameData>,
@@ -96,6 +98,18 @@ impl<'c> GuiGlobalContext<'c> {
 
     pub fn uncapture_mouse(&self) {
         self.event_loop.borrow_mut().uncapture_mouse();
+    }
+
+    /// Convenience method to check whether any system-appropriate "command"
+    /// key is in `self.pressed_keys_semantic`. (The ctrl or command key).
+    pub fn is_command_key_pressed(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.pressed_keys_semantic.contains(&VirtualKeyCode::LWin)
+            || self.pressed_keys_semantic.contains(&VirtualKeyCode::RWin)
+        } else {
+            self.pressed_keys_semantic.contains(&VirtualKeyCode::LControl)
+            || self.pressed_keys_semantic.contains(&VirtualKeyCode::RControl)
+        }
     }
 }
 

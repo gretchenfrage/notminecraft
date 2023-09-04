@@ -38,6 +38,7 @@ mod node;
 mod block;
 mod gui_event_loop;
 mod fps_overlay;
+mod clipboard;
 
 pub mod blocks;
 
@@ -99,4 +100,5 @@ pub use self::{
         },
     },
     gui_event_loop::GuiEventLoop,
+    clipboard::Clipboard,
 };
