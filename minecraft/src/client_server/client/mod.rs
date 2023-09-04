@@ -49,9 +49,6 @@ pub struct Client {
 
     prediction: PredictionManager,
 
-    game_gui: Option<GameGui>,
-    game_gui_resources: GameGuiResources,
-
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
 }
@@ -104,9 +101,6 @@ impl Client {
 
             prediction: PredictionManager::new(),
 
-            game_gui: None,
-            game_gui_resources: GameGuiResources::new(ctx.assets),
-
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx.assets),
         }
@@ -125,21 +119,12 @@ impl Client {
                 chunks: &self.chunks,
                 tile_meshes: &mut self.tile_meshes,
             },
-
-            if self.game_gui.is_none() && self.menu_stack.is_empty() {
-                Some(mouse_capturer())
-            } else { None },
-
-            if let Some(open_game_gui) = self.game_gui.as_mut() {
-                Some(open_game_gui.gui(&mut self.game_gui_resources, ctx))
-            } else { None },
-
-            if let Some(open_menu) = self.menu_stack.iter_mut().rev().next() {
-                Some(layer((
+            mouse_capturer(),
+            self.menu_stack.iter_mut().rev().next()
+                .map(|open_menu| layer((
                     solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]),
                     open_menu.gui(&mut self.menu_resources, ctx),
-                )))
-            } else { None },
+                ))),
         ))
     }
 
@@ -223,7 +208,6 @@ impl GuiStateFrame for Client {
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         // menu stuff
-        self.game_gui_resources.process_set_game_gui(&mut self.game_gui);
         self.menu_resources.process_effect_queue(&mut self.menu_stack);
 
         // deal with messages from the server
@@ -266,7 +250,7 @@ impl GuiStateFrame for Client {
         }
 
         // movement
-        if self.game_gui.is_none() && self.menu_stack.is_empty() && ctx.global().focus_level == FocusLevel::MouseCaptured {
+        if ctx.global().focus_level == FocusLevel::MouseCaptured {
             let mut movement = Vec3::from(0.0);
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::W) {
                 movement.z += 1.0;
@@ -298,76 +282,73 @@ impl GuiStateFrame for Client {
     }
 
     fn on_captured_mouse_move(&mut self, _: &GuiWindowContext, amount: Vec2<f32>) {
-        if self.menu_stack.is_empty() {
-            let sensitivity = 1.0 / 1600.0;
-            
-            self.pitch = (self.pitch - amount.y * sensitivity).clamp(-PI / 2.0, PI / 2.0);
-            self.yaw = (self.yaw - amount.x * sensitivity) % (PI * 2.0);
-        }
+        let sensitivity = 1.0 / 1600.0;
+        
+        self.pitch = (self.pitch - amount.y * sensitivity).clamp(-PI / 2.0, PI / 2.0);
+        self.yaw = (self.yaw - amount.x * sensitivity) % (PI * 2.0);
     }
 
     fn on_captured_mouse_click(&mut self, ctx: &GuiWindowContext, button: MouseButton) {
-        if self.menu_stack.is_empty() {
-            let getter = self.chunks.getter();
-            if let Some(looking_at) = compute_looking_at(
-                // position
-                self.pos,
-                // direction
-                Quaternion::rotation_y(-self.yaw)
-                    * Quaternion::rotation_x(-self.pitch)
-                    * Vec3::new(0.0, 0.0, 1.0),
-                // reach
-                50.0,
-                // geometry
-                &getter,
-                &self.tile_blocks,
-                ctx.game(),
-            ) {
-                match button {
-                    MouseButton::Left => {
-                        self.connection.send(up::SetTileBlock {
-                            gtc: looking_at.tile.gtc(),
+        let getter = self.chunks.getter();
+        if let Some(looking_at) = compute_looking_at(
+            // position
+            self.pos,
+            // direction
+            Quaternion::rotation_y(-self.yaw)
+                * Quaternion::rotation_x(-self.pitch)
+                * Vec3::new(0.0, 0.0, 1.0),
+            // reach
+            50.0,
+            // geometry
+            &getter,
+            &self.tile_blocks,
+            ctx.game(),
+        ) {
+            match button {
+                MouseButton::Left => {
+                    self.connection.send(up::SetTileBlock {
+                        gtc: looking_at.tile.gtc(),
+                        bid: AIR.bid,
+                    });
+                    self.prediction.make_prediction(
+                        edit::SetTileBlock {
+                            lti: looking_at.tile.lti,
                             bid: AIR.bid,
-                        });
-                        self.prediction.make_prediction(
-                            edit::SetTileBlock {
-                                lti: looking_at.tile.lti,
-                                bid: AIR.bid,
-                            }.into(),
-                            looking_at.tile.cc,
-                            looking_at.tile.ci,
-                            &getter,
-                            &self.connection,
-                            &mut self.tile_blocks,
-                            &mut self.block_updates,
-                        );
-                    }
-                    _ => (),
+                        }.into(),
+                        looking_at.tile.cc,
+                        looking_at.tile.ci,
+                        &getter,
+                        &self.connection,
+                        &mut self.tile_blocks,
+                        &mut self.block_updates,
+                    );
                 }
+                _ => (),
             }
         }
     }
 
     fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
-        if !self.menu_stack.is_empty() {
-            if key == VirtualKeyCode::Escape {
-                self.menu_stack.pop();
-                if self.menu_stack.is_empty() {
-                    ctx.global().capture_mouse();
-                }
-            }
-        } else if self.game_gui.is_some() {
-            if key == VirtualKeyCode::Escape  || key == VirtualKeyCode::E {
-                self.game_gui = None;
-                ctx.global().capture_mouse();
-            }
-        } else {
+        if self.menu_stack.is_empty() {
             if key == VirtualKeyCode::Escape {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::EscMenu);
             } else if key == VirtualKeyCode::E {
                 ctx.global().uncapture_mouse();
-                self.game_gui = Some(GameGui::Inventory);
+                self.menu_stack.push(Menu::Inventory);
+            }
+        } else {
+            if key == VirtualKeyCode::Escape {
+                self.menu_stack.pop();
+                if self.menu_stack.is_empty() {
+                    ctx.global().capture_mouse();
+                }
+            } else {
+                self.menu_stack.iter_mut().rev().next().unwrap().on_key_press_semantic(
+                    &mut self.menu_resources,
+                    ctx,
+                    key,
+                );
             }
         }
     }
@@ -431,47 +412,6 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     (&*inner.tile_meshes).get(cc, ci).mesh(),
                     &ctx.assets().blocks,
                 );
-        }
-    }
-}
-
-
-// ==== game gui stuff ====
-
-#[derive(Debug)]
-struct GameGuiResources {
-
-    set_game_gui: RefCell<Option<Option<GameGui>>>,
-}
-
-impl GameGuiResources {
-    fn new(assets: &Assets) -> Self {
-        GameGuiResources {
-
-            set_game_gui: RefCell::new(None),
-        }
-    }
-
-    fn process_set_game_gui(&mut self, game_gui: &mut Option<GameGui>) {
-        if let Some(set_to) = self.set_game_gui.get_mut().take() {
-            *game_gui = set_to;
-        }
-    }
-}
-
-#[derive(Debug)]
-enum GameGui {
-    Inventory,
-}
-
-impl GameGui {
-    fn gui<'a>(
-        &'a mut self,
-        resources: &'a mut GameGuiResources,
-        _: &'a GuiWindowContext,
-    ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
-        match self {
-            &mut GameGui::Inventory => solid([1.0, 0.0, 0.0, 0.5]),
         }
     }
 }
@@ -542,16 +482,31 @@ enum MenuEffect {
 #[derive(Debug)]
 enum Menu {
     EscMenu,
+    Inventory,
 }
 
 impl Menu {
+    fn on_key_press_semantic(
+        &mut self,
+        resources: &mut MenuResources,
+        _: &GuiWindowContext,
+        key: VirtualKeyCode,
+    ) {
+        if key == VirtualKeyCode::E && match self {
+            &mut Menu::EscMenu => false,
+            &mut Menu::Inventory => true,
+        } {
+            resources.effect_queue.get_mut().push_back(MenuEffect::PopMenu);
+        }
+    }
+
     fn gui<'a>(
         &'a mut self,
         resources: &'a mut MenuResources,
         _: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
-            &mut Menu::EscMenu => align(0.5,
+            &mut Menu::EscMenu => GuiEither::A(align(0.5,
                 logical_size([400.0, 320.0],
                     v_align(0.0,
                         v_stack(0.0, (
@@ -565,7 +520,8 @@ impl Menu {
                         ))
                     )
                 )
-            ),
+            )),
+            &mut Menu::Inventory => GuiEither::B(solid([1.0, 0.0, 0.0, 0.5])),
         }
     }
 }
