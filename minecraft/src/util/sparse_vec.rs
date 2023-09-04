@@ -20,8 +20,8 @@ impl<T> SparseVec<T> {
         self.0[index] = Some(elem)
     }
 
-    pub fn remove(&mut self, index: usize) {
-        self.0[index] = None;
+    pub fn remove(&mut self, index: usize) -> T {
+        self.0[index].take().unwrap()
     }
 
     pub fn iter(&self) -> impl Iterator<Item=(usize, &T)> {

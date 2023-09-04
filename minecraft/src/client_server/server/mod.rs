@@ -39,10 +39,20 @@ use crossbeam_channel::{
     RecvTimeoutError,
     TryRecvError,
 };
+use slab::Slab;
 use vek::*;
 
 
 pub const TICK: Duration = Duration::from_millis(50);
+
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+enum ConnectionState {
+    // state a connection starts in
+    Uninit,
+    // connection is logged in as a connected client
+    Client,
+}
 
 
 /// Body of the server thread.
@@ -54,16 +64,24 @@ pub fn run_server(
     info!("initializing server data structures");
     let mut chunks: LoadedChunks = LoadedChunks::new();
     let mut tile_blocks: PerChunk<ChunkBlocks> = PerChunk::new();
-    let mut connections: SparseVec<Connection> = SparseVec::new();
 
-    // mapping from connection to clientside ci spaces
-    let mut client_loaded_chunks: SparseVec<LoadedChunks> = SparseVec::new();
-    // mapping from chunk to connection to clientside ci
-    let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
-    // mapping from connection to highest up message number processed
-    let mut client_last_processed: SparseVec<u64> = SparseVec::new();
+    // maps from state-invariant connection keys to which state the connection
+    // is in and its key within that state's connection key space
+    let mut all_connections: SparseVec<(ConnectionState, usize)> = SparseVec::new();
+    
+    // state connection key spaces
+    let mut uninit_connections: Slab<Connection> = Slab::new();
+    let mut client_connections: Slab<Connection> = Slab::new();
+    
+    // mapping from all connection to highest up message number processed
+    let mut conn_last_processed: SparseVec<u64> = SparseVec::new();
     // remains all false except when used
-    let mut client_last_processed_increased: SparseVec<bool> = SparseVec::new();
+    let mut conn_last_processed_increased: SparseVec<bool> = SparseVec::new();
+
+    // mapping from client to clientside ci spaces
+    let mut client_loaded_chunks: SparseVec<LoadedChunks> = SparseVec::new();
+    // mapping from chunk to client to clientside ci
+    let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
 
     let mut save = SaveFile::open("server", data_dir, game)?;
     let mut chunk_unsaved: PerChunk<bool> = PerChunk::new();
@@ -81,7 +99,7 @@ pub fn run_server(
         do_tick(
             &chunk_loader,
             &mut chunks,
-            &connections,
+            &client_connections,
             &mut tile_blocks,
             game,
             &mut client_loaded_chunks,
@@ -106,13 +124,15 @@ pub fn run_server(
             &network_events,
             &chunks,
             &game,
-            &mut connections,
+            &mut all_connections,
             &mut tile_blocks,
             &mut client_loaded_chunks,
             &mut chunk_client_cis,
-            &mut client_last_processed,
-            &mut client_last_processed_increased,
+            &mut conn_last_processed,
+            &mut conn_last_processed_increased,
             &mut chunk_unsaved,
+            &mut client_connections,
+            &mut uninit_connections,
         );
     }
 }
@@ -120,7 +140,7 @@ pub fn run_server(
 fn do_tick(
     chunk_loader: &ChunkLoader,
     chunks: &mut LoadedChunks,
-    connections: &SparseVec<Connection>,
+    client_connections: &Slab<Connection>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     game: &Arc<GameData>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
@@ -134,12 +154,12 @@ fn do_tick(
 
         let mut client_cis = SparseVec::new();
 
-        for (conn_key, conn) in connections.iter() {
+        for (client_conn_key, conn) in client_connections.iter() {
             // for each connection, assign it ci in that client chunk space
-            let client_ci = client_loaded_chunks[conn_key].add(chunk.cc);
+            let client_ci = client_loaded_chunks[client_conn_key].add(chunk.cc);
 
             // backlink it in this chunk's new chunk_client_cis entry
-            client_cis.set(conn_key, client_ci);
+            client_cis.set(client_conn_key, client_ci);
 
             // and send to that client
             send_load_chunk_message(
@@ -216,13 +236,15 @@ fn process_network_events_until_next_tick(
     network_events: &Receiver<NetworkEvent>,
     chunks: &LoadedChunks,
     game: &Arc<GameData>,
-    connections: &mut SparseVec<Connection>,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
     chunk_unsaved: &mut PerChunk<bool>,
+    client_connections: &mut Slab<Connection>,
+    uninit_connections: &mut Slab<Connection>,
 ) {
     while let Ok(event) = network_events
         .recv_deadline(next_tick)
@@ -232,13 +254,15 @@ fn process_network_events_until_next_tick(
             event,
             chunks,
             game,
-            connections,
+            all_connections,
             tile_blocks,
             client_loaded_chunks,
             chunk_client_cis,
-            client_last_processed,
-            client_last_processed_increased,
+            conn_last_processed,
+            conn_last_processed_increased,
             chunk_unsaved,
+            uninit_connections,
+            client_connections,
         );
 
         while let Ok(event) = network_events
@@ -249,20 +273,23 @@ fn process_network_events_until_next_tick(
                 event,
                 chunks,
                 game,
-                connections,
+                all_connections,
                 tile_blocks,
                 client_loaded_chunks,
                 chunk_client_cis,
-                client_last_processed,
-                client_last_processed_increased,
+                conn_last_processed,
+                conn_last_processed_increased,
                 chunk_unsaved,
+                uninit_connections,
+                client_connections,
             );                
         }
 
         after_process_available_network_events(
-            connections,
-            client_last_processed,
-            client_last_processed_increased,
+            all_connections,
+            client_connections,
+            conn_last_processed,
+            conn_last_processed_increased,
         )
     }
 }
@@ -271,135 +298,234 @@ fn on_network_event(
     event: NetworkEvent,
     chunks: &LoadedChunks,
     game: &Arc<GameData>,
-    connections: &mut SparseVec<Connection>,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
     chunk_unsaved: &mut PerChunk<bool>,
+    uninit_connections: &mut Slab<Connection>,
+    client_connections: &mut Slab<Connection>,
 ) {
     match event {
-        NetworkEvent::NewConnection(conn_key, conn) => on_new_connection(
-            conn_key,
+        NetworkEvent::NewConnection(all_conn_key, conn) => on_new_connection(
+            all_conn_key,
             conn,
             chunks,
             game,
-            connections,
+            all_connections,
+            uninit_connections,
             tile_blocks,
             client_loaded_chunks,
             chunk_client_cis,
-            client_last_processed,
-            client_last_processed_increased,
+            conn_last_processed,
+            conn_last_processed_increased,
         ),
-        NetworkEvent::Disconnected(conn_key) => on_disconnected(
-            conn_key,
-            connections,
+        NetworkEvent::Disconnected(all_conn_key) => on_disconnected(
+            all_conn_key,
+            all_connections,
             client_loaded_chunks,
-            client_last_processed,
-            client_last_processed_increased,
+            conn_last_processed,
+            conn_last_processed_increased,
             chunks,
             chunk_client_cis,
+            uninit_connections,
+            client_connections,
         ),
-        NetworkEvent::Received(conn_key, msg) => on_received(
-            conn_key,
+        NetworkEvent::Received(all_conn_key, msg) => on_received(
             msg,
+            all_conn_key,
+            all_connections,
+            conn_last_processed,
+            conn_last_processed_increased,
+            client_loaded_chunks,
+            client_connections,
+            game,
             tile_blocks,
             chunk_client_cis,
-            connections,
             chunks,
-            client_last_processed,
-            client_last_processed_increased,
+            uninit_connections,
             chunk_unsaved,
         ),
     }
 }
 
 fn on_new_connection(
-    conn_key: usize,
+    all_conn_key: usize,
     conn: Connection,
     chunks: &LoadedChunks,
     game: &Arc<GameData>,
-    connections: &mut SparseVec<Connection>,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
+    uninit_connections: &mut Slab<Connection>,
     tile_blocks: &PerChunk<ChunkBlocks>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
 ) {
-    connections.set(conn_key, conn);
-
-    let mut loaded_chunks = LoadedChunks::new();
-
-    // for each chunk already loaded
-    for (cc, ci) in chunks.iter() {
-        // add it to the client's loaded chunks set
-        let client_ci = loaded_chunks.add(cc);
-
-        // backlink it in the chunk's chunk_client_cis entry
-        chunk_client_cis.get_mut(cc, ci).set(conn_key, client_ci);
-        
-        // send the chunk to the client
-        send_load_chunk_message(
-            cc,
-            client_ci,
-            tile_blocks.get(cc, ci),
-            game,
-            &connections[conn_key],
-        );
-    }
-
-    // insert the client's new loaded_chunks set into the server's data structures
-    client_loaded_chunks.set(conn_key, loaded_chunks);
-
+    let uninit_conn_key = uninit_connections.insert(conn);
+    all_connections.set(all_conn_key, (ConnectionState::Uninit, uninit_conn_key));
+    
     // insert other things into the server's data structures
     // (up msg indices starts at 1, so setting last_processed to 0 indicates that
     // no messages from that client have been processed)
-    client_last_processed.set(conn_key, 0);
-    client_last_processed_increased.set(conn_key, false);
+    conn_last_processed.set(all_conn_key, 0);
+    conn_last_processed_increased.set(all_conn_key, false);
 }
 
 fn on_disconnected(
-    conn_key: usize,
-    connections: &mut SparseVec<Connection>,
+    all_conn_key: usize,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
     client_loaded_chunks: &mut SparseVec<LoadedChunks>,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
     chunks: &LoadedChunks,
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    uninit_connections: &mut Slab<Connection>,
+    client_connections: &mut Slab<Connection>,
 ) {
-    // remove from list of connections
-    connections.remove(conn_key);
+    let (conn_state, state_conn_key) = all_connections.remove(all_conn_key);
+    match conn_state {
+        ConnectionState::Uninit => {
+            uninit_connections.remove(state_conn_key);
+        }
+        ConnectionState::Client => {
+            // remove from list of connections
+            client_connections.remove(state_conn_key);
 
-    // remove client's clientside ci from all chunks
-    for (cc, _) in client_loaded_chunks[conn_key].iter() {
-        let ci = chunks.getter().get(cc).unwrap();
-        chunk_client_cis.get_mut(cc, ci).remove(conn_key);
+            // remove client's clientside ci from all chunks
+            for (cc, _) in client_loaded_chunks[state_conn_key].iter() {
+                let ci = chunks.getter().get(cc).unwrap();
+                chunk_client_cis.get_mut(cc, ci).remove(state_conn_key);
+            }
+
+            // remove client's ci space
+            client_loaded_chunks.remove(state_conn_key);
+
+            // remove from other data structures
+            conn_last_processed.remove(state_conn_key);
+            conn_last_processed_increased.remove(state_conn_key);
+        }
     }
-
-    // remove client's ci space
-    client_loaded_chunks.remove(conn_key);
-
-    // remove from other data structures
-    client_last_processed.remove(conn_key);
-    client_last_processed_increased.remove(conn_key);
 }
 
 fn on_received(
-    conn_key: usize,
+    msg: UpMessage,
+    all_conn_key: usize,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    client_connections: &mut Slab<Connection>,
+    game: &Arc<GameData>,
+    tile_blocks: &mut PerChunk<ChunkBlocks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    chunks: &LoadedChunks,
+    uninit_connections: &mut Slab<Connection>,
+    chunk_unsaved: &mut PerChunk<bool>,
+) {
+    conn_last_processed[all_conn_key] += 1;
+    conn_last_processed_increased[all_conn_key] = true;
+
+    let (conn_state, state_conn_key) = all_connections[all_conn_key];
+    match conn_state {
+        ConnectionState::Uninit => on_received_uninit(
+            all_conn_key,
+            state_conn_key,
+            msg,
+            client_loaded_chunks,
+            client_connections,
+            game,
+            tile_blocks,
+            chunk_client_cis,
+            chunks,
+            all_connections,
+            uninit_connections,
+        ),
+        ConnectionState::Client => on_received_client(
+            all_conn_key,
+            state_conn_key,
+            msg,
+            tile_blocks,
+            chunk_client_cis,
+            client_connections,
+            chunks,
+            conn_last_processed,
+            conn_last_processed_increased,
+            chunk_unsaved,
+        ),
+    }
+}
+
+fn on_received_uninit(
+    all_conn_key: usize,
+    uninit_conn_key: usize,
+    msg: UpMessage,
+    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
+    client_connections: &mut Slab<Connection>,
+    game: &Arc<GameData>,
+    tile_blocks: &PerChunk<ChunkBlocks>,
+    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
+    chunks: &LoadedChunks,
+    all_connections: &mut SparseVec<(ConnectionState, usize)>,
+    uninit_connections: &mut Slab<Connection>,
+) {
+    match msg {
+        UpMessage::LogIn(up::LogIn {
+            username,
+        }) => {
+            let conn = uninit_connections.remove(uninit_conn_key);
+            let client_conn_key = client_connections.insert(conn);
+            all_connections.set(all_conn_key, (ConnectionState::Client, client_conn_key));
+
+            let mut loaded_chunks = LoadedChunks::new();
+
+            // for each chunk already loaded
+            for (cc, ci) in chunks.iter() {
+                // add it to the client's loaded chunks set
+                let client_ci = loaded_chunks.add(cc);
+
+                // backlink it in the chunk's chunk_client_cis entry
+                chunk_client_cis.get_mut(cc, ci).set(client_conn_key, client_ci);
+                
+                // send the chunk to the client
+                send_load_chunk_message(
+                    cc,
+                    client_ci,
+                    tile_blocks.get(cc, ci),
+                    game,
+                    &client_connections[client_conn_key],
+                );
+            }
+
+            // insert the client's new loaded_chunks set into the server's data structures
+            client_loaded_chunks.set(client_conn_key, loaded_chunks);
+        }
+        UpMessage::SetTileBlock(_) => {
+            error!("uninit connection sent settileblock");
+            // TODO: handle this better than just ignoring it lol
+        }
+    }
+}
+
+fn on_received_client(
+    all_conn_key: usize,
+    client_conn_key: usize,
     msg: UpMessage,
     tile_blocks: &mut PerChunk<ChunkBlocks>,
     chunk_client_cis: &PerChunk<SparseVec<usize>>,
-    connections: &SparseVec<Connection>,
+    client_connections: &Slab<Connection>,
     chunks: &LoadedChunks,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
     chunk_unsaved: &mut PerChunk<bool>,
 ) {
-    client_last_processed[conn_key] += 1;
-    client_last_processed_increased[conn_key] = true;
-
     match msg {
+        UpMessage::LogIn(_) => {
+            error!("client connection sent login");
+            // TODO: handle this better than just ignoring it lol
+        }
         UpMessage::SetTileBlock(up::SetTileBlock {
             gtc,
             bid,
@@ -417,14 +543,14 @@ fn on_received(
             tile.get(tile_blocks).raw_set(bid, ());
 
             // send update to all clients with that chunk loaded
-            for (conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
-                let ack = if client_last_processed_increased[conn_key] {
-                    client_last_processed_increased[conn_key] = false;
-                    Some(client_last_processed[conn_key])
+            for (client_conn_key, &client_ci) in chunk_client_cis.get(tile.cc, tile.ci).iter() {
+                let ack = if conn_last_processed_increased[all_conn_key] {
+                    conn_last_processed_increased[all_conn_key] = false;
+                    Some(conn_last_processed[all_conn_key])
                 } else {
                     None
                 };
-                connections[conn_key].send(down::ApplyEdit {
+                client_connections[client_conn_key].send(down::ApplyEdit {
                     ack,
                     ci: client_ci,
                     edit: edit::SetTileBlock {
@@ -432,7 +558,7 @@ fn on_received(
                         bid,
                     }.into(),
                 });
-                client_last_processed_increased[conn_key] = false;
+                conn_last_processed_increased[all_conn_key] = false;
                 *chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
             }
         }
@@ -440,16 +566,22 @@ fn on_received(
 }
 
 fn after_process_available_network_events(
-    connections: &SparseVec<Connection>,
-    client_last_processed: &mut SparseVec<u64>,
-    client_last_processed_increased: &mut SparseVec<bool>,
+    all_connections: &SparseVec<(ConnectionState, usize)>,
+    client_connections: &mut Slab<Connection>,
+    conn_last_processed: &mut SparseVec<u64>,
+    conn_last_processed_increased: &mut SparseVec<bool>,
 ) {
-    for (conn_key, conn) in connections.iter() {
-        if client_last_processed_increased[conn_key] {
+    for (all_conn_key, client_conn_key) in all_connections.iter()
+        .filter(|(_, &(conn_state, _))| conn_state == ConnectionState::Client)
+        .map(|(all_conn_key, &(_, client_conn_key))| (all_conn_key, client_conn_key))
+    {
+        let conn = &client_connections[client_conn_key];
+
+        if conn_last_processed_increased[all_conn_key] {
             conn.send(down::Ack {
-                last_processed: client_last_processed[conn_key],
+                last_processed: conn_last_processed[all_conn_key],
             });
-            client_last_processed_increased[conn_key] = false;
+            conn_last_processed_increased[all_conn_key] = false;
         }
     }
 }

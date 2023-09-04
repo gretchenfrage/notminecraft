@@ -17,7 +17,6 @@ use binschema::{
 use std::{
     sync::Arc,
     marker::Unpin,
-    time::Duration,
 };
 use anyhow::{Result, anyhow, bail};
 use crossbeam_channel::{
@@ -38,11 +37,7 @@ use tokio::{
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{
-        error::{
-            Error as WsError,
-            Result as WsResult,
-        },
-        handshake::client::Request as WsClientRequest,
+        error::Error as WsError,
         Message as WsMessage,
     },
 };

@@ -50,6 +50,7 @@ pub mod prelude {
         },
         *,
     };
+    #[allow(unused_imports)]
     pub(crate) use super::blocks::simple_gui_block::{
         SimpleGuiBlock,
         simple_blocks_cursor_impl,

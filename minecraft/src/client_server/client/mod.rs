@@ -14,7 +14,6 @@ use crate::{
     asset::Assets,
     block_update_queue::BlockUpdateQueue,
     chunk_mesh::ChunkMesh,
-    game_data::GameData,
     gui::prelude::*,
     util::sparse_vec::SparseVec,
     physics::looking_at::compute_looking_at,
@@ -23,14 +22,10 @@ use chunk_data::*;
 use mesh_data::MeshData;
 use graphics::prelude::*;
 use std::{
-    sync::Arc,
     ops::Range,
     f32::consts::PI,
     cell::RefCell,
     collections::VecDeque,
-};
-use tokio::{
-    runtime::Handle,
 };
 use anyhow::{Result, ensure};
 use vek::*;
@@ -58,8 +53,38 @@ pub struct Client {
     menu_resources: MenuResources,
 }
 
+fn get_username() -> String {
+    // TODO: temporary hacky sillyness
+    use std::process::Command;
+
+    let command = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(&["/C", "echo %username%"])
+            .output()
+            .expect("Failed to execute command")
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg("echo $USER")
+            .output()
+            .expect("Failed to execute command")
+    };
+
+    let output = String::from_utf8_lossy(&command.stdout);
+    let username = output.trim().to_string();
+    if username.is_empty() {
+        "username_not_found".into()
+    } else {
+        username
+    }
+}
+
 impl Client {
-    pub fn new(connection: Connection, assets: &Assets) -> Self {
+    pub fn new(address: &str, ctx: &GuiGlobalContext) -> Self {
+        let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
+        connection.send(UpMessage::LogIn(up::LogIn {
+            username: get_username(),
+        }));
         Client {
             connection,
 
@@ -77,7 +102,7 @@ impl Client {
             prediction: PredictionManager::new(),
 
             menu_stack: Vec::new(),
-            menu_resources: MenuResources::new(assets)
+            menu_resources: MenuResources::new(ctx.assets)
         }
     }
 
@@ -107,6 +132,9 @@ impl Client {
 
     fn on_network_message(&mut self, msg: DownMessage) -> Result<()> {
         match msg {
+            DownMessage::Initialized(down::Initialized {}) => {
+                info!("yippeee! initialized");
+            }
             DownMessage::LoadChunk(down::LoadChunk {
                 cc,
                 ci,
@@ -475,7 +503,7 @@ impl Menu {
 }
 
 fn on_exit_menu_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
-    |ctx| {
+    |_| {
         effect_queue.borrow_mut().push_back(MenuEffect::PopMenu);
     }
 }
@@ -484,8 +512,8 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
     ctx.pop_state_frame();
 }
 
-fn on_options_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
-    |ctx| {
+fn on_options_click<'a>(_effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
+    |_| {
 
     }
 }

@@ -46,6 +46,9 @@ message_enum!(edit Edit {
 });
 
 message_enum!(up UpMessage {
+    LogIn {
+        username: String,
+    }
     SetTileBlock {
         gtc: Vec3<i64>,
         bid: RawBlockId,
@@ -53,6 +56,7 @@ message_enum!(up UpMessage {
 });
 
 message_enum!(down DownMessage {
+    Initialized {}
     LoadChunk {
         cc: Vec3<i64>,
         ci: usize,

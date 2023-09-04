@@ -1,13 +1,11 @@
 
 use crate::{
     client_server::client::connection::Connection,
-    asset::Assets,
     gui::prelude::*,
     util::hex_color::hex_color,
     client_server::client::Client,
 };
 use graphics::prelude::*;
-use rand::thread_rng;
 use vek::*;
 
 
@@ -165,10 +163,7 @@ impl GuiStateFrame for MultiplayerMenu {
 fn on_connect_click<'a>(address: &'a str) -> impl FnOnce(&GuiGlobalContext) + 'a {
     |ctx| {
         ctx.pop_state_frame();
-        ctx.push_state_frame(Client::new(
-            Connection::connect(address, ctx.tokio, ctx.game),
-            ctx.assets
-        ));
+        ctx.push_state_frame(Client::new(address, ctx));
     }
 }
 

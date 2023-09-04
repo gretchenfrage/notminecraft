@@ -7,7 +7,6 @@ use crate::gui::{
     DimChildSets,
     GuiGlobalContext,
 };
-use crate::gui::blocks::simple_gui_block::SimpleGuiBlock;
 use graphics::{
     Renderer,
     frame_content::{

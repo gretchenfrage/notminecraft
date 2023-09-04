@@ -10,7 +10,6 @@ use crate::{
         },
     },
 	util::hex_color::hex_color,
-    client_server::client::Client,
 };
 use graphics::{
 	Renderer,
