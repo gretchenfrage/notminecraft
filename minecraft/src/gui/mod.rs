@@ -91,7 +91,6 @@ pub use self::{
             GuiBlockSeq,
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
-            DebugHack,
         },
         sized_gui_block_seq_flatten::{
             DirMaperators,

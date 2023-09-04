@@ -82,10 +82,6 @@ impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for AxisSwap<I> {
 }
 
 
-#[derive(Debug)]
-struct AxisSwap<I>(I);
-
-
 impl<
     'a,
     W: DimConstraint,

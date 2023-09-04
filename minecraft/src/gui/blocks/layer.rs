@@ -7,12 +7,8 @@ use crate::gui::{
     SizedGuiBlockFlatten,
     DirSymMaperator,
     GuiGlobalContext,
-    DebugHack,
 };
-use std::{
-    iter::repeat,
-    fmt::{self, Formatter, Debug},
-};
+use std::iter::repeat;
 
 
 /// Gui block that superimposes its children over each other.
@@ -25,14 +21,13 @@ pub fn layer<
 }
 
 
+#[derive(Debug)]
 struct Layer<I>(I);
 
 impl<
     'a,
     I: GuiBlockSeq<'a, DimParentSets, DimParentSets>,
 > GuiBlock<'a, DimParentSets, DimParentSets> for Layer<I>
-where
-    for<'d> DebugHack<'d, I>: Debug,
 {
     type Sized = SizedGuiBlockFlatten<
         I::SizedSeq,
@@ -62,16 +57,5 @@ where
         );
 
         ((), (), sized)
-    }
-}
-
-impl<I> Debug for Layer<I>
-where
-    for<'d> DebugHack<'d, I>: Debug,
-{
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.debug_tuple("Layer")
-            .field(&DebugHack(&self.0))
-            .finish()
     }
 }

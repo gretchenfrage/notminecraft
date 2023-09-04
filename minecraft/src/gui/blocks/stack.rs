@@ -11,7 +11,6 @@ use crate::gui::{
     DimConstraint,
     GuiBlock,
     GuiBlockSeq,
-    DebugHack,
 };
 use super::{
     axis_swap,
@@ -20,7 +19,7 @@ use super::{
 use std::{
     iter::repeat,
     ops::Index,
-    fmt::{self, Formatter, Debug},
+    fmt::Debug,
 };
 
 
@@ -49,11 +48,7 @@ pub fn h_stack<'a, I: GuiBlockSeq<'a, DimChildSets, DimParentSets>>(
 pub fn v_stack_auto<'a, I: GuiBlockSeq<'a, DimChildSets, DimChildSets>>(
     logical_gap: f32,
     items: I,
-) -> impl GuiBlock<'a, DimChildSets, DimChildSets>
-where
-    for<'d> DebugHack<'d, I>: Debug,
-    for<'d> DebugHack<'d, I::SizedSeq>: Debug,
-{
+) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
     VStack {
         logical_gap,
         items,
@@ -63,8 +58,7 @@ where
 pub fn h_stack_auto<'a, I: GuiBlockSeq<'a, DimChildSets, DimChildSets>>(
     logical_gap: f32,
     items: I,
-) -> impl GuiBlock<'a, DimChildSets, DimChildSets>
-{
+) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
     axis_swap(v_stack_auto(logical_gap, axis_swap_seq(items)))
 }
 
@@ -99,6 +93,7 @@ impl WidthLogic for DimChildSets {
 }
 
 
+#[derive(Debug)]
 struct VStack<I> {
     logical_gap: f32,
     items: I,
@@ -109,9 +104,6 @@ impl<
     W: DimConstraint + WidthLogic,
     I: GuiBlockSeq<'a, W, DimChildSets>,
 > GuiBlock<'a, W, DimChildSets> for VStack<I>
-where
-    for<'d> DebugHack<'d, I>: Debug,
-    for<'d> DebugHack<'d, I::SizedSeq>: Debug,
 {
     type Sized = SizedGuiBlockFlatten<
         I::SizedSeq,
@@ -160,17 +152,6 @@ where
     }
 }
 
-impl<I> Debug for VStack<I>
-where
-    for<'d> DebugHack<'d, I>: Debug,
-{
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.debug_struct("VStack")
-            .field("logical_gap", &self.logical_gap)
-            .field("items", &DebugHack(&self.items))
-            .finish()
-    }
-}
 
 #[derive(Debug)]
 struct VStackDirMaperators<H> {
