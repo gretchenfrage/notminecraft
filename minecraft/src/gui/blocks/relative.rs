@@ -10,8 +10,12 @@ use crate::gui::{
     SizedGuiBlockSeq,
     GuiVisitorTarget,
     GuiVisitor,
+    DebugHack,
 };
-use std::iter::repeat;
+use std::{
+    iter::repeat,
+    fmt::{self, Formatter, Debug},
+};
 
 
 pub fn relative<'a, W, H, B, I, A>(
@@ -25,6 +29,10 @@ where
     B: GuiBlockSeq<'a, DimChildSets, DimChildSets>,
     I: GuiBlock<'a, W, H>,
     A: GuiBlockSeq<'a, DimChildSets, DimChildSets>,
+    for<'d> DebugHack<'d, B>: Debug,
+    for<'d> DebugHack<'d, A>: Debug,
+    for<'d> DebugHack<'d, B::SizedSeq>: Debug,
+    for<'d> DebugHack<'d, A::SizedSeq>: Debug,
 {
     Relative {
         before,
@@ -34,7 +42,6 @@ where
 }
 
 
-#[derive(Debug)]
 struct Relative<B, I, A> {
     before: B,
     item: I,
@@ -48,7 +55,13 @@ impl<
     B: GuiBlockSeq<'a, DimChildSets, DimChildSets>,
     I: GuiBlock<'a, W, H>,
     A: GuiBlockSeq<'a, DimChildSets, DimChildSets>,
-> GuiBlock<'a, W, H> for Relative<B, I, A> {
+> GuiBlock<'a, W, H> for Relative<B, I, A>
+where
+    for<'d> DebugHack<'d, B>: Debug,
+    for<'d> DebugHack<'d, A>: Debug,
+    for<'d> DebugHack<'d, B::SizedSeq>: Debug,
+    for<'d> DebugHack<'d, A::SizedSeq>: Debug,
+{
     type Sized = Relative<B::SizedSeq, I::Sized, A::SizedSeq>;
 
     fn size(
@@ -88,6 +101,9 @@ impl<
     I: SizedGuiBlock<'a>,
     A: SizedGuiBlockSeq<'a>,
 > SizedGuiBlock<'a> for Relative<B, I, A>
+where
+    for<'d> DebugHack<'d, B>: Debug,
+    for<'d> DebugHack<'d, A>: Debug,
 {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
@@ -103,5 +119,19 @@ impl<
             self.item.visit_nodes(visitor, false);
             self.before.visit_items_nodes(visitor, IdentityMaperator, false);
         }
+    }
+}
+
+impl<B, I: Debug, A> Debug for Relative<B, I, A>
+where
+    for<'d> DebugHack<'d, B>: Debug,
+    for<'d> DebugHack<'d, A>: Debug,
+{
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("Relative")
+            .field("before", &DebugHack(&self.before))
+            .field("item", &self.item)
+            .field("after", &DebugHack(&self.after))
+            .finish()
     }
 }

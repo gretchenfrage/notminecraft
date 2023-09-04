@@ -9,10 +9,11 @@ use crate::gui::{
         gui_block_seq::{
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
+            DebugHack,
         },
     },
 };
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Formatter};
 
 
 /// A direction -> `GuiVisitorMaperator` constructor.
@@ -49,7 +50,6 @@ impl<
 /// Its `visit_nodes` implementation calls `visit_nodes` for each
 /// `SizedGuiBlock` in the sequence, mapping `visitor` through the maperator
 /// to produce each other's modified visitor.
-#[derive(Debug)]
 pub struct SizedGuiBlockFlatten<S, M>(pub S, pub M);
 
 impl<
@@ -57,6 +57,8 @@ impl<
     S: SizedGuiBlockSeq<'a>,
     M: DirMaperators<'a>,
 > SizedGuiBlock<'a> for SizedGuiBlockFlatten<S, M>
+where
+    for<'d> DebugHack<'d, S>: Debug,
 {
     fn visit_nodes<T: GuiVisitorTarget<'a>>(
         self,
@@ -71,5 +73,17 @@ impl<
             let maperator = maperators.reverse();
             seq.visit_items_nodes(visitor, maperator, false);
         }
+    }
+}
+
+impl<S, M: Debug> Debug for SizedGuiBlockFlatten<S, M>
+where
+    for<'d> DebugHack<'d, S>: Debug,
+{
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_tuple("SizedGuiBlockFlatten")
+            .field(&DebugHack(&self.0))
+            .field(&self.1)
+            .finish()
     }
 }

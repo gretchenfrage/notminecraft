@@ -15,7 +15,7 @@ use crate::gui::{
 };
 use std::{
     ops::Index,
-    fmt::Debug,
+    fmt::{self, Debug, Formatter},
 };
 
 
@@ -24,7 +24,7 @@ use std::{
 ///
 /// Blanket-impl'd on tuple types. All elements must have the same dimensional
 /// constraints. Facilitates avoiding allocations.
-pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint>: Debug {
+pub trait GuiBlockSeq<'a, W: DimConstraint, H: DimConstraint> {
     /// Sequence of sized version of self's elements. Possibly a tuple.
     type SizedSeq: SizedGuiBlockSeq<'a>;
 
@@ -113,7 +113,7 @@ impl<
 /// heterogenous tuple of `SizedGuiBlock` implementations.
 ///
 /// Blanket-impl'd on tuple types. Facilitates avoiding allocations.
-pub trait SizedGuiBlockSeq<'a>: Debug {
+pub trait SizedGuiBlockSeq<'a> {
     /// Call `visit_nodes` on each item, in order, getting their GUI visitors
     /// by mapping `visitor` through `maperator`. 
     fn visit_items_nodes<T, M>(
@@ -223,7 +223,6 @@ macro_rules! reverse_visit_nodes {
     };
 }
 
-
 macro_rules! gui_seq_tuple {
     (
         $len:expr,
@@ -307,6 +306,18 @@ macro_rules! gui_seq_tuple {
                 }
             }
         }
+
+        impl<'a, $( $A: Debug, )*> Debug for DebugHack<'a, ( $( $A, )* )> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                let &( $( ref $a, )* ) = self.0;
+
+                let mut debug_tuple = f.debug_tuple("");
+                $(
+                    debug_tuple.field($a);
+                )*
+                debug_tuple.finish()
+            }
+        }
     };
 }
 
@@ -340,7 +351,6 @@ gui_seq_tuples!(
     (A08, a08, a08_w_out, a08_h_out, a08_sized),
     (A09, a09, a09_w_out, a09_h_out, a09_sized),
     (A10, a10, a10_w_out, a10_h_out, a10_sized),
-    /*
     (A11, a11, a11_w_out, a11_h_out, a11_sized),
     (A12, a12, a12_w_out, a12_h_out, a12_sized),
     (A13, a13, a13_w_out, a13_h_out, a13_sized),
@@ -351,5 +361,12 @@ gui_seq_tuples!(
     (A18, a18, a18_w_out, a18_h_out, a18_sized),
     (A19, a19, a19_w_out, a19_h_out, a19_sized),
     (A20, a20, a20_w_out, a20_h_out, a20_sized),
-    */
 );
+
+pub struct DebugHack<'a, I>(pub &'a I);
+
+impl<'a, T: Debug, const N: usize> Debug for DebugHack<'a, [T; N]> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Debug::fmt(self.0, f)
+    }
+}

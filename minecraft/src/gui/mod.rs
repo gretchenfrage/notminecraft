@@ -45,10 +45,14 @@ pub mod prelude {
     pub use super::{
         blocks::{
             mc::*,
-            simple_gui_block::SimpleGuiBlock,
             *,
         },
         *,
+    };
+    pub(crate) use super::blocks::simple_gui_block::{
+        SimpleGuiBlock,
+        simple_blocks_cursor_impl,
+        never_blocks_cursor_impl,
     };
 }
 
@@ -87,6 +91,7 @@ pub use self::{
             GuiBlockSeq,
             SizedGuiBlockSeq,
             GuiVisitorMaperator,
+            DebugHack,
         },
         sized_gui_block_seq_flatten::{
             DirMaperators,
