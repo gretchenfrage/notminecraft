@@ -5,13 +5,7 @@ use crate::{
     util::hex_color::hex_color,
     client_server::client::Client,
 };
-use graphics::{
-    Renderer,
-    frame_content::{
-        HAlign,
-        VAlign,
-    },
-};
+use graphics::prelude::*;
 use rand::thread_rng;
 use vek::*;
 
@@ -19,11 +13,14 @@ use vek::*;
 #[derive(Debug)]
 pub struct MultiplayerMenu {
     title_text: GuiTextBlock<true>,
-    info1_text: GuiTextBlock<false>,
-    info2_text: GuiTextBlock<false>,
-    ipinfo_text: GuiTextBlock<false>,
+    info_text: GuiTextBlock<true>,
     connect_button: MenuButton,
     cancel_button: MenuButton,
+
+    address: String,
+    address_text_block: GuiTextBlock<false>,
+    address_blinker: bool,
+    address_blinker_time: f32,
 }
 
 impl MultiplayerMenu {
@@ -37,24 +34,8 @@ impl MultiplayerMenu {
             h_align: HAlign::Center,
             v_align: VAlign::Top,
         });
-        let info1_text = GuiTextBlock::new(&GuiTextBlockConfig {
-            text: &ctx.assets.lang.multiplayer_info1,
-            font: ctx.assets.font,
-            logical_font_size: 16.0,
-            color: hex_color(0xa0a0a0ff),
-            h_align: HAlign::Left,
-            v_align: VAlign::Top,
-        });
-        let info2_text = GuiTextBlock::new(&GuiTextBlockConfig {
-            text: &ctx.assets.lang.multiplayer_info2,
-            font: ctx.assets.font,
-            logical_font_size: 16.0,
-            color: hex_color(0xa0a0a0ff),
-            h_align: HAlign::Left,
-            v_align: VAlign::Top,
-        });
-        let ipinfo_text = GuiTextBlock::new(&GuiTextBlockConfig {
-            text: &ctx.assets.lang.multiplayer_ipinfo,
+        let info_text = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: "Not Minecraft Beta 1.0.2 multiplayer is yes! Enter the address of a server to connect to it:",
             font: ctx.assets.font,
             logical_font_size: 16.0,
             color: hex_color(0xa0a0a0ff),
@@ -65,13 +46,16 @@ impl MultiplayerMenu {
             .build(&ctx.assets);
         let cancel_button = menu_button(&ctx.assets.lang.gui_cancel)
             .build(&ctx.assets);
+        let address_text_block = make_address_text_block("", true, ctx);
         MultiplayerMenu {
             title_text,
-            info1_text,
-            info2_text,
-            ipinfo_text,
+            info_text,
             connect_button,
             cancel_button,
+            address: String::new(),
+            address_text_block,
+            address_blinker: true,
+            address_blinker_time: 0.0,
         }
     }
 
@@ -92,27 +76,20 @@ impl MultiplayerMenu {
                             logical_height(64.0,
                                 gap()
                             ),
-                            h_align(0.0,
-                                &mut self.info1_text,
-                            ),
-                            logical_height(2.0,
-                                gap()
-                            ),
-                            h_align(0.0,
-                                &mut self.info2_text,
-                            ),
-                            logical_height(38.0,
-                                gap(),
-                            ),
-                            h_align(0.0,
-                                &mut self.ipinfo_text,
-                            ),
+                            &mut self.info_text,
                             logical_height(26.0,
                                 gap(),
                             ),
                             h_align(0.5,
                                 logical_size([404.0, 44.0],
-                                    DebugRed
+                                    layer((
+                                        AddressBoxBackground,
+                                        h_margin(10.0, 10.0,
+                                            align([0.0, 0.5],
+                                                &mut self.address_text_block
+                                            )
+                                        ),
+                                    ))
                                 )
                             ),
                             logical_height(58.0,
@@ -141,29 +118,76 @@ impl MultiplayerMenu {
 
 impl GuiStateFrame for MultiplayerMenu {
     impl_visit_nodes!();
+
+    fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
+        if c.is_control() {
+            if c == '\u{8}' {
+                // backspace
+                self.address.pop();
+            } else {
+                trace!(?c, "ignoring unknown control character");
+                return;
+            }
+        } else {
+            self.address.push(c);
+        }
+        self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
+    }
+
+    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+        const BLINKEY: f32 = 1.0 / 3.0;
+
+        self.address_blinker_time += elapsed;
+        self.address_blinker_time %= BLINKEY * 2.0;
+        let new_address_blinker = self.address_blinker_time < BLINKEY;
+        if self.address_blinker != new_address_blinker {
+            self.address_blinker = new_address_blinker;
+            self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
+        }
+    }
 }
 
 fn on_connect_click(ctx: &GuiGlobalContext) {
-
+    debug!("beebo");
 }
 
 fn on_cancel_click(ctx: &GuiGlobalContext) {
+    ctx.pop_state_frame();
+}
 
+fn make_address_text_block(address: &str, blinker: bool, ctx: &GuiGlobalContext) -> GuiTextBlock<false> {
+    let mut address = address.to_string();
+    if blinker {
+        address.push('_');
+    }
+    GuiTextBlock::new(&GuiTextBlockConfig {
+        text: &address,
+        font: ctx.assets.font,
+        logical_font_size: 16.0,
+        color: hex_color(0xe0e0e0ff),
+        h_align: HAlign::Left,
+        v_align: VAlign::Center,
+    })
 }
 
 
-
-use graphics::prelude::*;
-
+/// GUI block for the address box background.
 #[derive(Debug)]
-struct DebugRed;
+struct AddressBoxBackground;
 
-impl<'a> GuiNode<'a> for SimpleGuiBlock<DebugRed> {
-    never_blocks_cursor_impl!();
+impl<'a> GuiNode<'a> for SimpleGuiBlock<AddressBoxBackground> {
+    simple_blocks_cursor_impl!();
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2) {
+        let border = 2.0 * self.scale;
+        let border = Vec2::from(border);
+
         canvas.reborrow()
-            .color(Rgba::red())
+            .color(hex_color(0xa0a0a0ff))
             .draw_solid(self.size);
+        canvas.reborrow()
+            .translate(border)
+            .color(Rgba::black())
+            .draw_solid(self.size - border * 2.0);
     }
 }

@@ -74,11 +74,13 @@ impl SoundPlayer {
         })
     }
 
-    pub fn play(&self, sound: &SoundEffect) {
+    pub fn play(&self, sound: &SoundEffect, volume: f32) {
         let r = self.rng.lock().gen::<usize>();
         let clip = &sound.0[r % sound.0.len()];
 
-        let res = self.stream_handle.play_raw(clip.0.clone().convert_samples());
+        let source = clip.0.clone().convert_samples();
+        let source = source.amplify(volume);
+        let res = self.stream_handle.play_raw(source);
         if let Err(e) = res {
             error!(%e, "error playing sound");
         }

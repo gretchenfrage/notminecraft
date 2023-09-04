@@ -19,7 +19,7 @@ use std::fmt::{
 
 pub fn click_sound<'a>() -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
     on_any_click(|ctx, _| {
-        ctx.sound_player().play(&ctx.assets().click_sound);
+        ctx.sound_player().play(&ctx.assets().click_sound, 0.25);
     })
 }
 
