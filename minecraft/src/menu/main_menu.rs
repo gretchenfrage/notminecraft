@@ -136,10 +136,12 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
+    /*
     ctx.push_state_frame(Client::new(
         ctx.game,
         ctx.tokio,
     ));
+    */
 }
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {

@@ -324,6 +324,7 @@ impl GuiEventLoop {
 										.pressed_keys_semantic
 										.insert(key);
 									if
+										false &&
 										key == VirtualKeyCode::Escape
 										&& state.focus_level
 										== FocusLevel::MouseCaptured

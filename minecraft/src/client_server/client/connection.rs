@@ -38,7 +38,6 @@ use tokio::{
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{
-        client::IntoClientRequest,
         error::{
             Error as WsError,
             Result as WsResult,
@@ -47,6 +46,7 @@ use tokio_tungstenite::{
         Message as WsMessage,
     },
 };
+use url::Url;
 use futures::{
     prelude::*,
     select,
@@ -63,23 +63,21 @@ pub struct Connection {
 impl Connection {
     /// Asynchronously begin connecting and return immediately.
     pub fn connect(
-        connect_to: impl IntoClientRequest,
+        address: &str,
         rt: &Handle,
         game: &Arc<GameData>,
     ) -> Self {
-        // pre-do this part so connect_to can be non-static
-        let connect_to = connect_to.into_client_request();
-
         let (send_up, recv_up) = tokio_unbounded_channel();
         let (send_down, recv_down) = unbounded();
 
+        let address = address.to_owned();
         let rt_2 = Handle::clone(rt);
         let game = Arc::clone(game);
         rt.spawn(async move {
             // spawn a task to try and run the connection
             let mut abort_send_task = None;
             let result = try_run_connection(
-                connect_to,
+                address,
                 rt_2,
                 game,
                 &mut abort_send_task,
@@ -138,18 +136,29 @@ impl Connection {
 /// Returns with error on connection error, or Ok if stopped due to the
 /// Connection handle being dropped.
 async fn try_run_connection(
-    connect_to: WsResult<WsClientRequest>,
+    address: String,
     rt: Handle,
     game: Arc<GameData>,
     abort_send_task: &mut Option<AbortHandle>,
     send_down: Sender<Result<DownMessage>>,
     recv_up: TokioUnboundedReceiver<UpMessage>,
 ) -> Result<()> {
-    // TODO this is temporary
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // parse address and add default parts
+    let mut address = match Url::parse(&address) {
+        Ok(url) => url,
+        Err(url::ParseError::RelativeUrlWithoutBase) => Url::parse(&format!("ws://{}", address))?,
+        Err(e) => return Err(e.into()),
+    };
+    if address.scheme().is_empty() {
+        address.set_scheme("ws").unwrap();
+    }
+    if address.port().is_none() {
+        address.set_port(Some(35565)).unwrap();
+    }
+    info!("connecting to {}", address);
 
     // connect
-    let (ws, _) = connect_async(connect_to?).await?;
+    let (ws, _) = connect_async(address).await?;
     let (ws_send, mut ws_recv) = ws.split();
 
     // spawn task to handle the send half

@@ -1,5 +1,6 @@
 
 use crate::{
+    client_server::client::connection::Connection,
     asset::Assets,
     gui::prelude::*,
     util::hex_color::hex_color,
@@ -13,7 +14,8 @@ use vek::*;
 #[derive(Debug)]
 pub struct MultiplayerMenu {
     title_text: GuiTextBlock<true>,
-    info_text: GuiTextBlock<true>,
+    info_text_1: GuiTextBlock<true>,
+    info_text_2: GuiTextBlock<true>,
     connect_button: MenuButton,
     cancel_button: MenuButton,
 
@@ -34,8 +36,17 @@ impl MultiplayerMenu {
             h_align: HAlign::Center,
             v_align: VAlign::Top,
         });
-        let info_text = GuiTextBlock::new(&GuiTextBlockConfig {
-            text: "Not Minecraft Beta 1.0.2 multiplayer is yes! Enter the address of a server to connect to it:",
+        let info_text_1 = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: "Not Minecraft Beta 1.0.2 multiplayer is yes! \
+                   The default port is 35565.",
+            font: ctx.assets.font,
+            logical_font_size: 16.0,
+            color: hex_color(0xa0a0a0ff),
+            h_align: HAlign::Left,
+            v_align: VAlign::Top,
+        });
+        let info_text_2 = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: "Enter the address of a server to connect to it:",
             font: ctx.assets.font,
             logical_font_size: 16.0,
             color: hex_color(0xa0a0a0ff),
@@ -49,7 +60,8 @@ impl MultiplayerMenu {
         let address_text_block = make_address_text_block("", true, ctx);
         MultiplayerMenu {
             title_text,
-            info_text,
+            info_text_1,
+            info_text_2,
             connect_button,
             cancel_button,
             address: String::new(),
@@ -73,13 +85,11 @@ impl MultiplayerMenu {
                     v_align(0.0,
                         v_stack(0.0, (
                             &mut self.title_text,
-                            logical_height(64.0,
-                                gap()
-                            ),
-                            &mut self.info_text,
-                            logical_height(26.0,
-                                gap(),
-                            ),
+                            logical_height(64.0, gap()),
+                            &mut self.info_text_1,
+                            logical_height(38.0, gap()),
+                            &mut self.info_text_2,
+                            logical_height(26.0, gap()),
                             h_align(0.5,
                                 logical_size([404.0, 44.0],
                                     layer((
@@ -92,17 +102,13 @@ impl MultiplayerMenu {
                                     ))
                                 )
                             ),
-                            logical_height(58.0,
-                                gap(),
-                            ),
+                            logical_height(58.0, gap()),
                             h_align(0.5,
                                 logical_width(400.0,
-                                    self.connect_button.gui(on_connect_click)
+                                    self.connect_button.gui(on_connect_click(&self.address))
                                 )
                             ),
-                            logical_height(9.0,
-                                gap(),
-                            ),
+                            logical_height(9.0, gap()),
                             h_align(0.5,
                                 logical_width(400.0,
                                     self.cancel_button.gui(on_cancel_click)
@@ -134,6 +140,12 @@ impl GuiStateFrame for MultiplayerMenu {
         self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
     }
 
+    fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
+        if key == VirtualKeyCode::Return {
+            on_connect_click(&self.address)(ctx.global())
+        }
+    }
+
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         const BLINKEY: f32 = 1.0 / 3.0;
 
@@ -147,8 +159,14 @@ impl GuiStateFrame for MultiplayerMenu {
     }
 }
 
-fn on_connect_click(ctx: &GuiGlobalContext) {
-    debug!("beebo");
+fn on_connect_click<'a>(address: &'a str) -> impl FnOnce(&GuiGlobalContext) + 'a {
+    |ctx| {
+        ctx.pop_state_frame();
+        ctx.push_state_frame(Client::new(
+            Connection::connect(address, ctx.tokio, ctx.game),
+            ctx.assets
+        ));
+    }
 }
 
 fn on_cancel_click(ctx: &GuiGlobalContext) {

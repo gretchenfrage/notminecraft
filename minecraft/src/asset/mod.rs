@@ -92,9 +92,7 @@ lang!(
     gui_cancel,
 
     multiplayer_title,
-    multiplayer_info1,
-    multiplayer_info2,
-    multiplayer_ipinfo,
+    
     multiplayer_connect,
 
     tile_stone_name,

@@ -21,6 +21,7 @@ mod relative;
 mod logical_translate;
 mod gui_block_seq_chain;
 mod mouse_capturer;
+mod solid;
 
 
 pub use self::{
@@ -67,4 +68,5 @@ pub use self::{
         gui_seq_flatten,
     },
     mouse_capturer::mouse_capturer,
+    solid::solid,
 };
