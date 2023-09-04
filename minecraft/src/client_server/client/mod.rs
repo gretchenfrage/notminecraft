@@ -122,7 +122,9 @@ impl Client {
             mouse_capturer(),
             self.menu_stack.iter_mut().rev().next()
                 .map(|open_menu| layer((
-                    solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]),
+                    if open_menu.has_darkened_background() {
+                        Some(solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]))
+                    } else { None },
                     open_menu.gui(&mut self.menu_resources, ctx),
                 ))),
         ))
@@ -338,17 +340,17 @@ impl GuiStateFrame for Client {
                 self.menu_stack.push(Menu::Inventory);
             }
         } else {
-            if key == VirtualKeyCode::Escape {
+            if key == VirtualKeyCode::Escape
+                || (
+                    key == VirtualKeyCode::E
+                    && self.menu_stack.iter().rev().next().unwrap()
+                        .exitable_via_inventory_button()
+                )
+            {
                 self.menu_stack.pop();
                 if self.menu_stack.is_empty() {
                     ctx.global().capture_mouse();
                 }
-            } else {
-                self.menu_stack.iter_mut().rev().next().unwrap().on_key_press_semantic(
-                    &mut self.menu_resources,
-                    ctx,
-                    key,
-                );
             }
         }
     }
@@ -486,20 +488,6 @@ enum Menu {
 }
 
 impl Menu {
-    fn on_key_press_semantic(
-        &mut self,
-        resources: &mut MenuResources,
-        _: &GuiWindowContext,
-        key: VirtualKeyCode,
-    ) {
-        if key == VirtualKeyCode::E && match self {
-            &mut Menu::EscMenu => false,
-            &mut Menu::Inventory => true,
-        } {
-            resources.effect_queue.get_mut().push_back(MenuEffect::PopMenu);
-        }
-    }
-
     fn gui<'a>(
         &'a mut self,
         resources: &'a mut MenuResources,
@@ -522,6 +510,19 @@ impl Menu {
                 )
             )),
             &mut Menu::Inventory => GuiEither::B(solid([1.0, 0.0, 0.0, 0.5])),
+        }
+    }
+
+    fn exitable_via_inventory_button(&self) -> bool {
+        match self {
+            &Menu::EscMenu => false,
+            &Menu::Inventory => true,
+        }
+    }
+
+    fn has_darkened_background(&self) -> bool {
+        match self {
+            _ => true,
         }
     }
 }
