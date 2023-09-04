@@ -40,7 +40,6 @@ impl<'a> MenuButtonBuilder<'a> {
             color: hex_color(0xE0E0E0FF),
             h_align: HAlign::Center,
             v_align: VAlign::Center,
-            wrap: false,
         });
         MenuButton {
             text,
@@ -51,7 +50,7 @@ impl<'a> MenuButtonBuilder<'a> {
 
 #[derive(Debug)]
 pub struct MenuButton {
-    text: GuiTextBlock,
+    text: GuiTextBlock<false>,
 }
 
 impl MenuButton {
@@ -65,7 +64,9 @@ impl MenuButton {
         logical_height(40.0,
             layer((
                 button_bg(),
-                &mut self.text,
+                align(0.5,
+                    &mut self.text,
+                ),
                 click_sound(),
                 on_left_click(move |ctx| on_click(ctx.global)),
             )),

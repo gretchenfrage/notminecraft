@@ -26,8 +26,8 @@ use vek::*;
 #[derive(Debug)]
 pub struct MainMenu {
     title: GuiTitleBlock,
-	version_text: GuiTextBlock,
-    uncopyright_text: GuiTextBlock,
+	version_text: GuiTextBlock<true>,
+    uncopyright_text: GuiTextBlock<true>,
 
     singleplayer_button: MenuButton,
     multiplayer_button: MenuButton,
@@ -50,7 +50,6 @@ impl MainMenu {
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Left,
 			v_align: VAlign::Top,
-			wrap: true,
 		});
 		let uncopyright_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &assets.lang.menu_uncopyright,
@@ -59,7 +58,6 @@ impl MainMenu {
 			color: Rgba::white(),
 			h_align: HAlign::Right,
 			v_align: VAlign::Bottom,
-			wrap: true,
 		});
         let singleplayer_button = menu_button(&assets.lang.menu_singleplayer)
             .build(assets);
@@ -90,8 +88,12 @@ impl MainMenu {
             ),
 			margin(4.0, 4.0, 4.0, 4.0,
                 layer((
-                    &mut self.version_text,
-                    &mut self.uncopyright_text,
+                    v_align(0.0,
+                        &mut self.version_text,
+                    ),
+                    v_align(1.0,
+                        &mut self.uncopyright_text,
+                    ),
                 ))
             ),
             h_align(0.5,

@@ -2,8 +2,12 @@
 use crate::gui::{
     GuiSpatialContext,
     GuiNode,
+    GuiBlock,
+    DimParentSets,
+    DimChildSets,
+    GuiGlobalContext,
 };
-use super::simple_gui_block::SimpleGuiBlock;
+use crate::gui::blocks::simple_gui_block::SimpleGuiBlock;
 use graphics::{
     Renderer,
     frame_content::{
@@ -55,21 +59,21 @@ pub struct GuiTextBlockConfig<'a> {
     pub color: Rgba<f32>,
     pub h_align: HAlign,
     pub v_align: VAlign,
-    pub wrap: bool,
 }
 
 
-// ==== block ====
+// ==== inner ====
 
 
-/// GUI block that displays text. Designed to cache layout.
+/// Utility for GUI blocks that displays text. Designed to cache layout. Does
+/// the drop shadow.
 ///
 /// Since text layout is an expensive operation, this GUI node is designed to
 /// cache its layout so it doesn't have to recalculate unless the size or scale
 /// changes. The way this is done is that `GuiBlock` is implemented not for
-/// `GuiTextBlock` itself, but for `&mut GuiTextBlock`.
+/// `GuiTextBlockInner` itself, but for `&mut GuiTextBlockInner`.
 #[derive(Debug)]
-pub struct GuiTextBlock {
+pub struct GuiTextBlockInner {
     text: String,
     font: FontId,
     logical_font_size: f32,
@@ -87,16 +91,16 @@ struct CacheKey {
     scale: f32,
 }
 
-impl GuiTextBlock {
-    pub fn new(config: &GuiTextBlockConfig) -> Self {
-        GuiTextBlock {
+impl GuiTextBlockInner {
+    pub fn new(config: &GuiTextBlockConfig, wrap: bool) -> Self {
+        GuiTextBlockInner {
             text: config.text.to_owned(),
             font: config.font,
             logical_font_size: config.logical_font_size,
             color: config.color,
             h_align: config.h_align,
             v_align: config.v_align,
-            wrap: config.wrap,
+            wrap: wrap,
 
             cache: None,
         }
@@ -136,18 +140,15 @@ impl GuiTextBlock {
         }  
     }
 
-    pub fn content_bounds<E>(
+    pub fn content_bounds(
         &mut self,
-        size: E,
+        wrap_width: Option<f32>,
         scale: f32,
         renderer: &Renderer,
-    ) -> [Vec2<f32>; 2]
-    where
-        E: Into<Extent2<f32>>,
-    {
-        let size = size.into();
+    ) -> [Vec2<f32>; 2] {
+        assert_eq!(self.wrap, wrap_width.is_some());
         let cache_key = CacheKey {
-            wrap_width: Some(size.w).filter(|_| self.wrap),
+            wrap_width: if self.wrap { Some(wrap_width.unwrap()) } else { None },
             scale: scale,
         };
         self.validate_cache(renderer, cache_key);
@@ -158,26 +159,20 @@ impl GuiTextBlock {
         layed_out.content_bounds()
     }
 
-    /// This is exposed as an alternative way to render directly without
-    /// going through the conventional gui block logic.
-    pub fn draw<'a, E>(
+    pub fn draw<'a>(
         &'a mut self,
-        size: E,
+        size: Extent2<f32>,
         scale: f32,
         canvas: &mut Canvas2<'a, '_>,
         renderer: &Renderer,
-    )
-    where
-        E: Into<Extent2<f32>>,
-    {
-        let size = size.into();
-
+    ) {
         let cache_key = CacheKey {
             wrap_width: Some(size.w).filter(|_| self.wrap),
             scale: scale,
         };
 
         self.validate_cache(renderer, cache_key);
+
         let layed_out = self.cache
             .as_ref()
             .map(|&(_, ref content)| content)
@@ -216,7 +211,123 @@ impl GuiTextBlock {
     }
 }
 
-impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
+
+// ==== gui blocks ====
+
+
+/// GUI text block. If `WRAP` is false, doesn't wrap, and sets its own width
+/// and height. If `WRAP` is true, wraps based on parent set width.
+#[derive(Debug)]
+pub struct GuiTextBlock<const WRAP: bool>(GuiTextBlockInner);
+
+impl<const WRAP: bool> GuiTextBlock<WRAP> {
+    pub fn new(config: &GuiTextBlockConfig) -> Self {
+        GuiTextBlock(GuiTextBlockInner::new(config, WRAP))
+    }
+}
+
+// wrap false
+
+impl<'a> GuiBlock<'a, DimChildSets, DimChildSets> for &'a mut GuiTextBlock<false> {
+    type Sized = GuiTextBlockWrapFalseSized<'a>;
+
+    fn size(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        (): (),
+        (): (),
+        scale: f32,
+    ) -> (f32, f32, Self::Sized) {
+        let [min, max] = self.0.content_bounds(None, scale, &*ctx.renderer.borrow());
+        let size = Extent2 {
+            w: max.x - min.x,
+            h: max.y - min.y,
+        };
+        (
+            size.w,
+            size.h,
+            GuiTextBlockWrapFalseSized {
+                inner: &mut self.0,
+                size,
+                scale,
+            }
+        )
+    }
+}
+
+#[derive(Debug)]
+#[doc(hidden)]
+pub struct GuiTextBlockWrapFalseSized<'a> {
+    inner: &'a mut GuiTextBlockInner,
+    size: Extent2<f32>,
+    scale: f32,
+}
+
+impl<'a> GuiNode<'a> for GuiTextBlockWrapFalseSized<'a> {
+    fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        self.inner.draw(
+            self.size,
+            self.scale,
+            canvas,
+            &*ctx.global.renderer.borrow(),
+        );
+    }
+}
+
+// wrap true
+
+impl<'a> GuiBlock<'a, DimParentSets, DimChildSets> for &'a mut GuiTextBlock<true> {
+    type Sized = GuiTextBlockWrapTrueSized<'a>;
+
+    fn size(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w: f32,
+        (): (),
+        scale: f32,
+    ) -> ((), f32, Self::Sized) {
+        let [min, max] = self.0.content_bounds(Some(w), scale, &*ctx.renderer.borrow());
+        let size = Extent2 {
+            w,
+            h: max.y - min.y,
+        };
+        (
+            (),
+            size.h,
+            GuiTextBlockWrapTrueSized {
+                inner: &mut self.0,
+                size,
+                scale,
+            }
+        )
+    }
+} 
+
+#[derive(Debug)]
+#[doc(hidden)]
+pub struct GuiTextBlockWrapTrueSized<'a> {
+    inner: &'a mut GuiTextBlockInner,
+    size: Extent2<f32>,
+    scale: f32,
+}
+
+impl<'a> GuiNode<'a> for GuiTextBlockWrapTrueSized<'a> {
+    fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        self.inner.draw(
+            self.size,
+            self.scale,
+            canvas,
+            &*ctx.global.renderer.borrow(),
+        );
+    }
+}
+
+/*
+impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlockInner> {
     fn blocks_cursor(&self, _: GuiSpatialContext) -> bool { false }
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
@@ -228,3 +339,4 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<&'a mut GuiTextBlock> {
         );
     }
 }
+*/

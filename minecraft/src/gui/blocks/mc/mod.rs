@@ -6,6 +6,7 @@ mod on_click;
 mod button_bg;
 mod menu_button;
 mod game_gui_macro;
+mod text;
 
 pub use self::{
     splash_text::GuiSplashText,
@@ -28,4 +29,8 @@ pub use self::{
         menu_button,
     },
     game_gui_macro::game_gui,
+    text::{
+        GuiTextBlockConfig,
+        GuiTextBlock, 
+    },
 };

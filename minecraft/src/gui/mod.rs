@@ -41,6 +41,17 @@ mod fps_overlay;
 
 pub mod blocks;
 
+pub mod prelude {
+    pub use super::{
+        blocks::{
+            mc::*,
+            simple_gui_block::SimpleGuiBlock,
+            *,
+        },
+        *,
+    };
+}
+
 pub use self::{
     context::{
         GuiGlobalContext,

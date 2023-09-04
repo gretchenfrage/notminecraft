@@ -1,10 +1,7 @@
 
 use crate::{
 	asset::Assets,
-	gui::{
-		*,
-		blocks::*,
-	},
+	gui::prelude::*,
 	util::hex_color::hex_color,
 };
 use graphics::frame_content::{
@@ -15,7 +12,7 @@ use graphics::frame_content::{
 
 #[derive(Debug)]
 pub struct FpsOverlay {
-	gui_text: GuiTextBlock,
+	gui_text: GuiTextBlock<false>,
 }
 
 impl FpsOverlay {
@@ -27,7 +24,6 @@ impl FpsOverlay {
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Right,
 			v_align: VAlign::Top,
-			wrap: false,
 		});
 		FpsOverlay {
 			gui_text,
@@ -40,7 +36,9 @@ impl FpsOverlay {
 	) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
 	{
 		margin(4.0, 4.0, 4.0, 4.0,
-			&mut self.gui_text,
+			align([1.0, 0.0],
+				&mut self.gui_text,
+			)
 		)
 	}
 }

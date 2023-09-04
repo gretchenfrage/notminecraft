@@ -16,7 +16,6 @@ mod stack;
 mod image;
 mod tile_image;
 mod tile_9;
-mod text;
 mod either;
 mod relative;
 mod logical_translate;
@@ -59,10 +58,6 @@ pub use self::{
         tile_9_crop,
         Tile9Parts,
         tile_9,
-    },
-    text::{
-        GuiTextBlockConfig,
-        GuiTextBlock, 
     },
     either::GuiEither,
     relative::relative,

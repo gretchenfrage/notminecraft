@@ -24,7 +24,7 @@ use vek::*;
 
 #[derive(Debug)]
 pub struct MultiplayerMenu {
-    title_text: GuiTextBlock,
+    title_text: GuiTextBlock<true>,
     //info_text_1: GuiTextBlock,
     //info_text_2: GuiTextBlock,
 }
@@ -39,7 +39,6 @@ impl MultiplayerMenu {
             color: hex_color(0xE0E0E0FF),
             h_align: HAlign::Center,
             v_align: VAlign::Top,
-            wrap: true,
         });
         MultiplayerMenu {
             title_text,
@@ -58,7 +57,7 @@ impl MultiplayerMenu {
             align(0.5,
                 logical_width(500.0,
                     v_stack(0.0, (
-                        logical_height(10.0, &mut self.title_text),
+                        &mut self.title_text,
                     ))
                 )
             )
