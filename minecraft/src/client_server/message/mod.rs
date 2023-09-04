@@ -57,6 +57,9 @@ message_enum!(up UpMessage {
 
 message_enum!(down DownMessage {
     Initialized {}
+    RejectLogIn {
+        message: String,
+    }
     LoadChunk {
         cc: Vec3<i64>,
         ci: usize,

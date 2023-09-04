@@ -27,7 +27,7 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
 };
-use anyhow::{Result, ensure};
+use anyhow::{Result, ensure, bail};
 use vek::*;
 
 
@@ -134,6 +134,11 @@ impl Client {
         match msg {
             DownMessage::Initialized(down::Initialized {}) => {
                 info!("yippeee! initialized");
+            }
+            DownMessage::RejectLogIn(down::RejectLogIn {
+                message,
+            }) => {
+                bail!("server rejected log in: {}", message)
             }
             DownMessage::LoadChunk(down::LoadChunk {
                 cc,

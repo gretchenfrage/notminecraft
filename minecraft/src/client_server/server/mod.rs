@@ -31,6 +31,7 @@ use std::{
         Duration,
         Instant,
     },
+    collections::HashMap,
 };
 use tokio::runtime::Handle;
 use anyhow::Result;
@@ -83,6 +84,11 @@ pub fn run_server(
     // mapping from chunk to client to clientside ci
     let mut chunk_client_cis: PerChunk<SparseVec<usize>> = PerChunk::new();
 
+    // mapping from client to username
+    let mut client_username: SparseVec<String> = SparseVec::new();
+    // mapping from username to client
+    let mut username_client: HashMap<String, usize> = HashMap::new();
+
     let mut save = SaveFile::open("server", data_dir, game)?;
     let mut chunk_unsaved: PerChunk<bool> = PerChunk::new();
     let mut last_tick_saved = 0;
@@ -133,6 +139,8 @@ pub fn run_server(
             &mut chunk_unsaved,
             &mut client_connections,
             &mut uninit_connections,
+            &mut client_username,
+            &mut username_client,
         );
     }
 }
@@ -245,6 +253,8 @@ fn process_network_events_until_next_tick(
     chunk_unsaved: &mut PerChunk<bool>,
     client_connections: &mut Slab<Connection>,
     uninit_connections: &mut Slab<Connection>,
+    client_username: &mut SparseVec<String>,
+    username_client: &mut HashMap<String, usize>,
 ) {
     while let Ok(event) = network_events
         .recv_deadline(next_tick)
@@ -263,6 +273,8 @@ fn process_network_events_until_next_tick(
             chunk_unsaved,
             uninit_connections,
             client_connections,
+            client_username,
+            username_client,
         );
 
         while let Ok(event) = network_events
@@ -282,6 +294,8 @@ fn process_network_events_until_next_tick(
                 chunk_unsaved,
                 uninit_connections,
                 client_connections,
+                client_username,
+                username_client,
             );                
         }
 
@@ -307,6 +321,8 @@ fn on_network_event(
     chunk_unsaved: &mut PerChunk<bool>,
     uninit_connections: &mut Slab<Connection>,
     client_connections: &mut Slab<Connection>,
+    client_username: &mut SparseVec<String>,
+    username_client: &mut HashMap<String, usize>,
 ) {
     match event {
         NetworkEvent::NewConnection(all_conn_key, conn) => on_new_connection(
@@ -332,6 +348,8 @@ fn on_network_event(
             chunk_client_cis,
             uninit_connections,
             client_connections,
+            client_username,
+            username_client,
         ),
         NetworkEvent::Received(all_conn_key, msg) => on_received(
             msg,
@@ -347,6 +365,8 @@ fn on_network_event(
             chunks,
             uninit_connections,
             chunk_unsaved,
+            client_username,
+            username_client,
         ),
     }
 }
@@ -384,6 +404,8 @@ fn on_disconnected(
     chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
     uninit_connections: &mut Slab<Connection>,
     client_connections: &mut Slab<Connection>,
+    client_username: &mut SparseVec<String>,
+    username_client: &mut HashMap<String, usize>,
 ) {
     let (conn_state, state_conn_key) = all_connections.remove(all_conn_key);
     match conn_state {
@@ -404,8 +426,11 @@ fn on_disconnected(
             client_loaded_chunks.remove(state_conn_key);
 
             // remove from other data structures
-            conn_last_processed.remove(state_conn_key);
-            conn_last_processed_increased.remove(state_conn_key);
+            let username = client_username.remove(state_conn_key);
+            username_client.remove(&username);
+
+            conn_last_processed.remove(all_conn_key);
+            conn_last_processed_increased.remove(all_conn_key);
         }
     }
 }
@@ -424,6 +449,8 @@ fn on_received(
     chunks: &LoadedChunks,
     uninit_connections: &mut Slab<Connection>,
     chunk_unsaved: &mut PerChunk<bool>,
+    client_username: &mut SparseVec<String>,
+    username_client: &mut HashMap<String, usize>,
 ) {
     conn_last_processed[all_conn_key] += 1;
     conn_last_processed_increased[all_conn_key] = true;
@@ -442,6 +469,8 @@ fn on_received(
             chunks,
             all_connections,
             uninit_connections,
+            client_username,
+            username_client,
         ),
         ConnectionState::Client => on_received_client(
             all_conn_key,
@@ -470,11 +499,22 @@ fn on_received_uninit(
     chunks: &LoadedChunks,
     all_connections: &mut SparseVec<(ConnectionState, usize)>,
     uninit_connections: &mut Slab<Connection>,
+    client_username: &mut SparseVec<String>,
+    username_client: &mut HashMap<String, usize>,
 ) {
     match msg {
         UpMessage::LogIn(up::LogIn {
             username,
         }) => {
+            // validate
+            if username_client.contains_key(&username) {
+                uninit_connections[uninit_conn_key]
+                    .send(DownMessage::RejectLogIn(down::RejectLogIn {
+                        message: "client already logged in with same username".into(),
+                    }));
+                return;
+            }
+
             let conn = uninit_connections.remove(uninit_conn_key);
             let client_conn_key = client_connections.insert(conn);
             all_connections.set(all_conn_key, (ConnectionState::Client, client_conn_key));
@@ -501,6 +541,10 @@ fn on_received_uninit(
 
             // insert the client's new loaded_chunks set into the server's data structures
             client_loaded_chunks.set(client_conn_key, loaded_chunks);
+
+            // insert into other server data structures
+            client_username.set(client_conn_key, username.clone());
+            username_client.insert(username, client_conn_key);
         }
         UpMessage::SetTileBlock(_) => {
             error!("uninit connection sent settileblock");
