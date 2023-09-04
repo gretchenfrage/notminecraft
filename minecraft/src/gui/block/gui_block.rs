@@ -6,7 +6,10 @@ use crate::gui::{
         GuiVisitorTarget,
         GuiVisitor,
     },
-    block::dim_constraint::DimConstraint,
+    block::dim_constraint::{
+        DimConstraint,
+        DimParentSets,
+    }
 };
 
 
@@ -57,4 +60,30 @@ impl<'a, N: GuiNode<'a>> SizedGuiBlock<'a> for N {
         visitor.reborrow()
             .visit_node(self);
     }
+}
+
+impl<'a, I: GuiBlock<'a, DimParentSets, DimParentSets>> GuiBlock<'a, DimParentSets, DimParentSets> for Option<I> {
+    type Sized = Option<I::Sized>;
+
+    fn size(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w: f32,
+        h: f32,
+        scale: f32,
+    ) -> ((), (), Self::Sized) {
+        ((), (), self.map(|inner| inner.size(ctx, w, h, scale).2))
+    }
+}
+
+impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for Option<I> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
+    ) {
+        if let Some(inner) = self {
+            inner.visit_nodes(visitor, forward);
+        }
+    } 
 }

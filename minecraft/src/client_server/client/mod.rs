@@ -49,6 +49,9 @@ pub struct Client {
 
     prediction: PredictionManager,
 
+    game_gui: Option<GameGui>,
+    game_gui_resources: GameGuiResources,
+
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
 }
@@ -101,8 +104,11 @@ impl Client {
 
             prediction: PredictionManager::new(),
 
+            game_gui: None,
+            game_gui_resources: GameGuiResources::new(ctx.assets),
+
             menu_stack: Vec::new(),
-            menu_resources: MenuResources::new(ctx.assets)
+            menu_resources: MenuResources::new(ctx.assets),
         }
     }
 
@@ -119,14 +125,21 @@ impl Client {
                 chunks: &self.chunks,
                 tile_meshes: &mut self.tile_meshes,
             },
+
+            if self.game_gui.is_none() && self.menu_stack.is_empty() {
+                Some(mouse_capturer())
+            } else { None },
+
+            if let Some(open_game_gui) = self.game_gui.as_mut() {
+                Some(open_game_gui.gui(&mut self.game_gui_resources, ctx))
+            } else { None },
+
             if let Some(open_menu) = self.menu_stack.iter_mut().rev().next() {
-                GuiEither::A(layer((
+                Some(layer((
                     solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]),
                     open_menu.gui(&mut self.menu_resources, ctx),
                 )))
-            } else {
-                GuiEither::B(mouse_capturer())
-            },
+            } else { None },
         ))
     }
 
@@ -210,6 +223,7 @@ impl GuiStateFrame for Client {
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
         // menu stuff
+        self.game_gui_resources.process_set_game_gui(&mut self.game_gui);
         self.menu_resources.process_effect_queue(&mut self.menu_stack);
 
         // deal with messages from the server
@@ -252,7 +266,7 @@ impl GuiStateFrame for Client {
         }
 
         // movement
-        if self.menu_stack.is_empty() {
+        if self.game_gui.is_none() && self.menu_stack.is_empty() && ctx.global().focus_level == FocusLevel::MouseCaptured {
             let mut movement = Vec3::from(0.0);
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::W) {
                 movement.z += 1.0;
@@ -335,17 +349,25 @@ impl GuiStateFrame for Client {
     }
 
     fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
-        if self.menu_stack.is_empty() {
-            if key == VirtualKeyCode::Escape {
-                ctx.global().uncapture_mouse();
-                self.menu_stack.push(Menu::EscMenu);
-            }
-        } else {
+        if !self.menu_stack.is_empty() {
             if key == VirtualKeyCode::Escape {
                 self.menu_stack.pop();
                 if self.menu_stack.is_empty() {
                     ctx.global().capture_mouse();
                 }
+            }
+        } else if self.game_gui.is_some() {
+            if key == VirtualKeyCode::Escape  || key == VirtualKeyCode::E {
+                self.game_gui = None;
+                ctx.global().capture_mouse();
+            }
+        } else {
+            if key == VirtualKeyCode::Escape {
+                ctx.global().uncapture_mouse();
+                self.menu_stack.push(Menu::EscMenu);
+            } else if key == VirtualKeyCode::E {
+                ctx.global().uncapture_mouse();
+                self.game_gui = Some(GameGui::Inventory);
             }
         }
     }
@@ -409,6 +431,47 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     (&*inner.tile_meshes).get(cc, ci).mesh(),
                     &ctx.assets().blocks,
                 );
+        }
+    }
+}
+
+
+// ==== game gui stuff ====
+
+#[derive(Debug)]
+struct GameGuiResources {
+
+    set_game_gui: RefCell<Option<Option<GameGui>>>,
+}
+
+impl GameGuiResources {
+    fn new(assets: &Assets) -> Self {
+        GameGuiResources {
+
+            set_game_gui: RefCell::new(None),
+        }
+    }
+
+    fn process_set_game_gui(&mut self, game_gui: &mut Option<GameGui>) {
+        if let Some(set_to) = self.set_game_gui.get_mut().take() {
+            *game_gui = set_to;
+        }
+    }
+}
+
+#[derive(Debug)]
+enum GameGui {
+    Inventory,
+}
+
+impl GameGui {
+    fn gui<'a>(
+        &'a mut self,
+        resources: &'a mut GameGuiResources,
+        _: &'a GuiWindowContext,
+    ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        match self {
+            &mut GameGui::Inventory => solid([1.0, 0.0, 0.0, 0.5]),
         }
     }
 }
