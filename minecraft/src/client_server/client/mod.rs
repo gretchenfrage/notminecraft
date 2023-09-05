@@ -353,6 +353,12 @@ impl GuiStateFrame for Client {
             } else if key == VirtualKeyCode::E {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::Inventory);
+            } else if key == VirtualKeyCode::T {
+                ctx.global().uncapture_mouse();
+                self.menu_stack.push(Menu::ChatInput {
+                    text: "hello world".into(),
+                    text_block: make_chat_input_text_block("hello world", ctx.global()),
+                });
             }
         } else {
             if key == VirtualKeyCode::Escape
@@ -367,6 +373,26 @@ impl GuiStateFrame for Client {
                     ctx.global().capture_mouse();
                 }
             }
+        }
+    }
+
+    fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
+        if let Some(&mut Menu::ChatInput {
+            ref mut text,
+            ref mut text_block,
+        }) = self.menu_stack.iter_mut().rev().next() {
+            if c.is_control() {
+                if c == '\u{8}' {
+                    // backspace
+                    text.pop();
+                } else {
+                    trace!(?c, "ignoring unknown control character");
+                    return;
+                }
+            } else {
+                text.push(c);
+            }
+            *text_block = make_chat_input_text_block(text, ctx.global())
         }
     }
 }
@@ -500,6 +526,10 @@ enum MenuEffect {
 enum Menu {
     EscMenu,
     Inventory,
+    ChatInput {
+        text: String,
+        text_block: GuiTextBlock<true>,
+    }
 }
 
 impl Menu {
@@ -509,7 +539,7 @@ impl Menu {
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
-            &mut Menu::EscMenu => GuiEither::A(align(0.5,
+            &mut Menu::EscMenu => GuiEither::A(GuiEither::A(align(0.5,
                 logical_size([400.0, 320.0],
                     v_align(0.0,
                         v_stack(0.0, (
@@ -523,12 +553,30 @@ impl Menu {
                         ))
                     )
                 )
-            )),
-            &mut Menu::Inventory => GuiEither::B(align(0.5,
+            ))),
+            &mut Menu::Inventory => GuiEither::A(GuiEither::B(align(0.5,
                 game_gui!(
                     [176, 166],
                     &ctx.assets().gui_inventory,
                     []
+                )
+            ))),
+            &mut Menu::ChatInput {
+                text: _,
+                ref mut text_block,
+            } => GuiEither::B(margin(4.0, 4.0, 4.0, 4.0,
+                v_align(1.0,
+                    before_after(
+                        (
+                            solid(CHAT_BACKGROUND),
+                        ),
+                        v_pad(4.0, 4.0,
+                            h_margin(4.0, 4.0,
+                                text_block
+                            )
+                        ),
+                        (),
+                    )
                 )
             )),
         }
@@ -538,11 +586,13 @@ impl Menu {
         match self {
             &Menu::EscMenu => false,
             &Menu::Inventory => true,
+            &Menu::ChatInput { .. } => false,
         }
     }
 
     fn has_darkened_background(&self) -> bool {
         match self {
+            &Menu::ChatInput { .. } => false,
             _ => true,
         }
     }
@@ -566,6 +616,9 @@ fn on_options_click<'a>(_effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiG
 
 
 // ==== chat stuff ====
+
+const CHAT_BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0 - 0x6f as f32 / 0xde as f32];
+
 
 #[derive(Debug)]
 struct GuiChat {
@@ -605,7 +658,7 @@ impl GuiChat {
                         self.lines.iter_mut()
                             .map(|chat_line| before_after(
                                 (
-                                    solid([0.0, 0.0, 0.0, 1.0 - 0x6f as f32 / 0xde as f32]),
+                                    solid(CHAT_BACKGROUND),
                                 ),
                                 v_pad(2.0, 2.0,
                                     h_margin(8.0, 8.0,
@@ -620,6 +673,17 @@ impl GuiChat {
             )
         )
     }
+}
+
+fn make_chat_input_text_block(text: &str, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
+    GuiTextBlock::new(&GuiTextBlockConfig {
+        text,
+        font: ctx.assets.font,
+        logical_font_size: 16.0,
+        color: hex_color(0xfbfbfbff),
+        h_align: HAlign::Left,
+        v_align: VAlign::Top,
+    })
 }
 
 
