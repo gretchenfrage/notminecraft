@@ -119,7 +119,10 @@ impl Client {
                 chunks: &self.chunks,
                 tile_meshes: &mut self.tile_meshes,
             },
-            mouse_capturer(),
+            Vignette,
+            if self.menu_stack.is_empty() {
+                Some(mouse_capturer())
+            } else { None },
             self.menu_stack.iter_mut().rev().next()
                 .map(|open_menu| layer((
                     if open_menu.has_darkened_background() {
@@ -491,7 +494,7 @@ impl Menu {
     fn gui<'a>(
         &'a mut self,
         resources: &'a mut MenuResources,
-        _: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
             &mut Menu::EscMenu => GuiEither::A(align(0.5,
@@ -509,7 +512,13 @@ impl Menu {
                     )
                 )
             )),
-            &mut Menu::Inventory => GuiEither::B(solid([1.0, 0.0, 0.0, 0.5])),
+            &mut Menu::Inventory => GuiEither::B(align(0.5,
+                game_gui!(
+                    [176, 166],
+                    &ctx.assets().gui_inventory,
+                    []
+                )
+            )),
         }
     }
 
@@ -540,5 +549,28 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
 fn on_options_click<'a>(_effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
     |_| {
 
+    }
+}
+
+
+// ==== other stuff ====
+
+/// GUI block for rendering the vignette.
+#[derive(Debug)]
+struct Vignette;
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<Vignette> {
+    never_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2) {
+        if !ctx.global.pressed_keys_semantic.contains(&VirtualKeyCode::F1) {
+            canvas.reborrow()
+                .color([1.0, 1.0, 1.0, 1.0 - 0x5b as f32 / 0x7f as f32])
+                .draw_image(
+                    &ctx.assets().vignette,
+                    0,
+                    self.size,
+                );
+        }
     }
 }

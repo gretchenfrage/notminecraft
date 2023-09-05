@@ -37,8 +37,8 @@ const MISSING_PROPERTY: &'static str = "[MISSING]";
 
 #[derive(Debug)]
 pub struct AssetLoader<'a> {
-    base: &'a DataDir,
-    renderer: RefCell<&'a mut Renderer>,
+    pub base: &'a DataDir,
+    pub renderer: RefCell<&'a mut Renderer>,
 }
 
 fn load_missing_image(renderer: &mut Renderer) -> GpuImageArray {
@@ -69,7 +69,7 @@ impl<'a> AssetLoader<'a> {
         }
     }
 
-    async fn load_raw_image(&self, name: &str) -> Option<DynamicImage> {
+    pub async fn load_raw_image(&self, name: &str) -> Option<DynamicImage> {
         self.base
             .get_asset(name).await
             .and_then(|bytes| image::load_from_memory(&bytes)

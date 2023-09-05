@@ -22,6 +22,10 @@ use graphics::frame_content::{
     FontId,
     GpuImageArray,
 };
+use image::{
+    DynamicImage,
+    RgbaImage,
+};
 use vek::*;
 
 
@@ -151,6 +155,8 @@ pub struct Assets {
     pub item_meshes: Vec<ItemMesh>,
 
     pub gui_inventory: GpuImageArray,
+
+    pub vignette: GpuImageArray,
 }
 
 
@@ -166,6 +172,8 @@ impl Assets {
             .with_default("menu.version", "Not Minecraft Beta 1.0.2")
             .with_default("menu.uncopyright", "Everything in the universe is in the public domain.");
         let lang = Lang::new(&lang);
+
+
 
         let assets = Assets {
             lang,
@@ -236,7 +244,25 @@ impl Assets {
                 ItemMesh::Item(ITI_STICK),
             ],
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
+            vignette: load_vignette(loader).await,
         };
         assets
     }
+}
+
+async fn load_vignette(loader: &mut AssetLoader<'_>) -> GpuImageArray {
+    let mut image;
+    if let Some(asset_image) = loader.load_raw_image("misc/vignette.png").await {
+        image = asset_image.into_rgba8();
+        for pixel in image.pixels_mut() {
+            let alpha = pixel[0];
+            *pixel = [0, 0, 0, alpha].into()
+        }
+    } else {
+        image = RgbaImage::new(1, 1);
+    }
+    loader.renderer.borrow().load_image_array_raw(
+        [image.width(), image.height()].into(),
+        [DynamicImage::from(image)],
+    )
 }
