@@ -12,6 +12,8 @@ use std::fmt::Debug;
 pub trait DimConstraint {
     type In: Debug + Default + Copy;
     type Out: Debug + Default + Copy;
+
+    fn get(i: Self::In, o: Self::Out) -> f32;
 }
 
 
@@ -22,6 +24,8 @@ pub enum DimParentSets {}
 impl DimConstraint for DimParentSets {
     type In = f32;
     type Out = ();
+
+    fn get(n: f32, (): ()) -> f32 { n }
 }
 
 
@@ -32,4 +36,6 @@ pub enum DimChildSets {}
 impl DimConstraint for DimChildSets {
     type In = ();
     type Out = f32;
+
+    fn get((): (), n: f32) -> f32 { n }
 }

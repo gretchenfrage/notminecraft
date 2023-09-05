@@ -110,7 +110,7 @@ impl Client {
             chat: {
                 let mut chat = GuiChat::new();
                 for i in 1..=10 {
-                    chat.add_line(format!("hello world {}", i), ctx.assets);
+                    chat.add_line(format!("<nano1000> hello world {}", i), ctx.assets);
                 }
                 chat
             },
@@ -601,10 +601,18 @@ impl GuiChat {
         v_margin(0.0, 80.0,
             align([0.0, 1.0],
                 logical_width(664.0,
-                    v_stack(4.0,
+                    v_stack(0.0,
                         self.lines.iter_mut()
-                            .map(|chat_line| h_margin(8.0, 8.0,
-                                &mut chat_line.text_block
+                            .map(|chat_line| before_after(
+                                (
+                                    solid([0.0, 0.0, 0.0, 1.0 - 0x6f as f32 / 0xde as f32]),
+                                ),
+                                v_pad(2.0, 2.0,
+                                    h_margin(8.0, 8.0,
+                                        &mut chat_line.text_block
+                                    )
+                                ),
+                                (),
                             ))
                             .collect::<Vec<_>>()
                     )

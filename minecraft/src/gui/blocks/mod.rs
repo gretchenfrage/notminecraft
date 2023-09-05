@@ -10,6 +10,7 @@ mod axis_swap;
 mod align;
 mod layer;
 mod margin;
+mod pad;
 mod modify;
 mod logical_size;
 mod stack;
@@ -22,6 +23,7 @@ mod logical_translate;
 mod gui_block_seq_chain;
 mod mouse_capturer;
 mod solid;
+mod before_after;
 
 
 pub use self::{
@@ -40,6 +42,11 @@ pub use self::{
         margin,
         h_margin,
         v_margin,
+    },
+    pad::{
+        pad,
+        h_pad,
+        v_pad,
     },
     modify::modify,
     logical_size::{
@@ -69,4 +76,5 @@ pub use self::{
     },
     mouse_capturer::mouse_capturer,
     solid::solid,
+    before_after::before_after,
 };

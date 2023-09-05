@@ -89,7 +89,8 @@ impl<
         let margin_max = self.logical_margin_right * scale;
 
         let inner_w = f32::max(w - margin_min - margin_max, 0.0);
-        let x_translate = (w - inner_w) / 2.0;
+        //let x_translate = (w - inner_w) / 2.0;
+        let x_translate = margin_min;
 
         let (
             (),
