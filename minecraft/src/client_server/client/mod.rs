@@ -17,6 +17,7 @@ use crate::{
     gui::prelude::*,
     util::sparse_vec::SparseVec,
     physics::looking_at::compute_looking_at,
+    util::hex_color::hex_color,
 };
 use chunk_data::*;
 use mesh_data::MeshData;
@@ -51,6 +52,8 @@ pub struct Client {
 
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
+
+    chat: GuiChat,
 }
 
 fn get_username() -> String {
@@ -103,6 +106,14 @@ impl Client {
 
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx.assets),
+
+            chat: {
+                let mut chat = GuiChat::new();
+                for i in 1..=10 {
+                    chat.add_line(format!("hello world {}", i), ctx.assets);
+                }
+                chat
+            },
         }
     }
 
@@ -120,6 +131,7 @@ impl Client {
                 tile_meshes: &mut self.tile_meshes,
             },
             Vignette,
+            self.chat.gui(),
             if self.menu_stack.is_empty() {
                 Some(mouse_capturer())
             } else { None },
@@ -549,6 +561,56 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
 fn on_options_click<'a>(_effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
     |_| {
 
+    }
+}
+
+
+// ==== chat stuff ====
+
+#[derive(Debug)]
+struct GuiChat {
+    lines: VecDeque<GuiChatLine>,
+}
+
+#[derive(Debug)]
+struct GuiChatLine {
+    text_block: GuiTextBlock<true>,
+}
+
+impl GuiChat {
+    pub fn new() -> Self {
+        GuiChat {
+            lines: VecDeque::new(),
+        }
+    }
+
+    pub fn add_line(&mut self, line: String, assets: &Assets) {
+        self.lines.push_back(GuiChatLine {
+            text_block: GuiTextBlock::new(&GuiTextBlockConfig {
+                text: &line,
+                font: assets.font,
+                logical_font_size: 16.0,
+                color: hex_color(0xfbfbfbff),
+                h_align: HAlign::Left,
+                v_align: VAlign::Top,
+            }),
+        });
+    }
+
+    fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        v_margin(0.0, 80.0,
+            align([0.0, 1.0],
+                logical_width(664.0,
+                    v_stack(4.0,
+                        self.lines.iter_mut()
+                            .map(|chat_line| h_margin(8.0, 8.0,
+                                &mut chat_line.text_block
+                            ))
+                            .collect::<Vec<_>>()
+                    )
+                )
+            )
+        )
     }
 }
 

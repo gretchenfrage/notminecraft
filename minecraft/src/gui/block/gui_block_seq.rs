@@ -109,6 +109,59 @@ impl<
     }
 }
 
+impl<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    T: GuiBlock<'a, W, H>,
+> GuiBlockSeq<'a, W, H> for Vec<T> {
+    type SizedSeq = Vec<T::Sized>;
+    type WOutSeq = Vec<W::Out>;
+    type HOutSeq = Vec<H::Out>;
+
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+
+    fn size_all<
+        WInSeq: IntoIterator<Item=W::In>,
+        HInSeq: IntoIterator<Item=H::In>,
+        ScaleSeq: IntoIterator<Item=f32>,
+    >(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w_in_seq: WInSeq,
+        h_in_seq: HInSeq,
+        scale_seq: ScaleSeq,
+    ) -> (Self::WOutSeq, Self::HOutSeq, Self::SizedSeq) {
+        let mut w_in_iter = w_in_seq.into_iter();
+        let mut h_in_iter = h_in_seq.into_iter();
+        let mut scale_iter = scale_seq.into_iter();
+
+        let mut w_out_seq = Vec::new();
+        let mut h_out_seq = Vec::new();
+
+        let sized_seq = self
+            .into_iter()
+            .map(|block| {
+                let (w_out, h_out, sized) = block.size(
+                    ctx,
+                    w_in_iter.next().unwrap(),
+                    h_in_iter.next().unwrap(),
+                    scale_iter.next().unwrap(),
+                );
+
+                w_out_seq.push(w_out);
+                h_out_seq.push(h_out);
+                
+                sized
+            })
+            .collect();
+
+        (w_out_seq, h_out_seq, sized_seq)
+    }
+}
+
 /// Sequence version of `SizedGuiBlock`. Essentially a compile-time
 /// heterogenous tuple of `SizedGuiBlock` implementations.
 ///
@@ -132,6 +185,35 @@ impl<
     I: SizedGuiBlock<'a>,
     const LEN: usize,
 > SizedGuiBlockSeq<'a> for [I; LEN] {
+    fn visit_items_nodes<T, M>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        mut maperator: M,
+        forward: bool,
+    )
+    where
+        T: GuiVisitorTarget<'a>,
+        M: GuiVisitorMaperator<'a>,
+    {
+        if forward {
+            for item in self.into_iter() {
+                item.visit_nodes(
+                        &mut maperator.next(visitor),
+                        true,
+                    );
+            }
+        } else {
+            for item in self.into_iter().rev() {
+                item.visit_nodes(
+                        &mut maperator.next(visitor),
+                        false,
+                    );
+            }
+        }
+    }
+}
+
+impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlockSeq<'a> for Vec<I> {
     fn visit_items_nodes<T, M>(
         self,
         visitor: &mut GuiVisitor<'a, '_, T>,
