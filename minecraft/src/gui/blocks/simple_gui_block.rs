@@ -26,7 +26,6 @@ pub struct SimpleGuiBlock<I> {
 
 impl<'a, I> GuiBlock<'a, DimParentSets, DimParentSets> for I
 where
-	I: Debug,
 	SimpleGuiBlock<I>: GuiNode<'a>,
 {
 	type Sized = SimpleGuiBlock<I>;

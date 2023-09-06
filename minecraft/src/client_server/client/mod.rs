@@ -121,6 +121,14 @@ impl Client {
         &'a mut self,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        let mut chat = Some(&mut self.chat);
+        let menu_gui = self.menu_stack.iter_mut().rev().next()
+            .map(|open_menu| layer((
+                if open_menu.has_darkened_background() {
+                    Some(solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]))
+                } else { None },
+                open_menu.gui(&mut self.menu_resources, &mut chat, ctx),
+            )));
         layer((
             WorldGuiBlock {
                 pos: self.pos,
@@ -131,17 +139,17 @@ impl Client {
                 tile_meshes: &mut self.tile_meshes,
             },
             Vignette,
-            self.chat.gui(),
-            if self.menu_stack.is_empty() {
+            chat.map(|chat| 
+                v_margin(0.0, 80.0,
+                    align([0.0, 1.0],
+                        chat.gui()
+                    )
+                )
+            ),
+            if menu_gui.is_none() {
                 Some(mouse_capturer())
             } else { None },
-            self.menu_stack.iter_mut().rev().next()
-                .map(|open_menu| layer((
-                    if open_menu.has_darkened_background() {
-                        Some(solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]))
-                    } else { None },
-                    open_menu.gui(&mut self.menu_resources, ctx),
-                ))),
+            menu_gui,
         ))
     }
 
@@ -408,10 +416,16 @@ impl GuiStateFrame for Client {
                     return;
                 }
             } else {
-                if c == 't' || c == 'T' && *t_preventer {
+                // to prevent the T key press that opens the chat input from also causing
+                // a t character to be typed into the chat input, we have this kind of hacky
+                // "t preventer" where, if the first character input after opening the chat
+                // and before rendering is a t, we ignore it.
+                let prev_t_preventer = *t_preventer;
+                *t_preventer = false;
+                if (c == 't' || c == 'T') && prev_t_preventer {
                     return;
                 }
-                *t_preventer = false;
+
                 text.push(c);
             }
             *text_block = make_chat_input_text_block(text, ctx.global())
@@ -559,6 +573,7 @@ impl Menu {
     fn gui<'a>(
         &'a mut self,
         resources: &'a mut MenuResources,
+        chat: &mut Option<&'a mut GuiChat>,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
@@ -587,22 +602,31 @@ impl Menu {
             &mut Menu::ChatInput {
                 ref mut text_block,
                 ..
-            } => GuiEither::B(margin(4.0, 4.0, 4.0, 4.0,
-                v_align(1.0,
-                    before_after(
-                        (
-                            solid(CHAT_BACKGROUND),
-                        ),
-                        min_height(24.0, 1.0,
+            } => GuiEither::B(v_align(1.0,
+                v_stack(0.0, (
+                    h_align(0.0,
+                        chat.take().unwrap().gui()
+                    ),
+                    min_height(80.0, 1.0,
+                        h_margin(4.0, 4.0,
                             v_pad(4.0, 4.0,
-                                h_margin(4.0, 4.0,
-                                    text_block
+                                before_after(
+                                    (
+                                        solid(CHAT_BACKGROUND),
+                                    ),
+                                    min_height(24.0, 1.0,
+                                        h_margin(4.0, 4.0,
+                                            v_pad(4.0, 4.0,
+                                                text_block,
+                                            )
+                                        )
+                                    ),
+                                    (),
                                 )
-                            ),
-                        ),
-                        (),
-                    )
-                )
+                            )
+                        )
+                    ),
+                ))
             )),
         }
     }
@@ -675,6 +699,27 @@ impl GuiChat {
         });
     }
 
+    fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+        logical_width(664.0,
+            v_stack(0.0,
+                self.lines.iter_mut()
+                    .map(|chat_line| before_after(
+                        (
+                            solid(CHAT_BACKGROUND),
+                        ),
+                        v_pad(2.0, 2.0,
+                            h_margin(8.0, 8.0,
+                                &mut chat_line.text_block
+                            )
+                        ),
+                        (),
+                    ))
+                    .collect::<Vec<_>>()
+            )
+        )
+    }
+
+    /*
     fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         v_margin(0.0, 80.0,
             align([0.0, 1.0],
@@ -697,7 +742,7 @@ impl GuiChat {
                 )
             )
         )
-    }
+    }*/
 }
 
 fn make_chat_input_text_block(text: &str, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
