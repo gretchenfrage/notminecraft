@@ -721,31 +721,38 @@ impl GuiChat {
         });
     }
 
-    fn gui<'a>(&'a mut self, do_fading: bool) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+    fn gui<'a>(&'a mut self, limit: bool) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+        let lines = if limit {
+            self.lines.range_mut(self.lines.len().saturating_sub(10)..)
+        } else {
+            self.lines.range_mut(0..)
+        };
+
         logical_width(664.0,
             v_stack(0.0,
-                self.lines.iter_mut()
-                    .map(|chat_line| {
-                        let line_gui = before_after(
-                            (
-                                solid(CHAT_BACKGROUND),
-                            ),
-                            v_pad(2.0, 2.0,
-                                h_margin(8.0, 8.0,
-                                    &mut chat_line.text_block
-                                )
-                            ),
-                            (),
-                        );
-                        if do_fading {
-                            GuiEither::A(fade(chat_line.added + Duration::from_secs(10), 1.0,
-                                line_gui
-                            ))
-                        } else {
-                            GuiEither::B(line_gui)
-                        }
-                    })
-                    .collect::<Vec<_>>()
+                lines.map(|chat_line| {
+                    let line_gui = before_after(
+                        (
+                            solid(CHAT_BACKGROUND),
+                        ),
+                        //min_height(20.0, 1.0,
+                        v_pad(2.0, 2.0,
+                            h_margin(8.0, 8.0,
+                                &mut chat_line.text_block
+                            )
+                        )
+                        //),
+                        (),
+                    );
+                    if limit {
+                        GuiEither::A(fade(chat_line.added + Duration::from_secs(10), 1.0,
+                            line_gui
+                        ))
+                    } else {
+                        GuiEither::B(line_gui)
+                    }
+                })
+                .collect::<Vec<_>>()
             )
         )
     }
