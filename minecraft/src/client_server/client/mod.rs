@@ -30,6 +30,7 @@ use std::{
     f32::consts::PI,
     cell::RefCell,
     collections::VecDeque,
+    time::Duration,
 };
 use anyhow::{Result, ensure, bail};
 use vek::*;
@@ -139,7 +140,7 @@ impl Client {
             chat.map(|chat| 
                 v_margin(0.0, 80.0,
                     align([0.0, 1.0],
-                        chat.gui()
+                        chat.gui(true)
                     )
                 )
             ),
@@ -410,7 +411,7 @@ impl GuiStateFrame for Client {
                     ref text,
                     ..
                 }) = self.menu_stack.iter().rev().next() {
-                    self.chat.add_line(format!("<me> {}", text), ctx.global().assets);
+                    self.chat.add_line(format!("<me> {}", text), ctx.global());
                     self.menu_stack.pop().unwrap();
                     ctx.global().capture_mouse();
                 }
@@ -624,7 +625,7 @@ impl Menu {
             } => GuiEither::B(v_align(1.0,
                 v_stack(0.0, (
                     h_align(0.0,
-                        chat.take().unwrap().gui()
+                        chat.take().unwrap().gui(false)
                     ),
                     min_height(80.0, 1.0,
                         h_margin(4.0, 4.0,
@@ -696,6 +697,7 @@ struct GuiChat {
 #[derive(Debug)]
 struct GuiChatLine {
     text_block: GuiTextBlock<true>,
+    added: Duration, // TODO: make some sort of epoch time newtype?
 }
 
 impl GuiChat {
@@ -705,39 +707,125 @@ impl GuiChat {
         }
     }
 
-    pub fn add_line(&mut self, line: String, assets: &Assets) {
+    pub fn add_line(&mut self, line: String, ctx: &GuiGlobalContext) {
         self.lines.push_back(GuiChatLine {
             text_block: GuiTextBlock::new(&GuiTextBlockConfig {
                 text: &line,
-                font: assets.font,
+                font: ctx.assets.font,
                 logical_font_size: 16.0,
                 color: hex_color(0xfbfbfbff),
                 h_align: HAlign::Left,
                 v_align: VAlign::Top,
             }),
+            added: ctx.time_since_epoch,
         });
     }
 
-    fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
+    fn gui<'a>(&'a mut self, do_fading: bool) -> impl GuiBlock<'a, DimChildSets, DimChildSets> {
         logical_width(664.0,
             v_stack(0.0,
                 self.lines.iter_mut()
-                    .map(|chat_line| before_after(
-                        (
-                            solid(CHAT_BACKGROUND),
-                        ),
-                        v_pad(2.0, 2.0,
-                            h_margin(8.0, 8.0,
-                                &mut chat_line.text_block
-                            )
-                        ),
-                        (),
-                    ))
+                    .map(|chat_line| {
+                        let line_gui = before_after(
+                            (
+                                solid(CHAT_BACKGROUND),
+                            ),
+                            v_pad(2.0, 2.0,
+                                h_margin(8.0, 8.0,
+                                    &mut chat_line.text_block
+                                )
+                            ),
+                            (),
+                        );
+                        if do_fading {
+                            GuiEither::A(fade(chat_line.added + Duration::from_secs(10), 1.0,
+                                line_gui
+                            ))
+                        } else {
+                            GuiEither::B(line_gui)
+                        }
+                    })
                     .collect::<Vec<_>>()
             )
         )
     }
 }
+
+fn fade<'a, W, H, I>(
+    fade_at: Duration,
+    fade_for_secs: f32,
+    inner: I,
+) -> impl GuiBlock<'a, W, H>
+where
+    W: DimConstraint,
+    H: DimConstraint,
+    I: GuiBlock<'a, W, H>,
+{
+    Fade {
+        fade_at,
+        fade_for_secs,
+        inner,
+    }
+}
+
+struct Fade<I> {
+    fade_at: Duration,
+    fade_for_secs: f32,
+    inner: I,
+}
+
+impl<
+    'a,
+    W: DimConstraint,
+    H: DimConstraint,
+    I: GuiBlock<'a, W, H>,
+> GuiBlock<'a, W, H> for Fade<I> {
+    type Sized = FadeSized<I::Sized>;
+
+    fn size(
+        self,
+        ctx: &GuiGlobalContext<'a>,
+        w_in: W::In,
+        h_in: H::In,
+        scale: f32,
+    ) -> (W::Out, H::Out, Self::Sized) {
+        let alpha = if ctx.time_since_epoch > self.fade_at {
+            let secs_faded_for = (ctx.time_since_epoch - self.fade_at).as_secs_f32();
+            if secs_faded_for < self.fade_for_secs {
+                1.0 - secs_faded_for / self.fade_for_secs
+            } else {
+                0.0
+            }
+        } else {
+            1.0
+        };
+
+
+        let (w_out, h_out, inner_sized) = self.inner.size(ctx, w_in, h_in, scale);
+        (w_out, h_out, FadeSized {
+            alpha,
+            inner: inner_sized,
+        })
+    }
+}
+
+struct FadeSized<I> {
+    alpha: f32,
+    inner: I,
+}
+
+impl<'a, I: SizedGuiBlock<'a>> SizedGuiBlock<'a> for FadeSized<I> {
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
+    ) {
+        let mut visitor = visitor.reborrow()
+            .color([1.0, 1.0, 1.0, self.alpha]);
+        self.inner.visit_nodes(&mut visitor, forward);
+    }
+}
+
 
 fn make_chat_input_text_block(text: &str, blinker: bool, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
     let mut text = format!("saying: {}", text);
