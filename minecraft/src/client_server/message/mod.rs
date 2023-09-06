@@ -53,6 +53,9 @@ message_enum!(up UpMessage {
         gtc: Vec3<i64>,
         bid: RawBlockId,
     }
+    Say {
+        text: String,
+    }
 });
 
 message_enum!(down DownMessage {
@@ -72,5 +75,8 @@ message_enum!(down DownMessage {
     }
     Ack {
         last_processed: u64,
+    }
+    ChatLine {
+        line: String,
     }
 });

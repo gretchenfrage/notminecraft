@@ -483,6 +483,7 @@ fn on_received(
             conn_last_processed,
             conn_last_processed_increased,
             chunk_unsaved,
+            client_username,
         ),
     }
 }
@@ -504,15 +505,26 @@ fn on_received_uninit(
 ) {
     match msg {
         UpMessage::LogIn(up::LogIn {
-            username,
+            mut username,
         }) => {
             // validate
+            /*
             if username_client.contains_key(&username) {
                 uninit_connections[uninit_conn_key]
                     .send(DownMessage::RejectLogIn(down::RejectLogIn {
                         message: "client already logged in with same username".into(),
                     }));
                 return;
+            }
+            */
+            if username_client.contains_key(&username) {
+                let mut i = 2;
+                let mut username2;
+                while {
+                    username2 = format!("{}{}", username, i);
+                    username_client.contains_key(&username2)
+                } { i += 1 }
+                username = username2;
             }
 
             let conn = uninit_connections.remove(uninit_conn_key);
@@ -550,6 +562,10 @@ fn on_received_uninit(
             error!("uninit connection sent settileblock");
             // TODO: handle this better than just ignoring it lol
         }
+        UpMessage::Say(_) => {
+            error!("uninit connection sent say");
+            // TODO: handle this better than just ignoring it lol
+        }
     }
 }
 
@@ -564,6 +580,7 @@ fn on_received_client(
     conn_last_processed: &mut SparseVec<u64>,
     conn_last_processed_increased: &mut SparseVec<bool>,
     chunk_unsaved: &mut PerChunk<bool>,
+    client_username: &mut SparseVec<String>,
 ) {
     match msg {
         UpMessage::LogIn(_) => {
@@ -604,6 +621,17 @@ fn on_received_client(
                 });
                 conn_last_processed_increased[all_conn_key] = false;
                 *chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
+            }
+        }
+        UpMessage::Say(up::Say {
+            text,
+        }) => {
+            let username = &client_username[client_conn_key];
+            let line = format!("<{}> {}", username, text);
+            for (_, connection) in client_connections {
+                connection.send(down::ChatLine {
+                    line: line.clone(),
+                });
             }
         }
     }

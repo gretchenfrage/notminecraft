@@ -31,6 +31,7 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     time::Duration,
+    mem::take,
 };
 use anyhow::{Result, ensure, bail};
 use vek::*;
@@ -151,7 +152,7 @@ impl Client {
         ))
     }
 
-    fn on_network_message(&mut self, msg: DownMessage) -> Result<()> {
+    fn on_network_message(&mut self, msg: DownMessage, ctx: &GuiGlobalContext) -> Result<()> {
         match msg {
             DownMessage::Initialized(down::Initialized {}) => {
                 info!("yippeee! initialized");
@@ -220,6 +221,9 @@ impl Client {
                 &mut self.tile_blocks,
                 &mut self.block_updates,
             ),
+            DownMessage::ChatLine(down::ChatLine { line }) => {
+                self.chat.add_line(line, ctx);
+            }
         }
         Ok(())
     }
@@ -252,7 +256,7 @@ impl GuiStateFrame for Client {
         loop {
             match self.connection.poll() {
                 Ok(Some(msg)) => {
-                    if let Err(e) = self.on_network_message(msg) {
+                    if let Err(e) = self.on_network_message(msg, ctx.global()) {
                         error!(%e, "error processing message from server");
                         ctx.global().pop_state_frame();
                         return;
@@ -407,11 +411,14 @@ impl GuiStateFrame for Client {
                     *text_block = make_chat_input_text_block(text, blinker, ctx.global())
                 }
             } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
-                if let Some(&Menu::ChatInput {
-                    ref text,
+                if let Some(&mut Menu::ChatInput {
+                    ref mut text,
                     ..
-                }) = self.menu_stack.iter().rev().next() {
-                    self.chat.add_line(format!("<me> {}", text), ctx.global());
+                }) = self.menu_stack.iter_mut().rev().next() {
+                    //self.chat.add_line(format!("<me> {}", text), ctx.global());
+                    self.connection.send(up::Say {
+                        text: take(text),
+                    });
                     self.menu_stack.pop().unwrap();
                     ctx.global().capture_mouse();
                 }
@@ -740,7 +747,7 @@ impl GuiChat {
                             h_margin(8.0, 8.0,
                                 &mut chat_line.text_block
                             )
-                        )
+                        ),
                         //),
                         (),
                     );
