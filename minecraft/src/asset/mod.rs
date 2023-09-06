@@ -173,8 +173,6 @@ impl Assets {
             .with_default("menu.uncopyright", "Everything in the universe is in the public domain.");
         let lang = Lang::new(&lang);
 
-
-
         let assets = Assets {
             lang,
             font: loader.load_font_437("font/default.png").await,

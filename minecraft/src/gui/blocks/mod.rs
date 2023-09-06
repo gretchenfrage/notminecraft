@@ -24,6 +24,7 @@ mod gui_block_seq_chain;
 mod mouse_capturer;
 mod solid;
 mod before_after;
+mod min_size;
 
 
 pub use self::{
@@ -77,4 +78,9 @@ pub use self::{
     mouse_capturer::mouse_capturer,
     solid::solid,
     before_after::before_after,
+    min_size::{
+        min_width,
+        min_height,
+        min_size,
+    },
 };

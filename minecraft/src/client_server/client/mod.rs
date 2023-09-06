@@ -227,6 +227,13 @@ impl GuiStateFrame for Client {
         // menu stuff
         self.menu_resources.process_effect_queue(&mut self.menu_stack);
 
+        if let Some(&mut Menu::ChatInput {
+            ref mut t_preventer,
+            ..
+        }) = self.menu_stack.iter_mut().rev().next() {
+            *t_preventer = false;
+        }
+
         // deal with messages from the server
         loop {
             match self.connection.poll() {
@@ -356,8 +363,9 @@ impl GuiStateFrame for Client {
             } else if key == VirtualKeyCode::T {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::ChatInput {
-                    text: "hello world".into(),
-                    text_block: make_chat_input_text_block("hello world", ctx.global()),
+                    t_preventer: true,
+                    text: String::new(),
+                    text_block: make_chat_input_text_block("", ctx.global()),
                 });
             }
         } else {
@@ -372,12 +380,22 @@ impl GuiStateFrame for Client {
                 if self.menu_stack.is_empty() {
                     ctx.global().capture_mouse();
                 }
+            } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
+                if let Some(&mut Menu::ChatInput {
+                    t_preventer: _,
+                    ref mut text,
+                    ref mut text_block,
+                }) = self.menu_stack.iter_mut().rev().next() {
+                    text.push_str(&ctx.global().clipboard.get());
+                    *text_block = make_chat_input_text_block(text, ctx.global())
+                }
             }
         }
     }
 
     fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
         if let Some(&mut Menu::ChatInput {
+            ref mut t_preventer,
             ref mut text,
             ref mut text_block,
         }) = self.menu_stack.iter_mut().rev().next() {
@@ -390,6 +408,10 @@ impl GuiStateFrame for Client {
                     return;
                 }
             } else {
+                if c == 't' || c == 'T' && *t_preventer {
+                    return;
+                }
+                *t_preventer = false;
                 text.push(c);
             }
             *text_block = make_chat_input_text_block(text, ctx.global())
@@ -527,6 +549,7 @@ enum Menu {
     EscMenu,
     Inventory,
     ChatInput {
+        t_preventer: bool,
         text: String,
         text_block: GuiTextBlock<true>,
     }
@@ -562,18 +585,20 @@ impl Menu {
                 )
             ))),
             &mut Menu::ChatInput {
-                text: _,
                 ref mut text_block,
+                ..
             } => GuiEither::B(margin(4.0, 4.0, 4.0, 4.0,
                 v_align(1.0,
                     before_after(
                         (
                             solid(CHAT_BACKGROUND),
                         ),
-                        v_pad(4.0, 4.0,
-                            h_margin(4.0, 4.0,
-                                text_block
-                            )
+                        min_height(24.0, 1.0,
+                            v_pad(4.0, 4.0,
+                                h_margin(4.0, 4.0,
+                                    text_block
+                                )
+                            ),
                         ),
                         (),
                     )
@@ -677,7 +702,7 @@ impl GuiChat {
 
 fn make_chat_input_text_block(text: &str, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
     GuiTextBlock::new(&GuiTextBlockConfig {
-        text,
+        text: &format!("|_> {}", text),
         font: ctx.assets.font,
         logical_font_size: 16.0,
         color: hex_color(0xfbfbfbff),
