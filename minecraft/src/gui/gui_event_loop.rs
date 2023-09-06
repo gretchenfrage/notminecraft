@@ -29,8 +29,10 @@ use std::{
 	sync::Arc,
 	cell::RefCell,
 	time::{
+		UNIX_EPOCH,
 		Instant,
 		Duration,
+		SystemTime,
 	},
 	panic::{
 		catch_unwind,
@@ -115,6 +117,10 @@ impl EventLoopEffectQueue {
 
 struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
+
+	calibration_instant: Instant,
+	calibration_time_since_epoch: Duration,
+
     renderer: RefCell<Renderer>,
     tokio: Handle,
     clipboard: Clipboard,
@@ -147,9 +153,21 @@ impl State {
 		game: Arc<GameData>,
 	) -> Self
 	{
+		// the "calibration" part is just that we try to capture these as close
+		// to simultaneously as we can achieve
+		let calibration_instant = Instant::now();
+		let calibration_system_time = SystemTime::now();
+
 		let winit_size = window.inner_size();
 		State {
 			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
+			calibration_instant,
+			calibration_time_since_epoch: calibration_system_time
+				.duration_since(UNIX_EPOCH)
+				.unwrap_or_else(|_| {
+					warn!("system time is before unix epoch");
+					Duration::ZERO
+				}),
 			renderer: RefCell::new(renderer),
 			tokio,
 			clipboard: Clipboard::new(),
@@ -182,6 +200,7 @@ impl State {
 			spatial: GuiSpatialContext {
 				global: &GuiGlobalContext {
 					event_loop: &self.effect_queue,
+					time_since_epoch: Instant::now() - self.calibration_instant + self.calibration_time_since_epoch,
 					renderer: &self.renderer,
 					tokio: &self.tokio,
 					clipboard: &self.clipboard,

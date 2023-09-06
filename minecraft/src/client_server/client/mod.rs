@@ -17,7 +17,10 @@ use crate::{
     gui::prelude::*,
     util::sparse_vec::SparseVec,
     physics::looking_at::compute_looking_at,
-    util::hex_color::hex_color,
+    util::{
+        hex_color::hex_color,
+        secs_rem::secs_rem,
+    },
 };
 use chunk_data::*;
 use mesh_data::MeshData;
@@ -231,9 +234,17 @@ impl GuiStateFrame for Client {
 
         if let Some(&mut Menu::ChatInput {
             ref mut t_preventer,
-            ..
+            ref mut blinker,
+            ref text,
+            ref mut text_block,
         }) = self.menu_stack.iter_mut().rev().next() {
             *t_preventer = false;
+
+            let prev_blinker = *blinker;
+            *blinker = secs_rem(ctx.global().time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
+            if *blinker != prev_blinker {
+                *text_block = make_chat_input_text_block(text, *blinker, ctx.global());
+            }
         }
 
         // deal with messages from the server
@@ -364,10 +375,12 @@ impl GuiStateFrame for Client {
                 self.menu_stack.push(Menu::Inventory);
             } else if key == VirtualKeyCode::T {
                 ctx.global().uncapture_mouse();
+                let blinker = secs_rem(ctx.global().time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
                 self.menu_stack.push(Menu::ChatInput {
                     t_preventer: true,
                     text: String::new(),
-                    text_block: make_chat_input_text_block("", ctx.global()),
+                    text_block: make_chat_input_text_block("", blinker, ctx.global()),
+                    blinker,
                 });
             }
         } else {
@@ -387,9 +400,10 @@ impl GuiStateFrame for Client {
                     t_preventer: _,
                     ref mut text,
                     ref mut text_block,
+                    blinker,
                 }) = self.menu_stack.iter_mut().rev().next() {
                     text.push_str(&ctx.global().clipboard.get());
-                    *text_block = make_chat_input_text_block(text, ctx.global())
+                    *text_block = make_chat_input_text_block(text, blinker, ctx.global())
                 }
             } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
                 if let Some(&Menu::ChatInput {
@@ -409,6 +423,7 @@ impl GuiStateFrame for Client {
             ref mut t_preventer,
             ref mut text,
             ref mut text_block,
+            blinker,
         }) = self.menu_stack.iter_mut().rev().next() {
             if c.is_control() {
                 if c == '\u{8}' {
@@ -431,7 +446,7 @@ impl GuiStateFrame for Client {
 
                 text.push(c);
             }
-            *text_block = make_chat_input_text_block(text, ctx.global())
+            *text_block = make_chat_input_text_block(text, blinker, ctx.global())
         }
     }
 }
@@ -569,6 +584,7 @@ enum Menu {
         t_preventer: bool,
         text: String,
         text_block: GuiTextBlock<true>,
+        blinker: bool,
     }
 }
 
@@ -723,9 +739,14 @@ impl GuiChat {
     }
 }
 
-fn make_chat_input_text_block(text: &str, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
+fn make_chat_input_text_block(text: &str, blinker: bool, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
+    let mut text = format!("saying: {}", text);
+    if blinker {
+        text.push('_');
+    }
+
     GuiTextBlock::new(&GuiTextBlockConfig {
-        text: &format!("saying: {}", text),
+        text: &text,
         font: ctx.assets.font,
         logical_font_size: 16.0,
         color: hex_color(0xfbfbfbff),

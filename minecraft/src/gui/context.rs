@@ -19,6 +19,7 @@ use std::{
     collections::HashSet,
     cell::RefCell,
     sync::Arc,
+    time::Duration,
 };
 use vek::*;
 use tokio::runtime::Handle;
@@ -36,6 +37,9 @@ pub use winit::event::{
 #[derive(Debug, Copy, Clone)]
 pub struct GuiGlobalContext<'c> {
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
+    /// Time since the unix epoch. Monotonically increasing--calibrated once at
+    /// start up. Updated upon call to gui state frame.
+    pub time_since_epoch: Duration,
     pub renderer: &'c RefCell<Renderer>,
     pub tokio: &'c Handle,
     pub clipboard: &'c Clipboard,
