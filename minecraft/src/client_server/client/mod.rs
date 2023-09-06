@@ -107,13 +107,7 @@ impl Client {
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx.assets),
 
-            chat: {
-                let mut chat = GuiChat::new();
-                for i in 1..=10 {
-                    chat.add_line(format!("<nano1000> hello world {}", i), ctx.assets);
-                }
-                chat
-            },
+            chat: GuiChat::new(),
         }
     }
 
@@ -396,6 +390,15 @@ impl GuiStateFrame for Client {
                 }) = self.menu_stack.iter_mut().rev().next() {
                     text.push_str(&ctx.global().clipboard.get());
                     *text_block = make_chat_input_text_block(text, ctx.global())
+                }
+            } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
+                if let Some(&Menu::ChatInput {
+                    ref text,
+                    ..
+                }) = self.menu_stack.iter().rev().next() {
+                    self.chat.add_line(format!("<me> {}", text), ctx.global().assets);
+                    self.menu_stack.pop().unwrap();
+                    ctx.global().capture_mouse();
                 }
             }
         }
@@ -718,36 +721,11 @@ impl GuiChat {
             )
         )
     }
-
-    /*
-    fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
-        v_margin(0.0, 80.0,
-            align([0.0, 1.0],
-                logical_width(664.0,
-                    v_stack(0.0,
-                        self.lines.iter_mut()
-                            .map(|chat_line| before_after(
-                                (
-                                    solid(CHAT_BACKGROUND),
-                                ),
-                                v_pad(2.0, 2.0,
-                                    h_margin(8.0, 8.0,
-                                        &mut chat_line.text_block
-                                    )
-                                ),
-                                (),
-                            ))
-                            .collect::<Vec<_>>()
-                    )
-                )
-            )
-        )
-    }*/
 }
 
 fn make_chat_input_text_block(text: &str, ctx: &GuiGlobalContext) -> GuiTextBlock<true> {
     GuiTextBlock::new(&GuiTextBlockConfig {
-        text: &format!("|_> {}", text),
+        text: &format!("saying: {}", text),
         font: ctx.assets.font,
         logical_font_size: 16.0,
         color: hex_color(0xfbfbfbff),
