@@ -542,6 +542,17 @@ impl Face {
             (Axis::Z, Pole::Neg) => Face::NegZ,
         }
     }
+
+    pub const fn to_edges(self) -> [Edge; 4] {
+        match self {
+            Face::PosX => [Edge::PosXNegY, Edge::PosXPosY, Edge::PosXNegZ, Edge::PosXPosZ],
+            Face::NegX => [Edge::NegXNegY, Edge::NegXPosY, Edge::NegXNegZ, Edge::NegXPosZ],
+            Face::PosY => [Edge::NegXPosY, Edge::PosXPosY, Edge::PosYNegZ, Edge::PosYPosZ],
+            Face::NegY => [Edge::NegXNegY, Edge::PosXNegY, Edge::NegYNegZ, Edge::NegYPosZ],
+            Face::PosZ => [Edge::NegXPosZ, Edge::PosXPosZ, Edge::NegYPosZ, Edge::PosYPosZ],
+            Face::NegZ => [Edge::NegXNegZ, Edge::PosXNegZ, Edge::NegYNegZ, Edge::PosYNegZ],
+        }
+    }
 }
 
 impl Edge {
@@ -580,6 +591,23 @@ impl Edge {
             (Axis::Y, Pole::Neg, Pole::Neg) => Edge::NegXNegZ,
             (Axis::Y, Pole::Pos, Pole::Neg) => Edge::PosXNegZ,
             (Axis::Y, Pole::Neg, Pole::Pos) => Edge::NegXPosZ,
+        }
+    }
+
+    pub const fn to_corners(self) -> [Corner; 2] {
+        match self {
+            Edge::PosXPosY => [Corner::PosXPosYNegZ, Corner::PosXPosYPosZ],
+            Edge::NegXNegY => [Corner::NegXNegYNegZ, Corner::NegXNegYPosZ],
+            Edge::PosXNegY => [Corner::PosXNegYNegZ, Corner::PosXNegYPosZ],
+            Edge::NegXPosY => [Corner::NegXPosYNegZ, Corner::NegXPosYPosZ],
+            Edge::PosYPosZ => [Corner::NegXPosYPosZ, Corner::PosXPosYPosZ],
+            Edge::NegYNegZ => [Corner::NegXNegYNegZ, Corner::PosXNegYNegZ],
+            Edge::PosYNegZ => [Corner::NegXPosYNegZ, Corner::PosXPosYNegZ],
+            Edge::NegYPosZ => [Corner::NegXNegYPosZ, Corner::PosXNegYPosZ],
+            Edge::PosXPosZ => [Corner::PosXNegYPosZ, Corner::PosXPosYPosZ],
+            Edge::NegXNegZ => [Corner::NegXNegYNegZ, Corner::NegXPosYNegZ],
+            Edge::PosXNegZ => [Corner::PosXNegYNegZ, Corner::PosXPosYNegZ],
+            Edge::NegXPosZ => [Corner::NegXNegYPosZ, Corner::NegXPosYPosZ],
         }
     }
 }

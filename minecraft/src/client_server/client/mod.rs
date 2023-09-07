@@ -16,7 +16,7 @@ use crate::{
     chunk_mesh::ChunkMesh,
     gui::prelude::*,
     util::sparse_vec::SparseVec,
-    physics::looking_at::compute_looking_at,
+    physics::prelude::*,
     util::{
         hex_color::hex_color,
         secs_rem::secs_rem,
@@ -37,14 +37,31 @@ use anyhow::{Result, ensure, bail};
 use vek::*;
 
 
+const CAMERA_HEIGHT: f32 = 1.6;
+const PLAYER_HEIGHT: f32 = 1.8;
+const PLAYER_WIDTH: f32 = 0.6;
+
+const PLAYER_BOX_EXT: [f32; 3] = [PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH];
+const PLAYER_BOX_POS_ADJUST: [f32; 3] = [PLAYER_WIDTH / 2.0, 0.0, PLAYER_WIDTH / 2.0];
+
+const BOB_ANIMATION_LOOP_TIME: f32 = 0.7;
+const MAX_BOB_ROLL_DEGS: f32 = 0.07;
+const MAX_BOB_SHIFT_H: f32 = 0.03;
+const MAX_BOB_SHIFT_V: f32 = 0.05;
+
+
 /// GUI state frame for multiplayer game client.
 #[derive(Debug)]
 pub struct Client {
     connection: Connection,
 
     pos: Vec3<f32>,
+    vel: Vec3<f32>,
+    on_ground: bool,
     pitch: f32,
     yaw: f32,
+
+    bob_animation: f32,
 
     chunks: LoadedChunks,
     ci_reverse_lookup: SparseVec<Vec3<i64>>,
@@ -97,8 +114,12 @@ impl Client {
             connection,
 
             pos: [0.0, 80.0, 0.0].into(),
+            vel: 0.0.into(),
+            on_ground: false,
             pitch: f32::to_radians(-30.0),
             yaw: f32::to_radians(0.0),
+
+            bob_animation: 0.0,
 
             chunks: LoadedChunks::new(),
             ci_reverse_lookup: SparseVec::new(),
@@ -120,22 +141,27 @@ impl Client {
         &'a mut self,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        const MENU_DARKENED_BACKGROUND_ALPHA: f32 = 1.0 - 0x2a as f32 / 0x97 as f32;
+
         let mut chat = Some(&mut self.chat);
         let menu_gui = self.menu_stack.iter_mut().rev().next()
             .map(|open_menu| layer((
                 if open_menu.has_darkened_background() {
-                    Some(solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]))
+                    Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
                 } else { None },
                 open_menu.gui(&mut self.menu_resources, &mut chat, ctx),
             )));
         layer((
             WorldGuiBlock {
-                pos: self.pos,
+                pos: self.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0),
                 pitch: self.pitch,
                 yaw: self.yaw,
 
                 chunks: &self.chunks,
+                tile_blocks: &self.tile_blocks,
                 tile_meshes: &mut self.tile_meshes,
+
+                bob_animation: self.bob_animation,
             },
             Vignette,
             chat.map(|chat| 
@@ -291,35 +317,81 @@ impl GuiStateFrame for Client {
             tile.set(&mut self.tile_meshes, &mesh_buf);
         }
 
-        // movement
+        const WALK_SPEED: f32 = 4.0;
+
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
-            let mut movement = Vec3::from(0.0);
+            // walking
+            let mut walking_xz = Vec2::from(0.0);
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::W) {
-                movement.z += 1.0;
+                walking_xz.y += 1.0;
             }
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::S) {
-                movement.z -= 1.0;
+                walking_xz.y -= 1.0;
             }
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::D) {
-                movement.x += 1.0;
+                walking_xz.x += 1.0;
             }
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::A) {
-                movement.x -= 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
-                movement.y += 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
-                movement.y -= 1.0;
+                walking_xz.x -= 1.0;
             }
 
-            let xz = Vec2::new(movement.x, movement.z).rotated_z(self.yaw);
-            movement.x = xz.x;
-            movement.z = xz.y;
+            walking_xz.rotate_z(self.yaw);
+            walking_xz *= /*4.317*/ WALK_SPEED;
 
-            movement *= 5.0;
-            movement *= elapsed;
-            self.pos += movement;
+            self.vel.x = walking_xz.x;
+            self.vel.z = walking_xz.y;
+
+            // jumping
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space)
+                && self.on_ground
+            {
+                self.vel.y += /*8.4*/ 9.2;
+            }
+        }
+
+        const GRAVITY_ACCEL: f32 = 32.0;
+        const FALL_SPEED_DECAY: f32 = 0.98;
+
+        // gravity
+        self.vel.y -= GRAVITY_ACCEL * elapsed;
+        self.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * elapsed);
+
+        // movement and collision
+        self.pos -= Vec3::from(PLAYER_BOX_POS_ADJUST);
+        let physics = do_physics(
+            elapsed,
+            &mut self.pos,
+            &mut self.vel,
+            &AaBoxCollisionObject {
+                ext: PLAYER_BOX_EXT.into(),
+            },
+            &WorldPhysicsGeometry {
+                getter: &getter,
+                tile_blocks: &self.tile_blocks,
+                game: ctx.game(),
+            },
+        );
+        self.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
+        self.on_ground = physics.on_ground;
+        
+        // animations
+        let ground_speed = if self.on_ground {
+            Vec2::new(self.vel.x, self.vel.z).magnitude()
+        } else {
+            0.0
+        };
+        let bob_animation_elapsed = elapsed / BOB_ANIMATION_LOOP_TIME;
+        if ground_speed >= WALK_SPEED / 2.0 {
+            self.bob_animation += bob_animation_elapsed;
+            self.bob_animation %= 1.0;
+        } else if !(self.bob_animation == 0.0 || self.bob_animation == 0.5) {
+            if self.bob_animation < 0.5 && self.bob_animation + bob_animation_elapsed > 0.5 {
+                self.bob_animation = 0.5;
+            } else if self.bob_animation + bob_animation_elapsed > 1.0 {
+                self.bob_animation = 0.0;
+            } else {
+                self.bob_animation += bob_animation_elapsed;
+            }
         }
     }
 
@@ -334,11 +406,9 @@ impl GuiStateFrame for Client {
         let getter = self.chunks.getter();
         if let Some(looking_at) = compute_looking_at(
             // position
-            self.pos,
+            self.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0),
             // direction
-            Quaternion::rotation_y(-self.yaw)
-                * Quaternion::rotation_x(-self.pitch)
-                * Vec3::new(0.0, 0.0, 1.0),
+            cam_dir(self.pitch, self.yaw),
             // reach
             50.0,
             // geometry
@@ -346,26 +416,57 @@ impl GuiStateFrame for Client {
             &self.tile_blocks,
             ctx.game(),
         ) {
-            match button {
-                MouseButton::Left => {
-                    self.connection.send(up::SetTileBlock {
-                        gtc: looking_at.tile.gtc(),
-                        bid: AIR.bid,
-                    });
-                    self.prediction.make_prediction(
-                        edit::SetTileBlock {
-                            lti: looking_at.tile.lti,
-                            bid: AIR.bid,
-                        }.into(),
-                        looking_at.tile.cc,
-                        looking_at.tile.ci,
-                        &getter,
-                        &self.connection,
-                        &mut self.tile_blocks,
-                        &mut self.block_updates,
-                    );
+            if let Some((tile, bid, placing)) = match button {
+                MouseButton::Left => Some((looking_at.tile, AIR.bid, false)),
+                MouseButton::Right => {
+                    let gtc = looking_at.tile.gtc() + looking_at.face
+                        .map(|face| face.to_vec())
+                        .unwrap_or(0.into());
+                    getter.gtc_get(gtc).map(|tile| (
+                        tile,
+                        ctx.global().game.content_stone.bid_stone.bid,
+                        true,
+                    ))
                 }
-                _ => (),
+                _ => None
+            } {
+                if placing {
+                    const EPSILON: f32 = 0.0001;
+                    let (old_bid, old_meta) = tile
+                        .get(&mut self.tile_blocks)
+                        .replace(BlockId::new(bid), ());
+                    let placing_blocked = WorldPhysicsGeometry {
+                        getter: &getter,
+                        tile_blocks: &self.tile_blocks,
+                        game: ctx.game(),
+                    }.box_intersects(AaBox {
+                        pos: self.pos - Vec3::from(PLAYER_BOX_POS_ADJUST),
+                        ext: PLAYER_BOX_EXT.into(),
+                    }.expand(EPSILON));
+                    tile
+                        .get(&mut self.tile_blocks)
+                        .erased_set(old_bid, old_meta);
+                    if placing_blocked {
+                        return;
+                    }
+                }
+
+                self.connection.send(up::SetTileBlock {
+                    gtc: tile.gtc(),
+                    bid,
+                });
+                self.prediction.make_prediction(
+                    edit::SetTileBlock {
+                        lti: tile.lti,
+                        bid,
+                    }.into(),
+                    tile.cc,
+                    tile.ci,
+                    &getter,
+                    &self.connection,
+                    &mut self.tile_blocks,
+                    &mut self.block_updates,
+                );
             }
         }
     }
@@ -459,6 +560,11 @@ impl GuiStateFrame for Client {
     }
 }
 
+fn cam_dir(pitch: f32, yaw: f32) -> Vec3<f32> {
+    Quaternion::rotation_y(-yaw)
+        * Quaternion::rotation_x(-pitch)
+        * Vec3::new(0.0, 0.0, 1.0)
+}
 
 /// GUI block that draws the 3D game world from the player's perspective.
 #[derive(Debug)]
@@ -467,7 +573,10 @@ struct WorldGuiBlock<'a> {
     pitch: f32,
     yaw: f32,
 
+    bob_animation: f32,
+
     chunks: &'a LoadedChunks,
+    tile_blocks: &'a PerChunk<ChunkBlocks>,
     tile_meshes: &'a mut PerChunk<ChunkMesh>,
 }
 
@@ -482,21 +591,37 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             inner.tile_meshes.get_mut(cc, ci).patch(&*ctx.global.renderer.borrow());
         }
 
+        // bob animation
+        let bob_animation_sine = f32::sin(inner.bob_animation * 2.0 * PI);
+        let bob_roll = bob_animation_sine * f32::to_radians(MAX_BOB_ROLL_DEGS);
+        let bob_shift = Vec2 {
+            x: bob_animation_sine * MAX_BOB_SHIFT_H,
+            y: -(bob_animation_sine * bob_animation_sine) * MAX_BOB_SHIFT_V,
+        };
+        let bob_translate = Vec3 {
+            x: f32::cos(inner.yaw) * bob_shift.x,
+            y: bob_shift.y,
+            z: f32::sin(inner.yaw) * bob_shift.x,
+        };
+
         // sky
         canvas.reborrow()
             .color(ctx.assets().sky_day)
             .draw_solid(size);
 
         // begin 3D perspective
-        let view_proj = ViewProj::perspective(
+        let cam_pos = inner.pos + bob_translate;
+        let mut view_proj = ViewProj::perspective(
             // position
-            inner.pos,
+            cam_pos,
             // direction
-            Quaternion::rotation_x(inner.pitch) * Quaternion::rotation_y(inner.yaw),
+            Quaternion::rotation_x(inner.pitch)
+            * Quaternion::rotation_z(bob_roll)
+            * Quaternion::rotation_y(inner.yaw),
             // field of view
             f32::to_radians(120.0),
-            // aspect ratio
-            aspect_ratio(size),
+            // size
+            size,
         );
         let mut canvas = canvas.reborrow()
             .scale(self.size)
@@ -517,6 +642,41 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     (&*inner.tile_meshes).get(cc, ci).mesh(),
                     &ctx.assets().blocks,
                 );
+        }
+
+        // outline for block being looked at
+        let getter = inner.chunks.getter();
+        let cam_dir = cam_dir(inner.pitch, inner.yaw);
+        if let Some(looking_at) = compute_looking_at(
+            // pos
+            cam_pos,
+            // dir
+            cam_dir,
+            // reach
+            50.0,
+            &getter,
+            &inner.tile_blocks,
+            ctx.game(),
+        ) {
+            const GAP: f32 = 0.001;
+
+            let mut canvas = canvas.reborrow()
+                .translate(looking_at.tile.gtc().map(|n| n as f32))
+                .color([0.0, 0.0, 0.0, 0.4]);
+
+            for face in FACES {
+                for edge in face.to_edges() {
+                    let [start, end] = edge.to_corners()
+                        .map(|corner| corner.to_poles()
+                            .map(|pole| match pole {
+                                Pole::Neg => 0.0 + GAP,
+                                Pole::Pos => 1.0 - GAP,
+                            })
+                            + face.to_vec().map(|n| n as f32) * 2.0 * GAP);
+                    canvas.reborrow()
+                        .draw_line(start, end);
+                }
+            }
         }
     }
 }

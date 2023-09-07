@@ -1,14 +1,11 @@
 
 use crate::{
-    menu::multiplayer_menu::MultiplayerMenu,
-    asset::Assets,
-    gui::{
-        *,
-        blocks::{
-            *,
-            mc::*,
-        },
+    menu::{
+        multiplayer_menu::MultiplayerMenu,
+        about::AboutMenu,
     },
+    asset::Assets,
+    gui::prelude::*,
 	util::hex_color::hex_color,
 };
 use graphics::{
@@ -30,6 +27,7 @@ pub struct MainMenu {
 
     singleplayer_button: MenuButton,
     multiplayer_button: MenuButton,
+    about_button: MenuButton,
     exit_game_button: MenuButton,
     
     splash_text: GuiSplashText,
@@ -62,6 +60,8 @@ impl MainMenu {
             .build(assets);
         let multiplayer_button = menu_button(&assets.lang.menu_multiplayer)
             .build(assets);
+        let about_button = menu_button("About")
+            .build(assets);
         let exit_game_button = menu_button("Quit")
             .build(assets);
         let splash_text = GuiSplashText::new();
@@ -71,6 +71,7 @@ impl MainMenu {
 			uncopyright_text,
             singleplayer_button,
             multiplayer_button,
+            about_button,
             exit_game_button,
             splash_text,
 		}
@@ -109,6 +110,8 @@ impl MainMenu {
                                     .gui(on_singleplayer_click),
                                 self.multiplayer_button
                                     .gui(on_multiplayer_click),
+                                self.about_button
+                                    .gui(on_about_click),
                                 self.exit_game_button
                                     .gui(on_exit_game_click),
                             )),
@@ -145,6 +148,10 @@ fn on_singleplayer_click(ctx: &GuiGlobalContext) {
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {
     ctx.push_state_frame(MultiplayerMenu::new(ctx));
+}
+
+fn on_about_click(ctx: &GuiGlobalContext) {
+    ctx.push_state_frame(AboutMenu::new(ctx));
 }
 
 fn on_exit_game_click(ctx: &GuiGlobalContext) {

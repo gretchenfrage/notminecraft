@@ -22,6 +22,12 @@ impl AaBox {
         self
     }
 
+    pub fn expand(mut self, amount: f32) -> Self {
+        self.pos -= Vec3::from(amount);
+        self.ext += Extent3::from(amount * 2.0);
+        self
+    }
+
     pub fn contains<V: Into<Vec3<f32>>>(self, pos: V) -> bool {
         let pos = pos.into();
         let max = self.pos + self.ext;
@@ -31,5 +37,17 @@ impl AaBox {
             && pos.x < max.x
             && pos.y < max.y
             && pos.z < max.z
+    }
+
+    pub fn intersects(self, rhs: AaBox) -> bool {
+        for i in 0..3 {
+            if self.pos[i] >= rhs.pos[i] + rhs.ext[i] {
+                return false;
+            }
+            if self.pos[i] + self.ext[i] <= rhs.pos[i] {
+                return false;
+            }
+        }
+        true
     }
 }

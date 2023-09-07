@@ -93,6 +93,7 @@ lang!(
     menu_quit,
     menu_splash,
 
+    gui_done,
     gui_cancel,
 
     multiplayer_title,

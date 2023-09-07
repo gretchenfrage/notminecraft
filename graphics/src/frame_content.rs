@@ -474,7 +474,7 @@ impl<'a, 'b> Canvas2<'a, 'b> {
                 pos,
                 dir,
                 fov,
-                size.w / size.h,
+                size,
             ))
     }
 

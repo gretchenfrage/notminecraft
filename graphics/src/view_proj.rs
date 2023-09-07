@@ -27,15 +27,25 @@ impl ViewProj {
         pos: impl Into<Vec3<f32>>,
         dir: impl Into<Quaternion<f32>>,
         fov: f32,
-        aspect: f32,
+        //aspect: f32,
+        size: impl Into<Extent2<f32>>,
     ) -> Self {
         let view1 = Mat4::<f32>::translation_3d(-pos.into());
         let view2 = Mat4::<f32>::from(-dir.into());
+        let size = size.into();
+        /*
         let proj = Mat4::<f32>::infinite_perspective_lh(
             fov,
             aspect,
             0.01,
             //1.0, // TODO
+        );*/
+        let proj = Mat4::<f32>::perspective_fov_lh_zo(
+            fov,
+            size.w,
+            size.h,
+            0.01,
+            10000.0,
         );
         /*
         proj.cols.x.w = 0.0;

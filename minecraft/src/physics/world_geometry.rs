@@ -43,6 +43,33 @@ pub trait WorldGeometry: Sized {
 
         found
     }
+
+    /// Check whether `obj` is intersecting with another AA box.
+    fn box_intersects(&self, obj: AaBox) -> bool {
+        let gtc_min = obj.pos.map(|n| n.floor() as i64);
+        let gtc_max = (obj.pos + obj.ext).map(|n| n.floor() as i64);
+        for z in gtc_min.z..=gtc_max.z {
+            for y in gtc_min.y..=gtc_max.y {
+                for x in gtc_min.x..=gtc_max.x {
+                    let gtc = Vec3 { x, y, z };
+                    let mut intersects = false;
+                    self.tile_geometry(
+                        gtc,
+                        |mut aa_box, _| if aa_box
+                            .translate(gtc.map(|n| n as f32))
+                            .intersects(obj)
+                        {
+                            intersects = true
+                        }
+                    );
+                    if intersects {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
 }
 
 
