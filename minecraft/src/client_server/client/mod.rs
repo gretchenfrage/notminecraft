@@ -32,13 +32,15 @@ use graphics::{
     },
 };
 use std::{
-    ops::Range,
+    ops::{
+        Range,
+        Deref,
+    },
     f32::consts::PI,
     cell::RefCell,
     collections::VecDeque,
     time::Duration,
     mem::take,
-    sync::Arc,
 };
 use anyhow::{Result, ensure, bail};
 use vek::*;
@@ -64,6 +66,9 @@ const GROUND_DETECTION_PERIOD: f32 = 1.0 / 20.0;
 pub struct Client {
     connection: Connection,
 
+    char_mesh: CharMesh,
+    char_name_layed_out: LayedOutTextBlock,
+
     pos: Vec3<f32>,
     vel: Vec3<f32>,
     time_since_ground: f32,
@@ -72,6 +77,7 @@ pub struct Client {
     yaw: f32,
 
     bob_animation: f32,
+    third_person: bool,
 
     chunks: LoadedChunks,
     ci_reverse_lookup: SparseVec<Vec3<i64>>,
@@ -114,89 +120,36 @@ fn get_username() -> String {
     }
 }
 
-/// Utility for making mob body part meshes.
-struct MobMesher<'a> {
-    renderer: &'a Renderer,
-    tex_size: Extent2<u32>,
-    scale: f32,
-}
-
-impl<'a> MobMesher<'a> {
-    pub fn make_part(
-        &self,
-        offset: impl Into<Vec2<u32>>,
-        extent: impl Into<Extent3<u32>>,
-        origin_frac: impl Into<Vec3<f32>>,
-    ) -> Mesh {
-        // convert stuff into vectors
-        let offset = offset.into();
-        let extent = Vec3::<u32>::from(extent.into());
-        let origin_frac = origin_frac.into();
-
-        // convert stuff into floats
-        let tex_size = self.tex_size.map(|n| n as f32);
-        let offset = offset.map(|n| n as f32);
-        let extent = extent.map(|n| n as f32);
-
-        // compose mesh from faces
-        let mut mesh = MeshData::new();
-        let scaled_extent = Vec3::from(extent * self.scale);
-        let origin_adjust = -(extent * origin_frac * self.scale);
-        for face in FACES {
-            let (face_start, face_extents) = face.quad_start_extents();
-            let pos_start = face_start
-                .to_poles()
-                .zip(scaled_extent)
-                .map(|(pole, n)| match pole {
-                    Pole::Neg => 0.0,
-                    Pole::Pos => n,
-                }) + origin_adjust;
-            let [pos_ext_1, pos_ext_2] = face_extents
-                .map(|ext_face| {
-                    let (ext_axis, ext_pole) = ext_face.to_axis_pole();
-                    let n = PerAxis::from(scaled_extent)[ext_axis] * ext_pole.to_int() as f32;
-                    ext_axis.to_vec(n)
-                });
-            let tex_start =
-                (offset + Vec2::from(match face {
-                    Face::PosX => [0.0, extent.z],
-                    Face::NegX => [extent.z + extent.x, extent.z],
-                    Face::PosY => [extent.z, 0.0],
-                    Face::NegY => [extent.z + extent.x, 0.0],
-                    Face::PosZ => [extent.z, extent.z],
-                    Face::NegZ => [extent.z * 2.0 + extent.x, extent.z],
-                })) / tex_size;
-            let tex_extent = Vec2::from(face
-                .to_axis()
-                .other_axes()
-                .map(
-                    |axis| PerAxis::from(extent)[axis]
-                )) / tex_size;
-
-            mesh.add_quad(&Quad {
-                pos_start,
-                pos_ext_1: pos_ext_1.into(),
-                pos_ext_2: pos_ext_2.into(),
-                tex_start,
-                tex_extent: tex_extent.into(),
-                vert_colors: [Rgba::white(); 4],
-                tex_index: 0,
-            });
-        }
-
-        // upload
-        mesh.upload(self.renderer)
-    }
-}
-
 impl Client {
     pub fn new(address: &str, ctx: &GuiGlobalContext) -> Self {
+        let username = get_username();
+
         let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
         connection.send(UpMessage::LogIn(up::LogIn {
-            username: get_username(),
+            username: username.clone(),
         }));
+
+        let char_mesh = CharMesh::new(ctx);
+        let char_name_layed_out = ctx.renderer.borrow()
+            .lay_out_text(&TextBlock {
+                spans: &[TextSpan {
+                    text: &username,
+                    font: ctx.assets.font,
+                    font_size: 16.0,
+                    color: Rgba::white(),
+                }],
+                h_align: HAlign::Center,
+                v_align: VAlign::Center,
+                wrap_width: None,
+            });
+
+        ctx.capture_mouse();
+
         Client {
             connection,
+
+            char_mesh,
+            char_name_layed_out,
 
             pos: [0.0, 80.0, 0.0].into(),
             vel: 0.0.into(),
@@ -206,6 +159,7 @@ impl Client {
             yaw: f32::to_radians(0.0),
 
             bob_animation: 0.0,
+            third_person: false,
 
             chunks: LoadedChunks::new(),
             ci_reverse_lookup: SparseVec::new(),
@@ -239,7 +193,7 @@ impl Client {
             )));
         layer((
             WorldGuiBlock {
-                pos: self.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0),
+                pos: self.pos,
                 pitch: self.pitch,
                 yaw: self.yaw,
 
@@ -248,6 +202,10 @@ impl Client {
                 tile_meshes: &mut self.tile_meshes,
 
                 bob_animation: self.bob_animation,
+                third_person: self.third_person,
+
+                char_mesh: &self.char_mesh,
+                char_name_layed_out: &self.char_name_layed_out,
             },
             align(0.5,
                 logical_size(30.0,
@@ -599,6 +557,8 @@ impl GuiStateFrame for Client {
                     text_block: make_chat_input_text_block("", blinker, ctx.global()),
                     blinker,
                 });
+            } else if key == VirtualKeyCode::F5 {
+                self.third_person = !self.third_person;
             }
         } else {
             if key == VirtualKeyCode::Escape
@@ -669,6 +629,13 @@ impl GuiStateFrame for Client {
             *text_block = make_chat_input_text_block(text, blinker, ctx.global())
         }
     }
+
+    fn on_focus_change(&mut self, ctx: &GuiWindowContext) {
+        if ctx.global().focus_level != FocusLevel::MouseCaptured
+            && self.menu_stack.is_empty() {
+            self.menu_stack.push(Menu::EscMenu);
+        }
+    }
 }
 
 fn cam_dir(pitch: f32, yaw: f32) -> Vec3<f32> {
@@ -685,10 +652,14 @@ struct WorldGuiBlock<'a> {
     yaw: f32,
 
     bob_animation: f32,
+    third_person: bool,
 
     chunks: &'a LoadedChunks,
     tile_blocks: &'a PerChunk<ChunkBlocks>,
     tile_meshes: &'a mut PerChunk<ChunkMesh>,
+
+    char_mesh: &'a CharMesh,
+    char_name_layed_out: &'a LayedOutTextBlock,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -721,8 +692,12 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             .draw_solid(size);
 
         // begin 3D perspective
-        let cam_pos = inner.pos + bob_translate;
-        let mut view_proj = ViewProj::perspective(
+        let cam_dir = cam_dir(inner.pitch, inner.yaw);
+        let mut cam_pos = inner.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0) + bob_translate;
+        if inner.third_person {
+            cam_pos -= cam_dir * 5.0;
+        }
+        let view_proj = ViewProj::perspective(
             // position
             cam_pos,
             // direction
@@ -755,9 +730,22 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 );
         }
 
+        // character
+        if inner.third_person {
+            let mut canvas = canvas.reborrow()
+                .translate(inner.pos)
+                .rotate(Quaternion::rotation_y(-inner.yaw));
+            inner.char_mesh.draw(&mut canvas, ctx.assets());
+            canvas.reborrow()
+                .translate([0.0, 2.0, 0.0])
+                .scale(0.25 / 16.0)
+                .scale([1.0, -1.0, 1.0])
+                .rotate(Quaternion::rotation_y(PI))
+                .draw_text(&inner.char_name_layed_out);
+        }
+
         // outline for block being looked at
         let getter = inner.chunks.getter();
-        let cam_dir = cam_dir(inner.pitch, inner.yaw);
         if let Some(looking_at) = compute_looking_at(
             // pos
             cam_pos,
@@ -848,6 +836,7 @@ impl MenuResources {
 type MenuEffectQueue = RefCell<VecDeque<MenuEffect>>;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum MenuEffect {
     PopMenu,
     PushMenu(Menu),
@@ -1124,6 +1113,138 @@ fn make_chat_input_text_block(text: &str, blinker: bool, ctx: &GuiGlobalContext)
         h_align: HAlign::Left,
         v_align: VAlign::Top,
     })
+}
+
+
+// ==== mob meshes ===
+
+/// Utility for making mob body part meshes.
+#[derive(Debug)]
+struct MobMesher<G> {
+    gpu_vec_ctx: G,
+    tex_size: Extent2<u32>,
+}
+
+impl<G> MobMesher<G>
+where
+    G: Deref,
+    G::Target: GpuVecContext
+{
+    pub fn make_part(
+        &self,
+        offset: impl Into<Vec2<u32>>,
+        extent: impl Into<Extent3<u32>>,
+        origin_frac: impl Into<Vec3<f32>>,
+    ) -> Mesh {
+        // convert stuff into vectors
+        let offset = offset.into();
+        let extent = Vec3::<u32>::from(extent.into());
+        let origin_frac = origin_frac.into();
+
+        // convert stuff into floats
+        let tex_size = self.tex_size.map(|n| n as f32);
+        let offset = offset.map(|n| n as f32);
+        let extent = extent.map(|n| n as f32);
+
+        // compose mesh from faces
+        let mut mesh = MeshData::new();
+        let scaled_extent = Vec3::from(extent);
+        let origin_adjust = -(extent * origin_frac);
+        for face in FACES {
+            let (face_start, face_extents) = face.quad_start_extents();
+            let pos_start = face_start
+                .to_poles()
+                .zip(scaled_extent)
+                .map(|(pole, n)| match pole {
+                    Pole::Neg => 0.0,
+                    Pole::Pos => n,
+                }) + origin_adjust;
+            let [pos_ext_1, pos_ext_2] = face_extents
+                .map(|ext_face| {
+                    let (ext_axis, ext_pole) = ext_face.to_axis_pole();
+                    let n = PerAxis::from(scaled_extent)[ext_axis] * ext_pole.to_int() as f32;
+                    ext_axis.to_vec(n)
+                });
+            let tex_start =
+                (offset + Vec2::from(match face {
+                    Face::PosX => [0.0, extent.z],
+                    Face::NegX => [extent.z + extent.x, extent.z],
+                    Face::PosY => [extent.z, 0.0],
+                    Face::NegY => [extent.z + extent.x, 0.0],
+                    Face::PosZ => [extent.z, extent.z],
+                    Face::NegZ => [extent.z * 2.0 + extent.x, extent.z],
+                })) / tex_size;
+            let tex_extent = Vec2::from(face
+                .to_axis()
+                .other_axes()
+                .map(
+                    |axis| PerAxis::from(extent)[axis]
+                )) / tex_size;
+
+            mesh.add_quad(&Quad {
+                pos_start,
+                pos_ext_1: pos_ext_1.into(),
+                pos_ext_2: pos_ext_2.into(),
+                tex_start,
+                tex_extent: tex_extent.into(),
+                vert_colors: [Rgba::white(); 4],
+                tex_index: 0,
+            });
+        }
+
+        // upload
+        mesh.upload(&*self.gpu_vec_ctx)
+    }
+}
+
+#[derive(Debug)]
+struct CharMesh {
+    head: Mesh,
+    torso: Mesh,
+    leg: Mesh,
+    arm: Mesh,
+}
+
+impl CharMesh {
+    pub fn new(ctx: &GuiGlobalContext) -> Self {
+        let char_mesher = MobMesher {
+            gpu_vec_ctx: ctx.renderer.borrow(),
+            tex_size: [64, 32].into(),
+        };
+        CharMesh {
+            head: char_mesher.make_part([0, 0], [8, 8, 8], [0.5, 0.5, 0.5]),
+            torso: char_mesher.make_part([16, 16], [8, 12, 4], [0.5, 0.0, 0.5]),
+            leg: char_mesher.make_part([0, 16], [4, 12, 4], [0.5, 10.0 / 12.0, 0.5]),
+            arm: char_mesher.make_part([40, 16], [4, 12, 4], [0.5, 10.0 / 12.0, 0.5]),
+        }
+    }
+
+    pub fn draw<'a>(
+        &'a self,
+        canvas: &mut Canvas3<'a, '_>,
+        assets: &'a Assets,
+    ) {
+        let mut canvas = canvas.reborrow()
+            .scale(PLAYER_HEIGHT / 32.0);
+        canvas.reborrow()
+            .translate([0.0, 12.0, 0.0])
+            .draw_mesh(&self.torso, &assets.mob_char);
+        canvas.reborrow()
+            .translate([0.0, 28.0, 0.0])
+            .draw_mesh(&self.head, &assets.mob_char);
+        canvas.reborrow()
+            .translate([-2.0, 10.0, 0.0])
+            .draw_mesh(&self.leg, &assets.mob_char);
+        canvas.reborrow()
+            .translate([2.0, 10.0, 0.0])
+            .draw_mesh(&self.leg, &assets.mob_char);
+        canvas.reborrow()
+            .translate([-6.0, 22.0, 0.0])
+            .draw_mesh(&self.arm, &assets.mob_char);
+        canvas.reborrow()
+            .translate([6.0, 22.0, 0.0])
+            .draw_mesh(&self.arm, &assets.mob_char);
+    }
 }
 
 

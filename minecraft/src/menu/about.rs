@@ -1,9 +1,7 @@
 
 use crate::{
-    client_server::client::connection::Connection,
     gui::prelude::*,
     util::hex_color::hex_color,
-    client_server::client::Client,
 };
 use graphics::prelude::*;
 use vek::*;

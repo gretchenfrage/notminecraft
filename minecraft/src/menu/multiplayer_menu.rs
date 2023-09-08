@@ -1,6 +1,5 @@
 
 use crate::{
-    client_server::client::connection::Connection,
     gui::prelude::*,
     util::hex_color::hex_color,
     client_server::client::Client,
@@ -194,7 +193,7 @@ struct AddressBoxBackground;
 impl<'a> GuiNode<'a> for SimpleGuiBlock<AddressBoxBackground> {
     simple_blocks_cursor_impl!();
 
-    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2) {
+    fn draw(self, _: GuiSpatialContext<'a>, canvas: &mut Canvas2) {
         let border = 2.0 * self.scale;
         let border = Vec2::from(border);
 

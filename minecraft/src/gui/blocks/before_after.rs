@@ -3,7 +3,6 @@ use crate::gui::{
     blocks::identity_maperator::IdentityMaperator,
     DimConstraint,
     GuiBlockSeq,
-    DimChildSets,
     GuiBlock,
     GuiGlobalContext,
     SizedGuiBlock,

@@ -55,7 +55,7 @@ pub trait WorldGeometry: Sized {
                     let mut intersects = false;
                     self.tile_geometry(
                         gtc,
-                        |mut aa_box, _| if aa_box
+                        |aa_box, _| if aa_box
                             .translate(gtc.map(|n| n as f32))
                             .intersects(obj)
                         {

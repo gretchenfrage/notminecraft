@@ -328,13 +328,8 @@ fn on_network_event(
         NetworkEvent::NewConnection(all_conn_key, conn) => on_new_connection(
             all_conn_key,
             conn,
-            chunks,
-            game,
             all_connections,
             uninit_connections,
-            tile_blocks,
-            client_loaded_chunks,
-            chunk_client_cis,
             conn_last_processed,
             conn_last_processed_increased,
         ),
@@ -374,13 +369,8 @@ fn on_network_event(
 fn on_new_connection(
     all_conn_key: usize,
     conn: Connection,
-    chunks: &LoadedChunks,
-    game: &Arc<GameData>,
     all_connections: &mut SparseVec<(ConnectionState, usize)>,
     uninit_connections: &mut Slab<Connection>,
-    tile_blocks: &PerChunk<ChunkBlocks>,
-    client_loaded_chunks: &mut SparseVec<LoadedChunks>,
-    chunk_client_cis: &mut PerChunk<SparseVec<usize>>,
     conn_last_processed: &mut SparseVec<u64>,
     conn_last_processed_increased: &mut SparseVec<bool>,
 ) {

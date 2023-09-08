@@ -137,7 +137,7 @@ impl GuiStateFrame for MainMenu {
     }
 }
 
-fn on_singleplayer_click(ctx: &GuiGlobalContext) {
+fn on_singleplayer_click(_ctx: &GuiGlobalContext) {
     /*
     ctx.push_state_frame(Client::new(
         ctx.game,
