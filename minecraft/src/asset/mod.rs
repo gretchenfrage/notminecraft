@@ -129,6 +129,8 @@ pub struct Assets {
     pub blocks: GpuImageArray,
     pub items: GpuImageArray,
 
+    pub mob_char: GpuImageArray,
+
     pub click_sound: SoundEffect,
     pub grass_step_sound: SoundEffect,
     pub grass_dig_sound: SoundEffect,
@@ -220,6 +222,7 @@ impl Assets {
             items: items.load_sprite_array([
                 [5, 3], // 0: stick
             ]),
+            mob_char: loader.load_image_array(&["mob/char.png"]).await,
             click_sound: loader.load_sound_effect("sound3/random/click.ogg").await,
             grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
             grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,

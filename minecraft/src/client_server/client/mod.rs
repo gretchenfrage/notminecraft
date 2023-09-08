@@ -23,8 +23,14 @@ use crate::{
     },
 };
 use chunk_data::*;
-use mesh_data::MeshData;
-use graphics::prelude::*;
+use mesh_data::*;
+use graphics::{
+    prelude::*,
+    frame_content::{
+        DrawObj2,
+        DrawInvert,
+    },
+};
 use std::{
     ops::Range,
     f32::consts::PI,
@@ -32,6 +38,7 @@ use std::{
     collections::VecDeque,
     time::Duration,
     mem::take,
+    sync::Arc,
 };
 use anyhow::{Result, ensure, bail};
 use vek::*;
@@ -45,9 +52,11 @@ const PLAYER_BOX_EXT: [f32; 3] = [PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH];
 const PLAYER_BOX_POS_ADJUST: [f32; 3] = [PLAYER_WIDTH / 2.0, 0.0, PLAYER_WIDTH / 2.0];
 
 const BOB_ANIMATION_LOOP_TIME: f32 = 0.7;
-const MAX_BOB_ROLL_DEGS: f32 = 0.07;
+const MAX_BOB_ROLL_DEGS: f32 =  0.06;
 const MAX_BOB_SHIFT_H: f32 = 0.03;
 const MAX_BOB_SHIFT_V: f32 = 0.05;
+
+const GROUND_DETECTION_PERIOD: f32 = 1.0 / 20.0;
 
 
 /// GUI state frame for multiplayer game client.
@@ -57,7 +66,8 @@ pub struct Client {
 
     pos: Vec3<f32>,
     vel: Vec3<f32>,
-    on_ground: bool,
+    time_since_ground: f32,
+    time_since_jumped: f32,
     pitch: f32,
     yaw: f32,
 
@@ -104,6 +114,81 @@ fn get_username() -> String {
     }
 }
 
+/// Utility for making mob body part meshes.
+struct MobMesher<'a> {
+    renderer: &'a Renderer,
+    tex_size: Extent2<u32>,
+    scale: f32,
+}
+
+impl<'a> MobMesher<'a> {
+    pub fn make_part(
+        &self,
+        offset: impl Into<Vec2<u32>>,
+        extent: impl Into<Extent3<u32>>,
+        origin_frac: impl Into<Vec3<f32>>,
+    ) -> Mesh {
+        // convert stuff into vectors
+        let offset = offset.into();
+        let extent = Vec3::<u32>::from(extent.into());
+        let origin_frac = origin_frac.into();
+
+        // convert stuff into floats
+        let tex_size = self.tex_size.map(|n| n as f32);
+        let offset = offset.map(|n| n as f32);
+        let extent = extent.map(|n| n as f32);
+
+        // compose mesh from faces
+        let mut mesh = MeshData::new();
+        let scaled_extent = Vec3::from(extent * self.scale);
+        let origin_adjust = -(extent * origin_frac * self.scale);
+        for face in FACES {
+            let (face_start, face_extents) = face.quad_start_extents();
+            let pos_start = face_start
+                .to_poles()
+                .zip(scaled_extent)
+                .map(|(pole, n)| match pole {
+                    Pole::Neg => 0.0,
+                    Pole::Pos => n,
+                }) + origin_adjust;
+            let [pos_ext_1, pos_ext_2] = face_extents
+                .map(|ext_face| {
+                    let (ext_axis, ext_pole) = ext_face.to_axis_pole();
+                    let n = PerAxis::from(scaled_extent)[ext_axis] * ext_pole.to_int() as f32;
+                    ext_axis.to_vec(n)
+                });
+            let tex_start =
+                (offset + Vec2::from(match face {
+                    Face::PosX => [0.0, extent.z],
+                    Face::NegX => [extent.z + extent.x, extent.z],
+                    Face::PosY => [extent.z, 0.0],
+                    Face::NegY => [extent.z + extent.x, 0.0],
+                    Face::PosZ => [extent.z, extent.z],
+                    Face::NegZ => [extent.z * 2.0 + extent.x, extent.z],
+                })) / tex_size;
+            let tex_extent = Vec2::from(face
+                .to_axis()
+                .other_axes()
+                .map(
+                    |axis| PerAxis::from(extent)[axis]
+                )) / tex_size;
+
+            mesh.add_quad(&Quad {
+                pos_start,
+                pos_ext_1: pos_ext_1.into(),
+                pos_ext_2: pos_ext_2.into(),
+                tex_start,
+                tex_extent: tex_extent.into(),
+                vert_colors: [Rgba::white(); 4],
+                tex_index: 0,
+            });
+        }
+
+        // upload
+        mesh.upload(self.renderer)
+    }
+}
+
 impl Client {
     pub fn new(address: &str, ctx: &GuiGlobalContext) -> Self {
         let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
@@ -115,7 +200,8 @@ impl Client {
 
             pos: [0.0, 80.0, 0.0].into(),
             vel: 0.0.into(),
-            on_ground: false,
+            time_since_ground: f32::INFINITY,
+            time_since_jumped: f32::INFINITY,
             pitch: f32::to_radians(-30.0),
             yaw: f32::to_radians(0.0),
 
@@ -163,6 +249,11 @@ impl Client {
 
                 bob_animation: self.bob_animation,
             },
+            align(0.5,
+                logical_size(30.0,
+                    Crosshair
+                )
+            ),
             Vignette,
             chat.map(|chat| 
                 v_margin(0.0, 80.0,
@@ -253,6 +344,11 @@ impl Client {
         }
         Ok(())
     }
+
+    fn on_ground(&self) -> bool {
+        self.time_since_ground < GROUND_DETECTION_PERIOD
+        && self.time_since_jumped > GROUND_DETECTION_PERIOD
+    }
 }
 
 
@@ -342,10 +438,10 @@ impl GuiStateFrame for Client {
             self.vel.z = walking_xz.y;
 
             // jumping
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space)
-                && self.on_ground
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
             {
                 self.vel.y += /*8.4*/ 9.2;
+                self.time_since_jumped = 0.0;
             }
         }
 
@@ -372,25 +468,40 @@ impl GuiStateFrame for Client {
             },
         );
         self.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
-        self.on_ground = physics.on_ground;
+        self.time_since_ground += elapsed;
+        self.time_since_jumped += elapsed;
+        if physics.on_ground {
+            self.time_since_ground = 0.0;
+        }
         
         // animations
-        let ground_speed = if self.on_ground {
+        let ground_speed = if self.on_ground() {
             Vec2::new(self.vel.x, self.vel.z).magnitude()
         } else {
             0.0
         };
-        let bob_animation_elapsed = elapsed / BOB_ANIMATION_LOOP_TIME;
+        debug_assert!(self.bob_animation >= 0.0);
+        debug_assert!(self.bob_animation <= 1.0);
+        let mut bob_animation_elapsed = elapsed / BOB_ANIMATION_LOOP_TIME;
         if ground_speed >= WALK_SPEED / 2.0 {
             self.bob_animation += bob_animation_elapsed;
             self.bob_animation %= 1.0;
         } else if !(self.bob_animation == 0.0 || self.bob_animation == 0.5) {
+            bob_animation_elapsed *= 1.75;
+            
+            if self.bob_animation < 0.25 {
+                self.bob_animation += (0.25 - self.bob_animation) * 2.0;
+            } else if self.bob_animation > 0.5 && self.bob_animation < 0.75 {
+                self.bob_animation += (0.75 - self.bob_animation) * 2.0;
+            }
+            
             if self.bob_animation < 0.5 && self.bob_animation + bob_animation_elapsed > 0.5 {
                 self.bob_animation = 0.5;
             } else if self.bob_animation + bob_animation_elapsed > 1.0 {
                 self.bob_animation = 0.0;
             } else {
                 self.bob_animation += bob_animation_elapsed;
+                self.bob_animation %= 1.0;
             }
         }
     }
@@ -658,11 +769,11 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             &inner.tile_blocks,
             ctx.game(),
         ) {
-            const GAP: f32 = 0.001;
+            const GAP: f32 = 0.002;
 
             let mut canvas = canvas.reborrow()
                 .translate(looking_at.tile.gtc().map(|n| n as f32))
-                .color([0.0, 0.0, 0.0, 0.4]);
+                .color([0.0, 0.0, 0.0, 0.65]);
 
             for face in FACES {
                 for edge in face.to_edges() {
@@ -902,13 +1013,11 @@ impl GuiChat {
                         (
                             solid(CHAT_BACKGROUND),
                         ),
-                        //min_height(20.0, 1.0,
                         v_pad(2.0, 2.0,
                             h_margin(8.0, 8.0,
                                 &mut chat_line.text_block
                             )
                         ),
-                        //),
                         (),
                     );
                     if limit {
@@ -1037,5 +1146,24 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<Vignette> {
                     self.size,
                 );
         }
+    }
+}
+
+/// GUI block for rendering the crosshair.
+#[derive(Debug)]
+struct Crosshair;
+
+impl<'a> GuiNode<'a> for SimpleGuiBlock<Crosshair> {
+    never_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2) {
+        canvas.reborrow()
+            .scale(self.size)
+            .draw(DrawObj2::Invert(DrawInvert {
+                image: ctx.assets().hud_crosshair.clone(),
+                tex_index: 0,
+                tex_start: 0.0.into(),
+                tex_extent: 1.0.into(),
+            }));
     }
 }

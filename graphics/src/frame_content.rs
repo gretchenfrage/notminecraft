@@ -36,6 +36,7 @@ pub use crate::{
             Vertex,
             DrawMesh,
         },
+        invert::DrawInvert,
     },
 };
 
@@ -59,6 +60,7 @@ pub enum DrawObj2 {
     Line,
     Image(DrawImage),
     Text(LayedOutTextBlock),
+    Invert(DrawInvert),
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +70,7 @@ pub enum DrawObj3<'a> {
     Image(DrawImage),
     Text(LayedOutTextBlock),
     Mesh(DrawMesh<'a>),
+    Invert(DrawInvert),
 }
 
 /// Chainable utility for writing to `FrameContent`.

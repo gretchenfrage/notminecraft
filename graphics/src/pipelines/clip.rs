@@ -65,6 +65,7 @@ fn create_clip_texture(
         size,
         "clip texture",
         CLIP_FORMAT,
+        None,
     );
 
     let view = texture

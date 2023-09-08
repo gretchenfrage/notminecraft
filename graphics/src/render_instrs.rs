@@ -14,6 +14,7 @@ use crate::{
         DrawImage,
         LayedOutTextBlock,
         DrawMesh,
+        DrawInvert,
     },
 };
 use vek::*;
@@ -38,6 +39,7 @@ pub enum DrawObjNorm<'a> {
     Image(&'a DrawImage),
     Text(&'a LayedOutTextBlock),
     Mesh(&'a DrawMesh<'a>),
+    Invert(&'a DrawInvert),
 }
 
 impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
@@ -47,6 +49,7 @@ impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
             &DrawObj2::Line => DrawObjNorm::Line,
             &DrawObj2::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj2::Text(ref obj) => DrawObjNorm::Text(obj),
+            &DrawObj2::Invert(ref obj) => DrawObjNorm::Invert(obj),
         }
     }
 }
@@ -59,6 +62,7 @@ impl<'a> From<&'a DrawObj3<'a>> for DrawObjNorm<'a> {
             &DrawObj3::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
             &DrawObj3::Mesh(ref obj) => DrawObjNorm::Mesh(obj),
+            &DrawObj3::Invert(ref obj) => DrawObjNorm::Invert(obj),
         }
     }
 }

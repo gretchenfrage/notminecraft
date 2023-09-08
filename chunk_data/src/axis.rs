@@ -101,10 +101,30 @@ axis_enum!(
 impl Axis {
     pub fn other_axes(self) -> [Axis; 2] {
         match self {
-            Axis::X => [Axis::Y, Axis::Z],
-            Axis::Y => [Axis::Z, Axis::X],
+            Axis::X => [Axis::Z, Axis::Y],
+            Axis::Y => [Axis::X, Axis::Z],
             Axis::Z => [Axis::X, Axis::Y],
         }
+    }
+
+    pub fn to_vec(self, n: f32) -> Vec3<f32> {
+        match self {
+            Axis::X => Vec3::new(n, 0.0, 0.0),
+            Axis::Y => Vec3::new(0.0, n, 0.0),
+            Axis::Z => Vec3::new(0.0, 0.0, n),
+        }
+    }
+}
+
+impl<T> From<Vec3<T>> for PerAxis<T> {
+    fn from(vec: Vec3<T>) -> PerAxis<T> {
+        PerAxis([vec.x, vec.y, vec.z])
+    }
+}
+
+impl<T> Into<Vec3<T>> for PerAxis<T> {
+    fn into(self) -> Vec3<T> {
+        Vec3::from(self.0)
     }
 }
 
@@ -551,6 +571,20 @@ impl Face {
             Face::NegY => [Edge::NegXNegY, Edge::PosXNegY, Edge::NegYNegZ, Edge::NegYPosZ],
             Face::PosZ => [Edge::NegXPosZ, Edge::PosXPosZ, Edge::NegYPosZ, Edge::PosYPosZ],
             Face::NegZ => [Edge::NegXNegZ, Edge::PosXNegZ, Edge::NegYNegZ, Edge::PosYNegZ],
+        }
+    }
+
+    /// As in `::mesh_data::Quad`, produce `pos_start`, `pos_ext_1`, and `pos_ext_2`
+    /// information, where the start is represented as a corner, and the extent directions
+    /// are represented as faces.
+    pub const fn quad_start_extents(self) -> (Corner, [Face; 2]) {
+        match self {
+            Face::PosX => (Corner::PosXNegYNegZ, [Face::PosY, Face::PosZ]),
+            Face::NegX => (Corner::NegXNegYPosZ, [Face::PosY, Face::NegZ]),
+            Face::PosY => (Corner::NegXPosYNegZ, [Face::PosZ, Face::PosX]),
+            Face::NegY => (Corner::NegXNegYPosZ, [Face::NegZ, Face::PosX]),
+            Face::PosZ => (Corner::PosXNegYPosZ, [Face::PosY, Face::NegX]),
+            Face::NegZ => (Corner::NegXNegYNegZ, [Face::PosY, Face::PosX]),
         }
     }
 }

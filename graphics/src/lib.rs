@@ -7,6 +7,7 @@ use crate::{
             ClearPipeline,
         },
         clear_depth::ClearDepthPipeline,
+        finish::FinishPipeline,
         clip::{
             ClipPipeline,
             PreppedClipEdit,
@@ -23,6 +24,10 @@ use crate::{
             PreppedDrawText,
         },
         mesh::MeshPipeline,
+        invert::{
+            InvertPipeline,
+            PreppedDrawInvert,
+        },
     },
     std140::{
         Std140,
@@ -70,6 +75,7 @@ pub mod view_proj;
 pub mod frame_content;
 mod render_instrs;
 mod uniform_buffer;
+//mod draw_command_encoder;
 
 
 //const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm; TODO why can't it be this?
@@ -109,6 +115,8 @@ pub struct Renderer {
     surface: Surface,
     device: Arc<Device>,
     queue: Arc<Queue>,
+    color_texture: Texture,
+    color_texture_view: TextureView,
     depth_texture: Texture,
     config: SurfaceConfiguration,
     uniform_buffer: UniformBuffer,
@@ -117,12 +125,14 @@ pub struct Renderer {
     clear_color_pipeline: ClearPipeline,
     clear_clip_pipeline: ClearPipeline,
     clear_depth_pipeline: ClearDepthPipeline,
+    finish_pipeline: FinishPipeline,
     clip_pipeline: ClipPipeline,
     solid_pipeline: SolidPipeline,
     line_pipeline: LinePipeline,
     image_pipeline: ImagePipeline,    
     text_pipeline: TextPipeline,
     mesh_pipeline: MeshPipeline,
+    invert_pipeline: InvertPipeline,
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
@@ -130,7 +140,7 @@ pub struct Renderer {
 
 impl Debug for Renderer {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("Renderer")
+        f.write_str("Renderer { .. }")
     }
 }
 
@@ -150,6 +160,7 @@ fn create_depth_texture_like(
     size: Extent2<u32>,
     label: &'static str,
     format: TextureFormat,
+    extra_usages: Option<TextureUsages>,
 ) -> Texture {
     device
         .create_texture(&TextureDescriptor {
@@ -163,9 +174,30 @@ fn create_depth_texture_like(
             sample_count: 1,
             dimension: TextureDimension::D2,
             format,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT
+                | extra_usages.unwrap_or(TextureUsages::empty()),
             view_formats: &[],
         })
+}
+
+fn create_color_texture(
+    device: &Device,
+    size: Extent2<u32>
+) -> (Texture, TextureView) {
+    let color_texture = create_depth_texture_like(
+        &device,
+        size,
+        "color texture",
+        SWAPCHAIN_FORMAT,
+        Some(TextureUsages::COPY_SRC),
+    );
+    let color_texture_view = color_texture
+        .create_view(&TextureViewDescriptor {
+            label: Some("color texture view"),
+            ..Default::default()
+        });
+    (color_texture, color_texture_view)
 }
 
 impl Renderer {
@@ -239,12 +271,16 @@ impl Renderer {
                 ],
             });
 
+        // create the color texture
+        let (color_texture, color_texture_view) = create_color_texture(&device, size);
+
         // create the depth texture
         let depth_texture = create_depth_texture_like(
             &device,
             size,
             "depth texture",
             DEPTH_FORMAT,
+            None,
         );
 
         // create the gpu image manager
@@ -263,6 +299,10 @@ impl Renderer {
         trace!("creating clear depth pipeline");
         let clear_depth_pipeline = ClearDepthPipeline::new(&device)?;
 
+        // create the finish pipeline
+        trace!("creating finish pipeline");
+        let finish_pipeline = FinishPipeline::new(&device, &color_texture_view)?;
+
         // create the clip pipeline
         trace!("creating clip pipeline");
         let clip_pipeline = ClipPipeline::new(&device, size)?;
@@ -275,6 +315,7 @@ impl Renderer {
             &clip_pipeline.clip_texture_bind_group_layout,
         )?;
 
+        // create the line pipeline
         trace!("creating line pipeline");
         let line_pipeline = LinePipeline::new(
             &device,
@@ -308,6 +349,16 @@ impl Renderer {
             &gpu_image_manager,
         )?;
 
+        // create the invert pipeline
+        trace!("creating invert pipeline");
+        let invert_pipeline = InvertPipeline::new(
+            &device,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
+            &gpu_image_manager,
+            size,
+        )?;
+
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -327,6 +378,8 @@ impl Renderer {
             surface,
             device,
             queue,
+            color_texture,
+            color_texture_view,
             depth_texture,
             config,
             uniform_buffer,
@@ -335,12 +388,14 @@ impl Renderer {
             clear_color_pipeline,
             clear_clip_pipeline,
             clear_depth_pipeline,
+            finish_pipeline,
             clip_pipeline,
             solid_pipeline,
             line_pipeline,
             image_pipeline,
             text_pipeline,
             mesh_pipeline,
+            invert_pipeline,
             _window: window,
         })
     }
@@ -367,6 +422,11 @@ impl Renderer {
         self.config.height = size.h;
         self.surface.configure(&self.device, &self.config);
 
+        // resize color texture
+        let (color_texture, color_texture_view) = create_color_texture(&self.device, size);
+        self.color_texture = color_texture;
+        self.color_texture_view = color_texture_view;
+
         // resize depth texture
         trace!("resizing depth texture");
         self.depth_texture = create_depth_texture_like(
@@ -374,11 +434,20 @@ impl Renderer {
             size,
             "depth texture",
             DEPTH_FORMAT,
-        );// TODO factor out
+            None,
+        );
+
+        // resize finish pipeline
+        trace!("resizing clip pipeline");
+        self.finish_pipeline.resize(&self.device, &self.color_texture_view);
 
         // resize clip pipeline
         trace!("resizing clip pipeline");
         self.clip_pipeline.resize(&self.device, size);
+
+        // resize invert pipeline
+        trace!("resizing invert pipeline");
+        self.invert_pipeline.resize(&self.device, size);
     }
 
     /// Draw a frame with the given frame content.
@@ -408,9 +477,6 @@ impl Renderer {
         if attempts > 0 {
             trace!("successfully recreated swap chain surface");
         }
-        let color_texture = frame
-            .texture
-            .create_view(&TextureViewDescriptor::default());
 
         // compile and pre-render
         trace!("beginning pre-render");
@@ -439,6 +505,7 @@ impl Renderer {
             Image(PreppedDrawImage<'a>),
             Text(PreppedDrawText),
             Mesh(&'a DrawMesh<'a>),
+            Invert(PreppedDrawInvert<'a>),
         }
 
         let instrs = frame_render_compiler(&content, surface_size)
@@ -468,6 +535,12 @@ impl Renderer {
                         ),
                         DrawObjNorm::Mesh(mesh) => PreppedRenderObj::Mesh(
                             mesh
+                        ),
+                        DrawObjNorm::Invert(invert) => PreppedRenderObj::Invert(
+                            InvertPipeline::pre_render(
+                                invert,
+                                &mut uniform_packer,
+                            )
                         ),
                     };
                     PreppedRenderInstr::Draw {
@@ -500,6 +573,7 @@ impl Renderer {
                 &self.modifier_uniform_bind_group_layout,
                 &self.clip_pipeline,
                 &self.image_pipeline,
+                &self.invert_pipeline,
             );
 
         // begin encoder
@@ -520,7 +594,7 @@ impl Renderer {
         self.clear_color_pipeline
             .render(
                 &mut encoder,
-                &color_texture,
+                &self.color_texture_view,
                 Color::WHITE,
             );
 
@@ -533,6 +607,20 @@ impl Renderer {
                     depth,
                     dbg_transform,
                 } => {
+                    // immediate pre-render
+                    match &obj {
+                        &PreppedRenderObj::Invert(_) => {
+                            self.invert_pipeline
+                                .immediate_pre_render(
+                                    &mut encoder,
+                                    &self.color_texture,
+                                    self.size(),
+                                );
+                        }
+                        _ => ()
+                    }
+
+                    // render
                     let depth_load_op =
                         if depth { LoadOp::Load }
                         else { LoadOp::Clear(1.0) };
@@ -545,7 +633,7 @@ impl Renderer {
                             label: Some("draw render pass"),
                             color_attachments: &[
                                 Some(RenderPassColorAttachment {
-                                    view: &color_texture,
+                                    view: &self.color_texture_view,
                                     resolve_target: None,
                                     ops: Operations {
                                         load: LoadOp::Load,
@@ -612,6 +700,14 @@ impl Renderer {
                                     dbg_transform,
                                 );
                         }
+                        PreppedRenderObj::Invert(invert) => {
+                            self.invert_pipeline
+                                .render(
+                                    invert,
+                                    &mut pass,
+                                    self.uniform_buffer.unwrap_invert_uniform_bind_group(),
+                                );
+                        }
                     }
                 }
                 PreppedRenderInstr::ClearClip => {
@@ -657,8 +753,9 @@ impl Renderer {
             }
         }
 
-        // submit, present, return
+        // render onto frame, submit, present, return
         trace!("finishing frame");
+        self.finish_pipeline.render(&mut encoder, &frame);
         self.queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())

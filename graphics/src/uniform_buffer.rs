@@ -7,6 +7,7 @@ use crate::{
     pipelines::{
         clip::ClipPipeline,
         image::ImagePipeline,
+        invert::InvertPipeline,
     },
     ModifierUniformData,
 };
@@ -34,6 +35,7 @@ struct UniformBufferState {
     modifier_uniform_bind_group: BindGroup,
     clip_edit_uniform_bind_group: BindGroup,
     image_uniform_bind_group: BindGroup,
+    invert_uniform_bind_group: BindGroup,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +71,7 @@ impl UniformBuffer {
         modifier_uniform_bind_group_layout: &BindGroupLayout, // TODO move in?;
         clip_pipeline: &ClipPipeline,
         image_pipeline: &ImagePipeline,
+        invert_pipeline: &InvertPipeline,
     ) {
         if data.data.is_empty() {
             return;
@@ -125,6 +128,12 @@ impl UniformBuffer {
                     device,
                     &uniform_buffer,
                 );
+
+            let invert_uniform_bind_group = invert_pipeline
+                .create_uniform_bind_group(
+                    device,
+                    &uniform_buffer,
+                );
             
             self.state = Some(UniformBufferState {
                 uniform_buffer,
@@ -132,6 +141,7 @@ impl UniformBuffer {
                 modifier_uniform_bind_group,
                 clip_edit_uniform_bind_group,
                 image_uniform_bind_group,
+                invert_uniform_bind_group,
             });
         }
     }
@@ -146,6 +156,10 @@ impl UniformBuffer {
 
     pub fn unwrap_image_uniform_bind_group(&self) -> &BindGroup {
         &self.state.as_ref().unwrap().image_uniform_bind_group
+    }
+
+    pub fn unwrap_invert_uniform_bind_group(&self) -> &BindGroup {
+        &self.state.as_ref().unwrap().invert_uniform_bind_group
     }
 }
 
