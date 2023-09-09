@@ -15,7 +15,10 @@ use binschema::{
     Decoder,
 };
 use std::{
-    time::Duration,
+    time::{
+        Duration,
+        Instant,
+    },
     sync::Arc,
     marker::Unpin,
 };
@@ -24,6 +27,8 @@ use crossbeam_channel::{
     Sender,
     Receiver,
     unbounded,
+    RecvTimeoutError,
+    TryRecvError,
 };
 use parking_lot::Mutex;
 use tokio::{
@@ -75,63 +80,90 @@ impl Connection {
     }
 }
 
-pub fn spawn_network_stuff(
-    bind_to: impl ToSocketAddrs + Send + Sync + 'static,
-    rt: &Handle,
-    game: &Arc<GameData>,
-) -> Receiver<NetworkEvent> {
-    let (send_event, recv_event) = unbounded();
+/// Handle to the asynchronous system that serves network connections. Source
+/// of network events.
+pub struct NetworkServer(Receiver<NetworkEvent>);
 
-    let rt_2 = Handle::clone(&rt);
-    let game = Arc::clone(&game);
-    rt.spawn(async move {
-        // TCP bind with exponential backoff
-        let mut backoff = Duration::from_millis(100);
-        let listener = loop {
-            match TcpListener::bind(&bind_to).await {
-                Ok(listener) => break listener,
-                Err(e) => {
-                    error!(
-                        %e,
-                        "failure binding TCP listener, retrying in {}s",
-                        backoff.as_secs_f32(),
-                    );
-                    sleep(backoff).await;
-                    backoff *= 2;
+// TODO: shutting down when dropped (?) or just shutting down somehow in
+//       general, maybe shut down when dropped but not until all messages have
+//       been sent to clients? something.
+
+impl NetworkServer {
+    /// Spawn tasks onto the runtime that begin serving network connections.
+    pub fn spawn(
+        bind_to: impl ToSocketAddrs + Send + Sync + 'static,
+        rt: &Handle,
+        game: &Arc<GameData>,
+    ) -> Self {
+        let (send_event, recv_event) = unbounded();
+
+        let rt_2 = Handle::clone(&rt);
+        let game = Arc::clone(&game);
+        rt.spawn(async move {
+            // TCP bind with exponential backoff
+            let mut backoff = Duration::from_millis(100);
+            let listener = loop {
+                match TcpListener::bind(&bind_to).await {
+                    Ok(listener) => break listener,
+                    Err(e) => {
+                        error!(
+                            %e,
+                            "failure binding TCP listener, retrying in {}s",
+                            backoff.as_secs_f32(),
+                        );
+                        sleep(backoff).await;
+                        backoff *= 2;
+                    }
+                }
+            };
+
+            let slab = Arc::new(Mutex::new(Slab::new()));
+
+            // accept connections
+            loop {
+                match listener.accept().await {
+                    Ok((tcp, _)) => {
+                        let slab = Arc::clone(&slab);
+                        let rt = Handle::clone(&rt_2);
+                        let send_event = Sender::clone(&send_event);
+                        let game = Arc::clone(&game);
+                        rt_2.spawn(async move {
+                            // new task just to handle this TCP connection
+                            let result = handle_tcp_connection(
+                                tcp,
+                                slab,
+                                &rt,
+                                send_event,
+                                game,
+                            ).await;
+                            if let Err(e) = result {
+                                warn!(%e, "connection error");
+                            }
+                        });
+                    },
+                    Err(e) => warn!(%e, "failure accepting TCP connection"),
                 }
             }
-        };
+        });
 
-        let slab = Arc::new(Mutex::new(Slab::new()));
+        NetworkServer(recv_event)
+    }
 
-        // accept connections
-        loop {
-            match listener.accept().await {
-                Ok((tcp, _)) => {
-                    let slab = Arc::clone(&slab);
-                    let rt = Handle::clone(&rt_2);
-                    let send_event = Sender::clone(&send_event);
-                    let game = Arc::clone(&game);
-                    rt_2.spawn(async move {
-                        // new task just to handle this TCP connection
-                        let result = handle_tcp_connection(
-                            tcp,
-                            slab,
-                            &rt,
-                            send_event,
-                            game,
-                        ).await;
-                        if let Err(e) = result {
-                            warn!(%e, "connection error");
-                        }
-                    });
-                },
-                Err(e) => warn!(%e, "failure accepting TCP connection"),
-            }
-        }
-    });
+    /// Check for a network event without blocking.
+    pub fn poll(&self) -> Option<NetworkEvent> {
+        self.0
+            .try_recv()
+            .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
+            .ok()
+    }
 
-    recv_event
+    /// Wait up to deadline for a network event.
+    pub fn recv_deadline(&self, deadline: Instant) -> Option<NetworkEvent> {
+        self.0
+            .recv_deadline(deadline)
+            .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
+            .ok()
+    }
 }
 
 async fn handle_tcp_connection(
