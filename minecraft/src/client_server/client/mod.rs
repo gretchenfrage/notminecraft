@@ -98,6 +98,7 @@ pub struct Client {
     
     client_username: SparseVec<String>,
     client_char_state: SparseVec<CharState>,
+    client_char_name_layed_out: SparseVec<LayedOutTextBlock>,
 
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
@@ -195,6 +196,7 @@ impl Client {
 
             client_username: SparseVec::new(),
             client_char_state: SparseVec::new(),
+            client_char_name_layed_out: SparseVec::new(),
 
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx.assets),
@@ -236,6 +238,7 @@ impl Client {
                 my_client_key: self.my_client_key,
                 client_username: &self.client_username,
                 client_char_state: &self.client_char_state,
+                client_char_name_layed_out: &self.client_char_name_layed_out,
             },
             align(0.5,
                 logical_size(30.0,
@@ -336,8 +339,22 @@ impl Client {
             self.clients.insert(()) == client_key,
             "AddClient message client key did not correspond to slab behavior",
         );
+        // TODO: deduplicate this
+        let char_name_layed_out = ctx.renderer.borrow()
+            .lay_out_text(&TextBlock {
+                spans: &[TextSpan {
+                    text: &username,
+                    font: ctx.assets.font,
+                    font_size: 16.0,
+                    color: Rgba::white(),
+                }],
+                h_align: HAlign::Center,
+                v_align: VAlign::Center,
+                wrap_width: None,
+            });
         self.client_username.set(client_key, username);
         self.client_char_state.set(client_key, char_state);
+        self.client_char_name_layed_out.set(client_key, char_name_layed_out);
         Ok(())
     }
     
@@ -347,6 +364,7 @@ impl Client {
         self.clients.remove(client_key);
         self.client_username.remove(client_key);
         self.client_char_state.remove(client_key);
+        self.client_char_name_layed_out.remove(client_key);
     }
     
     fn on_network_message_this_is_you(&mut self, msg: down::ThisIsYou, ctx: &GuiGlobalContext) {
@@ -761,6 +779,7 @@ struct WorldGuiBlock<'a> {
     my_client_key: Option<usize>,
     client_username: &'a SparseVec<String>,
     client_char_state: &'a SparseVec<CharState>,
+    client_char_name_layed_out: &'a SparseVec<LayedOutTextBlock>,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -857,14 +876,12 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .translate(client_char_state.pos)
                     .rotate(Quaternion::rotation_y(-client_char_state.yaw));
                 inner.char_mesh.draw(&mut canvas, ctx.assets());
-                /*
                 canvas.reborrow()
                     .translate([0.0, 2.0, 0.0])
                     .scale(0.25 / 16.0)
                     .scale([1.0, -1.0, 1.0])
                     .rotate(Quaternion::rotation_y(PI))
-                    .draw_text(&inner.char_name_layed_out);
-                    */
+                    .draw_text(&inner.client_char_name_layed_out[client_key]);
             }
         }
 
