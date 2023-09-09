@@ -69,12 +69,15 @@ pub enum NetworkEvent {
     Received(usize, UpMessage),
 }
 
+/// Handle for sending messages down a single network connection. Received
+/// messages are centrally serialized through `NetworkServer` to facilitate
+/// a single-threaded usage pattern.
 pub struct Connection {
     send: TokioUnboundedSender<DownMessage>,
 }
 
 impl Connection {
-    /// Queues message to be transmitted to client and returns immediately.
+    /// Queue message to be transmitted to client and returns immediately.
     pub fn send(&self, msg: impl Into<DownMessage>) {
         let _ = self.send.send(msg.into());
     }

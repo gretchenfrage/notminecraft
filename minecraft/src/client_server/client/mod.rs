@@ -299,12 +299,12 @@ impl Client {
     
     fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) {
         let down::AddClient { client_key, username } = msg;
-        unimplemented!()
+        debug!(?client_key, ?username, "client added");
     }
     
     fn on_network_message_remove_client(&mut self, msg: down::RemoveClient, ctx: &GuiGlobalContext) {
         let down::RemoveClient { client_key } = msg;
-        unimplemented!()
+        debug!(?client_key, "client removed");
     }
     
     fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) {

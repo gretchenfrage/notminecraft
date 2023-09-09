@@ -270,9 +270,13 @@ impl Server {
     /// Process a disconnection network event.
     fn on_disconnected(&mut self, all_conn_key: usize) {
         let (conn_state, state_conn_key) = self.all_connections.remove(all_conn_key);
+
+        self.conn_last_processed.remove(all_conn_key);
+        self.conn_last_processed_increased.remove(all_conn_key);
+
         match conn_state {
             ConnectionState::Uninit => self.on_uninit_disconnected(state_conn_key),
-            ConnectionState::Client => self.on_client_disconnected(all_conn_key, state_conn_key),
+            ConnectionState::Client => self.on_client_disconnected(state_conn_key),
         }
     }
 
@@ -282,7 +286,7 @@ impl Server {
     }
 
     /// Process the disconnection of a client connection.
-    fn on_client_disconnected(&mut self, all_conn_key: usize, client_conn_key: usize) {
+    fn on_client_disconnected(&mut self, client_conn_key: usize) {
         // remove from list of connections
         self.client_connections.remove(client_conn_key);
 
@@ -292,15 +296,23 @@ impl Server {
             self.chunk_client_cis.get_mut(cc, ci).remove(client_conn_key);
         }
 
-        // remove client's ci space
-        self.client_loaded_chunks.remove(client_conn_key);
+        // remove client from other clients
+        for (client_conn_key2, client_conn2) in self.client_connections.iter() {
+            let clientside_client_key = self.client_client_clientside_keys[client_conn_key2].remove(client_conn_key);
+            self.client_clientside_client_keys[client_conn_key2].remove(clientside_client_key);
+            client_conn2.send(down::RemoveClient {
+                client_key: clientside_client_key,
+            });
+        }
 
         // remove from other data structures
+        self.client_loaded_chunks.remove(client_conn_key);
+
+        self.client_clientside_client_keys.remove(client_conn_key);
+        self.client_client_clientside_keys.remove(client_conn_key);
+
         let username = self.client_username.remove(client_conn_key);
         self.username_client.remove(&username);
-
-        self.conn_last_processed.remove(all_conn_key);
-        self.conn_last_processed_increased.remove(all_conn_key);
     }
 
     /// Process the receipt of a network message.
@@ -379,6 +391,35 @@ impl Server {
 
         // insert the client's new loaded_chunks set into the server's data structures
         self.client_loaded_chunks.set(client_conn_key, loaded_chunks);
+
+        // tell this new client about all other clients (not including this new one)
+        let mut clientside_client_keys = Slab::new();
+        let mut client_clientside_keys = SparseVec::new();
+        for (client_conn_key2, _) in self.client_connections.iter() {
+            if client_conn_key2 == client_conn_key {
+                continue;
+            }
+
+            let clientside_client_key = clientside_client_keys.insert(client_conn_key2);
+            client_clientside_keys.set(client_conn_key2, clientside_client_key);
+            self.client_connections[client_conn_key].send(down::AddClient {
+                client_key: clientside_client_key,
+                username: self.client_username[client_conn_key2].clone(),
+            });
+        }
+
+        self.client_clientside_client_keys.set(client_conn_key, clientside_client_keys);
+        self.client_client_clientside_keys.set(client_conn_key, client_clientside_keys);
+
+        // tell all clients (including this new one) about this new client
+        for (client_conn_key2, client_conn2) in self.client_connections.iter() {
+            let clientside_client_key = self.client_clientside_client_keys[client_conn_key2].insert(client_conn_key);
+            self.client_client_clientside_keys[client_conn_key2].set(client_conn_key, clientside_client_key);
+            client_conn2.send(down::AddClient {
+                client_key: clientside_client_key,
+                username: username.clone(),
+            });
+        }
 
         // insert into other server data structures
         self.client_username.set(client_conn_key, username.clone());
