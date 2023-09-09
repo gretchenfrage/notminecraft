@@ -58,7 +58,8 @@ use winit::{
 	    ScanCode,
 	    MouseButton,
 	    ElementState,
-	    MouseScrollDelta
+	    MouseScrollDelta,
+	    StartCause,
 	},
 	dpi::{
 		LogicalSize,
@@ -72,7 +73,7 @@ use vek::*;
 
 
 #[derive(Debug)]
-pub struct EventLoopEffectQueue(Vec<EventLoopEffect>);
+pub struct EventLoopEffectQueue(VecDeque<EventLoopEffect>);
 
 #[derive(Debug)]
 enum EventLoopEffect {
@@ -85,7 +86,7 @@ enum EventLoopEffect {
 
 impl EventLoopEffectQueue {
 	pub fn pop_state_frame(&mut self) {
-		self.0.push(EventLoopEffect::PopStateFrame);
+		self.0.push_back(EventLoopEffect::PopStateFrame);
 	}
 
 	pub fn push_state_frame<T>(&mut self, state_frame: T)
@@ -99,19 +100,19 @@ impl EventLoopEffectQueue {
 		&mut self,
 		state_frame: Box<dyn GuiStateFrameObj>,
 	) {
-		self.0.push(EventLoopEffect::PushStateFrame(state_frame));
+		self.0.push_back(EventLoopEffect::PushStateFrame(state_frame));
 	}
 
 	pub fn set_scale(&mut self, scale: f32) {
-		self.0.push(EventLoopEffect::SetScale(scale));
+		self.0.push_back(EventLoopEffect::SetScale(scale));
 	}
 
 	pub fn capture_mouse(&mut self) {
-		self.0.push(EventLoopEffect::CaptureMouse);
+		self.0.push_back(EventLoopEffect::CaptureMouse);
 	}
 
 	pub fn uncapture_mouse(&mut self) {
-		self.0.push(EventLoopEffect::UncaptureMouse);
+		self.0.push_back(EventLoopEffect::UncaptureMouse);
 	}
 }
 
@@ -163,7 +164,7 @@ impl State {
 
 		let winit_size = window.inner_size();
 		State {
-			effect_queue: RefCell::new(EventLoopEffectQueue(Vec::new())),
+			effect_queue: RefCell::new(EventLoopEffectQueue(VecDeque::new())),
 			calibration_instant,
 			calibration_time_since_epoch: calibration_system_time
 				.duration_since(UNIX_EPOCH)
@@ -300,9 +301,19 @@ impl GuiEventLoop {
 			game,
 		);
 
+		// decide what FPS to try and render at
+		const MIN_AUTO_MILLIHERTZ: u32 = 1000 * 60;
+		let millihertz = self.event_loop.available_monitors()
+			.filter_map(|monitor| monitor.refresh_rate_millihertz())
+			.filter(|&millihertz| millihertz >= MIN_AUTO_MILLIHERTZ)
+			.max()
+			.unwrap_or(MIN_AUTO_MILLIHERTZ);
+		let delay_between_frames = Duration::from_secs(1000) / millihertz;
+
 		let mut prev_update_time = None;
 		let mut fps_queue = VecDeque::new();
 
+		let mut frame_is_happening: bool = true;
 		
 		self.event_loop.run(move |event, _target, control_flow| {
 			trace!(?event, "winit event");
@@ -312,6 +323,18 @@ impl GuiEventLoop {
 			}
 
 			match event {
+				Event::NewEvents(cause) => {
+					let now = Instant::now();
+					frame_is_happening = match cause {
+						StartCause::ResumeTimeReached { .. } => true,
+						StartCause::WaitCancelled { .. } => false,
+						StartCause::Poll => panic!("event loop unexpectedly entered polling mode"),
+						StartCause::Init => true,
+					};
+					if frame_is_happening {
+						*control_flow = ControlFlow::WaitUntil(now + delay_between_frames);
+					}
+				}
 				Event::WindowEvent { event, .. } => match event {
 					WindowEvent::Resized(winit_size) => {
 						state.size.w = winit_size.width;
@@ -512,74 +535,73 @@ impl GuiEventLoop {
 					}
 					_ => (),
 				}
-				Event::MainEventsCleared => state.with_ctx(|ctx| {
-					// TODO: kinda awkward to just have this right here
-					let big = ctx.size.w >= 960 && ctx.size.h >= 720;
-			        if big {
-			            ctx.global().set_scale(2.0);
-			        } else {
-			            ctx.global().set_scale(1.0);
-			        }
+				Event::MainEventsCleared => if frame_is_happening {
+					state.with_ctx(|ctx| {
+						// TODO: kinda awkward to just have this right here
+						let big = ctx.size.w >= 960 && ctx.size.h >= 720;
+				        if big {
+				            ctx.global().set_scale(2.0);
+				        } else {
+				            ctx.global().set_scale(1.0);
+				        }
 
-					let curr_update_time = Instant::now();
+						let curr_update_time = Instant::now();
 
-					if let Some(prev_update_time) = prev_update_time {
-						let elapsed: Duration = curr_update_time - prev_update_time;
-						let elapsed = elapsed.as_secs_f32();
+						if let Some(prev_update_time) = prev_update_time {
+							let elapsed: Duration = curr_update_time - prev_update_time;
+							let elapsed = elapsed.as_secs_f32();
 
-						// TODO: tacked on
-						let update_result =
-							catch_unwind(AssertUnwindSafe(||
-								stack.top().update(ctx, elapsed)
-							));
-						if update_result.is_err() {
-							stack.0.pop().unwrap();
+							// TODO: tacked on
+							let update_result =
+								catch_unwind(AssertUnwindSafe(||
+									stack.top().update(ctx, elapsed)
+								));
+							if update_result.is_err() {
+								stack.0.pop().unwrap();
 
-							try_uncapture_mouse(&self.window);
+								state.effect_queue.borrow_mut().uncapture_mouse();
 
-							if stack.0.is_empty() {
-								stack.0.clear();stack.0.clear();
-								*control_flow = ControlFlow::Exit;
-								return;
+								if stack.0.is_empty() {
+									stack.0.clear();stack.0.clear();
+									*control_flow = ControlFlow::Exit;
+									return;
+								}
 							}
 						}
-					}
 
-					prev_update_time = Some(curr_update_time);
+						prev_update_time = Some(curr_update_time);
 
-					fps_queue.push_back(curr_update_time);
+						fps_queue.push_back(curr_update_time);
 
-					while fps_queue
-						.front()
-						.map(|&update_time|
-							curr_update_time - update_time
-							> Duration::from_secs(1)
-						)
-						.unwrap_or(false)
-					{
-						fps_queue.pop_front().unwrap();
-					}
-					let fps = fps_queue.len();
-					//info!(%fps);
+						while fps_queue
+							.front()
+							.map(|&update_time|
+								curr_update_time - update_time
+								> Duration::from_secs(1)
+							)
+							.unwrap_or(false)
+						{
+							fps_queue.pop_front().unwrap();
+						}
+						let fps = fps_queue.len();
+						//info!(%fps);
 
-					let mut frame_content = FrameContent::new();
-					stack.top().draw(ctx, &mut frame_content);
+						let mut frame_content = FrameContent::new();
+						stack.top().draw(ctx, &mut frame_content);
 
-					let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.assets());
-					fps_overlay.draw(ctx, &mut frame_content);
-					
-					if state.renderer.borrow().size() != state.size {
-						state.renderer.borrow_mut().resize(state.size);
-					}
+						let mut fps_overlay = FpsOverlay::new(fps as f32, ctx.assets());
+						fps_overlay.draw(ctx, &mut frame_content);
+						
+						if state.renderer.borrow().size() != state.size {
+							state.renderer.borrow_mut().resize(state.size);
+						}
 
-					ctx.spatial.global.renderer
-						.borrow_mut()
-						.draw_frame(&frame_content)
-						.expect("failed to draw frame");
-				}),
-				Event::RedrawEventsCleared => {
-					*control_flow = ControlFlow::Poll;
-				}
+						ctx.spatial.global.renderer
+							.borrow_mut()
+							.draw_frame(&frame_content)
+							.expect("failed to draw frame");
+					});
+				},
 				Event::LoopDestroyed => {
 					stack.0.clear();
 					*control_flow = ControlFlow::Exit;
@@ -587,17 +609,13 @@ impl GuiEventLoop {
 				_ => (),
 			}
 
-			for effect in state
-				.effect_queue
-				.borrow_mut()
-				.0
-				.drain(..)
-			{
+			let mut effect_queue = state.effect_queue.borrow_mut();
+			while let Some(effect) = effect_queue.0.pop_front() {
 				match effect {
 					EventLoopEffect::PopStateFrame => {
 						stack.0.pop().unwrap();
 
-						try_uncapture_mouse(&self.window);
+						effect_queue.uncapture_mouse();
 
 						if stack.0.is_empty() {
 							stack.0.clear();stack.0.clear();
