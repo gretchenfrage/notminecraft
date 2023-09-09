@@ -11,6 +11,7 @@ use crate::{
         clipboard::Clipboard,
     },
 };
+use get_assets::DataDir;
 use graphics::{
     Renderer,
     modifier::Transform2,
@@ -45,6 +46,7 @@ pub struct GuiGlobalContext<'c> {
     pub clipboard: &'c Clipboard,
     pub sound_player: &'c SoundPlayer,
     pub assets: &'c Assets,
+    pub data_dir: &'c DataDir,
     pub game: &'c Arc<GameData>,
     /// Window focus level.
     pub focus_level: FocusLevel,

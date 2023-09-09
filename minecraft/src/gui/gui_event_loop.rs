@@ -17,6 +17,7 @@ use crate::{
 		clipboard::Clipboard,
 	},
 };
+use get_assets::DataDir;
 use graphics::{
 	Renderer,
 	frame_content::FrameContent,
@@ -126,6 +127,7 @@ struct State {
     clipboard: Clipboard,
     sound_player: SoundPlayer,
     assets: Assets,
+    data_dir: DataDir,
     game: Arc<GameData>,
     focus_level: FocusLevel,
 	pressed_keys_semantic: HashSet<VirtualKeyCode>,
@@ -150,6 +152,7 @@ impl State {
 		tokio: Handle,
 		sound_player: SoundPlayer,
 		assets: Assets,
+		data_dir: DataDir,
 		game: Arc<GameData>,
 	) -> Self
 	{
@@ -173,6 +176,7 @@ impl State {
 			clipboard: Clipboard::new(),
 			sound_player,
 			assets,
+			data_dir,
 			game,
 			focus_level: FocusLevel::Focused,
 			pressed_keys_semantic: HashSet::new(),
@@ -206,6 +210,7 @@ impl State {
 					clipboard: &self.clipboard,
 					sound_player: &self.sound_player,
 					assets: &self.assets,
+					data_dir: &self.data_dir,
 					game: &self.game,
 					focus_level: self.focus_level,
 					pressed_keys_semantic:
@@ -281,6 +286,7 @@ impl GuiEventLoop {
 		self,
 		state_frame: Box<dyn GuiStateFrameObj>,
 		assets: Assets,
+		data_dir: DataDir,
 		game: Arc<GameData>,
 	) -> ! {
 		let mut stack = Stack::new(state_frame);
@@ -290,6 +296,7 @@ impl GuiEventLoop {
 			self.tokio,
 			self.sound_player,
 			assets,
+			data_dir,
 			game,
 		);
 
@@ -528,6 +535,8 @@ impl GuiEventLoop {
 						if update_result.is_err() {
 							stack.0.pop().unwrap();
 
+							try_uncapture_mouse(&self.window);
+
 							if stack.0.is_empty() {
 								stack.0.clear();stack.0.clear();
 								*control_flow = ControlFlow::Exit;
@@ -587,6 +596,8 @@ impl GuiEventLoop {
 				match effect {
 					EventLoopEffect::PopStateFrame => {
 						stack.0.pop().unwrap();
+
+						try_uncapture_mouse(&self.window);
 
 						if stack.0.is_empty() {
 							stack.0.clear();stack.0.clear();

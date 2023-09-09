@@ -2,9 +2,12 @@
 
 use crate::{
     game_data::GameData,
-    client_server::message::{
-        UpMessage,
-        DownMessage,
+    client_server::{
+        message::{
+            UpMessage,
+            DownMessage,
+        },
+        client,
     },
     game_binschema::GameBinschema,
 };
@@ -22,12 +25,11 @@ use std::{
     sync::Arc,
     marker::Unpin,
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use crossbeam_channel::{
     Sender,
     Receiver,
     unbounded,
-    RecvTimeoutError,
     TryRecvError,
 };
 use parking_lot::Mutex;
@@ -73,32 +75,167 @@ pub enum NetworkEvent {
 /// messages are centrally serialized through `NetworkServer` to facilitate
 /// a single-threaded usage pattern.
 pub struct Connection {
-    send: TokioUnboundedSender<DownMessage>,
+    send: SendDown,
+}
+
+enum SendDown {
+    Network(TokioUnboundedSender<DownMessage>),
+    InMem(Sender<DownMessage>),
 }
 
 impl Connection {
     /// Queue message to be transmitted to client and returns immediately.
     pub fn send(&self, msg: impl Into<DownMessage>) {
-        let _ = self.send.send(msg.into());
+        match self.send {
+            SendDown::Network(ref inner) => {
+                let _ = inner.send(msg.into());
+            }
+            SendDown::InMem(ref inner) => {
+                let _ = inner.send(msg.into());
+            }
+        }
     }
 }
 
 /// Handle to the asynchronous system that serves network connections. Source
 /// of network events.
-pub struct NetworkServer(Receiver<NetworkEvent>);
+pub struct NetworkServer {
+    send_event: Sender<NetworkEvent>,
+    recv_event: Receiver<NetworkEvent>,
+    // the slab is used to assign connection keys. it is also used to serialize
+    // changes to the set of connection keys. when the set of connection keys
+    // changes, the thread that changes that must lock the slab, make the change,
+    // and then make sure to send the network event which tells the user about
+    // that changes before unlocking the slab. unlocking the slab too early could
+    // result in the user receiving events in the wrong order, which could cause
+    // all sorts of problemos.
+    slab: Arc<Mutex<Slab<()>>>,
+}
 
-// TODO: shutting down when dropped (?) or just shutting down somehow in
-//       general, maybe shut down when dropped but not until all messages have
-//       been sent to clients? something.
+/// It is possible to construct a `NetworkServer` without actually opening it
+/// to the network immediately. It is possible to then, at some later point, open
+/// it to the network. That's what this is for.
+pub struct NetworkServerOpener {
+    send_event: Sender<NetworkEvent>,
+    slab: Arc<Mutex<Slab<()>>>,
+}
 
 impl NetworkServer {
-    /// Spawn tasks onto the runtime that begin serving network connections.
-    pub fn spawn(
+    /// Construct a `NetworkServer` and a corresponding `NetworkServerOpener`. The
+    /// network server will not actually spawn tasks that start serving network
+    /// connections until the opener is called upon to open it. The convenience
+    /// `NetworkServer::open` method does that automatically.
+    pub fn new() -> (Self, NetworkServerOpener) {
+        let (send_event, recv_event) = unbounded();
+        let slab = Arc::new(Mutex::new(Slab::new()));
+        (
+            NetworkServer {
+                send_event: Sender::clone(&send_event),
+                recv_event,
+                slab: Arc::clone(&slab),
+            },
+            NetworkServerOpener {
+                send_event,
+                slab,
+            }
+        )
+    }
+
+    /// Convenience method to construct a `NetworkServer` and spawn tasks that
+    /// opens it up to the network.
+    pub fn new_networked(
         bind_to: impl ToSocketAddrs + Send + Sync + 'static,
         rt: &Handle,
         game: &Arc<GameData>,
     ) -> Self {
-        let (send_event, recv_event) = unbounded();
+        let (server, opener) = Self::new();
+        opener.open(bind_to, rt, game);
+        server
+    }
+
+    /// Convenience method to construct a `NetworkServer` that isn't opened up
+    /// to a network along with a client `Connection` linked up in-memory.
+    pub fn new_internal() -> (Self, client::connection::Connection) {
+        let (server, _) = Self::new();
+        let client = server.create_in_mem_client().into();
+        (server, client)
+    }
+
+    /// Check for a network event without blocking.
+    pub fn poll(&self) -> Option<NetworkEvent> {
+        self.recv_event.try_recv().ok()
+    }
+
+    /// Wait up to deadline for a network event.
+    pub fn recv_deadline(&self, deadline: Instant) -> Option<NetworkEvent> {
+        self.recv_event.recv_deadline(deadline).ok()
+    }
+    
+    /// Create a new in-memory network client that just passes its messages
+    /// over a channel without even transcoding them.
+    pub fn create_in_mem_client(&self) -> InMemClient {
+        let (send_down, recv_down) = unbounded();
+
+        let mut slab_guard = self.slab.lock();
+        let key = slab_guard.insert(());
+        let connection = Connection {
+            send: SendDown::InMem(send_down),
+        };
+        let _ = self.send_event.send(NetworkEvent::NewConnection(key, connection));
+        drop(slab_guard); // take care to send event before unlocking
+
+        InMemClient {
+            key,
+            send_event: Sender::clone(&self.send_event),
+            slab: Arc::clone(&self.slab),
+            recv: recv_down,
+        }
+    }
+}
+
+/// A client connection to a `NetworkServer` in the same process that doesn't
+/// actually use the network.
+#[derive(Debug)]
+pub struct InMemClient {
+    key: usize,
+    send_event: Sender<NetworkEvent>,
+    slab: Arc<Mutex<Slab<()>>>,
+    recv: Receiver<DownMessage>,
+}
+
+impl InMemClient {
+    pub fn send(&self, msg: UpMessage) {
+        let _ = self.send_event.send(NetworkEvent::Received(self.key, msg));
+    }
+
+    pub fn poll(&self) -> Result<Option<DownMessage>> {
+        match self.recv.try_recv() {
+            Ok(msg) => Ok(Some(msg)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(anyhow!("internal server disconnected")),
+        }
+    }
+}
+
+impl Drop for InMemClient {
+    fn drop(&mut self) {
+        let mut slab_guard = self.slab.lock();
+        slab_guard.remove(self.key);
+        let _ = self.send_event.send(NetworkEvent::Disconnected(self.key));
+        drop(slab_guard); // take care to send event before unlocking
+    }
+}
+
+impl NetworkServerOpener {
+    /// Spawn tasks onto the runtime that bind to the port and begin serving
+    /// network connections on it.
+    pub fn open(
+        self,
+        bind_to: impl ToSocketAddrs + Send + Sync + 'static,
+        rt: &Handle,
+        game: &Arc<GameData>,
+    ) {
+        let NetworkServerOpener { send_event, slab } = self;
 
         let rt_2 = Handle::clone(&rt);
         let game = Arc::clone(&game);
@@ -119,8 +256,6 @@ impl NetworkServer {
                     }
                 }
             };
-
-            let slab = Arc::new(Mutex::new(Slab::new()));
 
             // accept connections
             loop {
@@ -148,24 +283,6 @@ impl NetworkServer {
                 }
             }
         });
-
-        NetworkServer(recv_event)
-    }
-
-    /// Check for a network event without blocking.
-    pub fn poll(&self) -> Option<NetworkEvent> {
-        self.0
-            .try_recv()
-            .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
-            .ok()
-    }
-
-    /// Wait up to deadline for a network event.
-    pub fn recv_deadline(&self, deadline: Instant) -> Option<NetworkEvent> {
-        self.0
-            .recv_deadline(deadline)
-            .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
-            .ok()
     }
 }
 
@@ -183,15 +300,13 @@ async fn handle_tcp_connection(
     let (send_to_transmit, recv_to_transmit) = tokio_unbounded_channel();
     let key;
     {
-        // it's necessary for correctness that the slab changes the set of indexes
-        // in the same order that the user is presented with those changes. thus
-        // this lock must be held at least until the event is sent.
         let mut slab_guard = slab.lock();
         key = slab_guard.insert(());
         let connection = Connection {
-            send: send_to_transmit,
+            send: SendDown::Network(send_to_transmit),
         };
         let _ = send_event.send(NetworkEvent::NewConnection(key, connection));
+        drop(slab_guard); // take care to send event before unlocking
     }
 
     // split it into sink half and stream half
@@ -311,14 +426,10 @@ async fn handle_tcp_connection(
 
     // do shutdown stuff now
     abort_send_task.abort();
-    {
-        // it's necessary for correctness that the slab changes the set of indexes
-        // in the same order that the user is presented with those changes. thus
-        // this lock must be held at least until the event is sent.
-        let mut slab_guard = slab.lock();
-        slab_guard.remove(key);
-        let _ = send_event.send(NetworkEvent::Disconnected(key));
-    }
+    let mut slab_guard = slab.lock();
+    slab_guard.remove(key);
+    let _ = send_event.send(NetworkEvent::Disconnected(key));
+    drop(slab_guard); // take care to send event before unlocking
 
     Ok(())
 }

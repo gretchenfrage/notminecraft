@@ -15,8 +15,7 @@ pub mod physics;
 pub mod client_server;
 pub mod game_binschema;
 pub mod menu;
-//pub mod singleplayer;
-//pub mod text_test;
+pub mod save_file;
 
 
 use crate::{
@@ -161,7 +160,7 @@ fn main() {
         &[_] => (),
         &[_, "--server"] => {
             info!("running server");
-            let result = client_server::server::run_server(rt.handle(), &data_dir, &game);
+            let result = client_server::server::run_networked_server(rt.handle(), &data_dir, &game);
             match result {
                 Ok(()) => {
                     info!("server shutting down");
@@ -200,8 +199,9 @@ fn main() {
         // start server in a background thread
         let rt_handle = Handle::clone(&rt.handle());
         let game_2 = Arc::clone(&game);
+        let data_dir = data_dir.clone();
         std::thread::spawn(move || {
-            let result = client_server::server::run_server(&rt_handle, &data_dir, &game_2);
+            let result = client_server::server::run_networked_server(&rt_handle, &data_dir, &game_2);
             match result {
                 Ok(()) => info!("server shutting down"),
                 Err(e) => error!(%e, "server shutting down"),
@@ -215,5 +215,5 @@ fn main() {
     );
 
     // enter window event loop
-    event_loop.run(Box::new(gui_state), assets, game);
+    event_loop.run(Box::new(gui_state), assets, data_dir, game);
 }

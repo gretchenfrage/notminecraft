@@ -162,7 +162,7 @@ impl GuiStateFrame for MultiplayerMenu {
 fn on_connect_click<'a>(address: &'a str) -> impl FnOnce(&GuiGlobalContext) + 'a {
     |ctx| {
         ctx.pop_state_frame();
-        ctx.push_state_frame(Client::new(address, ctx));
+        ctx.push_state_frame(Client::connect(address, ctx));
     }
 }
 

@@ -1,9 +1,12 @@
 //! Client-side connection handling.
 
 use crate::{
-    client_server::message::{
-        UpMessage,
-        DownMessage,
+    client_server::{
+        message::{
+            UpMessage,
+            DownMessage,
+        },
+        server::connection::InMemClient,
     },
     game_data::GameData,
     game_binschema::GameBinschema,
@@ -50,9 +53,17 @@ use futures::{
 
 #[derive(Debug)]
 pub struct Connection {
-    send_up: TokioUnboundedSender<UpMessage>,
-    recv_down: Receiver<Result<DownMessage>>,
+    inner: ConnectionInner,
     up_msg_idx: u64,
+}
+
+#[derive(Debug)]
+enum ConnectionInner {
+    Network {
+        send_up: TokioUnboundedSender<UpMessage>,
+        recv_down: Receiver<Result<DownMessage>>,
+    },
+    InMem(InMemClient),
 }
 
 impl Connection {
@@ -95,28 +106,47 @@ impl Connection {
         });
 
         Connection {
-            send_up,
-            recv_down,
+            inner: ConnectionInner::Network {
+                send_up,
+                recv_down,
+            },
+            up_msg_idx: 0,
+        }
+    }
+
+    /// Construct a new in memory connection.
+    pub fn new_in_mem(inner: InMemClient) -> Self {
+        Connection {
+            inner: ConnectionInner::InMem(inner),
             up_msg_idx: 0,
         }
     }
 
     /// Asynchronously queue a message for sending, return immediately.
     pub fn send(&mut self, msg: impl Into<UpMessage>) {
-        let _ = self.send_up.send(msg.into());
+        match &self.inner {
+            &ConnectionInner::Network { ref send_up, .. } => {
+                let _ = send_up.send(msg.into());
+            }
+            &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
+        }
         self.up_msg_idx += 1;
     }
 
     /// Check for an asynchronously received message or error without blocking,
-    /// return with result immediately. Error will be received only once, at end
-    /// if connection dies or errors somehow.
+    /// return with result immediately. Error is received when connection is
+    /// closed or gets borked--result of further polling after that is undefined.
     pub fn poll(&self) -> Result<Option<DownMessage>> {
-        match self.recv_down.try_recv() {
-            Ok(result) => result.map(Some),
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => {
-                panic!("unexpected ws client recv_down disconnection");
+        match &self.inner {
+            &ConnectionInner::Network {
+                ref recv_down,
+                ..
+            } => match recv_down.try_recv() {
+                Ok(result) => result.map(Some),
+                Err(TryRecvError::Empty) => Ok(None),
+                Err(TryRecvError::Disconnected) => Err(anyhow!("network recv down disconnected")),
             }
+            &ConnectionInner::InMem(ref inner) => inner.poll()
         }
     }
 
@@ -125,6 +155,12 @@ impl Connection {
     /// in cases where no messages have been sent to the server).
     pub fn up_msg_idx(&self) -> u64 {
         self.up_msg_idx
+    }
+}
+
+impl From<InMemClient> for Connection {
+    fn from(inner: InMemClient) -> Self {
+        Self::new_in_mem(inner)
     }
 }
 

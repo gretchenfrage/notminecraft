@@ -7,6 +7,10 @@ use crate::{
     asset::Assets,
     gui::prelude::*,
 	util::hex_color::hex_color,
+    client_server::{
+        client::Client,
+        server::spawn_internal_server,
+    },
 };
 use graphics::{
 	Renderer,
@@ -137,13 +141,9 @@ impl GuiStateFrame for MainMenu {
     }
 }
 
-fn on_singleplayer_click(_ctx: &GuiGlobalContext) {
-    /*
-    ctx.push_state_frame(Client::new(
-        ctx.game,
-        ctx.tokio,
-    ));
-    */
+fn on_singleplayer_click(ctx: &GuiGlobalContext) {
+    let connection = spawn_internal_server(ctx.data_dir, ctx.game);
+    ctx.push_state_frame(Client::new(connection, ctx));
 }
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {

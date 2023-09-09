@@ -133,7 +133,12 @@ fn get_username() -> String {
 }
 
 impl Client {
-    pub fn new(address: &str, ctx: &GuiGlobalContext) -> Self {
+    pub fn connect(address: &str, ctx: &GuiGlobalContext) -> Self {
+        let connection = Connection::connect(address, ctx.tokio, ctx.game);
+        Self::new(connection, ctx)
+    }
+
+    pub fn new(mut connection: Connection, ctx: &GuiGlobalContext) -> Self {
         let username = get_username();
         let char_state = CharState {
             pos: [0.0, 80.0, 0.0].into(),
@@ -142,7 +147,6 @@ impl Client {
             pointing: false,
         };
 
-        let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
         connection.send(UpMessage::LogIn(up::LogIn {
             username: username.clone(),
             char_state,

@@ -1,7 +1,6 @@
 
-mod connection;
+pub mod connection;
 mod chunk_loader;
-pub mod save_file; // TODO make private again or like move elsewhere or something
 
 
 use self::{
@@ -10,16 +9,19 @@ use self::{
         NetworkEvent,
         NetworkServer,
     },
+    chunk_loader::ChunkLoader,
+};
+use super::{
+    message::*,
+    client,
+};
+use crate::{
+    game_data::GameData,
+    util::sparse_vec::SparseVec,
     save_file::{
         SaveFile,
         WriteEntry,
     },
-    chunk_loader::ChunkLoader,
-};
-use super::message::*;
-use crate::{
-    game_data::GameData,
-    util::sparse_vec::SparseVec,
 };
 use chunk_data::*;
 use get_assets::DataDir;
@@ -30,6 +32,7 @@ use std::{
         Instant,
     },
     collections::HashMap,
+    thread,
 };
 use tokio::runtime::Handle;
 use anyhow::Result;
@@ -41,17 +44,45 @@ const TICK: Duration = Duration::from_millis(50);
 const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
 
 
-/// Body of the server thread.
-pub fn run_server(
+/// Spawn a new thread which runs a server forever without it being open to
+/// the network, only open to an in-mem connection, which is returned.
+pub fn spawn_internal_server(
+    data_dir: &DataDir,
+    game: &Arc<GameData>,
+) -> client::connection::Connection {
+    let (network_server, client) = NetworkServer::new_internal();
+    let data_dir = data_dir.clone();
+    let game = Arc::clone(&game);
+    thread::spawn(move || {
+        if let Err(e) = run_server(network_server, &data_dir, &game) {
+            error!(?e, "internal server crashed");
+        }
+    });
+    client
+}
+
+/// Spawn a server, open it to the network, and attempt to run it forever in
+/// the current thread.
+pub fn run_networked_server(
     rt: &Handle,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
-    Server::new(rt, data_dir, game)?.run()
+    let network_server = NetworkServer::new_networked("127.0.0.1:35565", rt, game);
+    run_server(network_server, data_dir, game)
+}
+
+fn run_server(
+    network_server: NetworkServer,
+    data_dir: &DataDir,
+    game: &Arc<GameData>,
+) -> Result<()> {
+    Server::new(network_server, data_dir, game)?.run()
 }
 
 
 struct Server {
+    network_server: NetworkServer,
     game: Arc<GameData>,
 
     chunks: LoadedChunks,
@@ -97,7 +128,6 @@ struct Server {
 
     tick: u64,
     next_tick: Instant,
-    network_server: NetworkServer,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -111,7 +141,7 @@ enum ConnectionState {
 impl Server {
     /// Construct. This is expected to be immediately followed by `run`.
     fn new(
-        rt: &Handle,
+        network_server: NetworkServer,
         data_dir: &DataDir,
         game: &Arc<GameData>,
     ) -> Result<Self> {
@@ -119,6 +149,7 @@ impl Server {
         let chunk_loader = ChunkLoader::new(&save, game);
 
         Ok(Server {
+            network_server,
             game: Arc::clone(&game),
             chunks: LoadedChunks::new(),
             tile_blocks: PerChunk::new(),
@@ -140,7 +171,6 @@ impl Server {
             chunk_loader,
             tick: 0,
             next_tick: Instant::now(),
-            network_server: NetworkServer::spawn("127.0.0.1:35565", rt, game),
         })
     }
 
