@@ -139,6 +139,7 @@ impl Client {
             pos: [0.0, 80.0, 0.0].into(),
             pitch: f32::to_radians(-30.0),
             yaw: f32::to_radians(0.0),
+            pointing: false,
         };
 
         let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
@@ -224,6 +225,7 @@ impl Client {
                 pos: self.char_state.pos,
                 pitch: self.char_state.pitch,
                 yaw: self.char_state.yaw,
+                pointing: self.char_state.pointing,
 
                 chunks: &self.chunks,
                 tile_blocks: &self.tile_blocks,
@@ -534,6 +536,9 @@ impl GuiStateFrame for Client {
             self.time_since_ground = 0.0;
         }
 
+        // pointing
+        self.char_state.pointing = ctx.global().pressed_mouse_buttons.contains(&MouseButton::Middle);
+
         // send up char state, maybe
         let now = Instant::now();
         if self.char_state != self.char_state_last_sent
@@ -765,6 +770,7 @@ struct WorldGuiBlock<'a> {
     pos: Vec3<f32>,
     pitch: f32,
     yaw: f32,
+    pointing: bool,
 
     bob_animation: f32,
     third_person: bool,
@@ -855,7 +861,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             let mut canvas = canvas.reborrow()
                 .translate(inner.pos)
                 .rotate(Quaternion::rotation_y(-inner.yaw));
-            inner.char_mesh.draw(&mut canvas, ctx.assets(), inner.pitch);
+            inner.char_mesh.draw(&mut canvas, ctx.assets(), inner.pitch, inner.pointing);
             canvas.reborrow()
                 .translate([0.0, 2.0, 0.0])
                 .scale(0.25 / 16.0)
@@ -875,7 +881,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 let mut canvas = canvas.reborrow()
                     .translate(client_char_state.pos)
                     .rotate(Quaternion::rotation_y(-client_char_state.yaw));
-                inner.char_mesh.draw(&mut canvas, ctx.assets(), client_char_state.pitch);
+                inner.char_mesh.draw(&mut canvas, ctx.assets(), client_char_state.pitch, client_char_state.pointing);
                 canvas.reborrow()
                     .translate([0.0, 2.0, 0.0])
                     .scale(0.25 / 16.0)
@@ -1365,6 +1371,7 @@ impl CharMesh {
         canvas: &mut Canvas3<'a, '_>,
         assets: &'a Assets,
         head_pitch: f32,
+        pointing: bool,
     ) {
         let mut canvas = canvas.reborrow()
             .scale(PLAYER_HEIGHT / 32.0);
@@ -1384,8 +1391,14 @@ impl CharMesh {
         canvas.reborrow()
             .translate([-6.0, 22.0, 0.0])
             .draw_mesh(&self.arm, &assets.mob_char);
+        let mut arm_pitch = 0.0;
+        if pointing {
+            arm_pitch -= head_pitch;
+            arm_pitch -= PI / 2.0;
+        }
         canvas.reborrow()
             .translate([6.0, 22.0, 0.0])
+            .rotate(Quaternion::rotation_x(arm_pitch))
             .draw_mesh(&self.arm, &assets.mob_char);
     }
 }

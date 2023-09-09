@@ -107,4 +107,5 @@ pub struct CharState {
     pub pos: Vec3<f32>,
     pub pitch: f32,
     pub yaw: f32,
+    pub pointing: bool,
 }
