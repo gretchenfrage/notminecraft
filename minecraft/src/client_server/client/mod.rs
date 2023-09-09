@@ -229,79 +229,110 @@ impl Client {
 
     fn on_network_message(&mut self, msg: DownMessage, ctx: &GuiGlobalContext) -> Result<()> {
         match msg {
-            DownMessage::Initialized(down::Initialized {}) => {
-                info!("yippeee! initialized");
-            }
-            DownMessage::RejectLogIn(down::RejectLogIn {
-                message,
-            }) => {
-                bail!("server rejected log in: {}", message)
-            }
-            DownMessage::LoadChunk(down::LoadChunk {
-                cc,
-                ci,
-                chunk_tile_blocks,
-            }) => {
-                // insert into data structures
-                ensure!(
-                    self.chunks.add(cc) == ci,
-                    "DownMessage::load_chunk ci did not correspond to slab behavior"
-                );
-                self.ci_reverse_lookup.set(ci, cc);
-
-                self.tile_blocks.add(cc, ci, chunk_tile_blocks);
-                self.tile_meshes.add(cc, ci, ChunkMesh::new());
-                self.block_updates.add_chunk(cc, ci);
-
-                self.prediction.add_chunk(cc, ci);
-
-                // enqueue block updates
-                let getter = self.chunks.getter();
-                for lti in 0..=MAX_LTI {
-                    let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
-                    self.block_updates.enqueue(gtc, &getter);
-                }
-
-                for face in FACES {
-                    let ranges: Vec3<Range<i64>> = face
-                        .to_signs()
-                        .zip(CHUNK_EXTENT)
-                        .map(|(sign, extent)| match sign {
-                            Sign::Neg => -1..0,
-                            Sign::Zero => 0..extent,
-                            Sign::Pos => extent..extent + 1,
-                        });
-
-                    for x in ranges.x {
-                        for y in ranges.y.clone() {
-                            for z in ranges.z.clone() {
-                                let gtc = cc * CHUNK_EXTENT + Vec3 { x, y, z };
-                                self.block_updates.enqueue(gtc, &getter);
-                            }
-                        }
-                    }
-                }
-            }
-            DownMessage::ApplyEdit(msg) => self.prediction.process_apply_edit_msg(
-                msg,
-                &self.chunks,
-                &self.ci_reverse_lookup,
-                &mut self.tile_blocks,
-                &mut self.block_updates,
-            ),
-            DownMessage::Ack(down::Ack { last_processed }) => self.prediction.process_ack(
-                last_processed,
-                &self.chunks,
-                &self.ci_reverse_lookup,
-                &mut self.tile_blocks,
-                &mut self.block_updates,
-            ),
-            DownMessage::ChatLine(down::ChatLine { line }) => {
-                self.chat.add_line(line, ctx);
-            }
+            DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg),
+            DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
+            DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg)?,
+            DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx),
+            DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg, ctx),
+            DownMessage::ApplyEdit(msg) => self.on_network_message_apply_edit(msg),
+            DownMessage::Ack(msg) => self.on_network_message_ack(msg),
+            DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx),
         }
         Ok(())
     }
+
+    fn on_network_message_accept_login(&mut self, msg: down::AcceptLogin) {
+        let down::AcceptLogin {} = msg;
+        info!("yippeee! initialized");
+    }
+    
+    fn on_network_message_reject_login(&mut self, msg: down::RejectLogin) -> Result<()> {
+        let down::RejectLogin { message } = msg;
+        bail!("server rejected log in: {}", message);
+    }
+    
+    fn on_network_message_add_chunk(&mut self, msg: down::AddChunk) -> Result<()> {
+        let down::AddChunk { cc, ci, chunk_tile_blocks } = msg;
+
+        // insert into data structures
+        ensure!(
+            self.chunks.add(cc) == ci,
+            "DownMessage::load_chunk ci did not correspond to slab behavior"
+        );
+        self.ci_reverse_lookup.set(ci, cc);
+
+        self.tile_blocks.add(cc, ci, chunk_tile_blocks);
+        self.tile_meshes.add(cc, ci, ChunkMesh::new());
+        self.block_updates.add_chunk(cc, ci);
+
+        self.prediction.add_chunk(cc, ci);
+
+        // enqueue block updates
+        let getter = self.chunks.getter();
+        for lti in 0..=MAX_LTI {
+            let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
+            self.block_updates.enqueue(gtc, &getter);
+        }
+
+        for face in FACES {
+            let ranges: Vec3<Range<i64>> = face
+                .to_signs()
+                .zip(CHUNK_EXTENT)
+                .map(|(sign, extent)| match sign {
+                    Sign::Neg => -1..0,
+                    Sign::Zero => 0..extent,
+                    Sign::Pos => extent..extent + 1,
+                });
+
+            for x in ranges.x {
+                for y in ranges.y.clone() {
+                    for z in ranges.z.clone() {
+                        let gtc = cc * CHUNK_EXTENT + Vec3 { x, y, z };
+                        self.block_updates.enqueue(gtc, &getter);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+    
+    fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) {
+        let down::AddClient { client_key, username } = msg;
+        unimplemented!()
+    }
+    
+    fn on_network_message_remove_client(&mut self, msg: down::RemoveClient, ctx: &GuiGlobalContext) {
+        let down::RemoveClient { client_key } = msg;
+        unimplemented!()
+    }
+    
+    fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) {
+        self.prediction.process_apply_edit_msg(
+            msg,
+            &self.chunks,
+            &self.ci_reverse_lookup,
+            &mut self.tile_blocks,
+            &mut self.block_updates,
+        )
+    }
+    
+    fn on_network_message_ack(&mut self, msg: down::Ack) {
+        let down::Ack { last_processed } = msg;
+        self.prediction.process_ack(
+            last_processed,
+            &self.chunks,
+            &self.ci_reverse_lookup,
+            &mut self.tile_blocks,
+            &mut self.block_updates,
+        );
+    }
+    
+    fn on_network_message_chat_line(&mut self, msg: down::ChatLine, ctx: &GuiGlobalContext) {
+        let down::ChatLine { line } = msg;
+        self.chat.add_line(line, ctx);
+    }
+    
 
     fn on_ground(&self) -> bool {
         self.time_since_ground < GROUND_DETECTION_PERIOD

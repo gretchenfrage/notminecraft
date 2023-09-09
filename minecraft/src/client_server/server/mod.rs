@@ -474,7 +474,7 @@ impl Server {
         chunk_tile_blocks: &ChunkBlocks,
         connection: &Connection,
     )  {
-        connection.send(down::LoadChunk {
+        connection.send(down::AddChunk {
             cc,
             ci,
             chunk_tile_blocks: clone_chunk_tile_blocks(chunk_tile_blocks, &self.game),

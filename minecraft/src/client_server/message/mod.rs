@@ -59,14 +59,21 @@ message_enum!(up UpMessage {
 });
 
 message_enum!(down DownMessage {
-    Initialized {}
-    RejectLogIn {
+    AcceptLogin {}
+    RejectLogin {
         message: String,
     }
-    LoadChunk {
+    AddChunk {
         cc: Vec3<i64>,
         ci: usize,
         chunk_tile_blocks: ChunkBlocks,
+    }
+    AddClient {
+        client_key: usize,
+        username: String,
+    }
+    RemoveClient {
+        client_key: usize,
     }
     ApplyEdit {
         ack: Option<u64>,
