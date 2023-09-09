@@ -521,7 +521,7 @@ impl Server {
     fn on_received_client_set_char_state(&mut self, msg: up::SetCharState, client_conn_key: usize) {
         let up::SetCharState { char_state } = msg;
         self.client_char_state[client_conn_key] = char_state;
-        for (client_conn_key2, client_conn2) in self.client_connections.iter() {
+        for (_, client_conn2) in self.client_connections.iter() {
             client_conn2.send(down::SetCharState {
                 client_key: client_conn_key,
                 char_state,

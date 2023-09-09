@@ -238,7 +238,6 @@ impl Client {
                 char_name_layed_out: &self.char_name_layed_out,
 
                 my_client_key: self.my_client_key,
-                client_username: &self.client_username,
                 client_char_state: &self.client_char_state,
                 client_char_name_layed_out: &self.client_char_name_layed_out,
             },
@@ -268,12 +267,12 @@ impl Client {
             DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
             DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg)?,
             DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx)?,
-            DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg, ctx),
-            DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg, ctx),
+            DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg),
+            DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg),
             DownMessage::ApplyEdit(msg) => self.on_network_message_apply_edit(msg),
             DownMessage::Ack(msg) => self.on_network_message_ack(msg),
             DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx),
-            DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg, ctx),
+            DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg),
         }
         Ok(())
     }
@@ -360,7 +359,7 @@ impl Client {
         Ok(())
     }
     
-    fn on_network_message_remove_client(&mut self, msg: down::RemoveClient, ctx: &GuiGlobalContext) {
+    fn on_network_message_remove_client(&mut self, msg: down::RemoveClient) {
         let down::RemoveClient { client_key } = msg;
         debug!(?client_key, "client removed");
         self.clients.remove(client_key);
@@ -369,7 +368,7 @@ impl Client {
         self.client_char_name_layed_out.remove(client_key);
     }
     
-    fn on_network_message_this_is_you(&mut self, msg: down::ThisIsYou, ctx: &GuiGlobalContext) {
+    fn on_network_message_this_is_you(&mut self, msg: down::ThisIsYou) {
         let down::ThisIsYou { client_key } = msg;
         debug!(?client_key, "this is you!");
         self.my_client_key = Some(client_key);
@@ -401,7 +400,7 @@ impl Client {
         self.chat.add_line(line, ctx);
     }
 
-    fn on_network_message_set_char_state(&mut self, msg: down::SetCharState, ctx: &GuiGlobalContext) {
+    fn on_network_message_set_char_state(&mut self, msg: down::SetCharState) {
         let down::SetCharState { client_key, char_state } = msg;
         let () = self.clients[client_key];
         self.client_char_state[client_key] = char_state;
@@ -783,7 +782,6 @@ struct WorldGuiBlock<'a> {
     char_name_layed_out: &'a LayedOutTextBlock,
 
     my_client_key: Option<usize>,
-    client_username: &'a SparseVec<String>,
     client_char_state: &'a SparseVec<CharState>,
     client_char_name_layed_out: &'a SparseVec<LayedOutTextBlock>,
 }
