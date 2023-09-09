@@ -78,6 +78,12 @@ struct Server {
     // mapping from chunk to client to clientside ci
     chunk_client_cis: PerChunk<SparseVec<usize>>,
 
+    // mapping from client to clientside client key spaces
+    // which then maps from clientside client key to serverside client key
+    client_clientside_client_keys: SparseVec<Slab<usize>>,
+    // maping from client A to client B to client A's clientside client key for B
+    client_client_clientside_keys: SparseVec<SparseVec<usize>>,
+
     // mapping from client to username
     client_username: SparseVec<String>,
     // mapping from username to client
@@ -103,6 +109,7 @@ enum ConnectionState {
 }
 
 impl Server {
+    /// Construct. This is expected to be immediately followed by `run`.
     fn new(
         rt: &Handle,
         data_dir: &DataDir,
@@ -122,6 +129,8 @@ impl Server {
             conn_last_processed_increased: SparseVec::new(),
             client_loaded_chunks: SparseVec::new(),
             chunk_client_cis: PerChunk::new(),
+            client_clientside_client_keys: SparseVec::new(),
+            client_client_clientside_keys: SparseVec::new(),
             client_username: SparseVec::new(),
             username_client: HashMap::new(),
             save,
@@ -134,6 +143,7 @@ impl Server {
         })
     }
 
+    /// Run the server forever.
     fn run(&mut self) -> ! {
         self.request_load_chunks();
     
@@ -146,6 +156,7 @@ impl Server {
         }
     }
 
+    /// Do a tick.
     fn do_tick(&mut self) {
         while let Some(chunk) = self.chunk_loader.poll_ready() {
             // oh boy, chunk ready to load
@@ -178,6 +189,7 @@ impl Server {
         }
     }
 
+    /// Update `tick` and `next_tick` to schedule the happening of the next tick.
     fn update_time_stuff_after_doing_tick(&mut self) {
         self.tick += 1;
 
@@ -196,6 +208,7 @@ impl Server {
         }
     }
 
+    /// Save unsaved chunks if it's been long enough since the last save.
     fn maybe_save(&mut self) {
         if self.tick - self.last_tick_saved < TICKS_BETWEEN_SAVES {
             return;
@@ -220,6 +233,7 @@ impl Server {
             .unwrap(); // TODO: don't panic
     }
 
+    /// Wait for and process network events until `self.next_tick`.
     fn process_network_events_until_next_tick(&mut self) {
         while let Some(event) = self.network_server.recv_deadline(self.next_tick) {
             self.on_network_event(event);
@@ -232,6 +246,7 @@ impl Server {
         }
     }
 
+    /// Process any network event.
     fn on_network_event(&mut self, event: NetworkEvent) {
         match event {
             NetworkEvent::NewConnection(all_conn_key, conn) => self.on_new_connection(all_conn_key, conn),
@@ -240,6 +255,7 @@ impl Server {
         }
     }
 
+    /// Process a new connection network event.
     fn on_new_connection(&mut self, all_conn_key: usize, conn: Connection) {
         let uninit_conn_key = self.uninit_connections.insert(conn);
         self.all_connections.set(all_conn_key, (ConnectionState::Uninit, uninit_conn_key));
@@ -251,35 +267,43 @@ impl Server {
         self.conn_last_processed_increased.set(all_conn_key, false);
     }
 
+    /// Process a disconnection network event.
     fn on_disconnected(&mut self, all_conn_key: usize) {
         let (conn_state, state_conn_key) = self.all_connections.remove(all_conn_key);
         match conn_state {
-            ConnectionState::Uninit => {
-                self.uninit_connections.remove(state_conn_key);
-            }
-            ConnectionState::Client => {
-                // remove from list of connections
-                self.client_connections.remove(state_conn_key);
-
-                // remove client's clientside ci from all chunks
-                for (cc, _) in self.client_loaded_chunks[state_conn_key].iter() {
-                    let ci = self.chunks.getter().get(cc).unwrap();
-                    self.chunk_client_cis.get_mut(cc, ci).remove(state_conn_key);
-                }
-
-                // remove client's ci space
-                self.client_loaded_chunks.remove(state_conn_key);
-
-                // remove from other data structures
-                let username = self.client_username.remove(state_conn_key);
-                self.username_client.remove(&username);
-
-                self.conn_last_processed.remove(all_conn_key);
-                self.conn_last_processed_increased.remove(all_conn_key);
-            }
+            ConnectionState::Uninit => self.on_uninit_disconnected(state_conn_key),
+            ConnectionState::Client => self.on_client_disconnected(all_conn_key, state_conn_key),
         }
     }
 
+    /// Process the disconnection of an uninit connection.
+    fn on_uninit_disconnected(&mut self, uninit_conn_key: usize) {
+        self.uninit_connections.remove(uninit_conn_key);
+    }
+
+    /// Process the disconnection of a client connection.
+    fn on_client_disconnected(&mut self, all_conn_key: usize, client_conn_key: usize) {
+        // remove from list of connections
+        self.client_connections.remove(client_conn_key);
+
+        // remove client's clientside ci from all chunks
+        for (cc, _) in self.client_loaded_chunks[client_conn_key].iter() {
+            let ci = self.chunks.getter().get(cc).unwrap();
+            self.chunk_client_cis.get_mut(cc, ci).remove(client_conn_key);
+        }
+
+        // remove client's ci space
+        self.client_loaded_chunks.remove(client_conn_key);
+
+        // remove from other data structures
+        let username = self.client_username.remove(client_conn_key);
+        self.username_client.remove(&username);
+
+        self.conn_last_processed.remove(all_conn_key);
+        self.conn_last_processed_increased.remove(all_conn_key);
+    }
+
+    /// Process the receipt of a network message.
     fn on_received(&mut self, all_conn_key: usize, msg: UpMessage) {
         self.conn_last_processed[all_conn_key] += 1;
         self.conn_last_processed_increased[all_conn_key] = true;
@@ -291,61 +315,10 @@ impl Server {
         }
     }
 
+    /// Process the receipt of a network message from an uninit connection.
     fn on_received_uninit(&mut self, msg: UpMessage, all_conn_key: usize, uninit_conn_key: usize) {
         match msg {
-            UpMessage::LogIn(up::LogIn {
-                mut username,
-            }) => {
-                // validate
-                /*
-                if username_client.contains_key(&username) {
-                    uninit_connections[uninit_conn_key]
-                        .send(DownMessage::RejectLogIn(down::RejectLogIn {
-                            message: "client already logged in with same username".into(),
-                        }));
-                    return;
-                }
-                */
-                if self.username_client.contains_key(&username) {
-                    let mut i = 2;
-                    let mut username2;
-                    while {
-                        username2 = format!("{}{}", username, i);
-                        self.username_client.contains_key(&username2)
-                    } { i += 1 }
-                    username = username2;
-                }
-
-                let conn = self.uninit_connections.remove(uninit_conn_key);
-                let client_conn_key = self.client_connections.insert(conn);
-                self.all_connections.set(all_conn_key, (ConnectionState::Client, client_conn_key));
-
-                let mut loaded_chunks = LoadedChunks::new();
-
-                // for each chunk already loaded
-                for (cc, ci) in self.chunks.iter() {
-                    // add it to the client's loaded chunks set
-                    let client_ci = loaded_chunks.add(cc);
-
-                    // backlink it in the chunk's chunk_client_cis entry
-                    self.chunk_client_cis.get_mut(cc, ci).set(client_conn_key, client_ci);
-                    
-                    // send the chunk to the client
-                    self.send_load_chunk_message(
-                        cc,
-                        client_ci,
-                        self.tile_blocks.get(cc, ci),
-                        &self.client_connections[client_conn_key],
-                    );
-                }
-
-                // insert the client's new loaded_chunks set into the server's data structures
-                self.client_loaded_chunks.set(client_conn_key, loaded_chunks);
-
-                // insert into other server data structures
-                self.client_username.set(client_conn_key, username.clone());
-                self.username_client.insert(username, client_conn_key);
-            }
+            UpMessage::LogIn(msg) => self.on_received_uninit_log_in(msg, all_conn_key, uninit_conn_key),
             UpMessage::SetTileBlock(_) => {
                 error!("uninit connection sent settileblock");
                 // TODO: handle this better than just ignoring it lol
@@ -357,62 +330,126 @@ impl Server {
         }
     }
 
+    /// Process the receipt of a `LogIn` message from an uninit connection.
+    fn on_received_uninit_log_in(&mut self, msg: up::LogIn, all_conn_key: usize, uninit_conn_key: usize) {
+        let up::LogIn { mut username } = msg;
+
+        // validate
+        /*
+        if username_client.contains_key(&username) {
+            uninit_connections[uninit_conn_key]
+                .send(DownMessage::RejectLogIn(down::RejectLogIn {
+                    message: "client already logged in with same username".into(),
+                }));
+            return;
+        }
+        */
+        if self.username_client.contains_key(&username) {
+            let mut i = 2;
+            let mut username2;
+            while {
+                username2 = format!("{}{}", username, i);
+                self.username_client.contains_key(&username2)
+            } { i += 1 }
+            username = username2;
+        }
+
+        let conn = self.uninit_connections.remove(uninit_conn_key);
+        let client_conn_key = self.client_connections.insert(conn);
+        self.all_connections.set(all_conn_key, (ConnectionState::Client, client_conn_key));
+
+        let mut loaded_chunks = LoadedChunks::new();
+
+        // for each chunk already loaded
+        for (cc, ci) in self.chunks.iter() {
+            // add it to the client's loaded chunks set
+            let client_ci = loaded_chunks.add(cc);
+
+            // backlink it in the chunk's chunk_client_cis entry
+            self.chunk_client_cis.get_mut(cc, ci).set(client_conn_key, client_ci);
+            
+            // send the chunk to the client
+            self.send_load_chunk_message(
+                cc,
+                client_ci,
+                self.tile_blocks.get(cc, ci),
+                &self.client_connections[client_conn_key],
+            );
+        }
+
+        // insert the client's new loaded_chunks set into the server's data structures
+        self.client_loaded_chunks.set(client_conn_key, loaded_chunks);
+
+        // insert into other server data structures
+        self.client_username.set(client_conn_key, username.clone());
+        self.username_client.insert(username, client_conn_key);
+    }
+
+    /// Process the receipt of a network message from a client connection.
     fn on_received_client(&mut self, msg: UpMessage, all_conn_key: usize, client_conn_key: usize) {
         match msg {
             UpMessage::LogIn(_) => {
                 error!("client connection sent login");
                 // TODO: handle this better than just ignoring it lol
             }
-            UpMessage::SetTileBlock(up::SetTileBlock {
-                gtc,
-                bid,
-            }) => {
-                // lookup tile
-                let tile = match self.chunks.getter().gtc_get(gtc) {
-                    Some(tile) => tile,
-                    None => {
-                        info!("client tried SetTileBlock on non-present gtc");
-                        return;
-                    }
-                };
-
-                // set tile block
-                tile.get(&mut self.tile_blocks).raw_set(bid, ());
-
-                // send update to all clients with that chunk loaded
-                for (client_conn_key, &client_ci) in self.chunk_client_cis.get(tile.cc, tile.ci).iter() {
-                    let ack = if self.conn_last_processed_increased[all_conn_key] {
-                        self.conn_last_processed_increased[all_conn_key] = false;
-                        Some(self.conn_last_processed[all_conn_key])
-                    } else {
-                        None
-                    };
-                    self.client_connections[client_conn_key].send(down::ApplyEdit {
-                        ack,
-                        ci: client_ci,
-                        edit: edit::SetTileBlock {
-                            lti: tile.lti,
-                            bid,
-                        }.into(),
-                    });
-                    self.conn_last_processed_increased[all_conn_key] = false;
-                    *self.chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
-                }
-            }
-            UpMessage::Say(up::Say {
-                text,
-            }) => {
-                let username = &self.client_username[client_conn_key];
-                let line = format!("<{}> {}", username, text);
-                for (_, connection) in &self.client_connections {
-                    connection.send(down::ChatLine {
-                        line: line.clone(),
-                    });
-                }
-            }
+            UpMessage::SetTileBlock(msg) => self.on_received_client_set_tile_block(msg, all_conn_key),
+            UpMessage::Say(msg) => self.on_received_client_say(msg, client_conn_key),
         }
     }
 
+    /// Process the receipt of a `SetTileBlock` message from a client connection.
+    fn on_received_client_set_tile_block(&mut self, msg: up::SetTileBlock, all_conn_key: usize) {
+        let up::SetTileBlock { gtc, bid } = msg;
+
+        // lookup tile
+        let tile = match self.chunks.getter().gtc_get(gtc) {
+            Some(tile) => tile,
+            None => {
+                info!("client tried SetTileBlock on non-present gtc");
+                return;
+            }
+        };
+
+        // set tile block
+        tile.get(&mut self.tile_blocks).raw_set(bid, ());
+
+        // send update to all clients with that chunk loaded
+        for (client_conn_key, &client_ci) in self.chunk_client_cis.get(tile.cc, tile.ci).iter() {
+            let ack = if self.conn_last_processed_increased[all_conn_key] {
+                self.conn_last_processed_increased[all_conn_key] = false;
+                Some(self.conn_last_processed[all_conn_key])
+            } else {
+                None
+            };
+            self.client_connections[client_conn_key].send(down::ApplyEdit {
+                ack,
+                ci: client_ci,
+                edit: edit::SetTileBlock {
+                    lti: tile.lti,
+                    bid,
+                }.into(),
+            });
+            self.conn_last_processed_increased[all_conn_key] = false;
+            *self.chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
+        }
+    }
+
+    /// Process the receipt of a `Say` message from a client connection.
+    fn on_received_client_say(&mut self, msg: up::Say, client_conn_key: usize) {
+        let up::Say { text } = msg;
+
+        let username = &self.client_username[client_conn_key];
+        let line = format!("<{}> {}", username, text);
+        for (_, connection) in &self.client_connections {
+            connection.send(down::ChatLine {
+                line: line.clone(),
+            });
+        }
+    }
+
+    /// Called after processing at least one network event and then processing
+    /// all subsequent network events that were immediately available without
+    /// additional blocking.
     fn after_process_available_network_events(&mut self) {
         for (all_conn_key, client_conn_key) in self.all_connections.iter()
             .filter(|(_, &(conn_state, _))| conn_state == ConnectionState::Client)
@@ -429,6 +466,7 @@ impl Server {
         }
     }
 
+    /// Send a connection a `LoadChunk` message.
     fn send_load_chunk_message(
         &self,
         cc: Vec3<i64>,
@@ -443,6 +481,7 @@ impl Server {
         });
     }
 
+    /// Called during initialization to request that `chunk_loader` load the initial set of chunks.
     fn request_load_chunks(&self) {
         let view_dist = 6;
         let mut to_request = Vec::new();
