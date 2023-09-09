@@ -39,9 +39,13 @@ use std::{
     f32::consts::PI,
     cell::RefCell,
     collections::VecDeque,
-    time::Duration,
+    time::{
+        Instant,
+        Duration,
+    },
     mem::take,
 };
+use slab::Slab;
 use anyhow::{Result, ensure, bail};
 use vek::*;
 
@@ -69,12 +73,13 @@ pub struct Client {
     char_mesh: CharMesh,
     char_name_layed_out: LayedOutTextBlock,
 
-    pos: Vec3<f32>,
+    char_state: CharState,
     vel: Vec3<f32>,
     time_since_ground: f32,
     time_since_jumped: f32,
-    pitch: f32,
-    yaw: f32,
+
+    char_state_last_sent: CharState,
+    char_state_last_sent_time: Instant, // TODO: time handling is kinda a mess
 
     bob_animation: f32,
     third_person: bool,
@@ -87,6 +92,12 @@ pub struct Client {
     block_updates: BlockUpdateQueue,
 
     prediction: PredictionManager,
+
+    clients: Slab<()>,
+    my_client_key: Option<usize>,
+    
+    client_username: SparseVec<String>,
+    client_char_state: SparseVec<CharState>,
 
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
@@ -123,10 +134,16 @@ fn get_username() -> String {
 impl Client {
     pub fn new(address: &str, ctx: &GuiGlobalContext) -> Self {
         let username = get_username();
+        let char_state = CharState {
+            pos: [0.0, 80.0, 0.0].into(),
+            pitch: f32::to_radians(-30.0),
+            yaw: f32::to_radians(0.0),
+        };
 
         let mut connection = Connection::connect(address, ctx.tokio, ctx.game);
         connection.send(UpMessage::LogIn(up::LogIn {
             username: username.clone(),
+            char_state,
         }));
 
         let char_mesh = CharMesh::new(ctx);
@@ -145,18 +162,21 @@ impl Client {
 
         ctx.capture_mouse();
 
+
         Client {
             connection,
 
             char_mesh,
             char_name_layed_out,
 
-            pos: [0.0, 80.0, 0.0].into(),
+
+            char_state,
             vel: 0.0.into(),
             time_since_ground: f32::INFINITY,
             time_since_jumped: f32::INFINITY,
-            pitch: f32::to_radians(-30.0),
-            yaw: f32::to_radians(0.0),
+            
+            char_state_last_sent: char_state,
+            char_state_last_sent_time: Instant::now(),
 
             bob_animation: 0.0,
             third_person: false,
@@ -169,6 +189,12 @@ impl Client {
             block_updates: BlockUpdateQueue::new(),
 
             prediction: PredictionManager::new(),
+
+            clients: Slab::new(),
+            my_client_key: None,
+
+            client_username: SparseVec::new(),
+            client_char_state: SparseVec::new(),
 
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx.assets),
@@ -193,9 +219,9 @@ impl Client {
             )));
         layer((
             WorldGuiBlock {
-                pos: self.pos,
-                pitch: self.pitch,
-                yaw: self.yaw,
+                pos: self.char_state.pos,
+                pitch: self.char_state.pitch,
+                yaw: self.char_state.yaw,
 
                 chunks: &self.chunks,
                 tile_blocks: &self.tile_blocks,
@@ -206,6 +232,10 @@ impl Client {
 
                 char_mesh: &self.char_mesh,
                 char_name_layed_out: &self.char_name_layed_out,
+
+                my_client_key: self.my_client_key,
+                client_username: &self.client_username,
+                client_char_state: &self.client_char_state,
             },
             align(0.5,
                 logical_size(30.0,
@@ -232,11 +262,13 @@ impl Client {
             DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg),
             DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
             DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg)?,
-            DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx),
+            DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx)?,
             DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg, ctx),
+            DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg, ctx),
             DownMessage::ApplyEdit(msg) => self.on_network_message_apply_edit(msg),
             DownMessage::Ack(msg) => self.on_network_message_ack(msg),
             DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx),
+            DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg, ctx),
         }
         Ok(())
     }
@@ -257,7 +289,7 @@ impl Client {
         // insert into data structures
         ensure!(
             self.chunks.add(cc) == ci,
-            "DownMessage::load_chunk ci did not correspond to slab behavior"
+            "AddChunk message ci did not correspond to slab behavior"
         );
         self.ci_reverse_lookup.set(ci, cc);
 
@@ -297,16 +329,32 @@ impl Client {
         Ok(())
     }
     
-    fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) {
-        let down::AddClient { client_key, username } = msg;
-        debug!(?client_key, ?username, "client added");
+    fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) -> Result<()> {
+        let down::AddClient { client_key, username, char_state } = msg;
+        debug!(?client_key, ?username, ?char_state, "client added");
+        ensure!(
+            self.clients.insert(()) == client_key,
+            "AddClient message client key did not correspond to slab behavior",
+        );
+        self.client_username.set(client_key, username);
+        self.client_char_state.set(client_key, char_state);
+        Ok(())
     }
     
     fn on_network_message_remove_client(&mut self, msg: down::RemoveClient, ctx: &GuiGlobalContext) {
         let down::RemoveClient { client_key } = msg;
         debug!(?client_key, "client removed");
+        self.clients.remove(client_key);
+        self.client_username.remove(client_key);
+        self.client_char_state.remove(client_key);
     }
     
+    fn on_network_message_this_is_you(&mut self, msg: down::ThisIsYou, ctx: &GuiGlobalContext) {
+        let down::ThisIsYou { client_key } = msg;
+        debug!(?client_key, "this is you!");
+        self.my_client_key = Some(client_key);
+    }
+
     fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) {
         self.prediction.process_apply_edit_msg(
             msg,
@@ -332,7 +380,12 @@ impl Client {
         let down::ChatLine { line } = msg;
         self.chat.add_line(line, ctx);
     }
-    
+
+    fn on_network_message_set_char_state(&mut self, msg: down::SetCharState, ctx: &GuiGlobalContext) {
+        let down::SetCharState { client_key, char_state } = msg;
+        let () = self.clients[client_key];
+        self.client_char_state[client_key] = char_state;
+    }
 
     fn on_ground(&self) -> bool {
         self.time_since_ground < GROUND_DETECTION_PERIOD
@@ -420,7 +473,7 @@ impl GuiStateFrame for Client {
                 walking_xz.x -= 1.0;
             }
 
-            walking_xz.rotate_z(self.yaw);
+            walking_xz.rotate_z(self.char_state.yaw);
             walking_xz *= /*4.317*/ WALK_SPEED;
 
             self.vel.x = walking_xz.x;
@@ -442,10 +495,10 @@ impl GuiStateFrame for Client {
         self.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * elapsed);
 
         // movement and collision
-        self.pos -= Vec3::from(PLAYER_BOX_POS_ADJUST);
+        self.char_state.pos -= Vec3::from(PLAYER_BOX_POS_ADJUST);
         let physics = do_physics(
             elapsed,
-            &mut self.pos,
+            &mut self.char_state.pos,
             &mut self.vel,
             &AaBoxCollisionObject {
                 ext: PLAYER_BOX_EXT.into(),
@@ -456,13 +509,25 @@ impl GuiStateFrame for Client {
                 game: ctx.game(),
             },
         );
-        self.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
+        self.char_state.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
         self.time_since_ground += elapsed;
         self.time_since_jumped += elapsed;
         if physics.on_ground {
             self.time_since_ground = 0.0;
         }
-        
+
+        // send up char state, maybe
+        let now = Instant::now();
+        if self.char_state != self.char_state_last_sent
+            && (now - self.char_state_last_sent_time).as_secs_f32() >= 1.0 / 120.0
+        {
+            self.connection.send(up::SetCharState {
+                char_state: self.char_state,
+            });
+            self.char_state_last_sent = self.char_state;
+            self.char_state_last_sent_time = now;
+        }
+
         // animations
         let ground_speed = if self.on_ground() {
             Vec2::new(self.vel.x, self.vel.z).magnitude()
@@ -498,17 +563,17 @@ impl GuiStateFrame for Client {
     fn on_captured_mouse_move(&mut self, _: &GuiWindowContext, amount: Vec2<f32>) {
         let sensitivity = 1.0 / 1600.0;
         
-        self.pitch = (self.pitch - amount.y * sensitivity).clamp(-PI / 2.0, PI / 2.0);
-        self.yaw = (self.yaw - amount.x * sensitivity) % (PI * 2.0);
+        self.char_state.pitch = (self.char_state.pitch - amount.y * sensitivity).clamp(-PI / 2.0, PI / 2.0);
+        self.char_state.yaw = (self.char_state.yaw - amount.x * sensitivity) % (PI * 2.0);
     }
 
     fn on_captured_mouse_click(&mut self, ctx: &GuiWindowContext, button: MouseButton) {
         let getter = self.chunks.getter();
         if let Some(looking_at) = compute_looking_at(
             // position
-            self.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0),
+            self.char_state.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0),
             // direction
-            cam_dir(self.pitch, self.yaw),
+            cam_dir(self.char_state.pitch, self.char_state.yaw),
             // reach
             50.0,
             // geometry
@@ -540,7 +605,7 @@ impl GuiStateFrame for Client {
                         tile_blocks: &self.tile_blocks,
                         game: ctx.game(),
                     }.box_intersects(AaBox {
-                        pos: self.pos - Vec3::from(PLAYER_BOX_POS_ADJUST),
+                        pos: self.char_state.pos - Vec3::from(PLAYER_BOX_POS_ADJUST),
                         ext: PLAYER_BOX_EXT.into(),
                     }.expand(EPSILON));
                     tile
@@ -678,6 +743,7 @@ fn cam_dir(pitch: f32, yaw: f32) -> Vec3<f32> {
 /// GUI block that draws the 3D game world from the player's perspective.
 #[derive(Debug)]
 struct WorldGuiBlock<'a> {
+    // TODO: probably make this just like a substruct within client
     pos: Vec3<f32>,
     pitch: f32,
     yaw: f32,
@@ -691,6 +757,10 @@ struct WorldGuiBlock<'a> {
 
     char_mesh: &'a CharMesh,
     char_name_layed_out: &'a LayedOutTextBlock,
+
+    my_client_key: Option<usize>,
+    client_username: &'a SparseVec<String>,
+    client_char_state: &'a SparseVec<CharState>,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -761,7 +831,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 );
         }
 
-        // character
+        // my character
         if inner.third_person {
             let mut canvas = canvas.reborrow()
                 .translate(inner.pos)
@@ -773,6 +843,29 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 .scale([1.0, -1.0, 1.0])
                 .rotate(Quaternion::rotation_y(PI))
                 .draw_text(&inner.char_name_layed_out);
+        }
+
+        // other characters
+        if let Some(my_client_key) = inner.my_client_key {
+            for (client_key, client_char_state) in inner.client_char_state.iter() {
+                if client_key == my_client_key {
+                    continue;
+                }
+
+                // TODO: deduplicate this part with above
+                let mut canvas = canvas.reborrow()
+                    .translate(client_char_state.pos)
+                    .rotate(Quaternion::rotation_y(-client_char_state.yaw));
+                inner.char_mesh.draw(&mut canvas, ctx.assets());
+                /*
+                canvas.reborrow()
+                    .translate([0.0, 2.0, 0.0])
+                    .scale(0.25 / 16.0)
+                    .scale([1.0, -1.0, 1.0])
+                    .rotate(Quaternion::rotation_y(PI))
+                    .draw_text(&inner.char_name_layed_out);
+                    */
+            }
         }
 
         // outline for block being looked at

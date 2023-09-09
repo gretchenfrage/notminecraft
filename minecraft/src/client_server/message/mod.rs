@@ -48,6 +48,7 @@ message_enum!(edit Edit {
 message_enum!(up UpMessage {
     LogIn {
         username: String,
+        char_state: CharState,
     }
     SetTileBlock {
         gtc: Vec3<i64>,
@@ -55,6 +56,9 @@ message_enum!(up UpMessage {
     }
     Say {
         text: String,
+    }
+    SetCharState {
+        char_state: CharState,
     }
 });
 
@@ -71,8 +75,12 @@ message_enum!(down DownMessage {
     AddClient {
         client_key: usize,
         username: String,
+        char_state: CharState,
     }
     RemoveClient {
+        client_key: usize,
+    }
+    ThisIsYou {
         client_key: usize,
     }
     ApplyEdit {
@@ -86,4 +94,17 @@ message_enum!(down DownMessage {
     ChatLine {
         line: String,
     }
+    SetCharState {
+        client_key: usize,
+        char_state: CharState,
+    }
 });
+
+/// State of a client's char that's set by the client and streamed back down
+/// to other clients.
+#[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
+pub struct CharState {
+    pub pos: Vec3<f32>,
+    pub pitch: f32,
+    pub yaw: f32,
+}

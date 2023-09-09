@@ -16,9 +16,7 @@ use self::{
     },
     chunk_loader::ChunkLoader,
 };
-use super::{
-    message::*,
-};
+use super::message::*;
 use crate::{
     game_data::GameData,
     util::sparse_vec::SparseVec,
@@ -89,6 +87,8 @@ struct Server {
     // mapping from username to client
     username_client: HashMap<String, usize>,
 
+    client_char_state: SparseVec<CharState>,
+
     save: SaveFile,
     chunk_unsaved: PerChunk<bool>,
     last_tick_saved: u64,
@@ -133,6 +133,7 @@ impl Server {
             client_client_clientside_keys: SparseVec::new(),
             client_username: SparseVec::new(),
             username_client: HashMap::new(),
+            client_char_state: SparseVec::new(),
             save,
             chunk_unsaved: PerChunk::new(),
             last_tick_saved: 0,
@@ -313,6 +314,8 @@ impl Server {
 
         let username = self.client_username.remove(client_conn_key);
         self.username_client.remove(&username);
+
+        self.client_char_state.remove(client_conn_key);
     }
 
     /// Process the receipt of a network message.
@@ -339,14 +342,18 @@ impl Server {
                 error!("uninit connection sent say");
                 // TODO: handle this better than just ignoring it lol
             }
+            UpMessage::SetCharState(_) => {
+                error!("uninit connection sent set char state");
+                // TODO: handle this better than just ignoring it lol
+            }
         }
     }
 
     /// Process the receipt of a `LogIn` message from an uninit connection.
     fn on_received_uninit_log_in(&mut self, msg: up::LogIn, all_conn_key: usize, uninit_conn_key: usize) {
-        let up::LogIn { mut username } = msg;
+        let up::LogIn { mut username, char_state } = msg;
 
-        // validate
+        // "validate"
         /*
         if username_client.contains_key(&username) {
             uninit_connections[uninit_conn_key]
@@ -405,6 +412,7 @@ impl Server {
             self.client_connections[client_conn_key].send(down::AddClient {
                 client_key: clientside_client_key,
                 username: self.client_username[client_conn_key2].clone(),
+                char_state: self.client_char_state[client_conn_key2],
             });
         }
 
@@ -418,12 +426,22 @@ impl Server {
             client_conn2.send(down::AddClient {
                 client_key: clientside_client_key,
                 username: username.clone(),
+                char_state,
             });
+
+            if client_conn_key2 == client_conn_key {
+                // when telling it about itself, send the this-is-you
+                client_conn2.send(down::ThisIsYou {
+                    client_key: clientside_client_key,
+                });
+            }
         }
 
         // insert into other server data structures
         self.client_username.set(client_conn_key, username.clone());
         self.username_client.insert(username, client_conn_key);
+        
+        self.client_char_state.set(client_conn_key, char_state);
     }
 
     /// Process the receipt of a network message from a client connection.
@@ -435,6 +453,7 @@ impl Server {
             }
             UpMessage::SetTileBlock(msg) => self.on_received_client_set_tile_block(msg, all_conn_key),
             UpMessage::Say(msg) => self.on_received_client_say(msg, client_conn_key),
+            UpMessage::SetCharState(msg) => self.on_received_client_set_char_state(msg, client_conn_key),
         }
     }
 
@@ -484,6 +503,18 @@ impl Server {
         for (_, connection) in &self.client_connections {
             connection.send(down::ChatLine {
                 line: line.clone(),
+            });
+        }
+    }
+
+    /// Process the receipt of a `SetCharState` message from a client connection.
+    fn on_received_client_set_char_state(&mut self, msg: up::SetCharState, client_conn_key: usize) {
+        let up::SetCharState { char_state } = msg;
+        self.client_char_state[client_conn_key] = char_state;
+        for (client_conn_key2, client_conn2) in self.client_connections.iter() {
+            client_conn2.send(down::SetCharState {
+                client_key: client_conn_key,
+                char_state,
             });
         }
     }
