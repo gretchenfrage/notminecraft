@@ -855,7 +855,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             let mut canvas = canvas.reborrow()
                 .translate(inner.pos)
                 .rotate(Quaternion::rotation_y(-inner.yaw));
-            inner.char_mesh.draw(&mut canvas, ctx.assets());
+            inner.char_mesh.draw(&mut canvas, ctx.assets(), inner.pitch);
             canvas.reborrow()
                 .translate([0.0, 2.0, 0.0])
                 .scale(0.25 / 16.0)
@@ -875,7 +875,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 let mut canvas = canvas.reborrow()
                     .translate(client_char_state.pos)
                     .rotate(Quaternion::rotation_y(-client_char_state.yaw));
-                inner.char_mesh.draw(&mut canvas, ctx.assets());
+                inner.char_mesh.draw(&mut canvas, ctx.assets(), client_char_state.pitch);
                 canvas.reborrow()
                     .translate([0.0, 2.0, 0.0])
                     .scale(0.25 / 16.0)
@@ -1364,6 +1364,7 @@ impl CharMesh {
         &'a self,
         canvas: &mut Canvas3<'a, '_>,
         assets: &'a Assets,
+        head_pitch: f32,
     ) {
         let mut canvas = canvas.reborrow()
             .scale(PLAYER_HEIGHT / 32.0);
@@ -1372,6 +1373,7 @@ impl CharMesh {
             .draw_mesh(&self.torso, &assets.mob_char);
         canvas.reborrow()
             .translate([0.0, 28.0, 0.0])
+            .rotate(Quaternion::rotation_x(-head_pitch))
             .draw_mesh(&self.head, &assets.mob_char);
         canvas.reborrow()
             .translate([-2.0, 10.0, 0.0])
