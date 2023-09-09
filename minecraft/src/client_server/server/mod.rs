@@ -316,6 +316,9 @@ impl Server {
         self.username_client.remove(&username);
 
         self.client_char_state.remove(client_conn_key);
+
+        // announce
+        self.broadcast_chat_line(&format!("{} left the game", username));
     }
 
     /// Process the receipt of a network message.
@@ -439,9 +442,12 @@ impl Server {
 
         // insert into other server data structures
         self.client_username.set(client_conn_key, username.clone());
-        self.username_client.insert(username, client_conn_key);
+        self.username_client.insert(username.clone(), client_conn_key);
         
         self.client_char_state.set(client_conn_key, char_state);
+
+        // announce
+        self.broadcast_chat_line(&format!("{} joined the game", username));
     }
 
     /// Process the receipt of a network message from a client connection.
@@ -500,9 +506,13 @@ impl Server {
 
         let username = &self.client_username[client_conn_key];
         let line = format!("<{}> {}", username, text);
+        self.broadcast_chat_line(&line);
+    }
+
+    fn broadcast_chat_line(&self, line: &str) {
         for (_, connection) in &self.client_connections {
             connection.send(down::ChatLine {
-                line: line.clone(),
+                line: line.to_owned(),
             });
         }
     }
