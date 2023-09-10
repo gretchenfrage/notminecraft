@@ -84,7 +84,7 @@ enum SendDown {
 }
 
 impl Connection {
-    /// Queue message to be transmitted to client and returns immediately.
+    /// Queue message to be transmitted to client and return immediately.
     pub fn send(&self, msg: impl Into<DownMessage>) {
         match self.send {
             SendDown::Network(ref inner) => {

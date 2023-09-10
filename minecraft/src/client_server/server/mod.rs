@@ -9,7 +9,10 @@ use self::{
         NetworkEvent,
         NetworkServer,
     },
-    chunk_loader::ChunkLoader,
+    chunk_loader::{
+        ChunkLoader,
+        ReadyChunk,
+    },
 };
 use super::{
     message::*,
@@ -17,7 +20,10 @@ use super::{
 };
 use crate::{
     game_data::GameData,
-    util::sparse_vec::SparseVec,
+    util::{
+        sparse_vec::SparseVec,
+        chunk_range::ChunkRange,
+    },
     save_file::{
         SaveFile,
         WriteEntry,
@@ -33,6 +39,7 @@ use std::{
     },
     collections::HashMap,
     thread,
+    mem::replace,
 };
 use tokio::runtime::Handle;
 use anyhow::Result;
@@ -42,6 +49,11 @@ use vek::*;
 
 const TICK: Duration = Duration::from_millis(50);
 const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
+
+const LOAD_Y_START: i64 = 0;
+const LOAD_Y_END: i64 = 2;
+const INITIAL_LOAD_DISTANCE: i64 = 6;
+const LOAD_DISTANCE: i64 = 3;
 
 
 /// Spawn a new thread which runs a server forever without it being open to
@@ -176,7 +188,7 @@ impl Server {
 
     /// Run the server forever.
     fn run(&mut self) -> ! {
-        self.request_load_chunks();
+        self.request_load_initial_chunks();
     
         loop {
             trace!("doing tick");
@@ -190,34 +202,44 @@ impl Server {
     /// Do a tick.
     fn do_tick(&mut self) {
         while let Some(chunk) = self.chunk_loader.poll_ready() {
-            // oh boy, chunk ready to load
-            // assign it ci in server chunk space
-            let ci = self.chunks.add(chunk.cc);
-
-            let mut client_cis = SparseVec::new();
-
-            for (client_conn_key, conn) in self.client_connections.iter() {
-                // for each connection, assign it ci in that client chunk space
-                let client_ci = self.client_loaded_chunks[client_conn_key].add(chunk.cc);
-
-                // backlink it in this chunk's new chunk_client_cis entry
-                client_cis.set(client_conn_key, client_ci);
-
-                // and send to that client
-                self.send_load_chunk_message(
-                    chunk.cc,
-                    client_ci,
-                    &chunk.chunk_tile_blocks,
-                    conn,
-                );
-            }
-
-            // insert into server data structures
-            self.tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
-            self.chunk_client_cis.add(chunk.cc, ci, client_cis);
-
-            self.chunk_unsaved.add(chunk.cc, ci, chunk.unsaved);
+            self.add_chunk(chunk);
         }
+    }
+
+    /// Load a chunk in the world
+    fn add_chunk(&mut self, chunk: ReadyChunk) {
+        // TODO more robust system to track set of chunking that are "loading"
+        // for now, we just do this lol
+        if self.chunks.getter().get(chunk.cc).is_some() {
+            return;
+        }
+
+        // assign it ci in server chunk space
+        let ci = self.chunks.add(chunk.cc);
+
+        let mut client_cis = SparseVec::new();
+
+        for (client_conn_key, conn) in self.client_connections.iter() {
+            // for each connection, assign it ci in that client chunk space
+            let client_ci = self.client_loaded_chunks[client_conn_key].add(chunk.cc);
+
+            // backlink it in this chunk's new chunk_client_cis entry
+            client_cis.set(client_conn_key, client_ci);
+
+            // and send to that client
+            self.send_load_chunk_message(
+                chunk.cc,
+                client_ci,
+                &chunk.chunk_tile_blocks,
+                conn,
+            );
+        }
+
+        // insert into server data structures
+        self.tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
+        self.chunk_client_cis.add(chunk.cc, ci, client_cis);
+
+        self.chunk_unsaved.add(chunk.cc, ci, chunk.unsaved);
     }
 
     /// Update `tick` and `next_tick` to schedule the happening of the next tick.
@@ -476,6 +498,9 @@ impl Server {
         
         self.client_char_state.set(client_conn_key, char_state);
 
+        // request nearby chunks be loaded
+        self.request_load_chunks(char_load_range(char_state).iter());
+
         // announce
         self.broadcast_chat_line(&format!("{} joined the game", username));
     }
@@ -550,13 +575,27 @@ impl Server {
     /// Process the receipt of a `SetCharState` message from a client connection.
     fn on_received_client_set_char_state(&mut self, msg: up::SetCharState, client_conn_key: usize) {
         let up::SetCharState { char_state } = msg;
-        self.client_char_state[client_conn_key] = char_state;
+
+        // update
+        let old_char_state = replace(&mut self.client_char_state[client_conn_key], char_state);
+        
+        // broadcast
         for (_, client_conn2) in self.client_connections.iter() {
             client_conn2.send(down::SetCharState {
                 client_key: client_conn_key,
                 char_state,
             });
         }
+
+        // request new chunks be loaded
+        let old_char_load_range = char_load_range(old_char_state);
+        let new_char_load_range = char_load_range(char_state);
+        if old_char_load_range != new_char_load_range {
+            let char_load_range_added = new_char_load_range.iter_diff(old_char_load_range);
+            self.request_load_chunks(char_load_range_added);
+        }
+
+        // TODO: request old chunks be unloaded
     }
 
     /// Called after processing at least one network event and then processing
@@ -593,21 +632,16 @@ impl Server {
         });
     }
 
-    /// Called during initialization to request that `chunk_loader` load the initial set of chunks.
-    fn request_load_chunks(&self) {
-        let view_dist = 6;
-        let mut to_request = Vec::new();
-        for x in -view_dist..view_dist {
-            for z in -view_dist..view_dist {
-                for y in 0..2 {
-                    to_request.push(Vec3 { x, y, z });
-                }
-            }
-        }
-        fn square(n: i64) -> i64 {
-            n * n
-        }
-        to_request.sort_by_key(|cc| square(cc.x) + square(cc.z));
+    /// Request the loading of the initial set of chunks.
+    fn request_load_initial_chunks(&self) {
+        self.request_load_chunks(ChunkRange {
+            start: [-INITIAL_LOAD_DISTANCE, LOAD_Y_START, INITIAL_LOAD_DISTANCE].into(),
+            end: [INITIAL_LOAD_DISTANCE, LOAD_Y_END, INITIAL_LOAD_DISTANCE].into(),
+        }.iter());
+    }
+
+    /// Request the loading of this set of chunks.
+    fn request_load_chunks(&self, to_request: impl IntoIterator<Item=Vec3<i64>>) {
         for cc in to_request {
             self.chunk_loader.request(cc);
         }
@@ -621,4 +655,20 @@ fn clone_chunk_tile_blocks(chunk_tile_blocks: &ChunkBlocks, game: &Arc<GameData>
         chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
     }
     chunk_tile_blocks_clone
+}
+
+fn char_load_range(char_state: CharState) -> ChunkRange {
+    let char_cc = (char_state.pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
+    ChunkRange {
+        start: Vec3 {
+            x: char_cc.x - LOAD_DISTANCE,
+            y: LOAD_Y_START,
+            z: char_cc.z - LOAD_DISTANCE,
+        },
+        end: Vec3 {
+            x: char_cc.x + LOAD_DISTANCE + 1,
+            y: LOAD_Y_END,
+            z: char_cc.z + LOAD_DISTANCE + 1,
+        },
+    }
 }

@@ -82,6 +82,18 @@ macro_rules! axis_enum {
                 self.0.into_iter()
             }
         }
+
+        impl<T> From<[T; $num_constant]> for $per_name<T> {
+            fn from(array: [T; $num_constant]) -> Self {
+                $per_name(array)
+            }
+        }
+
+        impl<T> Into<[T; $num_constant]> for $per_name<T> {
+            fn into(self) -> [T; $num_constant] {
+                self.0
+            }
+        }
     };
 }
 
