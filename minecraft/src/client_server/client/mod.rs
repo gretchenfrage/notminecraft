@@ -74,6 +74,7 @@ pub struct Client {
     char_name_layed_out: LayedOutTextBlock,
 
     char_state: CharState,
+    noclip: bool,
     vel: Vec3<f32>,
     time_since_ground: f32,
     time_since_jumped: f32,
@@ -177,6 +178,7 @@ impl Client {
 
 
             char_state,
+            noclip: false,
             vel: 0.0.into(),
             time_since_ground: f32::INFINITY,
             time_since_jumped: f32::INFINITY,
@@ -497,16 +499,37 @@ impl GuiStateFrame for Client {
             }
 
             walking_xz.rotate_z(self.char_state.yaw);
-            walking_xz *= /*4.317*/ WALK_SPEED;
+            walking_xz *= WALK_SPEED;
 
-            self.vel.x = walking_xz.x;
-            self.vel.z = walking_xz.y;
+            if !self.noclip {
+                self.vel.x = walking_xz.x;
+                self.vel.z = walking_xz.y;
 
-            // jumping
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
-            {
-                self.vel.y += /*8.4*/ 9.2;
-                self.time_since_jumped = 0.0;
+                // jumping
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
+                {
+                    self.vel.y += 9.2;
+                    self.time_since_jumped = 0.0;
+                }
+            } else {
+                // noclip reset physics variables
+                self.vel = 0.0.into();
+                self.time_since_jumped = f32::INFINITY;
+                self.time_since_ground = f32::INFINITY;
+
+                // noclip movement
+                walking_xz *= elapsed;
+                self.char_state.pos.x += walking_xz.x;
+                self.char_state.pos.z += walking_xz.y;
+
+                let mut fly_y = 0.0;
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
+                    fly_y += 1.0;
+                }
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
+                    fly_y -= 1.0;
+                }
+                self.char_state.pos.y += fly_y * WALK_SPEED * elapsed;
             }
         }
 
@@ -514,29 +537,31 @@ impl GuiStateFrame for Client {
         const FALL_SPEED_DECAY: f32 = 0.98;
 
         // gravity
-        self.vel.y -= GRAVITY_ACCEL * elapsed;
-        self.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * elapsed);
+        if !self.noclip {
+            self.vel.y -= GRAVITY_ACCEL * elapsed;
+            self.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * elapsed);
 
-        // movement and collision
-        self.char_state.pos -= Vec3::from(PLAYER_BOX_POS_ADJUST);
-        let physics = do_physics(
-            elapsed,
-            &mut self.char_state.pos,
-            &mut self.vel,
-            &AaBoxCollisionObject {
-                ext: PLAYER_BOX_EXT.into(),
-            },
-            &WorldPhysicsGeometry {
-                getter: &getter,
-                tile_blocks: &self.tile_blocks,
-                game: ctx.game(),
-            },
-        );
-        self.char_state.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
-        self.time_since_ground += elapsed;
-        self.time_since_jumped += elapsed;
-        if physics.on_ground {
-            self.time_since_ground = 0.0;
+            // movement and collision
+            self.char_state.pos -= Vec3::from(PLAYER_BOX_POS_ADJUST);
+            let physics = do_physics(
+                elapsed,
+                &mut self.char_state.pos,
+                &mut self.vel,
+                &AaBoxCollisionObject {
+                    ext: PLAYER_BOX_EXT.into(),
+                },
+                &WorldPhysicsGeometry {
+                    getter: &getter,
+                    tile_blocks: &self.tile_blocks,
+                    game: ctx.game(),
+                },
+            );
+            self.char_state.pos += Vec3::from(PLAYER_BOX_POS_ADJUST);
+            self.time_since_ground += elapsed;
+            self.time_since_jumped += elapsed;
+            if physics.on_ground {
+                self.time_since_ground = 0.0;
+            }
         }
 
         // pointing
@@ -681,6 +706,8 @@ impl GuiStateFrame for Client {
                 });
             } else if key == VirtualKeyCode::F5 {
                 self.third_person = !self.third_person;
+            } else if key == VirtualKeyCode::F9 {
+                self.noclip = !self.noclip;
             }
         } else {
             if key == VirtualKeyCode::Escape
