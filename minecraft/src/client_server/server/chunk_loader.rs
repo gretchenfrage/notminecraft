@@ -19,7 +19,13 @@ use std::{
         catch_unwind,
         resume_unwind,
     },
-    sync::Arc,
+    sync::{
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+        Arc,
+    },
 };
 use crossbeam_channel::{
     Sender,
@@ -45,16 +51,34 @@ pub struct ReadyChunk {
     pub unsaved: bool,
 }
 
+/// Handle for cancelling a request to the chunk loader to load a chunk.
+/// If this is used to abort the request, subsequent calls to
+/// `ChunkLoader.poll_ready` are guaranteed to not load the chunk, and if
+/// the work of loading it has not yet been performed then time may be
+/// saved by not performing that work. Dropping this handle will not
+/// automatically abort the task.
+#[derive(Debug)]
+pub struct LoadChunkAbortHandle {
+    aborted: Arc<AtomicBool>,
+}
+
+impl LoadChunkAbortHandle {
+    pub fn abort(self) {
+        self.aborted.store(true, Ordering::SeqCst);
+    }
+}
 
 #[derive(Debug, Clone)]
-enum Task {
-    GetChunkReady {
-        cc: Vec3<i64>,
-    },
+struct Task {
+    cc: Vec3<i64>,
+    aborted: Arc<AtomicBool>,
 }
 
 enum TaskResult {
-    ChunkReady(ReadyChunk),
+    ChunkReady {
+        ready_chunk: ReadyChunk,
+        aborted: Arc<AtomicBool>,
+    },
     Panicked(Box<dyn Any + Send + 'static>),
 }
 
@@ -90,25 +114,35 @@ impl ChunkLoader {
     }
 
     /// Asynchronously ask the threadpool to get this chunk ready.
-    pub fn request(&self, cc: Vec3<i64>) {
-        let task = Task::GetChunkReady { cc };
+    pub fn request(&self, cc: Vec3<i64>) -> LoadChunkAbortHandle {
+        let aborted_1 = Arc::new(AtomicBool::new(false));
+        let aborted_2 = Arc::clone(&aborted_1);
+        let task = Task { cc, aborted: aborted_1 };
         let send_result = self.send_task.send(task);
         if send_result.is_err() {
             error!("chunk loader task sender disconnected");
+        }
+        LoadChunkAbortHandle {
+            aborted: aborted_2,
         }
     }
 
     /// Poll for a chunk which are ready to be loaded into the world without
     /// blocking.
     pub fn poll_ready(&self) -> Option<ReadyChunk> {
-        match self.recv_task_result.try_recv() {
-            Ok(TaskResult::ChunkReady(loaded)) => Some(loaded),
-            Ok(TaskResult::Panicked(panic)) => resume_unwind(panic),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => {
-                panic!(
+        loop {
+            match self.recv_task_result.try_recv() {
+                Ok(TaskResult::ChunkReady {
+                    ready_chunk,
+                    aborted,
+                }) => if !aborted.load(Ordering::SeqCst) {
+                    return Some(ready_chunk)
+                },
+                Ok(TaskResult::Panicked(panic)) => resume_unwind(panic),
+                Err(TryRecvError::Empty) => return None,
+                Err(TryRecvError::Disconnected) => panic!(
                     "chunk loaded task result receiver empty and disconnected"
-                );
+                ),
             }
         }
     }
@@ -123,6 +157,9 @@ fn worker_thread_body(
     let loop_result =
         catch_unwind(AssertUnwindSafe(|| {
             while let Ok(task) = recv_task.recv() {
+                if task.aborted.load(Ordering::SeqCst) {
+                    continue;
+                }
                 let task_result = do_task(
                     task,
                     &mut save,
@@ -165,14 +202,9 @@ fn do_task(
     save: &mut SaveFile,
     game: &GameData,
 ) -> TaskResult {
-    match task {
-        Task::GetChunkReady {
-            cc
-        } => TaskResult::ChunkReady(get_chunk_ready(
-            cc,
-            save,
-            game,
-        )),
+    TaskResult::ChunkReady {
+        ready_chunk: get_chunk_ready(task.cc, save, game),
+        aborted: task.aborted,
     }
 }
 
