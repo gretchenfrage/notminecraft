@@ -847,17 +847,21 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         }
 
         // bob animation
-        let bob_animation_sine = f32::sin(inner.bob_animation * 2.0 * PI);
-        let bob_roll = bob_animation_sine * f32::to_radians(MAX_BOB_ROLL_DEGS);
-        let bob_shift = Vec2 {
-            x: bob_animation_sine * MAX_BOB_SHIFT_H,
-            y: -(bob_animation_sine * bob_animation_sine) * MAX_BOB_SHIFT_V,
-        };
-        let bob_translate = Vec3 {
-            x: f32::cos(inner.yaw) * bob_shift.x,
-            y: bob_shift.y,
-            z: f32::sin(inner.yaw) * bob_shift.x,
-        };
+        let mut bob_roll = 0.0;
+        let mut bob_translate = Vec3::from(0.0);
+        if !inner.third_person {
+            let bob_animation_sine = f32::sin(inner.bob_animation * 2.0 * PI);
+            bob_roll = bob_animation_sine * f32::to_radians(MAX_BOB_ROLL_DEGS);
+            let bob_shift = Vec2 {
+                x: bob_animation_sine * MAX_BOB_SHIFT_H,
+                y: -(bob_animation_sine * bob_animation_sine) * MAX_BOB_SHIFT_V,
+            };
+            bob_translate = Vec3 {
+                x: f32::cos(inner.yaw) * bob_shift.x,
+                y: bob_shift.y,
+                z: f32::sin(inner.yaw) * bob_shift.x,
+            };
+        }
 
         // sky
         canvas.reborrow()
