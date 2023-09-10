@@ -481,6 +481,7 @@ impl GuiStateFrame for Client {
         }
 
         const WALK_SPEED: f32 = 4.0;
+        const NOCLIP_SPEED: f32 = 7.0;
 
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
             // walking
@@ -499,9 +500,10 @@ impl GuiStateFrame for Client {
             }
 
             walking_xz.rotate_z(self.char_state.yaw);
-            walking_xz *= WALK_SPEED;
 
             if !self.noclip {
+                walking_xz *= WALK_SPEED;
+
                 self.vel.x = walking_xz.x;
                 self.vel.z = walking_xz.y;
 
@@ -518,18 +520,16 @@ impl GuiStateFrame for Client {
                 self.time_since_ground = f32::INFINITY;
 
                 // noclip movement
-                walking_xz *= elapsed;
-                self.char_state.pos.x += walking_xz.x;
-                self.char_state.pos.z += walking_xz.y;
+                let mut noclip_move = Vec3::new(walking_xz.x, 0.0, walking_xz.y);
 
-                let mut fly_y = 0.0;
                 if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
-                    fly_y += 1.0;
+                    noclip_move.y += 1.0;
                 }
                 if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
-                    fly_y -= 1.0;
+                    noclip_move.y -= 1.0;
                 }
-                self.char_state.pos.y += fly_y * WALK_SPEED * elapsed;
+
+                self.char_state.pos += noclip_move * NOCLIP_SPEED * elapsed;
             }
         }
 
