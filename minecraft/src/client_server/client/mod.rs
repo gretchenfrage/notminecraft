@@ -481,11 +481,13 @@ impl GuiStateFrame for Client {
         }
 
         const WALK_SPEED: f32 = 4.0;
+        const WALK_ACCEL: f32 = 50.0;
+        const WALK_DECEL: f32 = 30.0;
         const NOCLIP_SPEED: f32 = 7.0;
 
+        // WASD buttons
+        let mut walking_xz = Vec2::from(0.0);
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
-            // walking
-            let mut walking_xz = Vec2::from(0.0);
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::W) {
                 walking_xz.y += 1.0;
             }
@@ -498,39 +500,55 @@ impl GuiStateFrame for Client {
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::A) {
                 walking_xz.x -= 1.0;
             }
+        }
+        walking_xz.rotate_z(self.char_state.yaw);
 
-            walking_xz.rotate_z(self.char_state.yaw);
+        if !self.noclip {
+            // walking
+            walking_xz *= WALK_SPEED;
 
-            if !self.noclip {
-                walking_xz *= WALK_SPEED;
-
-                self.vel.x = walking_xz.x;
-                self.vel.z = walking_xz.y;
-
-                // jumping
-                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
-                {
-                    self.vel.y += 9.2;
-                    self.time_since_jumped = 0.0;
-                }
+            // accelerate self.vel xz towards the target value of walking_xz
+            let accel_rate = if walking_xz != Vec2::from(0.0) {
+                WALK_ACCEL
             } else {
-                // noclip reset physics variables
-                self.vel = 0.0.into();
-                self.time_since_jumped = f32::INFINITY;
-                self.time_since_ground = f32::INFINITY;
+                WALK_DECEL
+            };
 
-                // noclip movement
-                let mut noclip_move = Vec3::new(walking_xz.x, 0.0, walking_xz.y);
-
-                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
-                    noclip_move.y += 1.0;
-                }
-                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
-                    noclip_move.y -= 1.0;
-                }
-
-                self.char_state.pos += noclip_move * NOCLIP_SPEED * elapsed;
+            let mut vel_xz = Vec2::new(self.vel.x, self.vel.z);
+            let vel_xz_deviation = walking_xz - vel_xz;
+            let vel_xz_deviation_magnitude = vel_xz_deviation.magnitude();
+            let max_delta_vel_xz_magnitude = accel_rate * elapsed;
+            if max_delta_vel_xz_magnitude > vel_xz_deviation_magnitude {
+                vel_xz = walking_xz;
+            } else {
+                vel_xz += vel_xz_deviation / vel_xz_deviation_magnitude * max_delta_vel_xz_magnitude;
             }
+            self.vel.x = vel_xz.x;
+            self.vel.z = vel_xz.y;
+
+            // jumping
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
+            {
+                self.vel.y += 9.2;
+                self.time_since_jumped = 0.0;
+            }
+        } else {
+            // noclip reset physics variables
+            self.vel = 0.0.into();
+            self.time_since_jumped = f32::INFINITY;
+            self.time_since_ground = f32::INFINITY;
+
+            // noclip movement
+            let mut noclip_move = Vec3::new(walking_xz.x, 0.0, walking_xz.y);
+
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
+                noclip_move.y += 1.0;
+            }
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
+                noclip_move.y -= 1.0;
+            }
+
+            self.char_state.pos += noclip_move * NOCLIP_SPEED * elapsed;
         }
 
         const GRAVITY_ACCEL: f32 = 32.0;
