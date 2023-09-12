@@ -56,10 +56,11 @@ use vek::*;
 /// Manages the sets of loaded chunks for the server and its clients. Side
 /// effects that the rest of the server should process are added to an internal
 /// effects queue. After calling any methods on `ChunkManager` that takes
-/// `&mut self`, events should be taken with `.pop_event()` and processed until
-/// exhausted.
+/// `&mut self`, events should be taken from `ChunkManager.effects` and
+/// processed until exhausted, unless the specific method specifies that this
+/// is not necessary.
 pub struct ChunkManager {
-    effects: VecDeque<Effect>,
+    pub effects: VecDeque<Effect>,
 
     // responsible for asynchronously servicing requests to read a chunk from
     // the save file or generate it if it was never saved.
@@ -115,7 +116,7 @@ pub enum Effect {
         ci: usize,
     },
     /// Chunk has left the loaded state and its ci has been taken away. Remove
-    /// it from other chunks.
+    /// it from other data structures.
     RemoveChunk {
         cc: Vec3<i64>,
         ci: usize,
@@ -157,12 +158,9 @@ impl ChunkManager {
         }
     }
 
-    /// Attempt to pop an effect from the effect queue.
-    pub fn pop_effect(&mut self) -> Option<Effect> {
-        self.effects.pop_front()
-    }
-
     /// Add a client with no loaded chunks or chunk interests.
+    ///
+    /// This does _not_ require draining the effect queue.
     pub fn add_client(&mut self, client_key: usize) {
         self.clientside_chunks.set(client_key, LoadedChunks::new());
     }
@@ -185,6 +183,8 @@ impl ChunkManager {
     }
 
     /// Increment the load request count for the given cc.
+    ///
+    /// This does _not_ require draining the effect queue.
     pub fn incr_load_request_count(&mut self, cc: Vec3<i64>) {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // already loaded, just increment count
@@ -311,6 +311,8 @@ impl ChunkManager {
     }
 
     /// Mark a loaded chunk as unsaved.
+    ///
+    /// This does _not_ require draining the effect queue.
     pub fn mark_unsaved(&mut self, cc: Vec3<i64>, ci: usize) {
         *self.saved.get_mut(cc, ci) = false;
     }
@@ -391,7 +393,7 @@ impl ChunkManager {
 
     /// Given a chunk, iterate through all clients which have it loaded, along
     /// with their clientside ci for the chunk.
-    pub fn iter_clientside<'c>(&'c self, cc: Vec3<i64>, ci: usize) -> impl Iterator<Item=ClientsideChunk> + 'c {
+    pub fn iter_chunk_clientsides<'c>(&'c self, cc: Vec3<i64>, ci: usize) -> impl Iterator<Item=ClientsideChunk> + 'c {
         self.clientside_cis.get(cc, ci).iter()
             .map(|(client_key, &clientside_ci)| ClientsideChunk { client_key, clientside_ci })
     }

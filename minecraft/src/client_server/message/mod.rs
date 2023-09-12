@@ -72,6 +72,10 @@ message_enum!(down DownMessage {
         ci: usize,
         chunk_tile_blocks: ChunkBlocks,
     }
+    RemoveChunk {
+        cc: Vec3<i64>,
+        ci: usize,
+    }
     AddClient {
         client_key: usize,
         username: String,

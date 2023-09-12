@@ -10,10 +10,8 @@ use self::{
         NetworkEvent,
         NetworkServer,
     },
-    chunk_loader::{
-        ChunkLoader,
-        ReadyChunk,
-    },
+    chunk_loader::ChunkLoader,
+    chunk_manager::ChunkManager,
 };
 use super::{
     message::*,
@@ -95,16 +93,26 @@ fn run_server(
 
 
 struct Server {
-    network_server: NetworkServer,
     game: Arc<GameData>,
+    network_server: NetworkServer,
 
-    chunks: LoadedChunks,
+    // tick management
+    tick: u64,
+    next_tick: Instant,
+
+    // chunk management
+    chunk_mgr: ChunkManager,
+    save: SaveFile,
+    last_tick_saved: u64,
+
+    // tick state
     tile_blocks: PerChunk<ChunkBlocks>,
+
+    // connection management
 
     // maps from state-invariant connection keys to which state the connection
     // is in and its key within that state's connection key space
     all_connections: SparseVec<(ConnectionState, usize)>,
-    
     // state connection key spaces
     uninit_connections: Slab<Connection>,
     client_connections: Slab<Connection>,
@@ -114,33 +122,20 @@ struct Server {
     // remains all false except when used
     conn_last_processed_increased: SparseVec<bool>,
 
-    // mapping from client to clientside ci spaces
-    // TODO: could just store a Slab<()> rather than a LoadedChunks in there
-    client_loaded_chunks: SparseVec<LoadedChunks>,
-    // mapping from chunk to client to clientside ci
-    chunk_client_cis: PerChunk<SparseVec<usize>>,
-
     // mapping from client to clientside client key spaces
     // which then maps from clientside client key to serverside client key
     client_clientside_client_keys: SparseVec<Slab<usize>>,
     // maping from client A to client B to client A's clientside client key for B
     client_client_clientside_keys: SparseVec<SparseVec<usize>>,
 
+    // client state
+    
     // mapping from client to username
     client_username: SparseVec<String>,
     // mapping from username to client
     username_client: HashMap<String, usize>,
 
     client_char_state: SparseVec<CharState>,
-
-    save: SaveFile,
-    chunk_unsaved: PerChunk<bool>,
-    last_tick_saved: u64,
-
-    chunk_loader: ChunkLoader,
-
-    tick: u64,
-    next_tick: Instant,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -159,31 +154,34 @@ impl Server {
         game: &Arc<GameData>,
     ) -> Result<Self> {
         let save = SaveFile::open("server", data_dir, game)?;
-        let chunk_loader = ChunkLoader::new(&save, game);
 
         Ok(Server {
-            network_server,
             game: Arc::clone(&game),
-            chunks: LoadedChunks::new(),
+            network_server,
+            
+            tick: 0,
+            next_tick: Instant::now(),
+            
+            chunk_mgr: ChunkManager::new(ChunkLoader::new(&save, game)),
+            save,
+            last_tick_saved: 0,
+
             tile_blocks: PerChunk::new(),
+            
             all_connections: SparseVec::new(),
             uninit_connections: Slab::new(),
             client_connections: Slab::new(),
+            
             conn_last_processed: SparseVec::new(),
             conn_last_processed_increased: SparseVec::new(),
-            client_loaded_chunks: SparseVec::new(),
-            chunk_client_cis: PerChunk::new(),
+            
             client_clientside_client_keys: SparseVec::new(),
             client_client_clientside_keys: SparseVec::new(),
+
             client_username: SparseVec::new(),
             username_client: HashMap::new(),
-            client_char_state: SparseVec::new(),
-            save,
-            chunk_unsaved: PerChunk::new(),
-            last_tick_saved: 0,
-            chunk_loader,
-            tick: 0,
-            next_tick: Instant::now(),
+            
+            client_char_state: SparseVec::new(),    
         })
     }
 
@@ -202,45 +200,52 @@ impl Server {
 
     /// Do a tick.
     fn do_tick(&mut self) {
-        while let Some(chunk) = self.chunk_loader.poll_ready() {
-            self.add_chunk(chunk);
-        }
+        self.chunk_mgr.poll_for_ready_chunks();
+        self.process_chunk_mgr_effects();
     }
 
-    /// Load a chunk in the world
-    fn add_chunk(&mut self, chunk: ReadyChunk) {
-        // TODO more robust system to track set of chunking that are "loading"
-        // for now, we just do this lol
-        if self.chunks.getter().get(chunk.cc).is_some() {
-            return;
+    /// Drain and process chunk manager's effect queue.
+    fn process_chunk_mgr_effects(&mut self) {
+        while let Some(effect) = self.chunk_mgr.effects.pop_front() {
+            match effect {
+                chunk_manager::Effect::AddChunk {
+                    ready_chunk,
+                    ci,
+                } => {
+                    self.tile_blocks.add(ready_chunk.cc, ci, ready_chunk.chunk_tile_blocks);
+                }
+                chunk_manager::Effect::RemoveChunk {
+                    cc,
+                    ci,
+                } => {
+                    self.tile_blocks.remove(cc, ci);
+                }
+                chunk_manager::Effect::AddChunkToClient {
+                    cc,
+                    ci,
+                    client_key,
+                    clientside_ci,
+                } => {
+                    self.send_load_chunk_message(
+                        cc,
+                        clientside_ci,
+                        self.tile_blocks.get(cc, ci),
+                        &self.client_connections[client_key],
+                    );
+                }
+                chunk_manager::Effect::RemoveChunkFromClient {
+                    cc,
+                    ci: _,
+                    client_key,
+                    clientside_ci,
+                } => {
+                    self.client_connections[client_key].send(down::RemoveChunk {
+                        cc,
+                        ci: clientside_ci,
+                    });
+                }
+            }
         }
-
-        // assign it ci in server chunk space
-        let ci = self.chunks.add(chunk.cc);
-
-        let mut client_cis = SparseVec::new();
-
-        for (client_conn_key, conn) in self.client_connections.iter() {
-            // for each connection, assign it ci in that client chunk space
-            let client_ci = self.client_loaded_chunks[client_conn_key].add(chunk.cc);
-
-            // backlink it in this chunk's new chunk_client_cis entry
-            client_cis.set(client_conn_key, client_ci);
-
-            // and send to that client
-            self.send_load_chunk_message(
-                chunk.cc,
-                client_ci,
-                &chunk.chunk_tile_blocks,
-                conn,
-            );
-        }
-
-        // insert into server data structures
-        self.tile_blocks.add(chunk.cc, ci, chunk.chunk_tile_blocks);
-        self.chunk_client_cis.add(chunk.cc, ci, client_cis);
-
-        self.chunk_unsaved.add(chunk.cc, ci, chunk.unsaved);
     }
 
     /// Update `tick` and `next_tick` to schedule the happening of the next tick.
@@ -269,22 +274,22 @@ impl Server {
         }
 
         debug!("saving");
-        
         self.last_tick_saved = self.tick;
 
-        self.save.write(self.chunks.iter()
-            .filter_map(|(cc, ci)| {
-                if *self.chunk_unsaved.get(cc, ci) {
-                    *self.chunk_unsaved.get_mut(cc, ci) = false;
-                    Some(WriteEntry::Chunk(
-                        cc,
-                        clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), &self.game),
-                    ))
-                } else {
-                    None
-                }
-            }))
-            .unwrap(); // TODO: don't panic
+        let writes = self.chunk_mgr.iter_unsaved()
+            .map(|(cc, ci, _)| WriteEntry::Chunk(
+                cc,
+                clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), &self.game),
+            ));
+        self.save.write(writes).unwrap(); // TODO: don't panic
+        
+        for (cc, ci) in self.chunk_mgr
+            .iter_unsaved()
+            .map(|(cc, ci, _)| (cc, ci)).collect::<Vec<_>>()
+        {
+            self.chunk_mgr.mark_saved(cc, ci);
+            self.process_chunk_mgr_effects();
+        }
     }
 
     /// Wait for and process network events until `self.next_tick`.
@@ -344,11 +349,11 @@ impl Server {
         // remove from list of connections
         self.client_connections.remove(client_conn_key);
 
-        // remove client's clientside ci from all chunks
-        for (cc, _) in self.client_loaded_chunks[client_conn_key].iter() {
-            let ci = self.chunks.getter().get(cc).unwrap();
-            self.chunk_client_cis.get_mut(cc, ci).remove(client_conn_key);
-        }
+        // tell chunk manager it's gone
+        let char_state = self.client_char_state[client_conn_key];
+        self.chunk_mgr.remove_client(client_conn_key, char_load_range(char_state).iter());
+        self.process_chunk_mgr_effects();
+
 
         // remove client from other clients
         for (client_conn_key2, client_conn2) in self.client_connections.iter() {
@@ -360,8 +365,6 @@ impl Server {
         }
 
         // remove from other data structures
-        self.client_loaded_chunks.remove(client_conn_key);
-
         self.client_clientside_client_keys.remove(client_conn_key);
         self.client_client_clientside_keys.remove(client_conn_key);
 
@@ -419,6 +422,8 @@ impl Server {
             return;
         }
         */
+
+        // uniqueify username
         if self.username_client.contains_key(&username) {
             let mut i = 2;
             let mut username2;
@@ -429,31 +434,20 @@ impl Server {
             username = username2;
         }
 
+        // move from uninit connection space to client connection space
         let conn = self.uninit_connections.remove(uninit_conn_key);
         let client_conn_key = self.client_connections.insert(conn);
         self.all_connections.set(all_conn_key, (ConnectionState::Client, client_conn_key));
 
-        let mut loaded_chunks = LoadedChunks::new();
+        // tell chunk manager it's here
+        self.chunk_mgr.add_client(client_conn_key);
+        self.process_chunk_mgr_effects();
 
-        // for each chunk already loaded
-        for (cc, ci) in self.chunks.iter() {
-            // add it to the client's loaded chunks set
-            let client_ci = loaded_chunks.add(cc);
-
-            // backlink it in the chunk's chunk_client_cis entry
-            self.chunk_client_cis.get_mut(cc, ci).set(client_conn_key, client_ci);
-            
-            // send the chunk to the client
-            self.send_load_chunk_message(
-                cc,
-                client_ci,
-                self.tile_blocks.get(cc, ci),
-                &self.client_connections[client_conn_key],
-            );
+        // tell chunk manager about it's chunk interests
+        for cc in char_load_range(char_state).iter() {
+            self.chunk_mgr.add_chunk_client_interest(client_conn_key, cc);
+            self.process_chunk_mgr_effects();
         }
-
-        // insert the client's new loaded_chunks set into the server's data structures
-        self.client_loaded_chunks.set(client_conn_key, loaded_chunks);
 
         // tell this new client about all other clients (not including this new one)
         let mut clientside_client_keys = Slab::new();
@@ -499,9 +493,6 @@ impl Server {
         
         self.client_char_state.set(client_conn_key, char_state);
 
-        // request nearby chunks be loaded
-        self.request_load_chunks(char_load_range(char_state).iter());
-
         // announce
         self.broadcast_chat_line(&format!("{} joined the game", username));
     }
@@ -524,7 +515,7 @@ impl Server {
         let up::SetTileBlock { gtc, bid } = msg;
 
         // lookup tile
-        let tile = match self.chunks.getter().gtc_get(gtc) {
+        let tile = match self.chunk_mgr.getter().gtc_get(gtc) {
             Some(tile) => tile,
             None => {
                 info!("client tried SetTileBlock on non-present gtc");
@@ -536,24 +527,26 @@ impl Server {
         tile.get(&mut self.tile_blocks).raw_set(bid, ());
 
         // send update to all clients with that chunk loaded
-        for (client_conn_key, &client_ci) in self.chunk_client_cis.get(tile.cc, tile.ci).iter() {
+        for clientside in self.chunk_mgr.iter_chunk_clientsides(tile.cc, tile.ci) {
             let ack = if self.conn_last_processed_increased[all_conn_key] {
                 self.conn_last_processed_increased[all_conn_key] = false;
                 Some(self.conn_last_processed[all_conn_key])
             } else {
                 None
             };
-            self.client_connections[client_conn_key].send(down::ApplyEdit {
+            self.client_connections[clientside.client_key].send(down::ApplyEdit {
                 ack,
-                ci: client_ci,
+                ci: clientside.clientside_ci,
                 edit: edit::SetTileBlock {
                     lti: tile.lti,
                     bid,
                 }.into(),
             });
             self.conn_last_processed_increased[all_conn_key] = false;
-            *self.chunk_unsaved.get_mut(tile.cc, tile.ci) = true;
         }
+
+        // mark chunk as unsaved    
+        self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);
     }
 
     /// Process the receipt of a `Say` message from a client connection.
@@ -588,15 +581,17 @@ impl Server {
             });
         }
 
-        // request new chunks be loaded
+        // update chunk interests
         let old_char_load_range = char_load_range(old_char_state);
         let new_char_load_range = char_load_range(char_state);
-        if old_char_load_range != new_char_load_range {
-            let char_load_range_added = new_char_load_range.iter_diff(old_char_load_range);
-            self.request_load_chunks(char_load_range_added);
+        for cc in old_char_load_range.iter_diff(new_char_load_range) {
+            self.chunk_mgr.remove_chunk_client_interest(client_conn_key, cc);
+            self.process_chunk_mgr_effects();
         }
-
-        // TODO: request old chunks be unloaded
+        for cc in new_char_load_range.iter_diff(old_char_load_range) {
+            self.chunk_mgr.add_chunk_client_interest(client_conn_key, cc);
+            self.process_chunk_mgr_effects();
+        }
     }
 
     /// Called after processing at least one network event and then processing
@@ -634,17 +629,17 @@ impl Server {
     }
 
     /// Request the loading of the initial set of chunks.
-    fn request_load_initial_chunks(&self) {
-        self.request_load_chunks(ChunkRange {
+    fn request_load_initial_chunks(&mut self) {
+        let ccs = ChunkRange {
             start: [-INITIAL_LOAD_DISTANCE, LOAD_Y_START, INITIAL_LOAD_DISTANCE].into(),
             end: [INITIAL_LOAD_DISTANCE, LOAD_Y_END, INITIAL_LOAD_DISTANCE].into(),
-        }.iter());
-    }
+        };
 
-    /// Request the loading of this set of chunks.
-    fn request_load_chunks(&self, to_request: impl IntoIterator<Item=Vec3<i64>>) {
-        for cc in to_request {
-            self.chunk_loader.request(cc);
+        let mut ccs = ccs.iter().collect::<Vec<_>>();
+        ccs.sort_by_key(|cc| (cc.x * cc.x + cc.z * cc.z, -cc.y));
+
+        for cc in ccs {
+            self.chunk_mgr.incr_load_request_count(cc);
         }
     }
 }

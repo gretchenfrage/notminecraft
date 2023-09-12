@@ -272,6 +272,7 @@ impl Client {
             DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg),
             DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
             DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg)?,
+            DownMessage::RemoveChunk(msg) => self.on_network_message_remove_chunk(msg)?,
             DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx)?,
             DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg),
             DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg),
@@ -295,11 +296,12 @@ impl Client {
     
     fn on_network_message_add_chunk(&mut self, msg: down::AddChunk) -> Result<()> {
         let down::AddChunk { cc, ci, chunk_tile_blocks } = msg;
+        debug!(?cc, ?ci, "client adding chunk");
 
         // insert into data structures
         ensure!(
             self.chunks.add(cc) == ci,
-            "AddChunk message ci did not correspond to slab behavior"
+            "AddChunk message ci did not correspond to slab behavior",
         );
         self.ci_reverse_lookup.set(ci, cc);
 
@@ -338,10 +340,27 @@ impl Client {
 
         Ok(())
     }
+
+    fn on_network_message_remove_chunk(&mut self, msg: down::RemoveChunk) -> Result<()> {
+        let down::RemoveChunk { cc, ci } = msg;
+
+        ensure!(
+            self.chunks.getter().get(cc) == Some(ci),
+            "RemoveChunk message cc and ci did not match",
+        );
+
+        self.chunks.remove(cc);
+        self.ci_reverse_lookup.remove(ci);
+        self.tile_blocks.remove(cc, ci);
+        self.tile_meshes.remove(cc, ci);
+        self.block_updates.remove_chunk(cc, ci);
+        self.prediction.remove_chunk(cc, ci);
+
+        Ok(())
+    }
     
     fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) -> Result<()> {
         let down::AddClient { client_key, username, char_state } = msg;
-        debug!(?client_key, ?username, ?char_state, "client added");
         ensure!(
             self.clients.insert(()) == client_key,
             "AddClient message client key did not correspond to slab behavior",

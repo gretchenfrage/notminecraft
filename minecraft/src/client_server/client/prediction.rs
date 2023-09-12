@@ -58,8 +58,27 @@ impl PredictionManager {
         self.tile_dont_stop_prediction.add(cc, ci, PerTileBool::new());
     }
 
-    // TODO: remove chunk
-    //       must make sure to remove predictions and serversides in that ci
+    pub fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize) {
+        self.tile_has_prediction.remove(cc, ci);
+        self.tile_dont_stop_prediction.remove(cc, ci);
+
+        for opt_prediction in &mut self.predictions {
+            if opt_prediction.as_ref()
+                .map(|prediction| prediction.ci == ci)
+                .unwrap_or(false)
+            {
+                *opt_prediction = None;
+            }
+        }
+        for opt_serverside in &mut self.serversides {
+            if opt_serverside.as_ref()
+                .map(|serverside| serverside.ci == ci)
+                .unwrap_or(false)
+            {
+                *opt_serverside = None;
+            }
+        }
+    }
 
     pub fn make_prediction(
         &mut self,
