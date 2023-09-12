@@ -366,4 +366,40 @@ impl ChunkManager {
         // the chunk from the server.
         self.decr_load_request_count(cc);
     }
+
+    /// Get the set of fully loaded chunks in the server.
+    pub fn chunks(&self) -> &LoadedChunks {
+        &self.chunks
+    }
+
+    /// Convenience method for `self.chunks().getter()`.
+    pub fn getter(&self) -> Getter {
+        self.chunks().getter()
+    }
+
+    /// Check whether a given chunk is marked as saved.
+    pub fn is_saved(&self, cc: Vec3<i64>, ci: usize) -> bool {
+        *self.saved.get(cc, ci)
+    }
+
+    /// Convenience method to iterate through all chunks which are marked as
+    /// not saved.
+    pub fn iter_unsaved<'c>(&'c self) -> impl Iterator<Item=(Vec3<i64>, usize, Getter<'c>)> + 'c {
+        self.chunks().iter_with_getters()
+            .filter(|&(cc, ci, _)| !self.is_saved(cc, ci))
+    }
+
+    /// Given a chunk, iterate through all clients which have it loaded, along
+    /// with their clientside ci for the chunk.
+    pub fn iter_clientside<'c>(&'c self, cc: Vec3<i64>, ci: usize) -> impl Iterator<Item=ClientsideChunk> + 'c {
+        self.clientside_cis.get(cc, ci).iter()
+            .map(|(client_key, &clientside_ci)| ClientsideChunk { client_key, clientside_ci })
+    }
+}
+
+/// Client key and clientside ci for a chunk.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ClientsideChunk {
+    pub client_key: usize,
+    pub clientside_ci: usize,
 }
