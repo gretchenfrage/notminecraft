@@ -13,8 +13,9 @@ use crate::{
 };
 use std::{
     num::NonZeroU64,
-    collection::VecDeque,
+    collections::VecDeque,
 };
+use vek::*;
 
 
 // manages changes to the set of loaded chunks.
@@ -105,7 +106,7 @@ pub struct ChunkManager {
     loading_interested_clients: PerChunk<SparseFlags>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Effect {
     /// Chunk has entered the loaded state and been assigned a ci. Initialize
     /// it in other data structures.
@@ -147,7 +148,7 @@ impl ChunkManager {
             chunks: LoadedChunks::new(),
             clientside_chunks: SparseVec::new(),
             clientside_cis: PerChunk::new(),
-            unsaved: PerChunk::new(),
+            saved: PerChunk::new(),
             load_request_count: PerChunk::new(),
             loading_chunks: LoadedChunks::new(),
             loading_abort_handle: PerChunk::new(),
@@ -196,9 +197,9 @@ impl ChunkManager {
             // going from zero to non-zero; create it in the loading state
             let abort_handle = self.chunk_loader.request(cc);
             let loading_ci = self.loading_chunks.add(cc);
-            self.loading_abort_handle.add(cc, ci, abort_handle);
-            self.loading_load_request_count.add(cc, ci, 1.try_into().unwrap());
-            self.loading_interested_clients.add(cc, ci, SparseFlags::new());
+            self.loading_abort_handle.add(cc, loading_ci, abort_handle);
+            self.loading_load_request_count.add(cc, loading_ci, 1.try_into().unwrap());
+            self.loading_interested_clients.add(cc, loading_ci, SparseFlags::new());
         }
     }
 
@@ -219,7 +220,7 @@ impl ChunkManager {
         } else if let Some(loading_ci) = self.loading_chunks.getter().get(cc) {
             // already loading, try to decrement count
             let count = self.loading_load_request_count.get_mut(cc, loading_ci);
-            if let Ok(decremented) = count.checked_sub(1) {
+            if let Some(decremented) = NonZeroU64::new(count.get() - 1) {
                 // it doesn't reach 0
                 *count = decremented;
             } else {
@@ -266,21 +267,23 @@ impl ChunkManager {
     /// accordingly.
     pub fn poll_for_ready_chunks(&mut self) {
         if let Some(ready_chunk) = self.chunk_loader.poll_ready() {
+            let cc = ready_chunk.cc;
+
             // remove from loading chunks
-            let loading_ci = self.loading_chunks.remove(ready_chunk.cc);
+            let loading_ci = self.loading_chunks.remove(cc);
             
             // remove from corresponding structures
-            self.loading_abort_handle.remove(ready_chunk.cc, loading_ci);
-            let count = self.loading_load_request_count.remove(ready_chunk.cc, loading_ci);
-            let interested_clients = self.loading_load_request_count.remove(ready_chunk.cc, loading_ci);
+            self.loading_abort_handle.remove(cc, loading_ci);
+            let count = self.loading_load_request_count.remove(cc, loading_ci);
+            let interested_clients = self.loading_interested_clients.remove(cc, loading_ci);
 
             // add to loaded chunks
-            let ci = self.chunks.add(ready_chunk.cc);
+            let ci = self.chunks.add(cc);
             
             // initialize in corresponding structures
-            self.clientside_cis.add(ready_chunk.cc, ci, SparseVec::new());
-            self.saved.add(ready_chunk.cc, ci, !ready_chunk.unsaved);
-            self.load_request_count.add(ready_chunk.cc, count.into());
+            self.clientside_cis.add(cc, ci, SparseVec::new());
+            self.saved.add(cc, ci, !ready_chunk.unsaved);
+            self.load_request_count.add(cc, ci, count.into());
 
             // tell the user to add the chunk
             self.effects.push_back(Effect::AddChunk {
@@ -347,7 +350,7 @@ impl ChunkManager {
             let clientside_ci = self.clientside_cis.get_mut(cc, ci).remove(client_key);
             if update_client {
                 self.clientside_chunks[client_key].remove(cc);
-                self.effects.push_back(Effect::RemoveChunk {
+                self.effects.push_back(Effect::RemoveChunkFromClient {
                     cc,
                     ci,
                     client_key,

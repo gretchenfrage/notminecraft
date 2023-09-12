@@ -1,6 +1,7 @@
 
 pub mod connection;
 mod chunk_loader;
+mod chunk_manager;
 
 
 use self::{
