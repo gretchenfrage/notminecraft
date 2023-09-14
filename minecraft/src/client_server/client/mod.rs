@@ -296,7 +296,6 @@ impl Client {
     
     fn on_network_message_add_chunk(&mut self, msg: down::AddChunk) -> Result<()> {
         let down::AddChunk { cc, ci, chunk_tile_blocks } = msg;
-        debug!(?cc, ?ci, "client adding chunk");
 
         // insert into data structures
         ensure!(

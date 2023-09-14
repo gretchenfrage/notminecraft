@@ -51,8 +51,8 @@ const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
 
 const LOAD_Y_START: i64 = 0;
 const LOAD_Y_END: i64 = 2;
-const INITIAL_LOAD_DISTANCE: i64 = 6;
-const LOAD_DISTANCE: i64 = 3;
+const INITIAL_LOAD_DISTANCE: i64 = 12;
+const LOAD_DISTANCE: i64 = 12;
 
 
 /// Spawn a new thread which runs a server forever without it being open to
