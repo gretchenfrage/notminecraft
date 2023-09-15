@@ -14,83 +14,114 @@ use std::time::Instant;
 
 
 macro_rules! server_events {
-    ($( $variant:ident($inner:ty) $send:ident $recv:ident $try_recv:ident $recv_deadline:ident, )*)=>{
-        /// Event that happened outside of the server primary thread that then
-        /// gets sent to the server primary thread asynchronously for it to
-        /// process.
+    ($( $variant:ident($inner:ty) $send:ident $recv:ident $sender:ident $recv_now:ident $recv_by:ident, )*)=>{
+        /// Events sent to the server thread for it to process asynchronously.
         #[derive(Debug)]
-        pub enum ServerEvent {$(
+        pub enum Event {$(
             $variant($inner),
         )*}
 
         $(
-            impl From<$inner> for ServerEvent {
+            impl From<$inner> for Event {
                 fn from(inner: $inner) -> Self {
-                    ServerEvent::$variant(inner)
+                    Event::$variant(inner)
                 }
             }
         )*
 
-        /// Concurrent queues of `ServerEvent` that prioritizes it by variant
-        /// and is capable of polling for only one variant.
+        pub fn event_channel() -> (EventSenders, EventReceiver) {
+            let (send_token, recv_token) = unbounded();
+            $(
+                let ($send, $recv) = unbounded();
+            )*
+            (
+                EventSenders {
+                    send_token,
+                    $(
+                        $send,
+                    )*
+                },
+                EventReceiver {
+                    recv_token,
+                    $(
+                        $recv,
+                    )*
+                },
+            )
+        }
+
         #[derive(Debug, Clone)]
-        pub struct ServerEventQueue {
-            // always send a token after sending an event
-            // sometimes take a token before taking an event
-            // thus message will not become available on any without token
-            // appearing first, but presence of token does not guarantee
-            // message available
+        pub struct EventSenders {
             send_token: Sender<()>,
-            recv_token: Receiver<()>,
-            
             $(
                 $send: Sender<$inner>,
+            )*
+        }
+
+        #[derive(Debug)]
+        pub struct EventSender<T> {
+            send_token: Sender<()>,
+            send: Sender<T>,
+        }
+
+
+        #[derive(Debug, Clone)]
+        pub struct EventReceiver {
+            // always send a token after sending an event
+            // sometimes take a token before taking an event
+            recv_token: Receiver<()>,
+            $(
                 $recv: Receiver<$inner>,
             )*
         }
 
-        impl ServerEventQueue {
-            pub fn new() -> Self {
-                let (send_token, recv_token) = unbounded();
-                $(
-                    let ($send, $recv) = unbounded();
-                )*
-                ServerEventQueue {
-                    send_token,
-                    recv_token,
-                    $(
-                        $send,
-                        $recv,
-                    )*
+        impl EventSenders {
+            $(
+                pub fn $sender(&self) -> EventSender<$inner> {
+                    EventSender {
+                        send_token: self.send_token.clone(),
+                        send: self.$send.clone(),
+                    }
+                }
+            )*
+        }
+
+        impl<T> EventSender<T> {
+            pub fn send(&self, event: T) {
+                let _ = self.send.send(event);
+                let _ = self.send_token.send(());
+            }
+        }
+
+        impl<T> Clone for EventSender<T> {
+            fn clone(&self) -> Self {
+                EventSender {
+                    send_token: self.send_token.clone(),
+                    send: self.send.clone(),
                 }
             }
+        }
 
-            pub fn send(&self, event: impl Into<ServerEvent>) {
-                match event.into() {$(
-                    ServerEvent::$variant(inner) => self.$send.send(inner).unwrap(),
-                )*}
-                self.send_token.send(()).unwrap();
-            }
-
-            fn inner_try_recv(&self) -> Option<ServerEvent> {
+        impl EventReceiver {
+            fn sweep(&self) -> Option<Event> {
                 $(
                     if let Ok(inner) = self.$recv
                         .try_recv()
                         .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
                     {
-                        return Some(ServerEvent::$variant(inner));
+                        return Some(Event::$variant(inner));
                     }
                 )*
                 None
             }
 
-            pub fn try_recv(&self) -> Option<ServerEvent> {
+            pub fn recv_any_now(&self) -> Option<Event> {
                 loop {
                     if self.recv_token.try_recv()
                         .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
                         .is_ok()
                     {
-                        if let Some(event) = self.inner_try_recv() {
+                        if let Some(event) = self.sweep() {
                             return Some(event);
                         }
                     } else {
@@ -99,13 +130,13 @@ macro_rules! server_events {
                 }
             }
 
-            pub fn recv_deadline(&self, deadline: Instant) -> Option<ServerEvent> {
+            pub fn recv_any_by(&self, deadline: Instant) -> Option<Event> {
                 loop {
                     if self.recv_token.recv_deadline(deadline)
                         .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
                         .is_ok()
                     {
-                        if let Some(event) = self.inner_try_recv() {
+                        if let Some(event) = self.sweep() {
                             return Some(event);
                         }
                     } else {
@@ -115,13 +146,13 @@ macro_rules! server_events {
             }
 
             $(
-                pub fn $try_recv(&self) -> Option<$inner> {
+                pub fn $recv_now(&self) -> Option<$inner> {
                     self.$recv.try_recv()
                         .map_err(|e| debug_assert!(matches!(e, TryRecvError::Empty)))
                         .ok()
                 }
 
-                pub fn $recv_deadline(&self, deadline: Instant) -> Option<$inner> {
+                pub fn $recv_by(&self, deadline: Instant) -> Option<$inner> {
                     self.$recv.recv_deadline(deadline)
                         .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
                         .ok()
@@ -131,7 +162,8 @@ macro_rules! server_events {
     };
 }
 
+// the order in which these appear will be the priority in which they're dispensed
 server_events!(
-    Network(NetworkEvent) send_network recv_network try_recv_network recv_network_deadline,
-    ChunkReady(ReadyChunk) send_chunk recv_chunk try_recv_chunk recv_chunk_deadline,
+    Network(NetworkEvent) send_network recv_network network_sender recv_network_now recv_network_by,
+    Chunk(ReadyChunk) send_chunk recv_chunk chunk_sender recv_chunk_now recv_chunk_by,
 );

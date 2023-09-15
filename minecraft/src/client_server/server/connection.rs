@@ -7,7 +7,7 @@ use crate::{
             UpMessage,
             DownMessage,
         },
-        server::event::ServerEventQueue,
+        server::event::EventSender,
         client,
     },
     game_binschema::GameBinschema,
@@ -101,7 +101,7 @@ impl Connection {
 /// Handle to the asynchronous system that serves network connections. Source
 /// of network events.
 pub struct NetworkServer {
-    event_queue: ServerEventQueue,
+    send_event: EventSender<NetworkEvent>,
     // the slab is used to assign connection keys. it is also used to serialize
     // changes to the set of connection keys. when the set of connection keys
     // changes, the thread that changes that must lock the slab, make the change,
@@ -116,7 +116,7 @@ pub struct NetworkServer {
 /// to the network immediately. It is possible to then, at some later point, open
 /// it to the network. That's what this is for.
 pub struct NetworkServerOpener {
-    event_queue: ServerEventQueue,
+    send_event: EventSender<NetworkEvent>,
     slab: Arc<Mutex<Slab<()>>>,
 }
 
@@ -125,15 +125,15 @@ impl NetworkServer {
     /// network server will not actually spawn tasks that start serving network
     /// connections until the opener is called upon to open it. The convenience
     /// `NetworkServer::open` method does that automatically.
-    pub fn new(event_queue: ServerEventQueue) -> (Self, NetworkServerOpener) {
+    pub fn new(send_event: EventSender<NetworkEvent>) -> (Self, NetworkServerOpener) {
         let slab = Arc::new(Mutex::new(Slab::new()));
         (
             NetworkServer {
-                event_queue: event_queue.clone(),
+                send_event: send_event.clone(),
                 slab: Arc::clone(&slab),
             },
             NetworkServerOpener {
-                event_queue: event_queue,
+                send_event,
                 slab,
             }
         )
@@ -142,12 +142,12 @@ impl NetworkServer {
     /// Convenience method to construct a `NetworkServer` and spawn tasks that
     /// opens it up to the network.
     pub fn new_networked(
-        event_queue: ServerEventQueue,
+        send_event: EventSender<NetworkEvent>,
         bind_to: impl ToSocketAddrs + Send + Sync + 'static,
         rt: &Handle,
         game: &Arc<GameData>,
     ) -> Self {
-        let (server, opener) = Self::new(event_queue);
+        let (server, opener) = Self::new(send_event);
         opener.open(bind_to, rt, game);
         server
     }
@@ -155,9 +155,9 @@ impl NetworkServer {
     /// Convenience method to construct a `NetworkServer` that isn't opened up
     /// to a network along with a client `Connection` linked up in-memory.
     pub fn new_internal(
-        event_queue: ServerEventQueue
+        send_event: EventSender<NetworkEvent>,
     ) -> (Self, client::connection::Connection) {
-        let (server, _) = Self::new(event_queue);
+        let (server, _) = Self::new(send_event);
         let client = server.create_in_mem_client().into();
         (server, client)
     }
@@ -172,12 +172,12 @@ impl NetworkServer {
         let connection = Connection {
             send: SendDown::InMem(send_down),
         };
-        let _ = self.event_queue.send(NetworkEvent::NewConnection(key, connection));
+        let _ = self.send_event.send(NetworkEvent::NewConnection(key, connection));
         drop(slab_guard); // take care to send event before unlocking
 
         InMemClient {
             key,
-            event_queue: self.event_queue.clone(),
+            send_event: self.send_event.clone(),
             slab: Arc::clone(&self.slab),
             recv: recv_down,
         }
@@ -189,14 +189,14 @@ impl NetworkServer {
 #[derive(Debug)]
 pub struct InMemClient {
     key: usize,
-    event_queue: ServerEventQueue,
+    send_event: EventSender<NetworkEvent>,
     slab: Arc<Mutex<Slab<()>>>,
     recv: Receiver<DownMessage>,
 }
 
 impl InMemClient {
     pub fn send(&self, msg: UpMessage) {
-        let _ = self.event_queue.send(NetworkEvent::Received(self.key, msg));
+        let _ = self.send_event.send(NetworkEvent::Received(self.key, msg));
     }
 
     pub fn poll(&self) -> Result<Option<DownMessage>> {
@@ -212,7 +212,7 @@ impl Drop for InMemClient {
     fn drop(&mut self) {
         let mut slab_guard = self.slab.lock();
         slab_guard.remove(self.key);
-        let _ = self.event_queue.send(NetworkEvent::Disconnected(self.key));
+        let _ = self.send_event.send(NetworkEvent::Disconnected(self.key));
         drop(slab_guard); // take care to send event before unlocking
     }
 }
@@ -226,7 +226,7 @@ impl NetworkServerOpener {
         rt: &Handle,
         game: &Arc<GameData>,
     ) {
-        let NetworkServerOpener { event_queue, slab } = self;
+        let NetworkServerOpener { send_event, slab } = self;
 
         let rt_2 = Handle::clone(&rt);
         let game = Arc::clone(&game);
@@ -254,7 +254,7 @@ impl NetworkServerOpener {
                     Ok((tcp, _)) => {
                         let slab = Arc::clone(&slab);
                         let rt = Handle::clone(&rt_2);
-                        let event_queue = event_queue.clone();
+                        let send_event = send_event.clone();
                         let game = Arc::clone(&game);
                         rt_2.spawn(async move {
                             // new task just to handle this TCP connection
@@ -262,7 +262,7 @@ impl NetworkServerOpener {
                                 tcp,
                                 slab,
                                 &rt,
-                                event_queue,
+                                send_event,
                                 game,
                             ).await;
                             if let Err(e) = result {
@@ -281,7 +281,7 @@ async fn handle_tcp_connection(
     tcp: TcpStream,
     slab: Arc<Mutex<Slab<()>>>,
     rt: &Handle,
-    event_queue: ServerEventQueue,
+    send_event: EventSender<NetworkEvent>,
     game: Arc<GameData>,
 ) -> Result<()> {
     // do the handshake to upgrade it to websocket
@@ -296,7 +296,7 @@ async fn handle_tcp_connection(
         let connection = Connection {
             send: SendDown::Network(send_to_transmit),
         };
-        let _ = event_queue.send(NetworkEvent::NewConnection(key, connection));
+        let _ = send_event.send(NetworkEvent::NewConnection(key, connection));
         drop(slab_guard); // take care to send event before unlocking
     }
 
@@ -401,7 +401,7 @@ async fn handle_tcp_connection(
                     };
 
                     // deliver
-                    let _ = event_queue.send(NetworkEvent::Received(key, msg));
+                    let _ = send_event.send(NetworkEvent::Received(key, msg));
 
                     // reset
                     coder_state_alloc = coder_state.into_alloc();
@@ -419,7 +419,7 @@ async fn handle_tcp_connection(
     abort_send_task.abort();
     let mut slab_guard = slab.lock();
     slab_guard.remove(key);
-    let _ = event_queue.send(NetworkEvent::Disconnected(key));
+    let _ = send_event.send(NetworkEvent::Disconnected(key));
     drop(slab_guard); // take care to send event before unlocking
 
     Ok(())
