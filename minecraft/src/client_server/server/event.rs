@@ -8,7 +8,7 @@ use crossbeam_channel::{
 };
 use crate::client_server::server::{
     connection::NetworkEvent,
-    chunk_loader::ReadyChunk,
+    chunk_loader::LoadChunkEvent,
 };
 use std::time::Instant;
 
@@ -132,6 +132,9 @@ macro_rules! server_events {
 
             pub fn recv_any_by(&self, deadline: Instant) -> Option<Event> {
                 loop {
+                    if Instant::now() > deadline {
+                        return None;
+                    }
                     if self.recv_token.recv_deadline(deadline)
                         .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
                         .is_ok()
@@ -153,6 +156,9 @@ macro_rules! server_events {
                 }
 
                 pub fn $recv_by(&self, deadline: Instant) -> Option<$inner> {
+                    if Instant::now() > deadline {
+                        return None;
+                    }
                     self.$recv.recv_deadline(deadline)
                         .map_err(|e| debug_assert!(matches!(e, RecvTimeoutError::Timeout)))
                         .ok()
@@ -165,5 +171,5 @@ macro_rules! server_events {
 // the order in which these appear will be the priority in which they're dispensed
 server_events!(
     Network(NetworkEvent) send_network recv_network network_sender recv_network_now recv_network_by,
-    Chunk(ReadyChunk) send_chunk recv_chunk chunk_sender recv_chunk_now recv_chunk_by,
+    LoadChunk(LoadChunkEvent) send_chunk recv_chunk chunk_sender recv_chunk_now recv_chunk_by,
 );

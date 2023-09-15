@@ -11,10 +11,14 @@ use self::{
         NetworkEvent,
         NetworkServer,
     },
-    chunk_loader::ChunkLoader,
+    chunk_loader::{
+        ChunkLoader,
+        LoadChunkEvent,
+    },
     chunk_manager::ChunkManager,
     event::{
         Event,
+        EventSenders,
         EventReceiver,
         event_channel,
     },
@@ -72,7 +76,7 @@ pub fn spawn_internal_server(
     let data_dir = data_dir.clone();
     let game = Arc::clone(&game);
     thread::spawn(move || {
-        if let Err(e) = run_server(recv_event, network_server, &data_dir, &game) {
+        if let Err(e) = run_server(send_event, recv_event, network_server, &data_dir, &game) {
             error!(?e, "internal server crashed");
         }
     });
@@ -88,16 +92,17 @@ pub fn run_networked_server(
 ) -> Result<()> {
     let (send_event, recv_event) = event_channel();
     let network_server = NetworkServer::new_networked(send_event.network_sender(), "127.0.0.1:35565", rt, game);
-    run_server(recv_event, network_server, data_dir, game)
+    run_server(send_event, recv_event, network_server, data_dir, game)
 }
 
 fn run_server(
+    send_event: EventSenders,
     recv_event: EventReceiver,
     network_server: NetworkServer,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
-    Server::new(recv_event, data_dir, game)?.run()
+    Server::new(send_event, recv_event, data_dir, game)?.run()
 }
 
 
@@ -158,6 +163,7 @@ enum ConnectionState {
 impl Server {
     /// Construct. This is expected to be immediately followed by `run`.
     fn new(
+        send_event: EventSenders,
         recv_event: EventReceiver,
         data_dir: &DataDir,
         game: &Arc<GameData>,
@@ -171,7 +177,7 @@ impl Server {
             tick: 0,
             next_tick: Instant::now(),
             
-            chunk_mgr: ChunkManager::new(ChunkLoader::new(&save, game)),
+            chunk_mgr: ChunkManager::new(ChunkLoader::new(send_event.chunk_sender(), &save, game)),
             save,
             last_tick_saved: 0,
 
@@ -203,14 +209,12 @@ impl Server {
             self.do_tick();
             self.update_time_stuff_after_doing_tick();
             self.maybe_save();
-            self.process_network_events_until_next_tick();
+            self.process_events_until_next_tick();
         }
     }
 
     /// Do a tick.
     fn do_tick(&mut self) {
-        self.chunk_mgr.poll_for_ready_chunks();
-        self.process_chunk_mgr_effects();
     }
 
     /// Drain and process chunk manager's effect queue.
@@ -301,20 +305,35 @@ impl Server {
         }
     }
 
-    /// Wait for and process network events until `self.next_tick`.
-    fn process_network_events_until_next_tick(&mut self) {
-        while let Some(event) = self.recv_event.recv_network_by(self.next_tick) {
-            self.on_network_event(event);
-
-            while let Some(event) = self.recv_event.recv_network_now() {
-                self.on_network_event(event);
-            }
-
-            self.after_process_available_network_events();
-        }
+    fn ttnt(&self) -> f32 {
+        (self.next_tick - Instant::now()).as_secs_f32()
     }
 
-    /// Process any network event.
+    /// Wait for and process events until `self.next_tick`.
+    fn process_events_until_next_tick(&mut self) {
+        //debug!(ttnt=%self.ttnt(), "looking for events");
+        while let Some(event) = self.recv_event.recv_any_by(self.next_tick) {
+            //debug!(ttnt=%self.ttnt(), "beginning to process event");
+            match event {
+                Event::Network(event) => self.on_first_available_network_event(event),
+                Event::LoadChunk(event) => self.on_load_chunk_event(event),
+            }
+            //debug!(ttnt=%self.ttnt(), "finished processing that event");
+        }
+        //debug!(ttnt=%self.ttnt(), "done processing events for tick");
+    }
+
+    /// Called when transitioning from not processing network event(s) back-to
+    /// back to doing so.
+    fn on_first_available_network_event(&mut self, event: NetworkEvent) {
+        self.on_network_event(event);
+        while let Some(event) = self.recv_event.recv_network_now() {
+            self.on_network_event(event);
+        }
+        self.after_process_available_network_events();
+    }
+
+    /// Process any single network event.
     fn on_network_event(&mut self, event: NetworkEvent) {
         match event {
             NetworkEvent::NewConnection(all_conn_key, conn) => self.on_new_connection(all_conn_key, conn),
@@ -635,6 +654,13 @@ impl Server {
             ci,
             chunk_tile_blocks: clone_chunk_tile_blocks(chunk_tile_blocks, &self.game),
         });
+    }
+
+    fn on_load_chunk_event(&mut self, event: LoadChunkEvent) {
+        if let Some(ready_chunk) = event.get().unwrap() { // TODO: don't panic (like this)
+            self.chunk_mgr.on_ready_chunk(ready_chunk);
+            self.process_chunk_mgr_effects();
+        } 
     }
 
     /// Request the loading of the initial set of chunks.

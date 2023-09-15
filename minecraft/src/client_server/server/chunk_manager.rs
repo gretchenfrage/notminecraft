@@ -263,38 +263,35 @@ impl ChunkManager {
         self.internal_remove_chunk_client_interest(client_key, cc, true);
     }
 
-    /// Call every tick to poll the chunk loader for ready chunks and process
-    /// accordingly.
-    pub fn poll_for_ready_chunks(&mut self) {
-        if let Some(ready_chunk) = self.chunk_loader.poll_ready() {
-            let cc = ready_chunk.cc;
+    /// Call upon receiving a ready chunk event.
+    pub fn on_ready_chunk(&mut self, ready_chunk: ReadyChunk) {
+        let cc = ready_chunk.cc;
 
-            // remove from loading chunks
-            let loading_ci = self.loading_chunks.remove(cc);
-            
-            // remove from corresponding structures
-            self.loading_abort_handle.remove(cc, loading_ci);
-            let count = self.loading_load_request_count.remove(cc, loading_ci);
-            let interested_clients = self.loading_interested_clients.remove(cc, loading_ci);
+        // remove from loading chunks
+        let loading_ci = self.loading_chunks.remove(cc);
+        
+        // remove from corresponding structures
+        self.loading_abort_handle.remove(cc, loading_ci);
+        let count = self.loading_load_request_count.remove(cc, loading_ci);
+        let interested_clients = self.loading_interested_clients.remove(cc, loading_ci);
 
-            // add to loaded chunks
-            let ci = self.chunks.add(cc);
-            
-            // initialize in corresponding structures
-            self.clientside_cis.add(cc, ci, SparseVec::new());
-            self.saved.add(cc, ci, !ready_chunk.unsaved);
-            self.load_request_count.add(cc, ci, count.into());
+        // add to loaded chunks
+        let ci = self.chunks.add(cc);
+        
+        // initialize in corresponding structures
+        self.clientside_cis.add(cc, ci, SparseVec::new());
+        self.saved.add(cc, ci, ready_chunk.saved);
+        self.load_request_count.add(cc, ci, count.into());
 
-            // tell the user to add the chunk
-            self.effects.push_back(Effect::AddChunk {
-                ready_chunk,
-                ci,
-            });
+        // tell the user to add the chunk
+        self.effects.push_back(Effect::AddChunk { // TODO: could simplify this
+            ready_chunk,
+            ci,
+        });
 
-            // for each client interested in it, add it to that client
-            for client_key in interested_clients.iter() {
-                self.add_chunk_to_client(cc, ci, client_key);
-            }
+        // for each client interested in it, add it to that client
+        for client_key in interested_clients.iter() {
+            self.add_chunk_to_client(cc, ci, client_key);
         }
     }
 

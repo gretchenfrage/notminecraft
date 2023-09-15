@@ -5,6 +5,7 @@ use crate::{
         SaveFile,
         read_key,
     },
+    client_server::server::event::EventSender,
 };
 use chunk_data::{
     CHUNK_EXTENT,
@@ -13,11 +14,9 @@ use chunk_data::{
 };
 use std::{
     thread,
-    any::Any,
     panic::{
         AssertUnwindSafe,
         catch_unwind,
-        resume_unwind,
     },
     sync::{
         atomic::{
@@ -30,9 +29,9 @@ use std::{
 use crossbeam_channel::{
     Sender,
     Receiver,
-    TryRecvError,
 };
 use bracket_noise::prelude::FastNoise;
+use anyhow::{Result, Error, anyhow};
 use vek::*;
 
 
@@ -40,7 +39,35 @@ use vek::*;
 #[derive(Debug)]
 pub struct ChunkLoader {
     send_task: Sender<Task>,
-    recv_task_result: Receiver<TaskResult>,
+}
+
+#[derive(Debug)]
+pub struct LoadChunkEvent(LoadChunkEventInner);
+
+#[derive(Debug)]
+enum LoadChunkEventInner {
+    ChunkReady {
+        ready_chunk: ReadyChunk,
+        aborted: Arc<AtomicBool>,
+    },
+    SaveError(Error),
+    GenerationPanic,
+}
+
+impl LoadChunkEvent {
+    pub fn get(self) -> Result<Option<ReadyChunk>> {
+        match self.0 {
+            LoadChunkEventInner::ChunkReady { ready_chunk, aborted } => {
+                if aborted.load(Ordering::SeqCst) {
+                    Ok(None)
+                } else {
+                    Ok(Some(ready_chunk))
+                }
+            }
+            LoadChunkEventInner::SaveError(e) => Err(e),
+            LoadChunkEventInner::GenerationPanic => Err(anyhow!("world generation panicked")),
+        }
+    }
 }
 
 /// Chunk that is ready to be loaded into the world.
@@ -48,7 +75,7 @@ pub struct ChunkLoader {
 pub struct ReadyChunk {
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
-    pub unsaved: bool,
+    pub saved: bool,
 }
 
 /// Handle for cancelling a request to the chunk loader to load a chunk.
@@ -74,34 +101,26 @@ struct Task {
     aborted: Arc<AtomicBool>,
 }
 
-enum TaskResult {
-    ChunkReady {
-        ready_chunk: ReadyChunk,
-        aborted: Arc<AtomicBool>,
-    },
-    Panicked(Box<dyn Any + Send + 'static>),
-}
-
 
 impl ChunkLoader {
-    pub fn new(save: &SaveFile, game: &Arc<GameData>) -> Self {
+    pub fn new(
+        send_event: EventSender<LoadChunkEvent>,
+        save: &SaveFile,
+        game: &Arc<GameData>,
+    ) -> Self {
         let (send_task, recv_task) = crossbeam_channel::unbounded();
-        let (
-            send_task_result,
-            recv_task_result,
-        ) = crossbeam_channel::unbounded();
 
         let num_threads = num_cpus::get();
 
         for _ in 0..num_threads {
             let recv_task = Receiver::clone(&recv_task);
-            let send_task_result = Sender::clone(&send_task_result);
+            let send_event = send_event.clone();
             let save = SaveFile::clone(save);
             let game = Arc::clone(&game);
 
             thread::spawn(move || worker_thread_body(
                 recv_task,
-                send_task_result,
+                send_event,
                 save,
                 game,
             ));
@@ -109,7 +128,6 @@ impl ChunkLoader {
 
         ChunkLoader {
             send_task,
-            recv_task_result,
         }
     }
 
@@ -126,31 +144,11 @@ impl ChunkLoader {
             aborted: aborted_2,
         }
     }
-
-    /// Poll for a chunk which are ready to be loaded into the world without
-    /// blocking.
-    pub fn poll_ready(&self) -> Option<ReadyChunk> {
-        loop {
-            match self.recv_task_result.try_recv() {
-                Ok(TaskResult::ChunkReady {
-                    ready_chunk,
-                    aborted,
-                }) => if !aborted.load(Ordering::SeqCst) {
-                    return Some(ready_chunk)
-                },
-                Ok(TaskResult::Panicked(panic)) => resume_unwind(panic),
-                Err(TryRecvError::Empty) => return None,
-                Err(TryRecvError::Disconnected) => panic!(
-                    "chunk loaded task result receiver empty and disconnected"
-                ),
-            }
-        }
-    }
 }
 
 fn worker_thread_body(
     recv_task: Receiver<Task>,
-    send_task_result: Sender<TaskResult>,
+    send_event: EventSender<LoadChunkEvent>,
     mut save: SaveFile,
     game: Arc<GameData>,
 ) {
@@ -165,35 +163,16 @@ fn worker_thread_body(
                     &mut save,
                     &game,
                 );
-                let send_result = send_task_result.send(task_result);
-                if send_result.is_err() {
-                    trace!(
-                        "chunk loader task result sender disconnected, \
-                        terminating worker"
-                    );
-                    break;
-                }
+                send_event.send(task_result);
             }
             trace!(
                 "chunk loader task receiver disconnected, terminating \
                 worker"
             );
         }));
-    if let Err(panic) = loop_result {
-        error!("chunk loader worker panicked, sending panic to main loop");
-        let send_result = send_task_result.send(TaskResult::Panicked(panic));
-        if let Err(failed_to_send) = send_result {
-            let panic = match failed_to_send.into_inner() {
-                TaskResult::Panicked(panic) => panic,
-                _ => unreachable!(),
-            };
-            error!(
-                "chunk loader task result sender disconnected when trying to \
-                send chunk loader worker panic, resuming chunk loader worker \
-                panic here"
-            );
-            resume_unwind(panic);
-        }
+    if let Err(_) = loop_result {
+        error!("chunk loader worker panicked");
+        send_event.send(LoadChunkEvent(LoadChunkEventInner::GenerationPanic));
     }
 }
 
@@ -201,25 +180,26 @@ fn do_task(
     task: Task,
     save: &mut SaveFile,
     game: &GameData,
-) -> TaskResult {
-    TaskResult::ChunkReady {
-        ready_chunk: get_chunk_ready(task.cc, save, game),
-        aborted: task.aborted,
-    }
+) -> LoadChunkEvent {
+    LoadChunkEvent(match get_chunk_ready(task.cc, save, game) {
+        Ok(ready_chunk) => LoadChunkEventInner::ChunkReady {
+            ready_chunk,
+            aborted: task.aborted,
+        },
+        Err(e) => LoadChunkEventInner::SaveError(e),
+    })
 }
 
 fn get_chunk_ready(
     cc: Vec3<i64>,
     save: &mut SaveFile,
     game: &GameData,
-) -> ReadyChunk {
-    // TODO: figure out a better way to handle IO errors at this point than
-    //       just panicking
-    if let Some(chunk_tile_blocks) = save.read(read_key::Chunk(cc)).unwrap() {
+) -> Result<ReadyChunk> {
+    Ok(if let Some(chunk_tile_blocks) = save.read(read_key::Chunk(cc))? {
         ReadyChunk {
             cc,
             chunk_tile_blocks,
-            unsaved: false,
+            saved: true,
         }
     } else {
         let mut seed = [0; 32];
@@ -240,9 +220,9 @@ fn get_chunk_ready(
         ReadyChunk {
             cc,
             chunk_tile_blocks,
-            unsaved: true,
+            saved: false,
         }
-    }
+    })
 }
 
 fn generate_chunk_blocks(
