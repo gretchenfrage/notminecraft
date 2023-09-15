@@ -1,4 +1,5 @@
 
+pub mod event;
 pub mod connection;
 mod chunk_loader;
 mod chunk_manager;
@@ -12,6 +13,7 @@ use self::{
     },
     chunk_loader::ChunkLoader,
     chunk_manager::ChunkManager,
+    event::ServerEventQueue,
 };
 use super::{
     message::*,
@@ -61,11 +63,12 @@ pub fn spawn_internal_server(
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> client::connection::Connection {
-    let (network_server, client) = NetworkServer::new_internal();
+    let event_queue = ServerEventQueue::new();
+    let (network_server, client) = NetworkServer::new_internal(event_queue.clone());
     let data_dir = data_dir.clone();
     let game = Arc::clone(&game);
     thread::spawn(move || {
-        if let Err(e) = run_server(network_server, &data_dir, &game) {
+        if let Err(e) = run_server(event_queue, network_server, &data_dir, &game) {
             error!(?e, "internal server crashed");
         }
     });
@@ -79,22 +82,24 @@ pub fn run_networked_server(
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
-    let network_server = NetworkServer::new_networked("127.0.0.1:35565", rt, game);
-    run_server(network_server, data_dir, game)
+    let event_queue = ServerEventQueue::new();
+    let network_server = NetworkServer::new_networked(event_queue.clone(), "127.0.0.1:35565", rt, game);
+    run_server(event_queue, network_server, data_dir, game)
 }
 
 fn run_server(
+    event_queue: ServerEventQueue,
     network_server: NetworkServer,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
-    Server::new(network_server, data_dir, game)?.run()
+    Server::new(event_queue, data_dir, game)?.run()
 }
 
 
 struct Server {
     game: Arc<GameData>,
-    network_server: NetworkServer,
+    event_queue: ServerEventQueue,
 
     // tick management
     tick: u64,
@@ -149,7 +154,7 @@ enum ConnectionState {
 impl Server {
     /// Construct. This is expected to be immediately followed by `run`.
     fn new(
-        network_server: NetworkServer,
+        event_queue: ServerEventQueue,
         data_dir: &DataDir,
         game: &Arc<GameData>,
     ) -> Result<Self> {
@@ -157,7 +162,7 @@ impl Server {
 
         Ok(Server {
             game: Arc::clone(&game),
-            network_server,
+            event_queue,
             
             tick: 0,
             next_tick: Instant::now(),
@@ -294,10 +299,10 @@ impl Server {
 
     /// Wait for and process network events until `self.next_tick`.
     fn process_network_events_until_next_tick(&mut self) {
-        while let Some(event) = self.network_server.recv_deadline(self.next_tick) {
+        while let Some(event) = self.event_queue.recv_network_deadline(self.next_tick) {
             self.on_network_event(event);
 
-            while let Some(event) = self.network_server.poll() {
+            while let Some(event) = self.event_queue.try_recv_network() {
                 self.on_network_event(event);
             }
 
