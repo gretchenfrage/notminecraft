@@ -286,7 +286,7 @@ impl Server {
             return;
         }
 
-        debug!("saving");
+        trace!("saving");
         self.last_tick_saved = self.tick;
 
         let writes = self.chunk_mgr.iter_unsaved()
@@ -305,22 +305,14 @@ impl Server {
         }
     }
 
-    fn ttnt(&self) -> f32 {
-        (self.next_tick - Instant::now()).as_secs_f32()
-    }
-
     /// Wait for and process events until `self.next_tick`.
     fn process_events_until_next_tick(&mut self) {
-        //debug!(ttnt=%self.ttnt(), "looking for events");
         while let Some(event) = self.recv_event.recv_any_by(self.next_tick) {
-            //debug!(ttnt=%self.ttnt(), "beginning to process event");
             match event {
                 Event::Network(event) => self.on_first_available_network_event(event),
                 Event::LoadChunk(event) => self.on_load_chunk_event(event),
             }
-            //debug!(ttnt=%self.ttnt(), "finished processing that event");
         }
-        //debug!(ttnt=%self.ttnt(), "done processing events for tick");
     }
 
     /// Called when transitioning from not processing network event(s) back-to
