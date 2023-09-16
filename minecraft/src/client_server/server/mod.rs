@@ -469,7 +469,7 @@ impl Server {
         self.process_chunk_mgr_effects();
 
         // tell chunk manager about it's chunk interests
-        for cc in char_load_range(char_state).iter() {
+        for cc in dist_sorted_ccs(char_load_range(char_state).iter(), char_state.pos) {
             self.chunk_mgr.add_chunk_client_interest(client_conn_key, cc);
             self.process_chunk_mgr_effects();
         }
@@ -613,7 +613,7 @@ impl Server {
             self.chunk_mgr.remove_chunk_client_interest(client_conn_key, cc);
             self.process_chunk_mgr_effects();
         }
-        for cc in new_char_load_range.iter_diff(old_char_load_range) {
+        for cc in dist_sorted_ccs(new_char_load_range.iter_diff(old_char_load_range), char_state.pos) {
             self.chunk_mgr.add_chunk_client_interest(client_conn_key, cc);
             self.process_chunk_mgr_effects();
         }
@@ -699,4 +699,19 @@ fn char_load_range(char_state: CharState) -> ChunkRange {
             z: char_cc.z + LOAD_DISTANCE + 1,
         },
     }
+}
+
+fn dist_sorted_ccs(ccs: impl IntoIterator<Item=Vec3<i64>>, pos: Vec3<f32>) -> Vec<Vec3<i64>> {
+    let mut ccs = ccs.into_iter().collect::<Vec<_>>();
+    fn square_dist(a: Vec3<f32>, b: Vec3<f32>) -> f32 {
+        (a - b).map(|n| n * n).sum()
+    }
+    fn cc_square_dist(cc: Vec3<i64>, pos: Vec3<f32>) -> f32 {
+        square_dist(
+            (cc.map(|n| n as f32) + 0.5) * CHUNK_EXTENT.map(|n| n as f32),
+            pos,
+        )
+    }
+    ccs.sort_by(|&cc1, &cc2| cc_square_dist(cc1, pos).total_cmp(&cc_square_dist(cc2, pos)));
+    ccs
 }
