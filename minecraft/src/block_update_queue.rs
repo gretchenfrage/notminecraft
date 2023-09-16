@@ -29,10 +29,16 @@ impl BlockUpdateQueue {
     /// tile.
     pub fn enqueue(&mut self, gtc: Vec3<i64>, getter: &Getter) {
         if let Some(tile) = getter.gtc_get(gtc) {
-            if tile.get(&self.tile_queued) == 0 {
-                tile.set(&mut self.tile_queued, 1);
-                self.queue.push_back(tile);
-            }
+            self.enqueue_tile_key(tile);
+        }
+    }
+
+    /// Enqueue a block update at the given tile key, it having been pre-looked
+    /// up and confirmed to currently exist ni the world.
+    pub fn enqueue_tile_key(&mut self, tile: TileKey) {
+        if tile.get(&self.tile_queued) == 0 {
+            tile.set(&mut self.tile_queued, 1);
+            self.queue.push_back(tile);
         }
     }
 

@@ -88,19 +88,17 @@ impl ChunkMesher {
     }
 
     pub fn try_recv(&self) -> Option<MeshedChunk> {
-        self.recv_response.try_recv()
-            .map_err(|e| assert!(
-                matches!(e, TryRecvError::Empty),
-                "mesh chunk response channel disconnected",
-            ))
-            .ok()
-            .and_then(|response| match response {
-                Response::Meshed {
+        loop {
+            match self.recv_response.try_recv() {
+                Ok(Response::Meshed {
                     meshed_chunk,
                     aborted,
-                } => Some(meshed_chunk).filter(|_| !aborted.load(Ordering::SeqCst)),
-                Response::Panicked => panic!("chunk meshing panicked"),
-            })
+                }) => if !aborted.load(Ordering::SeqCst) { return Some(meshed_chunk) },
+                Ok(Response::Panicked) => panic!("chunk meshing panicked"),
+                Err(TryRecvError::Empty) => return None,
+                Err(TryRecvError::Disconnected) => panic!("chunk mesher response channel disconnected"),
+            };
+        }
     }
 }
 
@@ -165,20 +163,25 @@ impl ThreadState {
         self.tile_meshes.add(cc, ci, ChunkMesh::new());
         let getter = self.chunks.getter_pre_cached(cc, ci);
 
-        // mesh each in the chunk
-        for lti in 0..=MAX_LTI {
-            self.mesh_buf.clear();
-            mesh_tile(
-                &mut self.mesh_buf,
-                TileKey { cc, ci, lti },
-                &getter,
-                &self.tile_blocks,
-                &self.game,
-            );
-            self.mesh_buf.translate(lti_to_ltc(lti).map(|n| n as f32));
-            self.tile_meshes.get_mut(cc, ci).set_tile_submesh(lti, &self.mesh_buf);
+        // mesh each tile in the chunk _except_ ones bordering on other chunks
+        for z in 1..CHUNK_EXTENT.z - 1 {
+            for y in 1..CHUNK_EXTENT.y - 1 {
+                for x in 1..CHUNK_EXTENT.x - 1{
+                    let lti = ltc_to_lti(Vec3 { x, y, z });
+                    self.mesh_buf.clear();
+                    mesh_tile(
+                        &mut self.mesh_buf,
+                        TileKey { cc, ci, lti },
+                        &getter,
+                        &self.tile_blocks,
+                        &self.game,
+                    );
+                    self.mesh_buf.translate(lti_to_ltc(lti).map(|n| n as f32));
+                    self.tile_meshes.get_mut(cc, ci).set_tile_submesh(lti, &self.mesh_buf);
+                }
+            }
         }
-
+        
         // reset the fake world and extract back out the chunk mesh
         self.chunks.remove(cc);
         self.tile_blocks.remove(cc, ci);

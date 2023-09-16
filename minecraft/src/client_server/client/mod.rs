@@ -11,6 +11,7 @@ use self::{
     prediction::PredictionManager,
     chunk_mesher::{
         ChunkMesher,
+        MeshedChunk,
         MeshChunkAbortHandle,
     },
 };
@@ -26,6 +27,7 @@ use crate::{
         hex_color::hex_color,
         secs_rem::secs_rem,
     },
+    game_data::GameData,
 };
 use chunk_data::*;
 use mesh_data::*;
@@ -49,6 +51,7 @@ use std::{
         Duration,
     },
     mem::take,
+    sync::Arc,
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -96,7 +99,7 @@ pub struct Client {
     ci_reverse_lookup: SparseVec<Vec3<i64>>,
 
     tile_blocks: PerChunk<ChunkBlocks>,
-    tile_meshes: PerChunk<ChunkMesh>,
+    tile_meshes: PerChunk<MaybePendingChunkMesh>,
     block_updates: BlockUpdateQueue,
 
     prediction: PredictionManager,
@@ -117,11 +120,14 @@ pub struct Client {
 #[derive(Debug)]
 enum MaybePendingChunkMesh {
     ChunkMesh(ChunkMesh),
-    Pending {
-        abort: MeshChunkAbortHandle,
-        buffered_updates: Vec<u16>,
-        update_buffered: PerTileBool,
-    },
+    Pending(PendingChunkMesh),
+}
+
+#[derive(Debug)]
+struct PendingChunkMesh {
+    abort: MeshChunkAbortHandle,
+    buffered_updates: Vec<u16>,
+    update_buffered: PerTileBool,
 }
 
 fn get_username() -> String {
@@ -295,8 +301,8 @@ impl Client {
         match msg {
             DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg),
             DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
-            DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg)?,
-            DownMessage::RemoveChunk(msg) => self.on_network_message_remove_chunk(msg)?,
+            DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg, ctx)?,
+            DownMessage::RemoveChunk(msg) => self.on_network_message_remove_chunk(msg, ctx)?,
             DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx)?,
             DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg),
             DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg),
@@ -318,8 +324,9 @@ impl Client {
         bail!("server rejected log in: {}", message);
     }
     
-    fn on_network_message_add_chunk(&mut self, msg: down::AddChunk) -> Result<()> {
+    fn on_network_message_add_chunk(&mut self, msg: down::AddChunk, ctx: &GuiGlobalContext) -> Result<()> {
         let down::AddChunk { cc, ci, chunk_tile_blocks } = msg;
+
 
         // insert into data structures
         ensure!(
@@ -329,18 +336,25 @@ impl Client {
         self.ci_reverse_lookup.set(ci, cc);
 
         self.tile_blocks.add(cc, ci, chunk_tile_blocks);
-        self.tile_meshes.add(cc, ci, ChunkMesh::new());
         self.block_updates.add_chunk(cc, ci);
 
         self.prediction.add_chunk(cc, ci);
+        
+        // request it be meshed asynchronously
+        // TODO: if the cloning here is expensive, we could potentially optimize
+        //       it a fair bit by doing some arc cow thing
+        self.tile_meshes.add(cc, ci, MaybePendingChunkMesh::Pending(PendingChunkMesh {
+            abort: self.chunk_mesher.request(
+                cc,
+                ci,
+                clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), ctx.game),
+            ),
+            buffered_updates: Vec::new(),
+            update_buffered: PerTileBool::new(),
+        }));
 
-        // enqueue block updates
+        // enqueue block updates to neighbors
         let getter = self.chunks.getter();
-        for lti in 0..=MAX_LTI {
-            let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
-            self.block_updates.enqueue(gtc, &getter);
-        }
-
         for face in FACES {
             let ranges: Vec3<Range<i64>> = face
                 .to_signs()
@@ -351,9 +365,9 @@ impl Client {
                     Sign::Pos => extent..extent + 1,
                 });
 
-            for x in ranges.x {
+            for z in ranges.z {
                 for y in ranges.y.clone() {
-                    for z in ranges.z.clone() {
+                    for x in ranges.x.clone() {
                         let gtc = cc * CHUNK_EXTENT + Vec3 { x, y, z };
                         self.block_updates.enqueue(gtc, &getter);
                     }
@@ -364,8 +378,12 @@ impl Client {
         Ok(())
     }
 
-    fn on_network_message_remove_chunk(&mut self, msg: down::RemoveChunk) -> Result<()> {
+    fn on_network_message_remove_chunk(&mut self, msg: down::RemoveChunk, ctx: &GuiGlobalContext) -> Result<()> {
         let down::RemoveChunk { cc, ci } = msg;
+
+        // removing a chunk from the block update queue requires that there
+        // exist no pending block updates
+        self.do_block_updates(ctx);
 
         ensure!(
             self.chunks.getter().get(cc) == Some(ci),
@@ -375,7 +393,12 @@ impl Client {
         self.chunks.remove(cc);
         self.ci_reverse_lookup.remove(ci);
         self.tile_blocks.remove(cc, ci);
-        self.tile_meshes.remove(cc, ci);
+        if let MaybePendingChunkMesh::Pending(PendingChunkMesh {
+            abort,
+            ..
+        }) = self.tile_meshes.remove(cc, ci) {
+            abort.abort();
+        }
         self.block_updates.remove_chunk(cc, ci);
         self.prediction.remove_chunk(cc, ci);
 
@@ -458,6 +481,39 @@ impl Client {
         self.time_since_ground < GROUND_DETECTION_PERIOD
         && self.time_since_jumped > GROUND_DETECTION_PERIOD
     }
+
+    fn do_block_updates(&mut self, ctx: &GuiGlobalContext) {
+        let mut mesh_buf = MeshData::new();
+        let getter = self.chunks.getter();
+        while let Some(tile) = self.block_updates.pop() {
+            match self.tile_meshes.get_mut(tile.cc, tile.ci) {
+                &mut MaybePendingChunkMesh::ChunkMesh(ref mut chunk_mesh) => {
+                    // re-mesh tile
+                    mesh_buf.clear();
+                    mesh_tile(
+                        &mut mesh_buf,
+                        tile,
+                        &getter,
+                        &self.tile_blocks,
+                        ctx.game,
+                    );
+                    mesh_buf.translate(lti_to_ltc(tile.lti).map(|n| n as f32));
+                    chunk_mesh.set_tile_submesh(tile.lti, &mesh_buf);
+                }
+                &mut MaybePendingChunkMesh::Pending(PendingChunkMesh {
+                    ref mut buffered_updates,
+                    ref mut update_buffered,
+                    ..
+                }) => {
+                    // buffer update to be re-applied when the initial mesh is received
+                    if !update_buffered.get(tile.lti) {
+                        update_buffered.set(tile.lti, true);
+                        buffered_updates.push(tile.lti);
+                    }
+                }
+            }
+        }
+    }
 }
 
 
@@ -502,22 +558,49 @@ impl GuiStateFrame for Client {
             }
         }
 
-        // do block updates
-        let mut mesh_buf = MeshData::new();
-        let getter = self.chunks.getter();
-        while let Some(tile) = self.block_updates.pop() {
-            // re-mesh
-            mesh_buf.clear();
-            mesh_tile(
-                &mut mesh_buf,
-                tile,
-                &getter,
-                &self.tile_blocks,
-                ctx.game(),
-            );
-            mesh_buf.translate(lti_to_ltc(tile.lti).map(|n| n as f32));
-            tile.set(&mut self.tile_meshes, &mesh_buf);
+        // deal with chunks finished being initially meshed
+        while let Some(MeshedChunk { cc, ci, mesh }) = self.chunk_mesher.try_recv() {
+            // enqueue buffered block updates
+            let chunk_tile_meshes = self.tile_meshes.get_mut(cc, ci);
+            match chunk_tile_meshes {
+                &mut MaybePendingChunkMesh::Pending(
+                    PendingChunkMesh { ref buffered_updates, .. }
+                ) => for &lti in buffered_updates {
+                    self.block_updates.enqueue_tile_key(TileKey { cc, ci, lti });
+                },
+                &mut MaybePendingChunkMesh::ChunkMesh(_) => unreachable!(),
+            }
+
+            // enqueue block updates for internal fecs
+            for fec in FACES_EDGES_CORNERS {
+                let ranges: Vec3<Range<i64>> = fec
+                    .to_signs()
+                    .zip(CHUNK_EXTENT)
+                    .map(|(sign, extent)| match sign {
+                        Sign::Neg => 0..1,
+                        Sign::Zero => 1..extent - 1,
+                        Sign::Pos => extent - 1..extent,
+                    });
+
+                for z in ranges.z {
+                    for y in ranges.y.clone() {
+                        for x in ranges.x.clone() {
+                            self.block_updates.enqueue_tile_key(TileKey {
+                                cc,
+                                ci,
+                                lti: ltc_to_lti(Vec3 { x, y, z }),
+                            });
+                        }
+                    }
+                }
+            }
+
+            // switch over
+            *chunk_tile_meshes = MaybePendingChunkMesh::ChunkMesh(mesh);
         }
+
+        // do block updates
+        self.do_block_updates(ctx.global());
 
         const WALK_SPEED: f32 = 4.0;
         const WALK_ACCEL: f32 = 50.0;
@@ -594,6 +677,7 @@ impl GuiStateFrame for Client {
         const FALL_SPEED_DECAY: f32 = 0.98;
 
         // gravity
+        let getter = self.chunks.getter();
         if !self.noclip {
             self.vel.y -= GRAVITY_ACCEL * elapsed;
             self.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * elapsed);
@@ -864,7 +948,7 @@ struct WorldGuiBlock<'a> {
 
     chunks: &'a LoadedChunks,
     tile_blocks: &'a PerChunk<ChunkBlocks>,
-    tile_meshes: &'a mut PerChunk<ChunkMesh>,
+    tile_meshes: &'a mut PerChunk<MaybePendingChunkMesh>,
 
     char_mesh: &'a CharMesh,
     char_name_layed_out: &'a LayedOutTextBlock,
@@ -882,7 +966,9 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
 
         // apply any pending chunk tile mesh patches
         for (cc, ci) in inner.chunks.iter() {
-            inner.tile_meshes.get_mut(cc, ci).patch(&*ctx.global.renderer.borrow());
+            if let &mut MaybePendingChunkMesh::ChunkMesh(ref mut chunk_mesh) = inner.tile_meshes.get_mut(cc, ci) {
+                chunk_mesh.patch(&*ctx.global.renderer.borrow());
+            }
         }
 
         // bob animation
@@ -938,12 +1024,11 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             }
 
             // blocks
-            canvas.reborrow()
-                .translate(pos)
-                .draw_mesh(
-                    (&*inner.tile_meshes).get(cc, ci).mesh(),
-                    &ctx.assets().blocks,
-                );
+            if let &MaybePendingChunkMesh::ChunkMesh(ref chunk_mesh) = (&*inner.tile_meshes).get(cc, ci) {
+                canvas.reborrow()
+                    .translate(pos)
+                    .draw_mesh(chunk_mesh.mesh(), &ctx.assets().blocks);
+            }
         }
 
         // my character
@@ -1533,4 +1618,14 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<Crosshair> {
                 tex_extent: 1.0.into(),
             }));
     }
+}
+
+fn clone_chunk_tile_blocks(chunk_tile_blocks: &ChunkBlocks, game: &Arc<GameData>) -> ChunkBlocks {
+    // TODO: deduplicate this function. maybe move it to GameData.
+    let mut chunk_tile_blocks_clone = ChunkBlocks::new(&game.blocks);
+    for lti in 0..=MAX_LTI {
+        chunk_tile_blocks.raw_meta::<()>(lti);
+        chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
+    }
+    chunk_tile_blocks_clone
 }

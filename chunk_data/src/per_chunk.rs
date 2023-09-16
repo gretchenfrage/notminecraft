@@ -62,6 +62,7 @@ impl<T> PerChunk<T> {
     }
 }
 
+// TODO: rename get to ci_get to prevent silly interference thing
 impl<'a, T> CiGet for &'a PerChunk<T> {
     type Output = &'a T;
 
