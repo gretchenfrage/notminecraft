@@ -8,14 +8,6 @@ mod quad;
 mod differ;
 
 
-use graphics::{
-    GpuVecContext,
-    frame_content::{
-        Vertex,
-        Mesh,
-    },
-};
-
 pub use crate::{
     quad::{
         Quad,
@@ -26,6 +18,14 @@ pub use crate::{
         GpuVecDiff,
     },
 };
+use graphics::{
+    GpuVecContext,
+    frame_content::{
+        Vertex,
+        Mesh,
+    },
+};
+use vek::*;
 
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -95,5 +95,12 @@ impl MeshData {
         self.indices
             .chunks(3)
             .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+    }
+
+    pub fn translate(&mut self, by: impl Into<Vec3<f32>>) {
+        let by = by.into();
+        for vert in &mut self.vertices {
+            vert.pos += by;
+        }
     }
 }

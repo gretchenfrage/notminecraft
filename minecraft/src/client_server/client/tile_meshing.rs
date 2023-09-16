@@ -11,6 +11,8 @@ use mesh_data::{
 use vek::*;
 
 
+/// Fills `mesh_buf` with the mesh data for `tile`, with the mesh being
+/// relative to the tile's position.
 pub fn mesh_tile(
     mesh_buf: &mut MeshData,
     tile: TileKey,
@@ -43,7 +45,7 @@ pub fn mesh_tile(
     }
 }
 
-pub fn mesh_simple_face(
+fn mesh_simple_face(
     mesh_buf: &mut MeshData,
     face: Face,
     tex_index: usize,

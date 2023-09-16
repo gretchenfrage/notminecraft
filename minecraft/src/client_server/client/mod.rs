@@ -3,11 +3,16 @@ pub mod connection;
 mod apply_edit;
 mod tile_meshing;
 mod prediction;
+mod chunk_mesher;
 
 use self::{
     connection::Connection,
     tile_meshing::mesh_tile,
     prediction::PredictionManager,
+    chunk_mesher::{
+        ChunkMesher,
+        MeshChunkAbortHandle,
+    },
 };
 use super::message::*;
 use crate::{
@@ -85,6 +90,8 @@ pub struct Client {
     bob_animation: f32,
     third_person: bool,
 
+    chunk_mesher: ChunkMesher,
+
     chunks: LoadedChunks,
     ci_reverse_lookup: SparseVec<Vec3<i64>>,
 
@@ -105,6 +112,16 @@ pub struct Client {
     menu_resources: MenuResources,
 
     chat: GuiChat,
+}
+
+#[derive(Debug)]
+enum MaybePendingChunkMesh {
+    ChunkMesh(ChunkMesh),
+    Pending {
+        abort: MeshChunkAbortHandle,
+        buffered_updates: Vec<u16>,
+        update_buffered: PerTileBool,
+    },
 }
 
 fn get_username() -> String {
@@ -167,8 +184,13 @@ impl Client {
                 wrap_width: None,
             });
 
-        ctx.capture_mouse();
+        let chunk_mesher = ChunkMesher::new(
+            ctx.thread_pool,
+            || ctx.renderer.borrow().create_async_gpu_vec_context(),
+            ctx.game,
+        );
 
+        ctx.capture_mouse();
 
         Client {
             connection,
@@ -188,6 +210,8 @@ impl Client {
 
             bob_animation: 0.0,
             third_person: false,
+
+            chunk_mesher,
 
             chunks: LoadedChunks::new(),
             ci_reverse_lookup: SparseVec::new(),
@@ -491,10 +515,7 @@ impl GuiStateFrame for Client {
                 &self.tile_blocks,
                 ctx.game(),
             );
-            let ltc_f = lti_to_ltc(tile.lti).map(|n| n as f32);
-            for vertex in &mut mesh_buf.vertices {
-                vertex.pos += ltc_f;
-            }
+            mesh_buf.translate(lti_to_ltc(tile.lti).map(|n| n as f32));
             tile.set(&mut self.tile_meshes, &mesh_buf);
         }
 
