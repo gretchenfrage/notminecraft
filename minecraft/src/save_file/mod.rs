@@ -29,6 +29,7 @@ const SAVES_SUBDIR: &'static str = "saves";
 /// Clone-shareable. Methods may take `&mut` merely as an optimization to reuse
 /// allocations across operations within a handle, and thus do not actually imply
 /// mutual exclusion of state changes beyond effects on operation performance.
+#[derive(Debug)]
 pub struct SaveFile {
     shared: Arc<Shared>,
     coder_state_alloc: Option<CoderStateAlloc>,
@@ -37,6 +38,7 @@ pub struct SaveFile {
 }
 
 // inner shared state
+#[derive(Debug)]
 struct Shared {
     db: DB,
     key_schema: Schema,

@@ -2,6 +2,7 @@
 use crate::{
 	asset::Assets,
 	sound::SoundPlayer,
+	thread_pool::ThreadPool,
 	game_data::GameData,
 	gui::{
 		context::{
@@ -126,6 +127,7 @@ struct State {
     renderer: RefCell<Renderer>,
     tokio: Handle,
     clipboard: Clipboard,
+    thread_pool: ThreadPool,
     sound_player: SoundPlayer,
     assets: Assets,
     data_dir: DataDir,
@@ -151,6 +153,7 @@ impl State {
 		window: &Window,
 		renderer: Renderer,
 		tokio: Handle,
+		thread_pool: ThreadPool,
 		sound_player: SoundPlayer,
 		assets: Assets,
 		data_dir: DataDir,
@@ -175,6 +178,7 @@ impl State {
 			renderer: RefCell::new(renderer),
 			tokio,
 			clipboard: Clipboard::new(),
+			thread_pool,
 			sound_player,
 			assets,
 			data_dir,
@@ -209,6 +213,7 @@ impl State {
 					renderer: &self.renderer,
 					tokio: &self.tokio,
 					clipboard: &self.clipboard,
+					thread_pool: &self.thread_pool,
 					sound_player: &self.sound_player,
 					assets: &self.assets,
 					data_dir: &self.data_dir,
@@ -255,11 +260,12 @@ pub struct GuiEventLoop {
 	window: Arc<Window>,
 	pub renderer: Renderer,
 	tokio: Handle,
+	thread_pool: ThreadPool,
 	sound_player: SoundPlayer,
 }
 
 impl GuiEventLoop {
-	pub fn new(tokio: &Handle) -> Self {
+	pub fn new(tokio: &Handle, thread_pool: ThreadPool) -> Self {
 		let event_loop = EventLoop::new();
 		let window = WindowBuilder::new()
 			.with_inner_size(LogicalSize::new(854, 480))
@@ -279,6 +285,7 @@ impl GuiEventLoop {
 			window,
 			renderer,
 			tokio: Handle::clone(&tokio),
+			thread_pool,
 			sound_player,
 		}		
 	}
@@ -295,6 +302,7 @@ impl GuiEventLoop {
 			&self.window,
 			self.renderer,
 			self.tokio,
+			self.thread_pool,
 			self.sound_player,
 			assets,
 			data_dir,

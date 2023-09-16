@@ -37,6 +37,7 @@ use crate::{
         SaveFile,
         WriteEntry,
     },
+    thread_pool::ThreadPool,
 };
 use chunk_data::*;
 use get_assets::DataDir;
@@ -68,6 +69,7 @@ const LOAD_DISTANCE: i64 = 12;
 /// Spawn a new thread which runs a server forever without it being open to
 /// the network, only open to an in-mem connection, which is returned.
 pub fn spawn_internal_server(
+    thread_pool: ThreadPool,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> client::connection::Connection {
@@ -76,7 +78,7 @@ pub fn spawn_internal_server(
     let data_dir = data_dir.clone();
     let game = Arc::clone(&game);
     thread::spawn(move || {
-        if let Err(e) = run_server(send_event, recv_event, network_server, &data_dir, &game) {
+        if let Err(e) = run_server(send_event, recv_event, &thread_pool, network_server, &data_dir, &game) {
             error!(?e, "internal server crashed");
         }
     });
@@ -87,22 +89,24 @@ pub fn spawn_internal_server(
 /// the current thread.
 pub fn run_networked_server(
     rt: &Handle,
+    thread_pool: &ThreadPool,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
     let (send_event, recv_event) = event_channel();
     let network_server = NetworkServer::new_networked(send_event.network_sender(), "127.0.0.1:35565", rt, game);
-    run_server(send_event, recv_event, network_server, data_dir, game)
+    run_server(send_event, recv_event, thread_pool, network_server, data_dir, game)
 }
 
 fn run_server(
     send_event: EventSenders,
     recv_event: EventReceiver,
+    thread_pool: &ThreadPool,
     network_server: NetworkServer,
     data_dir: &DataDir,
     game: &Arc<GameData>,
 ) -> Result<()> {
-    Server::new(send_event, recv_event, data_dir, game)?.run()
+    Server::new(send_event, recv_event, thread_pool, data_dir, game)?.run()
 }
 
 
@@ -165,6 +169,7 @@ impl Server {
     fn new(
         send_event: EventSenders,
         recv_event: EventReceiver,
+        thread_pool: &ThreadPool,
         data_dir: &DataDir,
         game: &Arc<GameData>,
     ) -> Result<Self> {
@@ -177,7 +182,7 @@ impl Server {
             tick: 0,
             next_tick: Instant::now(),
             
-            chunk_mgr: ChunkManager::new(ChunkLoader::new(send_event.chunk_sender(), &save, game)),
+            chunk_mgr: ChunkManager::new(ChunkLoader::new(thread_pool, || send_event.chunk_sender(), &save, game)),
             save,
             last_tick_saved: 0,
 

@@ -142,7 +142,7 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    let connection = spawn_internal_server(ctx.data_dir, ctx.game);
+    let connection = spawn_internal_server(ctx.thread_pool.clone(), ctx.data_dir, ctx.game);
     ctx.push_state_frame(Client::new(connection, ctx));
 }
 

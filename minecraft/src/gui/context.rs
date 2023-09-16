@@ -3,6 +3,7 @@
 use crate::{
     asset::Assets,
     sound::SoundPlayer,
+    thread_pool::ThreadPool,
     game_data::GameData,
     gui::{
         gui_event_loop::EventLoopEffectQueue,
@@ -43,6 +44,7 @@ pub struct GuiGlobalContext<'c> {
     pub time_since_epoch: Duration,
     pub renderer: &'c RefCell<Renderer>,
     pub tokio: &'c Handle,
+    pub thread_pool: &'c ThreadPool,
     pub clipboard: &'c Clipboard,
     pub sound_player: &'c SoundPlayer,
     pub assets: &'c Assets,

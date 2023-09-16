@@ -16,6 +16,7 @@ pub mod client_server;
 pub mod game_binschema;
 pub mod menu;
 pub mod save_file;
+pub mod thread_pool;
 
 
 use crate::{
@@ -26,6 +27,7 @@ use crate::{
         loader::AssetLoader,
         Assets,
     },
+    thread_pool::ThreadPool,
 };
 use get_assets::DataDir;
 use std::{
@@ -149,6 +151,7 @@ fn main() {
 
     // initialize things that'll be used even if it's server only
     let rt = Runtime::new().unwrap();
+    let thread_pool = ThreadPool::new();
     let game = GameData::new();
     let game = Arc::new(game);
     let data_dir = DataDir::new();
@@ -160,7 +163,7 @@ fn main() {
         &[_] => (),
         &[_, "--server"] => {
             info!("running server");
-            let result = client_server::server::run_networked_server(rt.handle(), &data_dir, &game);
+            let result = client_server::server::run_networked_server(rt.handle(), &thread_pool, &data_dir, &game);
             match result {
                 Ok(()) => {
                     info!("server shutting down");
@@ -187,7 +190,7 @@ fn main() {
         .map_err(|e| error!(%e, "unable to acquire assets"));
 
     // initialize rest of game runtime, including actually loading assets
-    let mut event_loop = GuiEventLoop::new(rt.handle());
+    let mut event_loop = GuiEventLoop::new(rt.handle(), thread_pool.clone());
 
     let assets = rt
         .block_on(async {
@@ -201,7 +204,7 @@ fn main() {
         let game_2 = Arc::clone(&game);
         let data_dir = data_dir.clone();
         std::thread::spawn(move || {
-            let result = client_server::server::run_networked_server(&rt_handle, &data_dir, &game_2);
+            let result = client_server::server::run_networked_server(&rt_handle, &thread_pool, &data_dir, &game_2);
             match result {
                 Ok(()) => info!("server shutting down"),
                 Err(e) => error!(%e, "server shutting down"),

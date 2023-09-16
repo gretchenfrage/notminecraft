@@ -15,11 +15,13 @@ use crossbeam_channel::{
 
 
 /// Pool of threads for processing moderately heavy-weight jobs.
+#[derive(Debug, Clone)]
 pub struct ThreadPool {
     state: Arc<ThreadPoolState>,
 }
 
 /// See `ThreadPool.create_domain`.
+#[derive(Debug, Clone)]
 pub struct ThreadPoolDomain<T> {
     state: Arc<ThreadPoolState>,
     domain_idx: usize,
@@ -27,12 +29,14 @@ pub struct ThreadPoolDomain<T> {
     _p: PhantomData<T>,
 }
 
+#[derive(Debug)]
 struct ThreadPoolState {
     index_state: Mutex<DomainIndexState>,
     send_any: Sender<MsgToAny>,
     send_alls: Vec<Sender<MsgToAll>>,
 }
 
+#[derive(Debug)]
 struct DomainIndexState {
     assigner: Slab<u128>,
     counter: u128,
@@ -78,7 +82,7 @@ fn thread_body(recv_any: Receiver<MsgToAny>, recv_all: Receiver<MsgToAll>) {
             .get_mut(domain_idx)
             .filter(|&&mut (_, domain_ctr2)| domain_ctr == domain_ctr2)
         {
-            job(domain);
+            job(domain.as_mut());
         }
     }
 }
@@ -115,7 +119,11 @@ impl ThreadPool {
     /// will be dropped and pending tasks submitted on that domain may be
     /// dropped without being ran (which is only for performance, as relying on
     /// that for behavior is probably impossible without race conditions).
-    pub fn create_domain<T: Send + Clone + 'static>(&self, state: &T) -> ThreadPoolDomain<T> {
+    pub fn create_domain<F, T>(&self, mut create_state: F) -> ThreadPoolDomain<T>
+    where
+        F: FnMut() -> T,
+        T: Send + 'static
+    {
         let mut guard = self.state.index_state.lock();
         let domain_ctr = guard.counter;
         guard.counter = guard.counter.checked_add(1).unwrap();
@@ -124,7 +132,7 @@ impl ThreadPool {
             send_all.send(MsgToAll::AddDomain {
                 domain_idx,
                 domain_ctr,
-                state: Box::new(state.clone()),
+                state: Box::new(create_state()),
             }).unwrap();
         }
         drop(guard);
