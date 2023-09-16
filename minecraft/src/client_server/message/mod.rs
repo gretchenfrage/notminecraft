@@ -112,4 +112,5 @@ pub struct CharState {
     pub pitch: f32,
     pub yaw: f32,
     pub pointing: bool,
+    pub load_dist: u8,
 }

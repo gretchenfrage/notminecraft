@@ -92,6 +92,7 @@ pub struct Client {
 
     bob_animation: f32,
     third_person: bool,
+    change_load_dist_accum: f32,
 
     chunk_mesher: ChunkMesher,
 
@@ -169,6 +170,7 @@ impl Client {
             pitch: f32::to_radians(-30.0),
             yaw: f32::to_radians(0.0),
             pointing: false,
+            load_dist: 0,
         };
 
         connection.send(UpMessage::LogIn(up::LogIn {
@@ -216,6 +218,7 @@ impl Client {
 
             bob_animation: 0.0,
             third_person: false,
+            change_load_dist_accum: 0.0,
 
             chunk_mesher,
 
@@ -262,6 +265,7 @@ impl Client {
                 pitch: self.char_state.pitch,
                 yaw: self.char_state.yaw,
                 pointing: self.char_state.pointing,
+                load_dist: self.char_state.load_dist,
 
                 chunks: &self.chunks,
                 tile_blocks: &self.tile_blocks,
@@ -514,6 +518,13 @@ impl Client {
             }
         }
     }
+
+    fn try_jump(&mut self) {
+        if !self.noclip && self.on_ground() {
+            self.vel.y += 9.2;
+            self.time_since_jumped = 0.0;
+        }
+    }
 }
 
 
@@ -606,6 +617,13 @@ impl GuiStateFrame for Client {
         const WALK_ACCEL: f32 = 50.0;
         const WALK_DECEL: f32 = 30.0;
         const NOCLIP_SPEED: f32 = 7.0;
+        const NOCLIP_FAST_MULTIPLIER: f32 = 8.0;
+
+        // change load distance
+        self.char_state.load_dist = self.char_state.load_dist.saturating_add_signed(
+            self.change_load_dist_accum.clamp(-100.0, 100.0) as i8
+        );
+        self.change_load_dist_accum %= 1.0;
 
         // WASD buttons
         let mut walking_xz = Vec2::from(0.0);
@@ -649,10 +667,8 @@ impl GuiStateFrame for Client {
             self.vel.z = vel_xz.y;
 
             // jumping
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) && self.on_ground()
-            {
-                self.vel.y += 9.2;
-                self.time_since_jumped = 0.0;
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
+                self.try_jump();
             }
         } else {
             // noclip reset physics variables
@@ -668,6 +684,10 @@ impl GuiStateFrame for Client {
             }
             if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
                 noclip_move.y -= 1.0;
+            }
+
+            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LControl) {
+                noclip_move *= NOCLIP_FAST_MULTIPLIER;
             }
 
             self.char_state.pos += noclip_move * NOCLIP_SPEED * elapsed;
@@ -830,9 +850,12 @@ impl GuiStateFrame for Client {
 
     fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
         if self.menu_stack.is_empty() {
+            // game style
             if key == VirtualKeyCode::Escape {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::EscMenu);
+            } else if key == VirtualKeyCode::Space {
+                self.try_jump();
             } else if key == VirtualKeyCode::E {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::Inventory);
@@ -849,8 +872,13 @@ impl GuiStateFrame for Client {
                 self.third_person = !self.third_person;
             } else if key == VirtualKeyCode::F9 {
                 self.noclip = !self.noclip;
+            } else if key == VirtualKeyCode::PageUp {
+                self.char_state.load_dist = self.char_state.load_dist.saturating_add(1);
+            } else if key == VirtualKeyCode::PageDown {
+                self.char_state.load_dist = self.char_state.load_dist.saturating_sub(1);
             }
         } else {
+            // menu style
             if key == VirtualKeyCode::Escape
                 || (
                     key == VirtualKeyCode::E
@@ -886,6 +914,10 @@ impl GuiStateFrame for Client {
                 }
             }
         }
+    }
+
+    fn on_captured_mouse_scroll(&mut self, _: &GuiWindowContext, amount: ScrolledAmount) {
+        self.change_load_dist_accum += amount.to_pixels(64.0).y / 64.0;
     }
 
     fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
@@ -942,6 +974,7 @@ struct WorldGuiBlock<'a> {
     pitch: f32,
     yaw: f32,
     pointing: bool,
+    load_dist: u8,
 
     bob_animation: f32,
     third_person: bool,
@@ -1099,9 +1132,40 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 }
             }
         }
+
+        // debug box for load dist
+        let load_dist = inner.load_dist as f32;
+        let chunk_ext = CHUNK_EXTENT.map(|n| n as f32);
+
+        let mut load_cc_start = (inner.pos / chunk_ext).map(|n| n.floor()) - load_dist;
+        load_cc_start.y = 0.0;
+        let mut load_cc_ext = Vec3::from(1.0 + load_dist * 2.0);
+        load_cc_ext.y = 2.0;
+
+        draw_debug_box(
+            &mut canvas,
+            load_cc_start * chunk_ext,
+            load_cc_ext * chunk_ext,
+        );
     }
 }
 
+fn draw_debug_box(canvas: &mut Canvas3, pos: impl Into<Vec3<f32>>, ext: impl Into<Vec3<f32>>) {
+    let ext = ext.into();
+    let mut canvas = canvas.reborrow()
+        .translate(pos.into())
+        .color(Rgba::red());
+    for edge in EDGES {
+        let [start, end] = edge.to_corners()
+            .map(|corner| corner.to_poles()
+                .map(|pole| match pole {
+                    Pole::Neg => 0.0,
+                    Pole::Pos => 1.0,
+                }) * ext);
+        canvas.reborrow()
+            .draw_line(start, end);
+    }
+}
 
 // ==== menu stuff ====
 

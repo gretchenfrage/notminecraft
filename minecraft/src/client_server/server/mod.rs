@@ -62,8 +62,8 @@ const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
 
 const LOAD_Y_START: i64 = 0;
 const LOAD_Y_END: i64 = 2;
-const INITIAL_LOAD_DISTANCE: i64 = 12;
-const LOAD_DISTANCE: i64 = 12;
+const INITIAL_LOAD_DISTANCE: i64 = /* 12 */ 0;
+//const LOAD_DISTANCE: i64 = 12;
 
 
 /// Spawn a new thread which runs a server forever without it being open to
@@ -687,16 +687,17 @@ fn clone_chunk_tile_blocks(chunk_tile_blocks: &ChunkBlocks, game: &Arc<GameData>
 
 fn char_load_range(char_state: CharState) -> ChunkRange {
     let char_cc = (char_state.pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
+    let load_distance = char_state.load_dist as i64;
     ChunkRange {
         start: Vec3 {
-            x: char_cc.x - LOAD_DISTANCE,
+            x: char_cc.x - load_distance,
             y: LOAD_Y_START,
-            z: char_cc.z - LOAD_DISTANCE,
+            z: char_cc.z - load_distance,
         },
         end: Vec3 {
-            x: char_cc.x + LOAD_DISTANCE + 1,
+            x: char_cc.x + load_distance + 1,
             y: LOAD_Y_END,
-            z: char_cc.z + LOAD_DISTANCE + 1,
+            z: char_cc.z + load_distance + 1,
         },
     }
 }
