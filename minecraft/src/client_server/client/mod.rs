@@ -92,7 +92,6 @@ pub struct Client {
 
     bob_animation: f32,
     third_person: bool,
-    change_load_dist_accum: f32,
 
     chunk_mesher: ChunkMesher,
 
@@ -170,7 +169,7 @@ impl Client {
             pitch: f32::to_radians(-30.0),
             yaw: f32::to_radians(0.0),
             pointing: false,
-            load_dist: 0,
+            load_dist: 6,
         };
 
         connection.send(UpMessage::LogIn(up::LogIn {
@@ -218,7 +217,6 @@ impl Client {
 
             bob_animation: 0.0,
             third_person: false,
-            change_load_dist_accum: 0.0,
 
             chunk_mesher,
 
@@ -619,12 +617,6 @@ impl GuiStateFrame for Client {
         const NOCLIP_SPEED: f32 = 7.0;
         const NOCLIP_FAST_MULTIPLIER: f32 = 8.0;
 
-        // change load distance
-        self.char_state.load_dist = self.char_state.load_dist.saturating_add_signed(
-            self.change_load_dist_accum.clamp(-100.0, 100.0) as i8
-        );
-        self.change_load_dist_accum %= 1.0;
-
         // WASD buttons
         let mut walking_xz = Vec2::from(0.0);
         if ctx.global().focus_level == FocusLevel::MouseCaptured {
@@ -916,10 +908,6 @@ impl GuiStateFrame for Client {
         }
     }
 
-    fn on_captured_mouse_scroll(&mut self, _: &GuiWindowContext, amount: ScrolledAmount) {
-        self.change_load_dist_accum += amount.to_pixels(64.0).y / 64.0;
-    }
-
     fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
         if let Some(&mut Menu::ChatInput {
             ref mut t_preventer,
@@ -1063,8 +1051,6 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .translate(pos)
                     .draw_mesh(chunk_mesh.mesh(), &ctx.assets().blocks);
             }
-
-            draw_debug_box(&mut canvas, pos, ext);
         }
 
         // my character
