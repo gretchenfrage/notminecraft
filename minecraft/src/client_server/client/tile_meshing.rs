@@ -7,6 +7,8 @@ use chunk_data::*;
 use mesh_data::{
     MeshData,
     Quad,
+    QUAD_INDICES,
+    FLIPPED_QUAD_INDICES,
 };
 use vek::*;
 
@@ -70,27 +72,6 @@ fn mesh_simple_face(
 
     // get quad start and extents
     let (pos_start, pos_exts) = face.quad_start_extents();
-
-
-
-    /*
-    let (
-        pos_start,
-        pos_ext_1,
-        pos_ext_2,
-    ) = match face {
-        Face::PosX => ([1, 0, 0], [0, 1,  0], [ 0, 0,  1]),
-        Face::NegX => ([0, 0, 1], [0, 1,  0], [ 0, 0, -1]),
-        Face::PosY => ([0, 1, 0], [0, 0,  1], [ 1, 0,  0]),
-        Face::NegY => ([0, 0, 1], [0, 0, -1], [ 1, 0,  0]),
-        Face::PosZ => ([1, 0, 1], [0, 1,  0], [-1, 0,  0]),
-        Face::NegZ => ([0, 0, 0], [0, 1,  0], [ 1, 0,  0]),
-    };
-    */
-
-    //let pos_start = Vec3::from(pos_start).map(|n: i32| n as f32);
-    //let pos_ext_1 = Extent3::from(pos_ext_1).map(|n: i32| n as f32);
-    //let pos_ext_2 = Extent3::from(pos_ext_2).map(|n: i32| n as f32);
 
     // calculate vertex lighting
     let mut vert_rgbs = [color.rgb(); 4];
@@ -164,14 +145,19 @@ fn mesh_simple_face(
         pos_ext_2,
     ] = pos_exts.map(|pos_ext| pos_ext.to_vec().map(|n| n as f32));
     let vert_colors = vert_rgbs.map(|rgb| Rgba::from((rgb, color.a)));
-    mesh_buf
-        .add_quad(&Quad {
-            pos_start,
-            pos_ext_1: pos_ext_1.into(),
-            pos_ext_2: pos_ext_2.into(),
-            tex_start: 0.0.into(),
-            tex_extent: 1.0.into(),
-            vert_colors,
-            tex_index,
-        });
+    let quad = Quad {
+        pos_start,
+        pos_ext_1: pos_ext_1.into(),
+        pos_ext_2: pos_ext_2.into(),
+        tex_start: 0.0.into(),
+        tex_extent: 1.0.into(),
+        vert_colors,
+        tex_index,
+    };
+    let flip = vert_rgbs[0].sum() + vert_rgbs[2].sum()
+        < vert_rgbs[1].sum() + vert_rgbs[3].sum();
+    let indices =
+        if flip { FLIPPED_QUAD_INDICES }
+        else { QUAD_INDICES };
+    mesh_buf.extend(quad.to_vertices(), indices);
 }

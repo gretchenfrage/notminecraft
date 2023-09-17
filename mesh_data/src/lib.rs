@@ -12,6 +12,7 @@ pub use crate::{
     quad::{
         Quad,
         QUAD_INDICES,
+        FLIPPED_QUAD_INDICES,
     },
     differ::{
         MeshDiffer,

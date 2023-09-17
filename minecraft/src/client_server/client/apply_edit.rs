@@ -23,9 +23,12 @@ pub fn apply_edit(
                 .replace(lti, BlockId::new(bid), ());
             old_meta.cast::<()>();
             let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
-            block_updates.enqueue(gtc, getter);
-            for face in FACES {
-                block_updates.enqueue(gtc + face.to_vec(), getter);
+            for z in -1..=1 {
+                for y in -1..=1 {
+                    for x in -1..=1 {
+                        block_updates.enqueue(gtc + Vec3 { x, y, z }, getter);
+                    }
+                }
             }
             edit::SetTileBlock {
                 lti: lti,

@@ -67,3 +67,8 @@ pub const QUAD_INDICES: [usize; INDICES_PER_QUAD] = [
     0, 1, 3,
     3, 1, 2,
 ];
+
+pub const FLIPPED_QUAD_INDICES: [usize; INDICES_PER_QUAD] = [
+    0, 1, 2,
+    0, 2, 3,
+];

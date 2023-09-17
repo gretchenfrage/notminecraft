@@ -359,8 +359,8 @@ impl Client {
 
         // enqueue block updates to neighbors
         let getter = self.chunks.getter();
-        for face in FACES {
-            let ranges: Vec3<Range<i64>> = face
+        for fec in FACES_EDGES_CORNERS {
+            let ranges: Vec3<Range<i64>> = fec
                 .to_signs()
                 .zip(CHUNK_EXTENT)
                 .map(|(sign, extent)| match sign {
