@@ -55,6 +55,7 @@ fn mesh_simple_face(
     tile_blocks: &PerChunk<ChunkBlocks>,
     game: &GameData,
 ) {
+    // short circuit if obscured
     let gtc2 = gtc + face.to_vec();
     let obscured = getter
         .gtc_get(gtc2)
@@ -63,48 +64,114 @@ fn mesh_simple_face(
             game.blocks_mesh_logic.get(bid2).obscures(-face)
         })
         .unwrap_or(true);
-    if !obscured {
-        let (
-            pos_start,
-            pos_ext_1,
-            pos_ext_2,
-        ) = match face {
-            Face::PosX => ([1, 0, 0], [0, 1,  0], [ 0, 0,  1]),
-            Face::NegX => ([0, 0, 1], [0, 1,  0], [ 0, 0, -1]),
-            Face::PosY => ([0, 1, 0], [0, 0,  1], [ 1, 0,  0]),
-            Face::NegY => ([0, 0, 1], [0, 0, -1], [ 1, 0,  0]),
-            Face::PosZ => ([1, 0, 1], [0, 1,  0], [-1, 0,  0]),
-            Face::NegZ => ([0, 0, 0], [0, 1,  0], [ 1, 0,  0]),
-        };
-
-        let pos_start = Vec3::from(pos_start)
-            .map(|n: i32| n as f32);
-        let pos_ext_1 = Extent3::from(pos_ext_1)
-            .map(|n: i32| n as f32);
-        let pos_ext_2 = Extent3::from(pos_ext_2)
-            .map(|n: i32| n as f32);
-
-        let face_darken = match face {
-            Face::PosY => 0,
-            Face::PosX | Face::NegX => 1,
-            Face::PosZ | Face::NegZ => 2,
-            Face::NegY => 3,
-        };
-
-        let mut color = color;
-        for i in 0..3 {
-            color[i] *= 1.0 - 0.07 * face_darken as f32;
-        }
-        
-        mesh_buf
-            .add_quad(&Quad {
-                pos_start,
-                pos_ext_1,
-                pos_ext_2,
-                tex_start: 0.0.into(),
-                tex_extent: 1.0.into(),
-                vert_colors: [color; 4],
-                tex_index,
-            });
+    if obscured {
+        return;
     }
+
+    // get quad start and extents
+    let (pos_start, pos_exts) = face.quad_start_extents();
+
+
+
+    /*
+    let (
+        pos_start,
+        pos_ext_1,
+        pos_ext_2,
+    ) = match face {
+        Face::PosX => ([1, 0, 0], [0, 1,  0], [ 0, 0,  1]),
+        Face::NegX => ([0, 0, 1], [0, 1,  0], [ 0, 0, -1]),
+        Face::PosY => ([0, 1, 0], [0, 0,  1], [ 1, 0,  0]),
+        Face::NegY => ([0, 0, 1], [0, 0, -1], [ 1, 0,  0]),
+        Face::PosZ => ([1, 0, 1], [0, 1,  0], [-1, 0,  0]),
+        Face::NegZ => ([0, 0, 0], [0, 1,  0], [ 1, 0,  0]),
+    };
+    */
+
+    //let pos_start = Vec3::from(pos_start).map(|n: i32| n as f32);
+    //let pos_ext_1 = Extent3::from(pos_ext_1).map(|n: i32| n as f32);
+    //let pos_ext_2 = Extent3::from(pos_ext_2).map(|n: i32| n as f32);
+
+    // calculate vertex lighting
+    let mut vert_rgbs = [color.rgb(); 4];
+
+    // calculate ambient occlusion
+    for (corner, ext_coefs) in [
+        [Pole::Neg, Pole::Neg],
+        [Pole::Pos, Pole::Neg],
+        [Pole::Pos, Pole::Pos],
+        [Pole::Neg, Pole::Pos],
+    ].into_iter().enumerate() {
+        let sides_occlude: [bool; 2] = [0, 1].map(|i| {
+            let gtc3 = gtc2 + pos_exts[i].to_vec() * ext_coefs[i].to_int();
+            getter
+                .gtc_get(gtc3)
+                .map(|tile3| {
+                    let bid3 = tile3.get(tile_blocks).get();
+                    game.blocks_mesh_logic.get(bid3).obscures(-ext_coefs[i] * pos_exts[i])
+                })
+                .unwrap_or(false)
+        });
+        let corner_occlude: f32 = {
+            let mut gtc3 = gtc2;
+            for i in 0..2 {
+                gtc3 += pos_exts[i].to_vec() * ext_coefs[i].to_int();
+            }
+            getter
+                .gtc_get(gtc3)
+                .map(|tile3| {
+                    let bid3 = tile3.get(tile_blocks).get();
+                    let mesh_logic = game.blocks_mesh_logic.get(bid3);
+                    let mut corner_obscure = 0.0;
+                    for i in 0..2 {
+                        if mesh_logic.obscures(-ext_coefs[i] * pos_exts[i]) {
+                            corner_obscure += 0.5;
+                        }
+                    }
+                    corner_obscure
+                })
+                .unwrap_or(0.0)
+        };
+        let occlude_lighting =
+            1.0 - (0.25 / 3.0) * if sides_occlude[0] && sides_occlude[1] {
+                3.0
+            } else {
+                corner_occlude
+                + sides_occlude[0] as i32 as f32
+                + sides_occlude[1] as i32 as f32
+            };
+        vert_rgbs[corner] *= occlude_lighting;
+    }
+
+    // calculate axis lighting
+    let axis_lighting = 1.0 - match face {
+        Face::PosY => 0,
+        Face::PosX | Face::NegX => 1,
+        Face::PosZ | Face::NegZ => 2,
+        Face::NegY => 3,
+    } as f32 * 0.07;
+    for vert_rgb in &mut vert_rgbs {
+        *vert_rgb *= axis_lighting;
+    }
+    
+    // mesh the quad
+    let pos_start = pos_start.to_poles().map(|pole| match pole {
+        Pole::Neg => 0.0,
+        Pole::Pos => 1.0,
+    });
+    let [
+        pos_ext_1,
+        pos_ext_2,
+    ] = pos_exts.map(|pos_ext| pos_ext.to_vec().map(|n| n as f32));
+    let vert_colors = vert_rgbs.map(|rgb| Rgba::from((rgb, color.a)));
+    mesh_buf
+        .add_quad(&Quad {
+            pos_start,
+            pos_ext_1: pos_ext_1.into(),
+            pos_ext_2: pos_ext_2.into(),
+            tex_start: 0.0.into(),
+            tex_extent: 1.0.into(),
+            vert_colors,
+            tex_index,
+        });
 }

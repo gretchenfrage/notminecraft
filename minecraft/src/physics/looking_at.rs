@@ -53,7 +53,6 @@ pub fn compute_looking_at(
                 dist: collision.dt,
                 face: Some(collision.barrier_face),
             })
-
     }
 }
 

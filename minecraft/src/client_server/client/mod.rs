@@ -1052,7 +1052,8 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         for (cc, ci) in inner.chunks.iter() {
             // frustum culling
             let pos = (cc * CHUNK_EXTENT).map(|n| n as f32);
-            if !view_proj.is_volume_visible(pos, CHUNK_EXTENT.map(|n| n as f32).into()) {
+            let ext = CHUNK_EXTENT.map(|n| n as f32).into();
+            if !view_proj.is_volume_visible(pos, ext) {
                 continue;
             }
 
@@ -1062,6 +1063,8 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .translate(pos)
                     .draw_mesh(chunk_mesh.mesh(), &ctx.assets().blocks);
             }
+
+            draw_debug_box(&mut canvas, pos, ext);
         }
 
         // my character

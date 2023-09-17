@@ -4,6 +4,7 @@ use std::{
         Index,
         IndexMut,
         Neg,
+        Mul,
     },
     convert::TryFrom,
 };
@@ -242,6 +243,17 @@ scalarlike_axis_enum!(
         Pos = (1) = -Neg,
     ),
 );
+
+impl<T: Neg<Output=T>> Mul<T> for Pole {
+    type Output = T;
+
+    fn mul(self, rhs: T) -> T {
+        match self {
+            Pole::Pos => rhs,
+            Pole::Neg => -rhs,
+        }
+    }
+}
 
 impl Sign {
     pub const fn of_i64(n: i64) -> Self {

@@ -46,6 +46,8 @@ impl ViewProj {
             size.h,
             0.01,
             10000.0,
+            //0.1,
+            //100.0,
         );
         /*
         proj.cols.x.w = 0.0;
