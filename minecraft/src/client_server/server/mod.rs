@@ -3,6 +3,7 @@ pub mod event;
 pub mod connection;
 mod chunk_loader;
 mod chunk_manager;
+mod per_connection;
 
 
 use self::{
