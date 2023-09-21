@@ -7,12 +7,13 @@ members = [
     "get_assets",
     "minecraft",
     "binschema",
-    "game_binschema_derive"
+    "game_binschema_derive",
 ]
 resolver = "2"
 
 [patch.crates-io]
 ab_glyph = { path = "ab_glyph" }
+slab = { path = "slab" }
 
 [profile.dev]
 opt-level = 3
