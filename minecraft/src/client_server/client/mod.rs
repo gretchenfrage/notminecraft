@@ -172,10 +172,10 @@ impl Client {
             load_dist: 6,
         };
 
-        connection.send(UpMessage::LogIn(up::LogIn {
+        connection.send(up::LogIn {
             username: username.clone(),
-            char_state,
-        }));
+        });
+        connection.send(up::JoinGame {});
 
         let char_mesh = CharMesh::new(ctx);
         let char_name_layed_out = ctx.renderer.borrow()
@@ -207,7 +207,7 @@ impl Client {
 
 
             char_state,
-            noclip: false,
+            noclip: true,
             vel: 0.0.into(),
             time_since_ground: f32::INFINITY,
             time_since_jumped: f32::INFINITY,
@@ -301,34 +301,43 @@ impl Client {
 
     fn on_network_message(&mut self, msg: DownMessage, ctx: &GuiGlobalContext) -> Result<()> {
         match msg {
-            DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg),
-            DownMessage::RejectLogin(msg) => self.on_network_message_reject_login(msg)?,
+            DownMessage::Close(msg) => self.on_network_message_close(msg)?,
+            DownMessage::AcceptLogin(msg) => self.on_network_message_accept_login(msg)?,
+            DownMessage::ShouldJoinGame(msg) => self.on_network_message_should_join_game(msg)?,
             DownMessage::AddChunk(msg) => self.on_network_message_add_chunk(msg, ctx)?,
             DownMessage::RemoveChunk(msg) => self.on_network_message_remove_chunk(msg, ctx)?,
             DownMessage::AddClient(msg) => self.on_network_message_add_client(msg, ctx)?,
-            DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg),
-            DownMessage::ThisIsYou(msg) => self.on_network_message_this_is_you(msg),
-            DownMessage::ApplyEdit(msg) => self.on_network_message_apply_edit(msg),
-            DownMessage::Ack(msg) => self.on_network_message_ack(msg),
-            DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx),
-            DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg),
+            DownMessage::RemoveClient(msg) => self.on_network_message_remove_client(msg)?,
+            DownMessage::ApplyEdit(msg) => self.on_network_message_apply_edit(msg)?,
+            DownMessage::Ack(msg) => self.on_network_message_ack(msg)?,
+            DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx)?,
+            DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg)?,
         }
         Ok(())
     }
 
-    fn on_network_message_accept_login(&mut self, msg: down::AcceptLogin) {
-        let down::AcceptLogin {} = msg;
-        info!("yippeee! initialized");
+    fn on_network_message_close(&mut self, msg: down::Close) -> Result<()> {
+        let down::Close {} = msg;
+        bail!("server closed connection");
     }
-    
-    fn on_network_message_reject_login(&mut self, msg: down::RejectLogin) -> Result<()> {
-        let down::RejectLogin { message } = msg;
-        bail!("server rejected log in: {}", message);
+
+    fn on_network_message_accept_login(&mut self, msg: down::AcceptLogin) -> Result<()> {
+        let down::AcceptLogin {} = msg;
+        info!("server accepted login");
+        Ok(())
+    }
+
+    fn on_network_message_should_join_game(&mut self, msg: down::ShouldJoinGame) -> Result<()> {
+        let down::ShouldJoinGame { own_client_key } = msg;
+        info!("client fully initialized");
+        self.my_client_key = Some(own_client_key);
+        self.char_state = self.client_char_state[own_client_key];
+        self.noclip = false;
+        Ok(())
     }
     
     fn on_network_message_add_chunk(&mut self, msg: down::AddChunk, ctx: &GuiGlobalContext) -> Result<()> {
         let down::AddChunk { cc, ci, chunk_tile_blocks } = msg;
-
 
         // insert into data structures
         ensure!(
@@ -429,35 +438,33 @@ impl Client {
         self.client_username.set(client_key, username);
         self.client_char_state.set(client_key, char_state);
         self.client_char_name_layed_out.set(client_key, char_name_layed_out);
+
         Ok(())
     }
     
-    fn on_network_message_remove_client(&mut self, msg: down::RemoveClient) {
+    fn on_network_message_remove_client(&mut self, msg: down::RemoveClient) -> Result<()> {
         let down::RemoveClient { client_key } = msg;
-        debug!(?client_key, "client removed");
         self.clients.remove(client_key);
         self.client_username.remove(client_key);
         self.client_char_state.remove(client_key);
         self.client_char_name_layed_out.remove(client_key);
+
+        Ok(())
     }
     
-    fn on_network_message_this_is_you(&mut self, msg: down::ThisIsYou) {
-        let down::ThisIsYou { client_key } = msg;
-        debug!(?client_key, "this is you!");
-        self.my_client_key = Some(client_key);
-    }
-
-    fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) {
+    fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) -> Result<()> {
         self.prediction.process_apply_edit_msg(
             msg,
             &self.chunks,
             &self.ci_reverse_lookup,
             &mut self.tile_blocks,
             &mut self.block_updates,
-        )
+        );
+
+        Ok(())
     }
     
-    fn on_network_message_ack(&mut self, msg: down::Ack) {
+    fn on_network_message_ack(&mut self, msg: down::Ack) -> Result<()> {
         let down::Ack { last_processed } = msg;
         self.prediction.process_ack(
             last_processed,
@@ -466,17 +473,23 @@ impl Client {
             &mut self.tile_blocks,
             &mut self.block_updates,
         );
+
+        Ok(())
     }
     
-    fn on_network_message_chat_line(&mut self, msg: down::ChatLine, ctx: &GuiGlobalContext) {
+    fn on_network_message_chat_line(&mut self, msg: down::ChatLine, ctx: &GuiGlobalContext) -> Result<()> {
         let down::ChatLine { line } = msg;
         self.chat.add_line(line, ctx);
+
+        Ok(())
     }
 
-    fn on_network_message_set_char_state(&mut self, msg: down::SetCharState) {
+    fn on_network_message_set_char_state(&mut self, msg: down::SetCharState) -> Result<()> {
         let down::SetCharState { client_key, char_state } = msg;
         let () = self.clients[client_key];
         self.client_char_state[client_key] = char_state;
+
+        Ok(())
     }
 
     fn on_ground(&self) -> bool {

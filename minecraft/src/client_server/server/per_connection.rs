@@ -12,7 +12,7 @@ macro_rules! connection_states {
     (
         $start_camel:ident $start_lower:ident $start_conn_key:ident,
         $(
-            $camel:ident $lower:ident $conn_key:ident $per_conn:ident $transition:ident,
+            $camel:ident $lower:ident $conn_key:ident $per_conn:ident $transition:ident $iter:ident $new_mapped_per:ident,
         )*
     )=>{
         /// State a connection can be in.
@@ -24,7 +24,7 @@ macro_rules! connection_states {
         /// Tracks the set of connections that exist and which state they're
         /// in, and manages the various index spaces involved.
         #[derive(Debug)]
-        pub struct Connections {
+        pub struct ConnStates {
             all_conns: Slab<AllConnsEntry>,
             state_conns: StateConns,
             next_ctr: usize,
@@ -39,21 +39,22 @@ macro_rules! connection_states {
 
         #[derive(Debug)]
         struct StateConns {$(
-            $lower: Slab<()>,
+            // backlinks state idx -> all idx
+            $lower: Slab<usize>,
         )*}
 
         impl StateConns {
-            fn get(&mut self, state: ConnState) -> &mut Slab<()> {
+            fn get(&mut self, state: ConnState) -> &mut Slab<usize> {
                 match state {$(
                     ConnState::$camel => &mut self.$lower,
                 )*}
             }
         }
 
-        impl Connections {
+        impl ConnStates {
             /// Construct without any connections.
             pub fn new() -> Self {
-                Connections {
+                ConnStates {
                     all_conns: Slab::new(),
                     state_conns: StateConns {$(
                         $lower: Slab::new(),
@@ -75,7 +76,7 @@ macro_rules! connection_states {
                 let ctr = self.next_ctr;
                 self.next_ctr = self.next_ctr.wrapping_add(1);
 
-                let state_idx = self.state_conns.$start_lower.insert(());
+                let state_idx = self.state_conns.$start_lower.insert(self.all_conns.vacant_key());
                 let all_idx = self.all_conns.insert(AllConnsEntry {
                     state: ConnState::$start_camel,
                     state_idx,
@@ -84,7 +85,7 @@ macro_rules! connection_states {
                 debug_assert_eq!(
                     raw_key,
                     all_idx,
-                    "Connections.insert did not follow slab pattern",
+                    "ConnStates.insert did not follow slab pattern",
                 );
 
                 $start_conn_key(ConnKeyInner { all_idx, state_idx, ctr })
@@ -112,10 +113,11 @@ macro_rules! connection_states {
                 debug_assert_eq!(
                     (state, state_idx, ctr),
                     (state2, state_idx2, ctr2),
-                    "Connections.remove something or other mismatch",
+                    "ConnStates.remove something or other mismatch",
                 );
 
-                self.state_conns.get(state).remove(state_idx);
+                let all_idx2 = self.state_conns.get(state).remove(state_idx);
+                debug_assert_eq!(all_idx, all_idx2);
             }
 
             /// Translate from raw key to typed key.
@@ -131,12 +133,13 @@ macro_rules! connection_states {
                 /// Transition an existing connection from its previous state
                 /// into this new state, returning its state-changed key.
                 ///
-                /// This should be followed by corresponding removal from all
+                /// This should be preceded by corresponding removal from all
                 /// `Per`-(previous state)-`Conn` structures with the old key
-                /// then corresponding insertion into all
+                /// and followed with corresponding insertion into all
                 /// `Per`-(new state)`-Conn` structures with the new key.
                 ///
                 /// Doesn't have to perturb `PerAnyConn` structures.
+                #[allow(unused)]
                 pub fn $transition(&mut self, key: impl Into<AnyConnKey>) -> $conn_key {
                     let key = key.into();
                     let old_state = key.state();
@@ -147,10 +150,11 @@ macro_rules! connection_states {
                     } = key.inner();
                     debug_assert_eq!(
                         old_state_idx, self.all_conns[all_idx].state_idx,
-                        concat!("Connections.", stringify!($transition), " old state idx mismatch"),
+                        concat!("ConnStates.", stringify!($transition), " old state idx mismatch"),
                     );
-                    self.state_conns.get(old_state).remove(old_state_idx);
-                    let new_state_idx = self.state_conns.$lower.insert(());
+                    let all_idx2 = self.state_conns.get(old_state).remove(old_state_idx);
+                    debug_assert_eq!(all_idx, all_idx2);
+                    let new_state_idx = self.state_conns.$lower.insert(all_idx);
                     self.all_conns[all_idx].state = ConnState::$camel;
                     $conn_key(ConnKeyInner {
                         all_idx,
@@ -159,13 +163,81 @@ macro_rules! connection_states {
                     })
                 }
             )*
+
+            /// Iterate through all connections.
+            #[allow(unused)]
+            pub fn iter_any<'a>(&'a self) -> impl Iterator<Item=AnyConnKey> + 'a {
+                self.all_conns.iter()
+                    .map(|(
+                        all_idx,
+                        &AllConnsEntry { state, state_idx, ctr },
+                    )| match state {$(
+                        ConnState::$camel => AnyConnKey::$camel($conn_key(
+                            ConnKeyInner { all_idx, state_idx, ctr }
+                        )),
+                    )*})
+            }
+
+            $(
+                /// Iterate through all connections in this state.
+                #[allow(unused)]
+                pub fn $iter<'a>(&'a self) -> impl Iterator<Item=$conn_key> + 'a {
+                    self.state_conns.$lower.iter()
+                        .map(|(state_idx, &all_idx)| $conn_key(ConnKeyInner {
+                            all_idx,
+                            state_idx,
+                            ctr: self.all_conns[all_idx].ctr,
+                        }))
+                }
+            )*
+
+            /// Map all connections to construct a `PerAnyConn` which is new
+            /// yet synchronized with self. 
+            #[allow(unused)]
+            pub fn new_mapped_per_any<T, F>(&self, mut f: F) -> PerAnyConn<T>
+            where
+                F: FnMut(AnyConnKey) -> T,
+            {
+                PerAnyConn(self.all_conns.new_mapped(
+                    |all_idx, &AllConnsEntry { state, state_idx, ctr }|
+                    match state {$(
+                        ConnState::$camel => (
+                            ctr,
+                            f(AnyConnKey::$camel($conn_key(
+                                ConnKeyInner { all_idx, state_idx, ctr }
+                            ))),
+                        ),
+                    )*}
+                ))
+            }
+
+            $(
+                /// Construct a new `Per`-state-`Conn` with its structure
+                /// pre-synchronized with self. Entries are populated as
+                /// `None`.
+                #[allow(unused)]
+                pub fn $new_mapped_per<T, F>(&self, mut f: F) -> $per_conn<T>
+                where
+                    F: FnMut($conn_key) -> T,
+                {
+                    $per_conn(self.state_conns.$lower.new_mapped(
+                        |state_idx, &all_idx| {
+                            let ctr = self.all_conns[all_idx].ctr;
+                            (
+                                ctr,
+                                f($conn_key(ConnKeyInner { all_idx, state_idx, ctr })),
+                            )
+                        }
+                    ))
+                }
+            )*
         }
 
 
         // ==== keys ====
 
 
-        /// Key for a connection within `Connections` that's in any state.
+        /// Key for a connection within `ConnStates` that's in any state.
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         pub enum AnyConnKey {$(
             $camel($conn_key),
@@ -185,6 +257,13 @@ macro_rules! connection_states {
             }
         }
 
+        /// Error for (state)-`ConnKey` as `TryFrom<AnyConnKey>`.
+        #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        pub struct WrongConnState {
+            pub required: ConnState,
+            pub actual: ConnState,
+        }
+
         $(
             impl From<$conn_key> for AnyConnKey {
                 fn from(conn_key: $conn_key) -> AnyConnKey {
@@ -192,8 +271,22 @@ macro_rules! connection_states {
                 }
             }
 
+            impl TryFrom<AnyConnKey> for $conn_key {
+                type Error = WrongConnState;
 
-            /// Key for a connection within `Connections` that's in this state.
+                fn try_from(key: AnyConnKey) -> Result<Self, WrongConnState> {
+                    if let AnyConnKey::$camel(key) = key {
+                        Ok(key)
+                    } else {
+                        Err(WrongConnState {
+                            required: ConnState::$camel,
+                            actual: key.state(),
+                        })
+                    }
+                }
+            }
+
+            /// Key for a connection within `ConnStates` that's in this state.
             #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
             pub struct $conn_key(ConnKeyInner);
         )*
@@ -211,7 +304,7 @@ macro_rules! connection_states {
 
 
         /// Storage of `T` for each current connection regardless of state.
-        /// Should be updated in synchrony with `Connections`.
+        /// Should be updated in synchrony with `ConnStates`.
         #[derive(Debug, Clone)]
         pub struct PerAnyConn<T>(Slab<(usize, T)>);
 
@@ -222,7 +315,7 @@ macro_rules! connection_states {
             }
 
             /// Insert a new element into this structure following an operation
-            /// on `Connections` which's documentation says to do so.
+            /// on `ConnStates` which's documentation says to do so.
             pub fn insert(&mut self, key: impl Into<AnyConnKey>, elem: T) {
                 let ConnKeyInner { all_idx, ctr, .. } = key.into().inner();
                 debug_assert!(
@@ -237,7 +330,7 @@ macro_rules! connection_states {
             }
 
             /// Remove an existing element from this structure following an
-            /// operation on `Connections` which's documentation says to do so.
+            /// operation on `ConnStates` which's documentation says to do so.
             pub fn remove(&mut self, key: impl Into<AnyConnKey>) -> T {
                 let ConnKeyInner { all_idx, ctr, .. } = key.into().inner();
                 let (ctr2, elem) = self.0.remove(all_idx);
@@ -271,8 +364,10 @@ macro_rules! connection_states {
 
         $(
             #[derive(Debug, Clone)]
+            #[allow(unused)]
             pub struct $per_conn<T>(Slab<(usize, T)>);
 
+            #[allow(unused)]
             impl<T> $per_conn<T> {
                 /// Construct empty.
                 pub fn new() -> Self {
@@ -280,11 +375,11 @@ macro_rules! connection_states {
                 }
 
                 /// Insert a new element into this structure following an operation
-                /// on `Connections` which's documentation says to do so.
+                /// on `ConnStates` which's documentation says to do so.
                 pub fn insert(&mut self, key: $conn_key, elem: T) {
                     debug_assert!(
                         self.0.get(key.0.state_idx).is_none(),
-                        concat!(stringify!($per_conn), "insert on non-empty index"),
+                        concat!(stringify!($per_conn), ".insert on non-empty index"),
                     );
                     let state_idx2 = self.0.insert((key.0.ctr, elem));
                     debug_assert_eq!(
@@ -294,7 +389,7 @@ macro_rules! connection_states {
                 }
 
                 /// Remove an existing element from this structure following an
-                /// operation on `Connections` which's documentation says to do so.
+                /// operation on `ConnStates` which's documentation says to do so.
                 pub fn remove(&mut self, key: $conn_key) -> T {
                     let (ctr2, elem) = self.0.remove(key.0.state_idx);
                     debug_assert_eq!(
@@ -331,6 +426,7 @@ connection_states!(
     Uninit uninit UninitConnKey,
 
     // list of states:
-    Uninit uninit UninitConnKey PerUninitConn transition_to_uninit,
-    Client client ClientConnKey PerClientConn transition_to_client,
+    Uninit uninit UninitConnKey PerUninitConn transition_to_uninit iter_uninit new_mapped_per_uninit,
+    Client client ClientConnKey PerClientConn transition_to_client iter_client new_mapped_per_client,
+    Closed closed ClosedConnKey PerClosedConn transition_to_closed iter_closed new_mapped_per_closed,
 );

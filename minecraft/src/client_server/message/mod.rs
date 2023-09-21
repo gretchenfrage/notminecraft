@@ -48,8 +48,8 @@ message_enum!(edit Edit {
 message_enum!(up UpMessage {
     LogIn {
         username: String,
-        char_state: CharState,
     }
+    JoinGame {}
     SetTileBlock {
         gtc: Vec3<i64>,
         bid: RawBlockId,
@@ -63,9 +63,10 @@ message_enum!(up UpMessage {
 });
 
 message_enum!(down DownMessage {
+    Close {}
     AcceptLogin {}
-    RejectLogin {
-        message: String,
+    ShouldJoinGame {
+        own_client_key: usize,
     }
     AddChunk {
         cc: Vec3<i64>,
@@ -82,9 +83,6 @@ message_enum!(down DownMessage {
         char_state: CharState,
     }
     RemoveClient {
-        client_key: usize,
-    }
-    ThisIsYou {
         client_key: usize,
     }
     ApplyEdit {
