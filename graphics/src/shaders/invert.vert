@@ -33,6 +33,6 @@ void main() {
     }
 
     o_pos = (u_transform * vec4(pos, 0, 1));
-    o_tex = vec3(u_tex_start + u_tex_extent * pos, u_tex_index);
     gl_Position = o_pos;
+    o_tex = vec3(u_tex_start + u_tex_extent * pos, u_tex_index);
 }

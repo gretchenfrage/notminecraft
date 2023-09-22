@@ -25,9 +25,6 @@ const float fog_min = 0.0;
 const float fog_max = 1.0;
 
 void main() {
-    // gl_Position
-    vec4 pos = i_pos / i_pos.w;
-
     // texture index rounding fix
     vec3 tex = i_tex;
     if (mod(tex.z, 1) > 0.5) {
@@ -37,9 +34,10 @@ void main() {
     vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
     //float fog = clamp(length(fog_mat * i_pos), fog_min, fog_max);
     //float fog = clamp(length(i_pos) / 20.0, 0.0, 1.0);
-    float fog = 0;
+    float fog = i_pos.z / i_pos.w;
     o_color = mix(tex_color * i_color, vec4(1), fog);
 
+    vec4 pos = i_pos / i_pos.w;
     vec2 clip_uv = vec2(
         pos.x / 2 + 0.5,
         pos.y / -2 + 0.5

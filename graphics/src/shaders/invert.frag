@@ -38,12 +38,17 @@ void main() {
     vec4 inverted = vec4(vec3(1) - drawn.xyz, 1);
     o_color = inverted * texture(sampler2DArray(u_texture, u_sampler), tex) * u_color;
 
-    float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_drawn_uv).r;
-    float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_drawn_uv).r;
-    if (i_pos.z < min_z) {
+    vec4 pos = i_pos / i_pos.w;
+    vec2 clip_uv = vec2(
+        pos.x / 2 + 0.5,
+        pos.y / -2 + 0.5
+    );
+    float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_uv).r;
+    float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_uv).r;
+    if (pos.z < min_z) {
         discard;
     }
-    if (i_pos.z > max_z) {
+    if (pos.z > max_z) {
         discard;
     }
 }

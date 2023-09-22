@@ -19,16 +19,17 @@ void main() {
     float a = texture(sampler2D(u_texture, u_sampler), i_tex).r;
     o_color = vec4(1, 1, 1, a) * i_color;
 
+    vec4 pos = i_pos / i_pos.w;
     vec2 clip_uv = vec2(
-        i_pos.x / 2 + 0.5,
-        i_pos.y / -2 + 0.5
+        pos.x / 2 + 0.5,
+        pos.y / -2 + 0.5
     );
     float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_uv).r;
     float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_uv).r;
-    if (i_pos.z < min_z) {
+    if (pos.z < min_z) {
         discard;
     }
-    if (i_pos.z > max_z) {
+    if (pos.z > max_z) {
         discard;
     }
 }

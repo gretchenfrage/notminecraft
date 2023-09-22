@@ -44,7 +44,7 @@ impl ViewProj {
             fov,
             size.w,
             size.h,
-            0.01,
+            0.1,
             100.0,
             //std::env::var("NEAR").unwrap().parse().unwrap(),
             //std::env::var("FAR").unwrap().parse().unwrap(),
