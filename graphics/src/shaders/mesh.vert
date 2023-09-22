@@ -15,8 +15,7 @@ layout(location=2) out vec4 o_color;
 
 void main() {
     o_pos = (u_transform * vec4(i_pos, 1));
+    gl_Position = o_pos;    
     o_tex = i_tex;
     o_color = i_color * u_color;
-    gl_Position = o_pos;
-    o_pos /= o_pos.w;
 }

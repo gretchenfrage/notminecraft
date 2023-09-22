@@ -36,16 +36,21 @@ impl ViewProj {
         /*
         let proj = Mat4::<f32>::infinite_perspective_lh(
             fov,
-            aspect,
+            size.w / size.h,
             0.01,
-            //1.0, // TODO
         );*/
+        
         let proj = Mat4::<f32>::perspective_fov_lh_zo(
             fov,
             size.w,
             size.h,
             0.01,
-            10000.0,
+            100.0,
+            //std::env::var("NEAR").unwrap().parse().unwrap(),
+            //std::env::var("FAR").unwrap().parse().unwrap(),
+
+            //1.0,
+            //1.0,
             //0.1,
             //100.0,
         );
@@ -54,10 +59,10 @@ impl ViewProj {
         proj.cols.y.w = 0.0; // TODO wtf?
         proj.cols.z.w = 0.0;
         proj.cols.w.w = 1.0;*/
-        let adjust1 = Mat4::<f32>::scaling_3d([1.0, 1.0, 1.0 / 1000.0]);
+        //let adjust1 = Mat4::<f32>::scaling_3d([1.0, 1.0, 1.0 / 1000.0]);
         let adjust2 = Mat4::<f32>::scaling_3d([1.0, -1.0, 1.0]);
         let adjust3 = Mat4::<f32>::translation_3d([0.5, 0.5, 0.0]);
-        ViewProj(adjust3 * adjust2 * adjust1 * proj * view2 * view1)
+        ViewProj(adjust3 * adjust2 /* * adjust1*/ * proj * view2 * view1)
         //ViewProj(proj)
     }
 

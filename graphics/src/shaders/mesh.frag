@@ -15,7 +15,19 @@ layout(location=2) in vec4 i_color;
 
 layout(location=0) out vec4 o_color;
 
+const mat4 fog_mat = mat4(
+    1.0 / 20.0, 0.0, 0.0, -1.0,
+    0.0, 1.0 / 20.0, 0.0, -1.0,
+    0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0
+);
+const float fog_min = 0.0;
+const float fog_max = 1.0;
+
 void main() {
+    // gl_Position
+    vec4 pos = i_pos / i_pos.w;
+
     // texture index rounding fix
     vec3 tex = i_tex;
     if (mod(tex.z, 1) > 0.5) {
@@ -23,18 +35,21 @@ void main() {
     }
 
     vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
-    o_color = tex_color * i_color;
+    //float fog = clamp(length(fog_mat * i_pos), fog_min, fog_max);
+    //float fog = clamp(length(i_pos) / 20.0, 0.0, 1.0);
+    float fog = 0;
+    o_color = mix(tex_color * i_color, vec4(1), fog);
 
     vec2 clip_uv = vec2(
-        i_pos.x / 2 + 0.5,
-        i_pos.y / -2 + 0.5
+        pos.x / 2 + 0.5,
+        pos.y / -2 + 0.5
     );
     float min_z = texture(sampler2D(u_clip_min_texture, u_clip_min_sampler), clip_uv).r;
     float max_z = texture(sampler2D(u_clip_max_texture, u_clip_max_sampler), clip_uv).r;
-    if (i_pos.z < min_z) {
+    if (pos.z < min_z) {
         discard;
     }
-    if (i_pos.z > max_z) {
+    if (pos.z > max_z) {
         discard;
     }
     if (tex_color.a == 0) {
