@@ -18,6 +18,7 @@ use crate::{
         tile_9_crop,
     },
 };
+use std::cmp::max;
 use graphics::frame_content::{
     FontId,
     GpuImageArray,
@@ -135,31 +136,14 @@ pub struct Assets {
     pub grass_step_sound: SoundEffect,
     pub grass_dig_sound: SoundEffect,
 
-    /// Baseline sky color at no-rain daytime.
-    pub sky_day: Rgb<f32>,
-    /// Baseline sky color at no-rain nighttime.
-    pub sky_night: Rgb<f32>,
-    /// Baseline sky color at rainy daytime.
-    pub sky_day_rain: Rgb<f32>,
-    /// Baseline sky color at rainy nighttime.
-    pub sky_night_rain: Rgb<f32>,
-    /// Baseline fog color at no-rain daytime.
-    pub fog_day: Rgb<f32>,
-    /// Baseline fog color at no-rain nighttime.
-    pub fog_night: Rgb<f32>,
-    /// Baseline fog color at rainy daytime.
-    pub fog_day_rain: Rgb<f32>,
-    /// Baseline fog color at rainy nighttime.
-    pub fog_night_rain: Rgb<f32>,
-    /// Baseline color of sunset fog (fog with sun behind it during sunset).
-    pub sky_sunset: Rgb<f32>,
-
     //pub block_item_mesh: Mesh,
     pub item_meshes: Vec<ItemMesh>,
 
     pub gui_inventory: GpuImageArray,
 
     pub vignette: GpuImageArray,
+    pub sun: GpuImageArray,
+    pub moon: GpuImageArray,
 }
 
 
@@ -227,15 +211,6 @@ impl Assets {
             grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
             grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,
             
-            sky_day:        [0.45, 0.62, 1.00].into(),
-            sky_night:      [0.00, 0.02, 0.05].into(),
-            sky_day_rain:   [0.24, 0.26, 0.32].into(),
-            sky_night_rain: [0.00, 0.01, 0.01].into(),
-            fog_day:        [0.70, 0.82, 1.00].into(),
-            fog_night:      [0.02, 0.05, 0.13].into(),
-            fog_day_rain:   [0.48, 0.52, 0.60].into(),
-            fog_night_rain: [0.02, 0.04, 0.07].into(),
-            sky_sunset:     [1.00, 0.35, 0.10].into(),
             item_meshes: vec![
                 ItemMesh::load_basic_block(&loader, BTI_STONE),
                 ItemMesh::load_basic_block(&loader, BTI_DIRT),
@@ -245,8 +220,12 @@ impl Assets {
                 ItemMesh::load_basic_block(&loader, BTI_GLASS),
                 ItemMesh::Item(ITI_STICK),
             ],
+            
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
+            
             vignette: load_vignette(loader).await,
+            sun: load_sun_moon(loader, "terrain/sun.png").await,
+            moon: load_sun_moon(loader, "terrain/moon.png").await,
         };
         assets
     }
@@ -259,6 +238,28 @@ async fn load_vignette(loader: &mut AssetLoader<'_>) -> GpuImageArray {
         for pixel in image.pixels_mut() {
             let alpha = pixel[0];
             *pixel = [0, 0, 0, alpha].into()
+        }
+    } else {
+        image = RgbaImage::new(1, 1);
+    }
+    loader.renderer.borrow().load_image_array_raw(
+        [image.width(), image.height()].into(),
+        [DynamicImage::from(image)],
+    )
+}
+
+async fn load_sun_moon(loader: &mut AssetLoader<'_>, path: &str) -> GpuImageArray {
+    let mut image;
+    if let Some(asset_image) = loader.load_raw_image(path).await {
+        image = asset_image.into_rgba8();
+        for pixel in image.pixels_mut() {
+            let alpha = max(max(pixel[0], pixel[1]), pixel[2]);
+            if alpha != 0 {
+                for i in 0..3 {
+                    pixel[i] = (pixel[i] as u32 * 0xff / alpha as u32) as u8;
+                }
+            }
+            pixel[3] = alpha;
         }
     } else {
         image = RgbaImage::new(1, 1);

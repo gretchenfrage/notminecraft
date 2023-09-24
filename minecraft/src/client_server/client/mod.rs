@@ -782,6 +782,10 @@ impl GuiStateFrame for Client {
                 self.bob_animation %= 1.0;
             }
         }
+
+        // sun
+        self.day_night_time += elapsed / 240.0;
+        self.day_night_time %= 1.0;
     }
 
     fn on_captured_mouse_move(&mut self, _: &GuiWindowContext, amount: Vec2<f32>) {
@@ -1055,6 +1059,13 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             size,
         );
 
+        // determine fog
+        let fog = Fog::Earth {
+            start: 100.0,
+            end: 150.0,
+            day_night_time: inner.day_night_time,
+        };
+
         // draw sky
         canvas.reborrow()
             .scale(self.size)
@@ -1063,17 +1074,19 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 day_night_time: inner.day_night_time,
             }));
 
+        // draw sun
+        canvas.reborrow()
+            .scale(self.size)
+            .begin_3d(view_proj, Fog::None)
+            .translate(cam_pos)
+            .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0))
+            .translate(Vec3::new(-0.5, -0.5, 2.0))
+            .draw_image(&ctx.assets().sun, 0, 0.0, 1.0);
+
         // begin 3D perspective
         let mut canvas = canvas.reborrow()
             .scale(self.size)
-            .begin_3d(
-                view_proj,
-                Fog::Earth {
-                    start: 100.0,
-                    end: 150.0,
-                    day_night_time: inner.day_night_time,
-                },
-            );
+            .begin_3d(view_proj, fog);
 
         // chunks
         for (cc, ci) in inner.chunks.iter() {

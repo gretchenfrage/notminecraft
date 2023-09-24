@@ -106,11 +106,6 @@ void main() {
     // output
     o_color = vec4(fog_color, 1) * u_color;
     
-    // debug sun
-    if (dot(sun_dir, view_dir) > 0.995) {
-        o_color = vec4(1, 1, 0, 1);
-    }
-
     // clipping
     vec4 pos = i_pos / i_pos.w;
     vec2 clip_uv = vec2(
