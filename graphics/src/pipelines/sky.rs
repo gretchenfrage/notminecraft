@@ -15,7 +15,11 @@ pub struct SkyPipeline {
 #[derive(Debug, Copy, Clone)]
 pub struct DrawSky {
     pub view_proj: ViewProj,
+    /// Point in the day night cycle, where 0 is sunrise, 0.25 is mid day,
+    /// 0.5 is sun set, 0.75 is midnight, and 1 is the next sunrise.
+    pub day_night_time: f32,
 }
+
 
 impl SkyPipeline {
     pub(crate) fn new(

@@ -116,6 +116,8 @@ pub struct Client {
     menu_resources: MenuResources,
 
     chat: GuiChat,
+
+    day_night_time: f32,
 }
 
 #[derive(Debug)]
@@ -241,6 +243,8 @@ impl Client {
             menu_resources: MenuResources::new(ctx.assets),
 
             chat: GuiChat::new(),
+
+            day_night_time: 0.0,
         }
     }
 
@@ -279,6 +283,8 @@ impl Client {
                 my_client_key: self.my_client_key,
                 client_char_state: &self.client_char_state,
                 client_char_name_layed_out: &self.client_char_name_layed_out,
+
+                day_night_time: self.day_night_time,
             },
             align(0.5,
                 logical_size(30.0,
@@ -954,6 +960,11 @@ impl GuiStateFrame for Client {
         }
     }
 
+    fn on_captured_mouse_scroll(&mut self, ctx: &GuiWindowContext, amount: ScrolledAmount) {
+        self.day_night_time += amount.to_pixels(16.0).y / 8000.0;
+        self.day_night_time %= 1.0;
+    }
+
     fn on_focus_change(&mut self, ctx: &GuiWindowContext) {
         if ctx.global().focus_level != FocusLevel::MouseCaptured
             && self.menu_stack.is_empty() {
@@ -991,6 +1002,8 @@ struct WorldGuiBlock<'a> {
     my_client_key: Option<usize>,
     client_char_state: &'a SparseVec<CharState>,
     client_char_name_layed_out: &'a SparseVec<LayedOutTextBlock>,
+
+    day_night_time: f32,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -1045,15 +1058,22 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         // draw sky
         canvas.reborrow()
             .scale(self.size)
-            .draw(DrawObj2::Sky(DrawSky { view_proj }));
-        /*canvas.reborrow()
-            .color(ctx.assets().sky_day)
-            .draw_solid(size);*/
+            .draw(DrawObj2::Sky(DrawSky {
+                view_proj,
+                day_night_time: inner.day_night_time,
+            }));
 
         // begin 3D perspective
         let mut canvas = canvas.reborrow()
             .scale(self.size)
-            .begin_3d(view_proj);
+            .begin_3d(
+                view_proj,
+                Fog::Earth {
+                    start: 100.0,
+                    end: 150.0,
+                    day_night_time: inner.day_night_time,
+                },
+            );
 
         // chunks
         for (cc, ci) in inner.chunks.iter() {
@@ -1142,6 +1162,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         }
 
         // debug box for load dist
+        /*
         let load_dist = inner.load_dist as f32;
         let chunk_ext = CHUNK_EXTENT.map(|n| n as f32);
 
@@ -1155,6 +1176,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             load_cc_start * chunk_ext,
             load_cc_ext * chunk_ext,
         );
+        */
     }
 }
 

@@ -4,6 +4,9 @@ layout(set=0, binding=0) uniform u {
     mat4 u_transform;
     vec4 u_color;
     mat4 u_screen_to_world;
+    float u_fog_mul;
+    float u_fog_add;
+    float u_day_night_time;
 };
 
 layout(set=1, binding=0) uniform texture2D u_clip_min_texture;
@@ -46,10 +49,8 @@ float sq(float n) {
 
 
 void main() {
-
-    // inputs
-    vec4 player_pos = u_screen_to_world * vec4(0, 0, 0, 1);
-    float time = player_pos.z / player_pos.w / -50;
+    // prepare inputs
+    float time = u_day_night_time;
     vec3 sun_dir = vec3(0, sin(time * PI * 2), cos(time * PI * 2));
     float rain = 0;
 
@@ -58,7 +59,7 @@ void main() {
     vec4 b = u_screen_to_world * vec4(i_pos.xy, 0, i_pos.w);
     vec3 view_dir = normalize((a.xyz / a.w) - (b.xyz / b.w));
 
-    // compute sky color
+    // compute fog color
 
     // intensity of it being day as opposed to night
     float day = clamp(sin(time * PI * 2) + 0.6, 0, 1);
@@ -69,15 +70,15 @@ void main() {
     // intensity of this fragment being in the direction of the sun
     float sun = sq(dot(view_dir, sun_dir) * 0.5 + 0.5);
 
-    // intensity of this fragment being in the direction of fog
+    // intensity of this fragment being in the direction of horizon fog
     // we make it intensify when in the direction of the sun
-    float fragment_fog = smoothstep(-sun * 0.5 - 0.1, 0.05, dot(view_dir, vec3(0, -1, 0)));
+    float fragment_hfog = smoothstep(-sun * 0.5 - 0.1, 0.05, dot(view_dir, vec3(0, -1, 0)));
 
     // intensity of this fragment's fog being purely sunset-colored
     float fragment_sunset = (sun * 10 / (0.45 + sun * 9)) * sunset;
 
     // then it's mixing them together
-    vec3 sky_color = mix(
+    vec3 fog_color = mix(
         // sky color:
         mix(
             // no-rain sky color:
@@ -99,14 +100,14 @@ void main() {
             SKY_SUNSET,
             clamp(fragment_sunset, 0, 1)
         ),
-        clamp(fragment_fog, 0, 1)
+        clamp(fragment_hfog, 0, 1)
     );
     
     // output
-    o_color = vec4(sky_color, 1) * u_color;
-
+    o_color = vec4(fog_color, 1) * u_color;
+    
     // debug sun
-    if (dot(sun_dir, view_dir) > 0.99) {
+    if (dot(sun_dir, view_dir) > 0.995) {
         o_color = vec4(1, 1, 0, 1);
     }
 

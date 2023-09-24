@@ -102,6 +102,7 @@ pub mod prelude {
             Vertex,
             HAlign,
             VAlign,
+            Fog,
         },
         view_proj::{
             ViewProj,
@@ -151,12 +152,18 @@ struct ModifierUniformData {
     transform: Mat4<f32>,
     color: Rgba<f32>,
     screen_to_world: Mat4<f32>,
+    fog_mul: f32,
+    fog_add: f32,
+    day_night_time: f32,
 }
 
 std140_struct!(ModifierUniformData {
     transform: Mat4<f32>,
     color: Rgba<f32>,
     screen_to_world: Mat4<f32>,
+    fog_mul: f32,
+    fog_add: f32,
+    day_night_time: f32,
 });
 
 fn create_depth_texture_like(
@@ -529,6 +536,9 @@ impl Renderer {
                     transform,
                     color,
                     screen_to_world,
+                    fog_mul,
+                    fog_add,
+                    day_night_time,
                     depth,
                 } => {
                     let muo = uniform_packer
@@ -536,6 +546,9 @@ impl Renderer {
                             transform,
                             color: color.map(|n| n as f32 / 255.0),
                             screen_to_world,
+                            fog_mul,
+                            fog_add,
+                            day_night_time,
                         });
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,

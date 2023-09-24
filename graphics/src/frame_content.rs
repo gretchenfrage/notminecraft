@@ -49,7 +49,7 @@ pub struct FrameContent<'a>(pub Vec<(usize, FrameItem<'a>)>);
 pub enum FrameItem<'a> {
     PushModifier2(Modifier2),
     Draw2(DrawObj2),
-    Begin3d(ViewProj),
+    Begin3d(ViewProj, Fog),
     PushModifier3(Modifier3),
     Draw3(DrawObj3<'a>),
     PushDebugTag(Cow<'static, str>),
@@ -73,9 +73,33 @@ pub enum DrawObj3<'a> {
     Text(LayedOutTextBlock),
     Mesh(DrawMesh<'a>),
     Invert(DrawInvert),
-    /// Warning: This is here for completeness, but you really probably want
+    /*/// Warning: This is here for completeness, but you really probably want
     /// to use the 2D version. Which is counterintuitive.
-    Sky(DrawSky),
+    Sky(DrawSky),*/
+}
+
+/// Graphical configuration for fog in a 3D scene.
+#[derive(Debug, Clone, Copy)]
+pub enum Fog {
+    /// No fog.
+    None,
+    /// Specially shaded "earth fog". Designed to work with the "sky" draw
+    /// object.
+    Earth {
+        /// Point at which fog starts increasing from 0%.
+        start: f32,
+        /// Point at which fog reaches 100%.
+        end: f32,
+        /// Point in the day night cycle, where 0 is sunrise, 0.25 is mid day,
+        /// 0.5 is sun set, 0.75 is midnight, and 1 is the next sunrise.
+        day_night_time: f32,
+    },
+}
+
+impl Default for Fog {
+    fn default() -> Self {
+        Fog::None
+    }
 }
 
 /// Chainable utility for writing to `FrameContent`.
@@ -460,8 +484,8 @@ impl<'a, 'b> Canvas2<'a, 'b> {
     }
 
     // TODO 3d helpers
-    pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I) -> Canvas3<'a, 'b> {
-        self.push(FrameItem::Begin3d(view_proj.into()));
+    pub fn begin_3d<I: Into<ViewProj>>(mut self, view_proj: I, fog: Fog) -> Canvas3<'a, 'b> {
+        self.push(FrameItem::Begin3d(view_proj.into(), fog));
         Canvas3 {
             target: self.target,
             stack_len: self.stack_len + 1,
@@ -478,12 +502,15 @@ impl<'a, 'b> Canvas2<'a, 'b> {
         let size = size.into();
         self
             .scale(size)
-            .begin_3d(ViewProj::perspective(
-                pos,
-                dir,
-                fov,
-                size,
-            ))
+            .begin_3d(
+                ViewProj::perspective(
+                    pos,
+                    dir,
+                    fov,
+                    size,
+                ),
+                Fog::None,
+            )
     }
 
     pub fn debug_tag<I: Into<Cow<'static, str>>>(mut self, tag: I) -> Self {

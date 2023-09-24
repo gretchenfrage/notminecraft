@@ -16,6 +16,7 @@ use crate::{
         DrawMesh,
         DrawInvert,
         DrawSky,
+        Fog,
     },
 };
 use vek::*;
@@ -27,10 +28,15 @@ use vek::*;
 enum FrameItemNorm<'a> {
     PushModifier {
         modifier: Modifier3,
-        is_begin_3d: bool,
+        begin_3d: Option<Begin3dNorm>,
     },
     Draw(DrawObjNorm<'a>),
     PushDebugTag, // TODO merge in to push modifier?
+}
+
+#[derive(Debug, Clone)]
+struct Begin3dNorm {
+    fog: Fog,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +72,7 @@ impl<'a> From<&'a DrawObj3<'a>> for DrawObjNorm<'a> {
             &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
             &DrawObj3::Mesh(ref obj) => DrawObjNorm::Mesh(obj),
             &DrawObj3::Invert(ref obj) => DrawObjNorm::Invert(obj),
-            &DrawObj3::Sky(ref obj) => DrawObjNorm::Sky(obj),
+            /* &DrawObj3::Sky(ref obj) => DrawObjNorm::Sky(obj), */
         }
     }
 }
@@ -88,19 +94,19 @@ where
                 match instr {
                     &FrameItem::PushModifier2(m) => FrameItemNorm::PushModifier {
                         modifier: m.to_3d(),
-                        is_begin_3d: false,
+                        begin_3d: None,
                     },
                     &FrameItem::Draw2(ref o) => FrameItemNorm::Draw(o.into()),
-                    &FrameItem::Begin3d(vp) => {
+                    &FrameItem::Begin3d(vp, fog) => {
                         // TODO additional coordinate system conversion matrices?
                         FrameItemNorm::PushModifier {
                             modifier: Transform3(vp.0).into(),
-                            is_begin_3d: true,
+                            begin_3d: Some(Begin3dNorm { fog }),
                         }
                     },
                     &FrameItem::PushModifier3(m) => FrameItemNorm::PushModifier {
                         modifier: m,
-                        is_begin_3d: false,
+                        begin_3d: None,
                     },
                     &FrameItem::Draw3(ref o) => FrameItemNorm::Draw(o.into()),
                     &FrameItem::PushDebugTag(_) => FrameItemNorm::PushDebugTag,
@@ -137,6 +143,9 @@ pub enum RenderInstr<'a> {
         color: Rgba<u8>,
         /// Matrix which converts screenspace to worldspace positions.
         screen_to_world: Mat4<f32>,
+        fog_mul: f32,
+        fog_add: f32,
+        day_night_time: f32,
         /// Whether to test against and write to the depth buffer.
         depth: bool,
     },
@@ -170,6 +179,9 @@ pub struct RenderCompiler<'a, I> {
     cumul_transform_stack: Vec<Transform3>,
     cumul_color_stack: Vec<Rgba<f32>>,
     screen_to_world: Mat4<f32>,
+    fog_mul: f32,
+    fog_add: f32,
+    day_night_time: f32,
     clip_stack: Vec<Clip3>,
     currently_3d: bool,
     clip_valid_up_to: Option<usize>,
@@ -212,6 +224,9 @@ impl<'a, I> RenderCompiler<'a, I> {
             cumul_transform_stack: vec![base_transform],
             cumul_color_stack: vec![base_color],
             screen_to_world: Mat4::zero(),
+            fog_mul: 0.0,
+            fog_add: 0.0,
+            day_night_time: 0.25,
             clip_stack: Vec::new(),
             currently_3d: false,
             clip_valid_up_to: None,
@@ -251,17 +266,30 @@ where
                     let obj = self.trying_to_draw.take().unwrap();
                     let color = self.color()
                         .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
-                    let screen_to_world = match &obj {
+                    let (
+                        screen_to_world,
+                        day_night_time,
+                    ) = match &obj {
                         // doing this like this isn't architecturally consistent, buuutt
                         // it's BOTH more optimized and requires less code, so whatever
-                        &DrawObjNorm::Sky(sky) => Transform3(sky.view_proj.0).then(&self.transform()).0.inverted(),
-                        _ => self.screen_to_world,
+                        &DrawObjNorm::Sky(sky) => (
+                            Transform3(sky.view_proj.0).then(&self.transform()).0.inverted(),
+                            sky.day_night_time,
+                        ),
+                        _ => (
+                            self.screen_to_world,
+                            self.day_night_time,
+                        ),
                     };
+
                     RenderInstr::Draw {
                         obj,
                         transform: self.transform().0,
                         color,
                         screen_to_world,
+                        fog_mul: self.fog_mul,
+                        fog_add: self.fog_add,
+                        day_night_time,
                         depth: self.currently_3d,
                     }
                 }
@@ -273,6 +301,9 @@ where
                     if entry.is_begin_3d {
                         debug_assert!(self.currently_3d);
                         self.screen_to_world = Mat4::zero();
+                        self.fog_mul = 0.0;
+                        self.fog_add = 0.0;
+                        self.day_night_time = 0.25;
                         self.currently_3d = false;
                         self.depth_valid = false;
                     }
@@ -298,7 +329,7 @@ where
                 match instr {
                     FrameItemNorm::PushModifier {
                         modifier,
-                        is_begin_3d,
+                        begin_3d,
                     } => {
                         let kind = match modifier {
                             Modifier3::Transform(t) => {
@@ -317,12 +348,20 @@ where
                         };
                         self.stack.push(StackEntry {
                             kind,
-                            is_begin_3d,
+                            is_begin_3d: begin_3d.is_some(),
                         });
-                        if is_begin_3d {
+                        if let Some(begin_3d) = begin_3d {
                             debug_assert!(!self.currently_3d);
                             self.currently_3d = true;
                             self.screen_to_world = self.transform().0.inverted();
+                            match begin_3d.fog {
+                                Fog::None => {},
+                                Fog::Earth { start, end, day_night_time } => {
+                                    self.fog_mul = 1.0 / (end - start);
+                                    self.fog_add = -start * self.fog_mul;
+                                    self.day_night_time = day_night_time;
+                                }
+                            }
                         }
                     }
                     FrameItemNorm::Draw(obj) => {
