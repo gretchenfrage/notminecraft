@@ -1074,14 +1074,23 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 day_night_time: inner.day_night_time,
             }));
 
-        // draw sun
-        canvas.reborrow()
-            .scale(self.size)
-            .begin_3d(view_proj, Fog::None)
-            .translate(cam_pos)
-            .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0))
-            .translate(Vec3::new(-0.5, -0.5, 2.0))
-            .draw_image(&ctx.assets().sun, 0, 0.0, 1.0);
+        // draw celestial objects
+        {
+            let mut canvas = canvas.reborrow()
+                .scale(self.size)
+                .begin_3d(view_proj, Fog::None)
+                .translate(cam_pos)
+                .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0));
+            let sun_moon_transl = Vec3::new(-0.5, -0.5, 2.0);
+            canvas.reborrow()
+                .translate(sun_moon_transl)
+                .draw_image(&ctx.assets().sun, 0, 0.0, 1.0);
+            canvas.reborrow()
+                .rotate(Quaternion::rotation_x(PI))
+                .translate(sun_moon_transl)
+                .draw_image(&ctx.assets().moon, 0, 0.0, 1.0);
+        }
+        
 
         // begin 3D perspective
         let mut canvas = canvas.reborrow()
