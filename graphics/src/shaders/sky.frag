@@ -46,9 +46,10 @@ float sq(float n) {
 
 
 void main() {
+
     // inputs
     vec4 player_pos = u_screen_to_world * vec4(0, 0, 0, 1);
-    float time = player_pos.z / player_pos.w / 50;
+    float time = player_pos.z / player_pos.w / -50;
     vec3 sun_dir = vec3(0, sin(time * PI * 2), cos(time * PI * 2));
     float rain = 0;
 

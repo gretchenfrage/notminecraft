@@ -63,26 +63,28 @@ void main() {
     vec3 sky_color;
     float sky = 0;
 
-    if (u_screen_to_world != mat4(0)) {
-        vec4 a = u_screen_to_world * i_pos;
-        vec4 b = u_screen_to_world * vec4(i_pos.xy, 0, i_pos.w);
-        vec3 view_vec = (a.xyz / a.w) - (b.xyz / b.w);
-        sky = clamp((length(view_vec.xz) - 175.0) / 50.0, 0.0, 0.9);
-
-        // inputs
+    // inputs
         vec4 player_pos = u_screen_to_world * vec4(0, 0, 0, 1);
-        float time = player_pos.z / player_pos.w / 50;
+        float time = player_pos.z / player_pos.w / -50;
         vec3 sun_dir = vec3(0, sin(time * PI * 2), cos(time * PI * 2));
         float rain = 0;
 
 
-        vec3 view_dir = normalize(view_vec);
         //sky_color = abs(normalize(view_vec.xyz));
 
         // compute sky color
 
         // intensity of it being day as opposed to night
         float day = clamp(sin(time * PI * 2) + 0.6, 0, 1);
+
+    if (u_screen_to_world != mat4(0)) {
+        vec4 a = u_screen_to_world * i_pos;
+        vec4 b = u_screen_to_world * vec4(i_pos.xy, 0, i_pos.w);
+        vec3 view_vec = (a.xyz / a.w) - (b.xyz / b.w);
+        sky = clamp((length(view_vec.xz) - 175.0) / 50.0, 0.0, 0.97);
+
+        vec3 view_dir = normalize(view_vec);
+        
 
         // intensity of the sunset being actively happening
         float sunset = pow(cos(time * PI * 4) * 0.5 + 0.5, 25);
@@ -97,7 +99,7 @@ void main() {
 
         // intensity of this fragment's fog being purely sunset-colored
         float fragment_sunset = (sun * 10 / (0.45 + sun * 9)) * sunset;
-        fragment_sunset /= 2;
+        //fragment_sunset /= 2;
 
         // then it's mixing them together
         sky_color = mix(
@@ -127,7 +129,7 @@ void main() {
     }
 
     // TODO: for maximum correctness, color must somehow be mixed into fog when 3D scene begins
-    o_color = mix(o_color, vec4(sky_color, 1), sky);
+    o_color = mix(o_color * vec4(vec3(day * 0.9 + 0.1), 1), vec4(sky_color, 1), sky);
 
     vec4 pos = i_pos / i_pos.w;
     vec2 clip_uv = vec2(
