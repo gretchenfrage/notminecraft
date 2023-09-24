@@ -37,6 +37,7 @@ pub use crate::{
             DrawMesh,
         },
         invert::DrawInvert,
+        sky::DrawSky,
     },
 };
 
@@ -61,6 +62,7 @@ pub enum DrawObj2 {
     Image(DrawImage),
     Text(LayedOutTextBlock),
     Invert(DrawInvert),
+    Sky(DrawSky),
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +73,9 @@ pub enum DrawObj3<'a> {
     Text(LayedOutTextBlock),
     Mesh(DrawMesh<'a>),
     Invert(DrawInvert),
+    /// Warning: This is here for completeness, but you really probably want
+    /// to use the 2D version. Which is counterintuitive.
+    Sky(DrawSky),
 }
 
 /// Chainable utility for writing to `FrameContent`.

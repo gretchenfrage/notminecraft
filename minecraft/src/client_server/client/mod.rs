@@ -36,6 +36,7 @@ use graphics::{
     frame_content::{
         DrawObj2,
         DrawInvert,
+        DrawSky,
     },
 };
 use std::{
@@ -1022,12 +1023,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             };
         }
 
-        // sky
-        canvas.reborrow()
-            .color(ctx.assets().sky_day)
-            .draw_solid(size);
-
-        // begin 3D perspective
+        // determine view proj
         let cam_dir = cam_dir(inner.pitch, inner.yaw);
         let mut cam_pos = inner.pos + Vec3::new(0.0, CAMERA_HEIGHT, 0.0) + bob_translate;
         if inner.third_person {
@@ -1045,6 +1041,16 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             // size
             size,
         );
+
+        // draw sky
+        canvas.reborrow()
+            .scale(self.size)
+            .draw(DrawObj2::Sky(DrawSky { view_proj }));
+        /*canvas.reborrow()
+            .color(ctx.assets().sky_day)
+            .draw_solid(size);*/
+
+        // begin 3D perspective
         let mut canvas = canvas.reborrow()
             .scale(self.size)
             .begin_3d(view_proj);

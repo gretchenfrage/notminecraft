@@ -27,6 +27,9 @@ void main() {
     if (mod(tex.z, 1) > 0.5) {
         tex.z += 0.5;
     }
+    
+    vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
+    o_color = tex_color * i_color;
 
     vec4 fog_color;
     float fog = 0;
@@ -36,13 +39,13 @@ void main() {
         vec4 b = u_screen_to_world * vec4(i_pos.xy, 0, i_pos.w);
         vec3 view = (a.xyz / a.w) - (b.xyz / b.w);
 
-        fog_color = vec4(1, 0, 0, 1);
-        fog = clamp((length(view.xz) - 100) / 100.0, 0.0, 100.0);
+        //fog_color = vec4(1, 0, 0, 1);
+        fog_color = vec4(abs(normalize(view.xyz)), 1);
+        fog = clamp((length(view.xz) - 100) / 100.0, 0.0, 1.0);
     }
 
-    vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
     // TODO: for maximum correctness, color must somehow be mixed into fog when 3D scene begins
-    o_color = mix(tex_color * i_color, fog_color, fog);
+    o_color = mix(o_color, fog_color, fog);
 
     vec4 pos = i_pos / i_pos.w;
     vec2 clip_uv = vec2(

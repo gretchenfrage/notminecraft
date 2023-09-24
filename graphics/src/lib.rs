@@ -28,6 +28,7 @@ use crate::{
             InvertPipeline,
             PreppedDrawInvert,
         },
+        sky::SkyPipeline,
     },
     std140::{
         Std140,
@@ -133,6 +134,7 @@ pub struct Renderer {
     text_pipeline: TextPipeline,
     mesh_pipeline: MeshPipeline,
     invert_pipeline: InvertPipeline,
+    sky_pipeline: SkyPipeline,
 
     // safety: surface must be dropped before window
     _window: Arc<Window>,
@@ -361,6 +363,14 @@ impl Renderer {
             size,
         )?;
 
+        // create the sky pipeline
+        trace!("creating sky pipeline");
+        let sky_pipeline = SkyPipeline::new(
+            &device,
+            &modifier_uniform_bind_group_layout,
+            &clip_pipeline.clip_texture_bind_group_layout,
+        )?;
+
         // set up the swapchain
         trace!("configuring swapchain");
         let config = SurfaceConfiguration {
@@ -398,6 +408,7 @@ impl Renderer {
             text_pipeline,
             mesh_pipeline,
             invert_pipeline,
+            sky_pipeline,
             _window: window,
         })
     }
@@ -508,6 +519,7 @@ impl Renderer {
             Text(PreppedDrawText),
             Mesh(&'a DrawMesh<'a>),
             Invert(PreppedDrawInvert<'a>),
+            Sky,
         }
 
         let instrs = frame_render_compiler(&content, surface_size)
@@ -546,6 +558,7 @@ impl Renderer {
                                 &mut uniform_packer,
                             )
                         ),
+                        DrawObjNorm::Sky(_) => PreppedRenderObj::Sky,
                     };
                     PreppedRenderInstr::Draw {
                         obj,
@@ -711,6 +724,10 @@ impl Renderer {
                                     &mut pass,
                                     self.uniform_buffer.unwrap_invert_uniform_bind_group(),
                                 );
+                        }
+                        PreppedRenderObj::Sky => {
+                            self.sky_pipeline
+                                .render(&mut pass);
                         }
                     }
                 }

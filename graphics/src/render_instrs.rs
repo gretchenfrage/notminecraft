@@ -15,6 +15,7 @@ use crate::{
         LayedOutTextBlock,
         DrawMesh,
         DrawInvert,
+        DrawSky,
     },
 };
 use vek::*;
@@ -40,6 +41,7 @@ pub enum DrawObjNorm<'a> {
     Text(&'a LayedOutTextBlock),
     Mesh(&'a DrawMesh<'a>),
     Invert(&'a DrawInvert),
+    Sky(&'a DrawSky),
 }
 
 impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
@@ -50,6 +52,7 @@ impl<'a> From<&'a DrawObj2> for DrawObjNorm<'a> {
             &DrawObj2::Image(ref obj) => DrawObjNorm::Image(obj),
             &DrawObj2::Text(ref obj) => DrawObjNorm::Text(obj),
             &DrawObj2::Invert(ref obj) => DrawObjNorm::Invert(obj),
+            &DrawObj2::Sky(ref obj) => DrawObjNorm::Sky(obj),
         }
     }
 }
@@ -63,6 +66,7 @@ impl<'a> From<&'a DrawObj3<'a>> for DrawObjNorm<'a> {
             &DrawObj3::Text(ref obj) => DrawObjNorm::Text(obj),
             &DrawObj3::Mesh(ref obj) => DrawObjNorm::Mesh(obj),
             &DrawObj3::Invert(ref obj) => DrawObjNorm::Invert(obj),
+            &DrawObj3::Sky(ref obj) => DrawObjNorm::Sky(obj),
         }
     }
 }
@@ -247,11 +251,17 @@ where
                     let obj = self.trying_to_draw.take().unwrap();
                     let color = self.color()
                         .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
+                    let screen_to_world = match &obj {
+                        // doing this like this isn't architecturally consistent, buuutt
+                        // it's BOTH more optimized and requires less code, so whatever
+                        &DrawObjNorm::Sky(sky) => Transform3(sky.view_proj.0).then(&self.transform()).0.inverted(),
+                        _ => self.screen_to_world,
+                    };
                     RenderInstr::Draw {
                         obj,
                         transform: self.transform().0,
                         color,
-                        screen_to_world: self.screen_to_world,
+                        screen_to_world,
                         depth: self.currently_3d,
                     }
                 }
