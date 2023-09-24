@@ -1,9 +1,9 @@
 #version 450
 
 layout(set=0, binding=0) uniform u1 {
-    mat4 u_transform_2d;
-    mat4 u_transform_3d;
+    mat4 u_transform;
     vec4 u_color;
+    mat4 u_screen_to_world;
 };
 layout(set=3, binding=0) uniform u2 {
     int u_tex_index;
@@ -33,7 +33,7 @@ void main() {
     case 3: pos = vec2(0, 1); break;
     }
 
-    o_pos = (u_transform_2d * u_transform_3d * vec4(pos, 0, 1));
+    o_pos = (u_transform * vec4(pos, 0, 1));
     gl_Position = o_pos;
     o_tex = vec3(u_tex_start + u_tex_extent * pos, u_tex_index);
 }

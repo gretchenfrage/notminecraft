@@ -1,9 +1,9 @@
 #version 450
 
 layout(set=0, binding=0) uniform u1 {
-    mat4 u_transform_2d;
-    mat4 u_transform_3d;
+    mat4 u_transform;
     vec4 u_color;
+    mat4 u_screen_to_world;
 };
 
 layout(set=1, binding=0) uniform texture2D u_clip_min_texture;

@@ -146,15 +146,15 @@ impl Debug for Renderer {
 
 #[derive(Debug, Copy, Clone)]
 struct ModifierUniformData {
-    transform_2d: Mat4<f32>,
-    transform_3d: Mat4<f32>,
+    transform: Mat4<f32>,
     color: Rgba<f32>,
+    screen_to_world: Mat4<f32>,
 }
 
 std140_struct!(ModifierUniformData {
-    transform_2d: Mat4<f32>,
-    transform_3d: Mat4<f32>,
+    transform: Mat4<f32>,
     color: Rgba<f32>,
+    screen_to_world: Mat4<f32>,
 });
 
 fn create_depth_texture_like(
@@ -493,8 +493,7 @@ impl Renderer {
                 obj: PreppedRenderObj<'a>,
                 muo: u32,
                 depth: bool,
-                dbg_transform_2d: Mat4<f32>,
-                dbg_transform_3d: Mat4<f32>,
+                dbg_transform: Mat4<f32>,
             },
             ClearClip,
             EditClip(PreppedClipEdit),
@@ -515,16 +514,16 @@ impl Renderer {
             .map(|instr| match instr {
                 RenderInstr::Draw {
                     obj,
-                    transform_2d,
-                    transform_3d,
+                    transform,
                     color,
+                    screen_to_world,
                     depth,
                 } => {
                     let muo = uniform_packer
                         .pack(&ModifierUniformData {
-                            transform_2d,
-                            transform_3d,
+                            transform,
                             color: color.map(|n| n as f32 / 255.0),
+                            screen_to_world,
                         });
                     let obj = match obj {
                         DrawObjNorm::Solid => PreppedRenderObj::Solid,
@@ -552,8 +551,7 @@ impl Renderer {
                         obj,
                         muo,
                         depth,
-                        dbg_transform_2d: transform_2d,
-                        dbg_transform_3d: transform_3d
+                        dbg_transform: transform,
                     }
                 },
                 RenderInstr::ClearClip => PreppedRenderInstr::ClearClip,
@@ -611,8 +609,7 @@ impl Renderer {
                     obj,
                     muo, // TODO
                     depth,
-                    dbg_transform_2d,
-                    dbg_transform_3d,
+                    dbg_transform,
                 } => {
                     // immediate pre-render
                     match &obj {
@@ -704,8 +701,7 @@ impl Renderer {
                                 .render(
                                     mesh,
                                     &mut pass,
-                                    dbg_transform_2d,
-                                    dbg_transform_3d,
+                                    dbg_transform,
                                 );
                         }
                         PreppedRenderObj::Invert(invert) => {

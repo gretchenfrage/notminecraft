@@ -210,8 +210,7 @@ impl MeshPipeline {
         &'a self,
         mesh: &'a DrawMesh<'a>,
         pass: &mut RenderPass<'a>,
-        _dbg_transform_2d: Mat4<f32>,
-        _dbg_transform_3d: Mat4<f32>,
+        _dbg_transform: Mat4<f32>,
     )
     {
         assert!(

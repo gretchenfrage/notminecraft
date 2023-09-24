@@ -1,9 +1,9 @@
 #version 450
 
 layout(set=0, binding=0) uniform u {
-    mat4 u_transform_2d;
-    mat4 u_transform_3d;
+    mat4 u_transform;
     vec4 u_color;
+    mat4 u_screen_to_world;
 };
 
 layout(set=1, binding=0) uniform texture2D u_clip_min_texture;
@@ -16,48 +16,32 @@ layout(set=3, binding=0) uniform texture2DArray u_texture;
 layout(set=3, binding=1) uniform sampler u_sampler;
 
 layout(location=0) in vec4 i_pos;
-layout(location=1) in vec4 i_pos_3d;
-layout(location=2) in vec3 i_tex;
-layout(location=3) in vec4 i_color;
+layout(location=1) in vec3 i_tex;
+layout(location=2) in vec4 i_color;
 
 layout(location=0) out vec4 o_color;
 
-vec3 dehomo(vec4 v) {
-    return v.xyz / v.w;
-}
-
-vec4 normiefy(vec4 v) {
-    return v / v.w;
-}
-
 void main() {
-
     // texture index rounding fix
     vec3 tex = i_tex;
     if (mod(tex.z, 1) > 0.5) {
         tex.z += 0.5;
     }
 
+    vec4 fog_color;
+    float fog = 0;
+
+    if (u_screen_to_world != mat4(0)) {
+        vec4 a = u_screen_to_world * i_pos;
+        vec4 b = u_screen_to_world * vec4(i_pos.xy, 0, i_pos.w);
+        vec3 view = (a.xyz / a.w) - (b.xyz / b.w);
+
+        fog_color = vec4(1, 0, 0, 1);
+        fog = clamp((length(view.xz) - 100) / 100.0, 0.0, 100.0);
+    }
+
     vec4 tex_color = texture(sampler2DArray(u_texture, u_sampler), tex);
-    //float fog = clamp(length(fog_mat * i_pos), fog_min, fog_max);
-    //float fog = clamp(length(i_pos) / 20.0, 0.0, 1.0);
-    //float fog = clamp(i_pos.z / i_pos.w, 0.0, 1.0);
-
-    //vec4 pos_3d = i_pos_3d / i_pos_3d.w;
-    vec4 fog_color = vec4(0.45, 0.62, 1.0, 1.0);
-    //float fog = clamp((length(pos_3d.xz) - 100.0) / 100.0, 0.0, 1.0);
-
-    //vec3 a = i_pos.xyz / i_pos.w; // screenspace position
-    mat4 b = inverse(u_transform_2d);
-    
-    vec3 d = dehomo(b * i_pos) - dehomo(b * vec4(i_pos.xy, 0, i_pos.z));
-
-    //vec4 c = (b * i_pos) - (b * vec4(i_pos.xy, 0, i_pos.z));
-    //vec3 d = c.xyz / c.w;
-
-    //vec4 fog_color = vec4(fract(normalize(d)), 1);
-    float fog = clamp((length(d.xz) - 100.0) / 100.0, 0.0, 1.0);
-
+    // TODO: for maximum correctness, color must somehow be mixed into fog when 3D scene begins
     o_color = mix(tex_color * i_color, fog_color, fog);
 
     vec4 pos = i_pos / i_pos.w;
