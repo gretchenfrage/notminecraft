@@ -146,12 +146,14 @@ impl Debug for Renderer {
 
 #[derive(Debug, Copy, Clone)]
 struct ModifierUniformData {
-    transform: Mat4<f32>,
+    transform_2d: Mat4<f32>,
+    transform_3d: Mat4<f32>,
     color: Rgba<f32>,
 }
 
 std140_struct!(ModifierUniformData {
-    transform: Mat4<f32>,
+    transform_2d: Mat4<f32>,
+    transform_3d: Mat4<f32>,
     color: Rgba<f32>,
 });
 
@@ -491,7 +493,8 @@ impl Renderer {
                 obj: PreppedRenderObj<'a>,
                 muo: u32,
                 depth: bool,
-                dbg_transform: Mat4<f32>,
+                dbg_transform_2d: Mat4<f32>,
+                dbg_transform_3d: Mat4<f32>,
             },
             ClearClip,
             EditClip(PreppedClipEdit),
@@ -512,13 +515,15 @@ impl Renderer {
             .map(|instr| match instr {
                 RenderInstr::Draw {
                     obj,
-                    transform,
+                    transform_2d,
+                    transform_3d,
                     color,
                     depth,
                 } => {
                     let muo = uniform_packer
                         .pack(&ModifierUniformData {
-                            transform,
+                            transform_2d,
+                            transform_3d,
                             color: color.map(|n| n as f32 / 255.0),
                         });
                     let obj = match obj {
@@ -547,7 +552,8 @@ impl Renderer {
                         obj,
                         muo,
                         depth,
-                        dbg_transform: transform,
+                        dbg_transform_2d: transform_2d,
+                        dbg_transform_3d: transform_3d
                     }
                 },
                 RenderInstr::ClearClip => PreppedRenderInstr::ClearClip,
@@ -605,7 +611,8 @@ impl Renderer {
                     obj,
                     muo, // TODO
                     depth,
-                    dbg_transform,
+                    dbg_transform_2d,
+                    dbg_transform_3d,
                 } => {
                     // immediate pre-render
                     match &obj {
@@ -697,7 +704,8 @@ impl Renderer {
                                 .render(
                                     mesh,
                                     &mut pass,
-                                    dbg_transform,
+                                    dbg_transform_2d,
+                                    dbg_transform_3d,
                                 );
                         }
                         PreppedRenderObj::Invert(invert) => {

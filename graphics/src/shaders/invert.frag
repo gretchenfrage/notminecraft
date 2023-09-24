@@ -1,7 +1,8 @@
 #version 450
 
 layout(set=0, binding=0) uniform u1 {
-    mat4 u_transform;
+    mat4 u_transform_2d;
+    mat4 u_transform_3d;
     vec4 u_color;
 };
 

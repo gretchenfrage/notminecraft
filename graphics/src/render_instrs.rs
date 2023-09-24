@@ -127,8 +127,23 @@ pub enum RenderInstr<'a> {
     Draw {
         /// The draw object to draw.
         obj: DrawObjNorm<'a>,
-        /// Matrix with which to affine-transform the object.
-        transform: Mat4<f32>,
+        /// 2D transformation matrix for the object.
+        ///
+        /// Screen position as calculated as:
+        ///
+        ///     transform_2d * transform_3d * pos
+        ///
+        /// (Homogenous coordinates).
+        transform_2d: Mat4<f32>,
+        /// 3D transformation matrix for the object.
+        ///
+        /// Position in 3D scene, for fog calculations and such, is calculated
+        /// as:
+        ///
+        ///     transform_3d * pos
+        ///
+        /// (Homogenous coordinates).
+        transform_3d: Mat4<f32>,
         /// Color by which to multiply the object.
         color: Rgba<u8>,
         /// Whether to test against and write to the depth buffer.
@@ -161,7 +176,8 @@ pub struct RenderCompiler<'a, I> {
     inner: Normalize<I>,
     trying_to_draw: Option<DrawObjNorm<'a>>,
     stack: Vec<StackEntry>,
-    cumul_transform_stack: Vec<Transform3>,
+    cumul_transform_2d_stack: Vec<Transform3>,
+    cumul_transform_3d_stack: Vec<Transform3>,
     cumul_color_stack: Vec<Rgba<f32>>,
     clip_stack: Vec<Clip3>,
     currently_3d: bool,
@@ -202,7 +218,8 @@ impl<'a, I> RenderCompiler<'a, I> {
             inner: Normalize(inner),
             trying_to_draw: None,
             stack: Vec::new(),
-            cumul_transform_stack: vec![base_transform],
+            cumul_transform_2d_stack: vec![base_transform],
+            cumul_transform_3d_stack: vec![Transform3::identity()],
             cumul_color_stack: vec![base_color],
             clip_stack: Vec::new(),
             currently_3d: false,
@@ -211,8 +228,12 @@ impl<'a, I> RenderCompiler<'a, I> {
         }
     }
 
-    pub fn transform(&self) -> Transform3 {
-        *self.cumul_transform_stack.last().unwrap()
+    pub fn transform_2d(&self) -> Transform3 {
+        *self.cumul_transform_2d_stack.last().unwrap()
+    }
+
+    pub fn transform_3d(&self) -> Transform3 {
+        *self.cumul_transform_3d_stack.last().unwrap()
     }
 
     pub fn color(&self) -> Rgba<f32> {
@@ -245,7 +266,8 @@ where
                         .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
                     RenderInstr::Draw {
                         obj,
-                        transform: self.transform().0,
+                        transform_2d: self.transform_2d().0,
+                        transform_3d: self.transform_3d().0,
                         color,
                         depth: self.currently_3d,
                     }
@@ -255,9 +277,18 @@ where
 
                 while self.stack.len() > stack_len {
                     let entry = self.stack.pop().unwrap();
+                    if entry.is_begin_3d {
+                        debug_assert!(self.currently_3d);
+                        self.currently_3d = false;
+                        self.depth_valid = false;
+                    }
                     match entry.kind {
                         StackEntryKind::Transform => {
-                            self.cumul_transform_stack.pop().unwrap();
+                            if self.currently_3d {
+                                self.cumul_transform_3d_stack.pop().unwrap();
+                            } else {
+                                self.cumul_transform_2d_stack.pop().unwrap();
+                            }
                         }
                         StackEntryKind::Color => {
                             self.cumul_color_stack.pop().unwrap();
@@ -272,11 +303,6 @@ where
                         }
                         StackEntryKind::DebugTag => (),
                     }
-                    if entry.is_begin_3d {
-                        debug_assert!(self.currently_3d);
-                        self.currently_3d = false;
-                        self.depth_valid = false;
-                    }
                 }
 
                 match instr {
@@ -286,7 +312,11 @@ where
                     } => {
                         let kind = match modifier {
                             Modifier3::Transform(t) => {
-                                self.cumul_transform_stack.push(t.then(&self.transform()));
+                                if self.currently_3d {
+                                    self.cumul_transform_3d_stack.push(t.then(&self.transform_3d()));
+                                } else {
+                                    self.cumul_transform_2d_stack.push(t.then(&self.transform_2d()));
+                                }
                                 StackEntryKind::Transform
                             }
                             Modifier3::Color(c) => {
@@ -294,7 +324,7 @@ where
                                 StackEntryKind::Color
                             }
                             Modifier3::Clip(c) => {
-                                let c = self.transform().apply_clip(&c);
+                                let c = self.transform_3d().then(&self.transform_2d()).apply_clip(&c);
                                 self.clip_stack.push(c);
                                 StackEntryKind::Clip
                             }
