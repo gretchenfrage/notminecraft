@@ -140,7 +140,7 @@ pub enum RenderInstr<'a> {
         /// Matrix with which to affine-transform the object.
         transform: Mat4<f32>,
         /// Color by which to multiply the object.
-        color: Rgba<u8>,
+        color: Rgba<f32>,
         /// Matrix which converts screenspace to worldspace positions.
         screen_to_world: Mat4<f32>,
         fog_mul: f32,
@@ -264,8 +264,6 @@ where
                     RenderInstr::ClearDepth
                 } else {
                     let obj = self.trying_to_draw.take().unwrap();
-                    let color = self.color()
-                        .map(|n| (n.max(0.0).min(1.0) * 255.0) as u8);
                     let (
                         screen_to_world,
                         day_night_time,
@@ -285,7 +283,7 @@ where
                     RenderInstr::Draw {
                         obj,
                         transform: self.transform().0,
-                        color,
+                        color: self.color(),
                         screen_to_world,
                         fog_mul: self.fog_mul,
                         fog_add: self.fog_add,

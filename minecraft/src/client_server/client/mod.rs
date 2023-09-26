@@ -57,6 +57,12 @@ use std::{
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
 use vek::*;
+use image::{
+    DynamicImage,
+    RgbaImage,
+};
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 
 
 const CAMERA_HEIGHT: f32 = 1.6;
@@ -118,6 +124,8 @@ pub struct Client {
     chat: GuiChat,
 
     day_night_time: f32,
+    white_pixel: GpuImageArray,
+    stars: Mesh,
 }
 
 #[derive(Debug)]
@@ -200,6 +208,49 @@ impl Client {
             ctx.game,
         );
 
+        let mut image = RgbaImage::new(1, 1);
+        image[(0, 0)] = [0xff; 4].into();
+        let white_pixel = ctx.renderer.borrow().load_image_array_raw(
+            [1, 1].into(),
+            [DynamicImage::from(image)],
+        );
+
+        let mut rng = ChaCha20Rng::from_seed([0; 32]);
+        let mut stars = MeshData::new();
+        let mut star = MeshData::new();
+        for _ in 0..1500 {
+            let u1: f32 = rng.gen_range(0.0..1.0);
+            let u2: f32 = rng.gen_range(0.0..1.0);
+            let u3: f32 = rng.gen_range(0.0..1.0);
+
+            let w = (1.0 - u1).sqrt() * (2.0 * PI * u2).sin();
+            let x = (1.0 - u1).sqrt() * (2.0 * PI * u2).cos();
+            let y = u1.sqrt() * (2.0 * PI * u3).sin();
+            let z = u1.sqrt() * (2.0 * PI * u3).cos();
+
+            let star_quat = Quaternion { w, x, y, z };
+            let star_size = rng.gen_range(0.5..2.0);
+            let star_light = rng.gen_range(1.0f32..10.0).powf(2.0) / 100.0;
+
+            star.add_quad(&Quad {
+                pos_start: [-star_size / 2.0, -star_size / 2.0, 300.0].into(),
+                pos_ext_1: [0.0, star_size, 0.0].into(),
+                pos_ext_2: [star_size, 0.0, 0.0].into(),
+                tex_start: 0.0.into(),
+                tex_extent: 1.0.into(),
+                vert_colors: [[1.0, 1.0, 1.0, star_light].into(); 4],
+                tex_index: 0,
+            });
+
+            for v in &mut star.vertices {
+                v.pos = star_quat * v.pos;
+            }
+
+            stars.extend(star.vertices.iter().copied(), star.indices.iter().copied());
+            star.clear();
+        }
+        let stars = stars.upload(&*ctx.renderer.borrow());
+
         ctx.capture_mouse();
 
         Client {
@@ -244,7 +295,9 @@ impl Client {
 
             chat: GuiChat::new(),
 
-            day_night_time: 0.0,
+            day_night_time: 0.1,
+            white_pixel,
+            stars,
         }
     }
 
@@ -285,6 +338,8 @@ impl Client {
                 client_char_name_layed_out: &self.client_char_name_layed_out,
 
                 day_night_time: self.day_night_time,
+                stars: &self.stars,
+                white_pixel: &self.white_pixel,
             },
             align(0.5,
                 logical_size(30.0,
@@ -1008,6 +1063,8 @@ struct WorldGuiBlock<'a> {
     client_char_name_layed_out: &'a SparseVec<LayedOutTextBlock>,
 
     day_night_time: f32,
+    stars: &'a Mesh,
+    white_pixel: &'a GpuImageArray,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -1074,16 +1131,30 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 day_night_time: inner.day_night_time,
             }));
 
-        // draw celestial objects
+        // draw stars
+        // intensity of it being day as opposed to night
+        let day = (f32::sin(inner.day_night_time * PI * 2.0) + 0.6).clamp(0.0, 1.0);
+        canvas.reborrow()
+            .scale(self.size)
+            .begin_3d(view_proj, Fog::None)
+            .translate(cam_pos)
+            .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0))
+            .color([1.0, 1.0, 1.0, 1.0 - day])
+            .draw_mesh(inner.stars, inner.white_pixel);
+
+        // draw sun and moon
         {
             let mut canvas = canvas.reborrow()
                 .scale(self.size)
                 .begin_3d(view_proj, Fog::None)
                 .translate(cam_pos)
                 .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0));
-            let sun_moon_transl = Vec3::new(-0.5, -0.5, 2.0);
+            let sun_moon_transl = Vec3::new(-0.5, -0.5, 1.6);
+            //let sun_oversat = 0.22 + day * 1.3;
+            let sun_oversat = (day + 1.0).powf(2.0) - 0.8;
             canvas.reborrow()
                 .translate(sun_moon_transl)
+                .color([sun_oversat, sun_oversat, sun_oversat, 1.0])
                 .draw_image(&ctx.assets().sun, 0, 0.0, 1.0);
             canvas.reborrow()
                 .rotate(Quaternion::rotation_x(PI))
@@ -1125,6 +1196,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 .scale(0.25 / 16.0)
                 .scale([1.0, -1.0, 1.0])
                 .rotate(Quaternion::rotation_y(PI))
+                .color([1.0, 1.0, 1.0, 0.5])
                 .draw_text(&inner.char_name_layed_out);
         }
 

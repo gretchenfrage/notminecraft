@@ -83,7 +83,7 @@ pub mod mod_impl {
                 ::core::include_bytes!(
                     ::core::concat!(
                         ::core::env!("CARGO_MANIFEST_DIR"),
-                        "/src/shaders/",
+                        "/src/shaders_spirv/",
                         $name,
                         ".spv"
                     )

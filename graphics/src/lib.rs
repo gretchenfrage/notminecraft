@@ -544,7 +544,7 @@ impl Renderer {
                     let muo = uniform_packer
                         .pack(&ModifierUniformData {
                             transform,
-                            color: color.map(|n| n as f32 / 255.0),
+                            color,
                             screen_to_world,
                             fog_mul,
                             fog_add,
