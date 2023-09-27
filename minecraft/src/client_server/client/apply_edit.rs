@@ -18,9 +18,9 @@ pub fn apply_edit(
             lti,
             bid_meta,
         }) => {
-            let (old_bid, old_meta) = tile_blocks
+            let old_bid_meta = tile_blocks
                 .get(cc, ci)
-                .erased_replace(lti, bid_meta.bid, bid_meta.meta);
+                .erased_replace(lti, bid_meta);
             let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
             for z in -1..=1 {
                 for y in -1..=1 {
@@ -31,7 +31,7 @@ pub fn apply_edit(
             }
             edit::SetTileBlock {
                 lti: lti,
-                bid_meta: ErasedTileBlock { bid: old_bid, meta: old_meta },
+                bid_meta: old_bid_meta,
             }.into()
         }
     }

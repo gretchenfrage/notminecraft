@@ -374,7 +374,7 @@ impl GameBinschema for RawBlockId {
     }
 }
 
-impl GameBinschema for ErasedTileBlock {
+impl GameBinschema for ErasedBidMeta {
     fn schema(game: &Arc<GameData>) -> Schema {
         Schema::Enum(game.blocks.iter()
             .map(|bid| EnumSchemaVariant {
@@ -400,14 +400,14 @@ impl GameBinschema for ErasedTileBlock {
             decoder,
             game,
         )?;
-        Ok(ErasedTileBlock { bid, meta })
+        Ok(ErasedBidMeta { bid, meta })
     }
 }
 
 impl GameBinschema for ChunkBlocks {
     fn schema(game: &Arc<GameData>) -> Schema {
         schema!(
-            seq(NUM_LTIS)(%ErasedTileBlock::schema(game))
+            seq(NUM_LTIS)(%ErasedBidMeta::schema(game))
         )
     }
     

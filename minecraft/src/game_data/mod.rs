@@ -18,10 +18,13 @@ use self::{
     mesh_logic::BlockMeshLogic,
     hitscan_logic::BlockHitscanLogic,
     physics_logic::BlockPhysicsLogic,
-    transclone_logic::Transcloner,
+    transclone_logic::{Transcloner, TransclonerFor},
 };
 use chunk_data::*;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    fmt::Debug,
+};
 
 
 pub mod content_module_prelude {
@@ -31,7 +34,7 @@ pub mod content_module_prelude {
         mesh_logic::BlockMeshLogic,
         hitscan_logic::BlockHitscanLogic,
         physics_logic::BlockPhysicsLogic,
-        transclone_logic::Transcloner,
+        transclone_logic::{Transcloner, TransclonerFor},
         content,
     };
     pub use crate::asset::consts::*;
@@ -52,6 +55,26 @@ pub struct GameDataBuilder {
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
+}
+
+impl GameDataBuilder {
+    /// Register a new block with the given meta type, automatically populate
+    /// all strictly _required_ per-block entries (and also its meta
+    /// transcloner), and return its assigned block ID.
+    pub fn register_block<M>(
+        &mut self,
+        machine_name: &str,
+        mesh_logic: BlockMeshLogic,
+    ) -> BlockId<M>
+    where
+        M: Debug + Send + Sync + TransclonerFor + 'static,
+    {
+        let bid = self.blocks.register();
+        self.blocks_machine_name.set(bid, machine_name.to_owned());
+        self.blocks_mesh_logic.set(bid, mesh_logic);
+        self.blocks_meta_transcloner.set(bid, M::transcloner_for());
+        bid
+    }
 }
 
 #[derive(Debug)]
@@ -123,8 +146,8 @@ impl GameData {
         b
     }
 
-    pub fn clone_erased_tile_block(&self, a: &ErasedTileBlock) -> ErasedTileBlock {
-        ErasedTileBlock {
+    pub fn clone_erased_tile_block(&self, a: &ErasedBidMeta) -> ErasedBidMeta {
+        ErasedBidMeta {
             bid: a.bid,
             meta: self.blocks_meta_transcloner[a.bid].clone_erased_block_meta(&a.meta),
         }

@@ -10,6 +10,9 @@ use std::{
     any::TypeId,
 };
 
+pub trait TransclonerFor: Sized {
+    fn transcloner_for() -> Transcloner;
+}
 
 macro_rules! transcloner {
     ($( $variant:ident $type:ty, )*)=>{
@@ -121,6 +124,14 @@ macro_rules! transcloner {
                 )*})
             }
         }
+
+        $(
+            impl TransclonerFor for $type {
+                fn transcloner_for() -> Transcloner {
+                    Transcloner::$variant
+                }
+            }
+        )*
     };
 }
 

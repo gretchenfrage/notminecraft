@@ -568,7 +568,7 @@ impl Server {
         }
 
         // set tile block
-        tile.get(&mut self.tile_blocks).erased_set(bid_meta.bid, bid_meta.meta);
+        tile.get(&mut self.tile_blocks).erased_set(bid_meta);
 
         // mark chunk as unsaved    
         self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);

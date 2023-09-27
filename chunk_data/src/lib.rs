@@ -203,7 +203,7 @@ pub use self::{
         BlockRegistry,
         ChunkBlocks,
         ErasedBlockMeta,
-        ErasedTileBlock,
+        ErasedBidMeta,
         MaybeBoxed,
     },
     per_tile::PerTile,

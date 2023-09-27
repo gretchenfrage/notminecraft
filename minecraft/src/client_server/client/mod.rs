@@ -862,11 +862,10 @@ impl GuiStateFrame for Client {
             &self.tile_blocks,
             ctx.game(),
         ) {
-            if let Some((tile, bid, mut meta, placing)) = match button {
+            if let Some((tile, mut bid_meta, placing)) = match button {
                 MouseButton::Left => Some((
                     looking_at.tile,
-                    AIR.bid,
-                    ErasedBlockMeta::new::<()>(()),
+                    ErasedBidMeta::new(AIR, ()),
                     false,
                 )),
                 MouseButton::Right => {
@@ -875,8 +874,10 @@ impl GuiStateFrame for Client {
                         .unwrap_or(0.into());
                     getter.gtc_get(gtc).map(|tile| (
                         tile,
-                        ctx.global().game.content_stone.bid_stone.bid,
-                        ErasedBlockMeta::new::<Rgb<u8>>(Rgb::new(0xff, 0x00, 0xff)),
+                        ErasedBidMeta::new(
+                            ctx.global().game.content_stone.bid_stone,
+                            Rgb::new(0xff, 0x00, 0xff),
+                        ),
                         true,
                     ))
                 }
@@ -884,9 +885,9 @@ impl GuiStateFrame for Client {
             } {
                 if placing {
                     const EPSILON: f32 = 0.0001;
-                    let (old_bid, old_meta) = tile
+                    let old_bid_meta = tile
                         .get(&mut self.tile_blocks)
-                        .erased_replace(bid, meta);
+                        .erased_replace(bid_meta);
                     let placing_blocked = WorldPhysicsGeometry {
                         getter: &getter,
                         tile_blocks: &self.tile_blocks,
@@ -895,16 +896,14 @@ impl GuiStateFrame for Client {
                         pos: self.char_state.pos - Vec3::from(PLAYER_BOX_POS_ADJUST),
                         ext: PLAYER_BOX_EXT.into(),
                     }.expand(EPSILON));
-                    let (_, new_meta) = tile
+                    bid_meta = tile
                         .get(&mut self.tile_blocks)
-                        .erased_replace(old_bid, old_meta);
-                    meta = new_meta;
+                        .erased_replace(old_bid_meta);
                     if placing_blocked {
                         return;
                     }
                 }
                 
-                let bid_meta = ErasedTileBlock { bid, meta };
                 self.connection.send(up::SetTileBlock {
                     gtc: tile.gtc(),
                     bid_meta: ctx.game().clone_erased_tile_block(&bid_meta),
