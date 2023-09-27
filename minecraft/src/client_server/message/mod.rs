@@ -41,7 +41,7 @@ macro_rules! message_enum {
 message_enum!(edit Edit {
     SetTileBlock {
         lti: u16,
-        bid: RawBlockId,
+        bid_meta: ErasedTileBlock,
     }
 });
 
@@ -52,7 +52,7 @@ message_enum!(up UpMessage {
     JoinGame {}
     SetTileBlock {
         gtc: Vec3<i64>,
-        bid: RawBlockId,
+        bid_meta: ErasedTileBlock,
     }
     Say {
         text: String,

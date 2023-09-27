@@ -36,7 +36,11 @@ pub fn mesh_tile(
                     mesh_buf,
                     face,
                     mesh_logic.tex_indices[face],
-                    Rgba::white(),
+                    if mesh_logic.rgb_u8_meta {
+                        tile.get(tile_blocks).raw_meta::<Rgb<u8>>().map(|n| n as f32 / 0xff as f32).into()
+                    } else {
+                        Rgba::white()
+                    },
                     gtc,
                     getter,
                     tile_blocks,

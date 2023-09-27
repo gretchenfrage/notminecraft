@@ -1,5 +1,6 @@
 
 use chunk_data::RawBlockId;
+use std::ops::Index;
 
 
 /// Association of `Option<T>` for each block.
@@ -45,5 +46,13 @@ impl<T> PerBlock<T> {
             warn!("overwrite of non-None PerBlock value");
         }
         self.vals[idx] = Some(val)
+    }
+}
+
+impl<B: Into<RawBlockId>, T> Index<B> for PerBlock<T> {
+    type Output = T;
+
+    fn index(&self, bid: B) -> &T {
+        self.get(bid)
     }
 }

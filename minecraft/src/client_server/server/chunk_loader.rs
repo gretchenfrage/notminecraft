@@ -197,14 +197,10 @@ impl LoadChunkThreadState {
                     let ltc = Vec3 { x, y, z };
                     let lti = ltc_to_lti(ltc);
 
-                    let depth = height - y;
-                    debug_assert!(depth >= 1);
+                    //let depth = height - y;
+                    //debug_assert!(depth >= 1);
 
-                    if depth == 1 {
-                        chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, ());
-                    } else {
-                        chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, ());
-                    }
+                    chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, cc_ltc_to_gtc(cc, ltc).map(|n| ((n % 0xff + 0xff) % 0xff) as u8).into());
                 }
             }
         }

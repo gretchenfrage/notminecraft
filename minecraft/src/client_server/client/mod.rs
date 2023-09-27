@@ -27,7 +27,6 @@ use crate::{
         hex_color::hex_color,
         secs_rem::secs_rem,
     },
-    game_data::GameData,
 };
 use chunk_data::*;
 use mesh_data::*;
@@ -52,7 +51,6 @@ use std::{
         Duration,
     },
     mem::take,
-    sync::Arc,
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -420,7 +418,7 @@ impl Client {
             abort: self.chunk_mesher.request(
                 cc,
                 ci,
-                clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), ctx.game),
+                ctx.game.clone_chunk_blocks(self.tile_blocks.get(cc, ci)),
             ),
             buffered_updates: Vec::new(),
             update_buffered: PerTileBool::new(),
@@ -864,8 +862,13 @@ impl GuiStateFrame for Client {
             &self.tile_blocks,
             ctx.game(),
         ) {
-            if let Some((tile, bid, placing)) = match button {
-                MouseButton::Left => Some((looking_at.tile, AIR.bid, false)),
+            if let Some((tile, bid, mut meta, placing)) = match button {
+                MouseButton::Left => Some((
+                    looking_at.tile,
+                    AIR.bid,
+                    ErasedBlockMeta::new::<()>(()),
+                    false,
+                )),
                 MouseButton::Right => {
                     let gtc = looking_at.tile.gtc() + looking_at.face
                         .map(|face| face.to_vec())
@@ -873,6 +876,7 @@ impl GuiStateFrame for Client {
                     getter.gtc_get(gtc).map(|tile| (
                         tile,
                         ctx.global().game.content_stone.bid_stone.bid,
+                        ErasedBlockMeta::new::<Rgb<u8>>(Rgb::new(0xff, 0x00, 0xff)),
                         true,
                     ))
                 }
@@ -882,7 +886,7 @@ impl GuiStateFrame for Client {
                     const EPSILON: f32 = 0.0001;
                     let (old_bid, old_meta) = tile
                         .get(&mut self.tile_blocks)
-                        .replace(BlockId::new(bid), ());
+                        .erased_replace(bid, meta);
                     let placing_blocked = WorldPhysicsGeometry {
                         getter: &getter,
                         tile_blocks: &self.tile_blocks,
@@ -891,22 +895,24 @@ impl GuiStateFrame for Client {
                         pos: self.char_state.pos - Vec3::from(PLAYER_BOX_POS_ADJUST),
                         ext: PLAYER_BOX_EXT.into(),
                     }.expand(EPSILON));
-                    tile
+                    let (_, new_meta) = tile
                         .get(&mut self.tile_blocks)
-                        .erased_set(old_bid, old_meta);
+                        .erased_replace(old_bid, old_meta);
+                    meta = new_meta;
                     if placing_blocked {
                         return;
                     }
                 }
-
+                
+                let bid_meta = ErasedTileBlock { bid, meta };
                 self.connection.send(up::SetTileBlock {
                     gtc: tile.gtc(),
-                    bid,
+                    bid_meta: ctx.game().clone_erased_tile_block(&bid_meta),
                 });
                 self.prediction.make_prediction(
                     edit::SetTileBlock {
                         lti: tile.lti,
-                        bid,
+                        bid_meta,
                     }.into(),
                     tile.cc,
                     tile.ci,
@@ -1019,7 +1025,7 @@ impl GuiStateFrame for Client {
         }
     }
 
-    fn on_captured_mouse_scroll(&mut self, ctx: &GuiWindowContext, amount: ScrolledAmount) {
+    fn on_captured_mouse_scroll(&mut self, _: &GuiWindowContext, amount: ScrolledAmount) {
         self.day_night_time += amount.to_pixels(16.0).y / 8000.0;
         self.day_night_time %= 1.0;
     }
@@ -1256,21 +1262,21 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         }
 
         // debug box for load dist
-        /*
-        let load_dist = inner.load_dist as f32;
-        let chunk_ext = CHUNK_EXTENT.map(|n| n as f32);
+        if false {
+            let load_dist = inner.load_dist as f32;
+            let chunk_ext = CHUNK_EXTENT.map(|n| n as f32);
 
-        let mut load_cc_start = (inner.pos / chunk_ext).map(|n| n.floor()) - load_dist;
-        load_cc_start.y = 0.0;
-        let mut load_cc_ext = Vec3::from(1.0 + load_dist * 2.0);
-        load_cc_ext.y = 2.0;
+            let mut load_cc_start = (inner.pos / chunk_ext).map(|n| n.floor()) - load_dist;
+            load_cc_start.y = 0.0;
+            let mut load_cc_ext = Vec3::from(1.0 + load_dist * 2.0);
+            load_cc_ext.y = 2.0;
 
-        draw_debug_box(
-            &mut canvas,
-            load_cc_start * chunk_ext,
-            load_cc_ext * chunk_ext,
-        );
-        */
+            draw_debug_box(
+                &mut canvas,
+                load_cc_start * chunk_ext,
+                load_cc_ext * chunk_ext,
+            );
+        }
     }
 }
 
@@ -1806,14 +1812,4 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<Crosshair> {
                 tex_extent: 1.0.into(),
             }));
     }
-}
-
-fn clone_chunk_tile_blocks(chunk_tile_blocks: &ChunkBlocks, game: &Arc<GameData>) -> ChunkBlocks {
-    // TODO: deduplicate this function. maybe move it to GameData.
-    let mut chunk_tile_blocks_clone = ChunkBlocks::new(&game.blocks);
-    for lti in 0..=MAX_LTI {
-        chunk_tile_blocks.raw_meta::<()>(lti);
-        chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
-    }
-    chunk_tile_blocks_clone
 }

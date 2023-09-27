@@ -16,12 +16,11 @@ pub fn apply_edit(
     match edit {
         Edit::SetTileBlock(edit::SetTileBlock {
             lti,
-            bid,
+            bid_meta,
         }) => {
             let (old_bid, old_meta) = tile_blocks
                 .get(cc, ci)
-                .replace(lti, BlockId::new(bid), ());
-            old_meta.cast::<()>();
+                .erased_replace(lti, bid_meta.bid, bid_meta.meta);
             let gtc = cc_ltc_to_gtc(cc, lti_to_ltc(lti));
             for z in -1..=1 {
                 for y in -1..=1 {
@@ -32,7 +31,7 @@ pub fn apply_edit(
             }
             edit::SetTileBlock {
                 lti: lti,
-                bid: old_bid,
+                bid_meta: ErasedTileBlock { bid: old_bid, meta: old_meta },
             }.into()
         }
     }

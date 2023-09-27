@@ -217,7 +217,7 @@ impl Server {
                     self.connections[ck].send(down::AddChunk {
                         cc,
                         ci: clientside_ci,
-                        chunk_tile_blocks: clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), &self.game),
+                        chunk_tile_blocks: self.game.clone_chunk_blocks(self.tile_blocks.get(cc, ci)),
                     });
                 }
                 chunk_manager::Effect::RemoveChunkFromClient { cc, ci: _, ck, clientside_ci } => {
@@ -261,7 +261,7 @@ impl Server {
         let writes = self.chunk_mgr.iter_unsaved()
             .map(|(cc, ci, _)| WriteEntry::Chunk(
                 cc,
-                clone_chunk_tile_blocks(self.tile_blocks.get(cc, ci), &self.game),
+                self.game.clone_chunk_blocks(self.tile_blocks.get(cc, ci)),
             ));
         self.save.write(writes).unwrap(); // TODO: don't panic
         
@@ -539,16 +539,13 @@ impl Server {
     }
 
     fn on_received_set_tile_block(&mut self, msg: up::SetTileBlock, _: ClientConnKey) -> Result<()> {
-        let up::SetTileBlock { gtc, bid } = msg;
+        let up::SetTileBlock { gtc, bid_meta } = msg;
 
         // lookup tile
         let tile = match self.chunk_mgr.getter().gtc_get(gtc) {
             Some(tile) => tile,
             None => bail!("client tried SetTileBlock on non-present gtc"),
         };
-
-        // set tile block
-        tile.get(&mut self.tile_blocks).raw_set(bid, ());
 
         // send update to all clients with that chunk loaded
         for ck2 in self.conn_states.iter_client() {
@@ -564,11 +561,14 @@ impl Server {
                     ci: clientside_ci,
                     edit: edit::SetTileBlock {
                         lti: tile.lti,
-                        bid,
+                        bid_meta: self.game.clone_erased_tile_block(&bid_meta),
                     }.into(),
                 });
             }
         }
+
+        // set tile block
+        tile.get(&mut self.tile_blocks).erased_set(bid_meta.bid, bid_meta.meta);
 
         // mark chunk as unsaved    
         self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);
@@ -659,16 +659,6 @@ impl Server {
             self.chunk_mgr.incr_load_request_count(cc, &self.conn_states);
         }
     }
-}
-
-// TODO factor out
-fn clone_chunk_tile_blocks(chunk_tile_blocks: &ChunkBlocks, game: &Arc<GameData>) -> ChunkBlocks {
-    let mut chunk_tile_blocks_clone = ChunkBlocks::new(&game.blocks);
-    for lti in 0..=MAX_LTI {
-        chunk_tile_blocks.raw_meta::<()>(lti);
-        chunk_tile_blocks_clone.raw_set(lti, chunk_tile_blocks.get(lti), ());
-    }
-    chunk_tile_blocks_clone
 }
 
 fn char_load_range(char_state: CharState) -> ChunkRange {

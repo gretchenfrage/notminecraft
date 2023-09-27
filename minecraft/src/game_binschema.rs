@@ -4,6 +4,7 @@ use crate::{
     util::array::ArrayBuilder,
 };
 use binschema::{*, error::*};
+use chunk_data::*;
 use std::{
     collections::*,
     sync::Arc,
@@ -350,16 +351,6 @@ vek_vec_game_binschema!(3, Extent3 { w, h, d });
 vek_vec_game_binschema!(3, Rgb { r, g, b });
 vek_vec_game_binschema!(4, Rgba { r, g, b, a });
 
-
-// TODO: this is temporary
-
-use chunk_data::{
-    RawBlockId,
-    ChunkBlocks,
-    NUM_LTIS,
-    MAX_LTI,
-};
-
 impl GameBinschema for RawBlockId {
     fn schema(game: &Arc<GameData>) -> Schema {
         Schema::Enum(game.blocks.iter()
@@ -383,10 +374,40 @@ impl GameBinschema for RawBlockId {
     }
 }
 
+impl GameBinschema for ErasedTileBlock {
+    fn schema(game: &Arc<GameData>) -> Schema {
+        Schema::Enum(game.blocks.iter()
+            .map(|bid| EnumSchemaVariant {
+                name: game.blocks_machine_name[bid].clone(),
+                inner: game.blocks_meta_transcloner[bid].instance_schema(game),
+            })
+            .collect())
+    }
+    
+    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        encoder.begin_enum(self.bid.0 as usize, &game.blocks_machine_name[self.bid])?;
+        game.blocks_meta_transcloner[self.bid].encode_erased_block_meta(
+            &self.meta,
+            encoder,
+            game,
+        )
+    }
+
+    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+        let bid = RawBlockId(decoder.begin_enum()? as u16);
+        decoder.begin_enum_variant(&game.blocks_machine_name[bid])?;
+        let meta = game.blocks_meta_transcloner[bid].decode_erased_block_meta(
+            decoder,
+            game,
+        )?;
+        Ok(ErasedTileBlock { bid, meta })
+    }
+}
+
 impl GameBinschema for ChunkBlocks {
     fn schema(game: &Arc<GameData>) -> Schema {
         schema!(
-            seq(NUM_LTIS)(%RawBlockId::schema(game))
+            seq(NUM_LTIS)(%ErasedTileBlock::schema(game))
         )
     }
     
@@ -394,24 +415,32 @@ impl GameBinschema for ChunkBlocks {
         encoder.begin_fixed_len_seq(NUM_LTIS)?;
         for lti in 0..=MAX_LTI {
             encoder.begin_seq_elem()?;
-            self.get(lti).encode(encoder, game)?;
-            self.raw_meta::<()>(lti);
+            let bid = self.get(lti);
+            encoder.begin_enum(bid.0 as usize, &game.blocks_machine_name[bid])?;
+            game.blocks_meta_transcloner[bid].encode_tile_block_meta(
+                TileBlockRead { chunk: self, lti },
+                encoder,
+                game,
+            )?;
         }
         encoder.finish_seq()
     }
 
     fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
         decoder.begin_fixed_len_seq(NUM_LTIS)?;
-        let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
+        let mut chunk = ChunkBlocks::new(&game.blocks);
         for lti in 0..=MAX_LTI {
             decoder.begin_seq_elem()?;
-            chunk_tile_blocks.raw_set(
-                lti,
-                RawBlockId::decode(decoder, game)?,
-                (),
-            );
+            let bid = RawBlockId(decoder.begin_enum()? as u16);
+            decoder.begin_enum_variant(&game.blocks_machine_name[bid])?;
+            game.blocks_meta_transcloner[bid].decode_tile_block_meta(
+                bid,
+                TileBlockWrite { chunk: &mut chunk, lti },
+                decoder,
+                game,
+            )?;
         }
         decoder.finish_seq()?;
-        Ok(chunk_tile_blocks)
+        Ok(chunk)
     }
 }

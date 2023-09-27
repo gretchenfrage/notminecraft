@@ -40,6 +40,7 @@ use std::{
 		catch_unwind,
 		AssertUnwindSafe,
 	},
+	env,
 };
 use winit::{
     event_loop::{
@@ -671,6 +672,10 @@ fn try_center_cursor(window: &Window) {
 }
 
 fn try_capture_mouse(window: &Window) -> bool {
+	if env::var("NO_CAPTURE_MOUSE").map(|s| !s.is_empty()).unwrap_or(false) {
+		trace!("not capturing mouse (disabled by env var)");
+		return true;
+	}
 	let success =
 		[
 			CursorGrabMode::Locked,

@@ -131,9 +131,18 @@ struct RegisteredBlock {
 
 #[derive(Copy, Clone)]
 enum MetaLayout {
+    // stored directly in the u16
     InPlace {
-        drop_in_place: Option<unsafe fn(*mut u8)>,   
+        drop_in_place: Option<unsafe fn(*mut u8)>,
     },
+    // the u16 is an index into the array of usize
+    // the data is stored directly in the usize
+    SemiInPlace {
+        drop_in_place: Option<unsafe fn(*mut u8)>,
+    },
+    // the u16 is an index into the array of usize
+    // the usize is a pointer to the heap
+    // the data is stored in the heap allocation
     OutOfPlace {
         drop_free: unsafe fn(*mut u8),
     },
@@ -157,14 +166,20 @@ unsafe fn cast_debug_fmt_meta<M: Debug>(
     )
 }
 
+fn drop_in_place_if_needed<M>() -> Option<unsafe fn(*mut u8)> {
+    if needs_drop::<M>() {
+        Some(cast_drop_in_place::<M> as unsafe fn(*mut u8))
+    } else {
+        None
+    }
+}
+
 impl MetaLayout {
     fn new<M: 'static>() -> Self {
         if size_of::<M>() <= 2 {
-            let drop_in_place =
-                if needs_drop::<M>() {
-                    Some(cast_drop_in_place::<M> as unsafe fn(*mut u8))
-                } else { None };
-            MetaLayout::InPlace { drop_in_place }
+            MetaLayout::InPlace { drop_in_place: drop_in_place_if_needed::<M>() }
+        } else if size_of::<M>() <= size_of::<usize>() {
+            MetaLayout::SemiInPlace { drop_in_place: drop_in_place_if_needed::<M>() }
         } else {
             MetaLayout::OutOfPlace {
                 drop_free: cast_drop_free::<M>,
@@ -189,6 +204,9 @@ impl Debug for MetaLayout {
             MetaLayout::InPlace {
                 ..
             } => f.write_str("MetaLayout::InPlace { .. }"),
+            MetaLayout::SemiInPlace {
+                ..
+            } => f.write_str("MetaLayout::SemiInPlace { .. }"),
             MetaLayout::OutOfPlace {
                 ..
             } => f.write_str("MetaLayout::OutOfPlace { .. }"),
@@ -196,11 +214,22 @@ impl Debug for MetaLayout {
     }
 }
 
+/// Raw block id + erased block meta.
+///
+/// Nothing special, just a struct. It's implied that they go together.
+#[derive(Debug)]
+pub struct ErasedTileBlock {
+    pub bid: RawBlockId,
+    pub meta: ErasedBlockMeta,
+}
+
 /// A single type-erased self-contained block metadata.
 ///
 /// Because of this being fully self-contained, each instance of this struct
-/// consumes a lot more memory than each equivalent tile within a
-/// `ChunkBlocks`.
+/// has more memory overhead than each tile within a `ChunkBlocks`. That said,
+/// this does still have `ChunkBlocks`'s behavior of avoiding heap allocations
+/// if the meta type is small enough, so it's not super bad--it just might not
+/// be optimal to store a big array of these.
 pub struct ErasedBlockMeta {
     type_id: TypeId,
     type_name: &'static str,
@@ -212,6 +241,7 @@ pub struct ErasedBlockMeta {
 impl Debug for ErasedBlockMeta {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         unsafe {
+            // TODO: is this wrong?
             (self.debug_fmt)(self.data.as_ptr() as *const u8, f)
         }
     }
@@ -222,6 +252,11 @@ impl Drop for ErasedBlockMeta {
         unsafe {
             match self.layout {
                 MetaLayout::InPlace {
+                    drop_in_place,
+                } => if let Some(drop_in_place) = drop_in_place {
+                    drop_in_place(self.data.as_mut_ptr() as *mut u8);
+                }
+                MetaLayout::SemiInPlace {
                     drop_in_place,
                 } => if let Some(drop_in_place) = drop_in_place {
                     drop_in_place(self.data.as_mut_ptr() as *mut u8);
@@ -292,15 +327,18 @@ unsafe impl Send for ErasedBlockMeta {}
 unsafe impl Sync for ErasedBlockMeta {}
 
 unsafe fn pack_metadata_value<M>(
-    in_place: bool,
+    layout: MetaLayout,
     meta: M,
 ) -> MaybeUninit<usize>
 {
     let mut packed = MaybeUninit::uninit();
-    if in_place {
-        *(packed.as_mut_ptr() as *mut M) = meta;
-    } else {
-        packed.write(Box::into_raw(Box::new(meta)) as usize);
+    match layout {
+        MetaLayout::InPlace { .. } | MetaLayout::SemiInPlace { .. } => {
+            *(packed.as_mut_ptr() as *mut M) = meta;
+        }
+        MetaLayout::OutOfPlace { .. } => {
+            packed.write(Box::into_raw(Box::new(meta)) as usize);
+        }
     }
     packed
 }
@@ -312,13 +350,7 @@ impl ErasedBlockMeta {
     {
         let layout = MetaLayout::new::<M>();
         let data = unsafe {
-            pack_metadata_value(
-                match layout {
-                    MetaLayout::InPlace { .. } => true,
-                    MetaLayout::OutOfPlace { .. } => false,
-                },
-                meta,
-            )
+            pack_metadata_value(layout, meta)
         };
         ErasedBlockMeta {
             type_id: TypeId::of::<M>(),
@@ -342,7 +374,7 @@ impl ErasedBlockMeta {
         unsafe {
             self.cast_assert::<M>();
             &*match self.layout {
-                MetaLayout::InPlace { .. } => {
+                MetaLayout::InPlace { .. } | MetaLayout::SemiInPlace { .. } => {
                     self.data.as_ptr() as *const M
                 }
                 MetaLayout::OutOfPlace { .. } => {
@@ -356,7 +388,7 @@ impl ErasedBlockMeta {
         unsafe {
             self.cast_assert::<M>();
             &mut *match self.layout {
-                MetaLayout::InPlace { .. } => {
+                MetaLayout::InPlace { .. } | MetaLayout::SemiInPlace { .. } => {
                     self.data.as_mut_ptr() as *mut M
                 }
                 MetaLayout::OutOfPlace { .. } => {
@@ -370,7 +402,7 @@ impl ErasedBlockMeta {
         let ret = unsafe {
             self.cast_assert::<M>();
             match self.layout {
-                MetaLayout::InPlace { .. } => {
+                MetaLayout::InPlace { .. } | MetaLayout::SemiInPlace { .. } => {
                     MaybeBoxed::NotBoxed(ptr::read(self.data.as_mut_ptr() as *mut M))
                 }
                 MetaLayout::OutOfPlace { .. } => {
@@ -454,6 +486,10 @@ impl BlockRegistry {
     pub fn iter(&self) -> impl Iterator<Item=RawBlockId> {
         (0..self.items.len()).map(|n| RawBlockId(n as u16))
     }
+
+    pub fn meta_type_id(&self, bid: impl Into<RawBlockId>) -> TypeId {
+        self.items[bid.into().0 as usize].meta_type_id
+    }
 }
 
 
@@ -469,7 +505,7 @@ pub struct ChunkBlocks {
 
 #[derive(Copy, Clone)]
 struct OutOfPlaceElem {
-    ptr: *mut u8,
+    val: usize,
     lti: u16,
 }
 
@@ -506,8 +542,8 @@ impl ChunkBlocks {
         self.bids[lti]
     }
 
-    /// Validate and return whether in-place.
-    fn meta_pre_get<M>(&self, lti: u16) -> bool
+    /// Validate and return layout.
+    fn meta_pre_get<M>(&self, lti: u16) -> MetaLayout
     where
         M: 'static,
     {
@@ -519,7 +555,7 @@ impl ChunkBlocks {
             type_name::<M>(),
             registered.meta_type_name,
         );
-        matches!(registered.meta_layout, MetaLayout::InPlace { .. })
+        registered.meta_layout
     }
 
     /// Get the block metadata at the given tile, without checking block ID.
@@ -530,19 +566,28 @@ impl ChunkBlocks {
         M: 'static,
     {
         unsafe {
-            let ptr =
-                if self.meta_pre_get::<M>(lti) {
-                    self.in_place[lti].as_ptr() as *const M
-                } else {
-                    let vec_idx = self.in_place[lti].assume_init_read() as usize;
-                    self.out_of_place
-                        .get(vec_idx)
-                        .unwrap_unchecked()
-                        .ptr
-                        as *const M
-                };
-            &*ptr
+            &*match self.meta_pre_get::<M>(lti) {
+                MetaLayout::InPlace { .. } => self.in_place[lti].as_ptr() as *const M,
+                MetaLayout::SemiInPlace { .. } => self.out_of_place(lti) as *const usize as *const M,
+                MetaLayout::OutOfPlace { .. } => *self.out_of_place(lti) as *const M,
+            }
         }
+    }
+
+    unsafe fn out_of_place(&self, lti: u16) -> &usize {
+        let vec_idx = self.in_place[lti].assume_init_read() as usize;
+        &self.out_of_place
+            .get(vec_idx)
+            .unwrap_unchecked()
+            .val
+    }
+
+    unsafe fn out_of_place_mut(&mut self, lti: u16) -> &mut usize {
+        let vec_idx = self.in_place[lti].assume_init_read() as usize;
+        &mut self.out_of_place
+            .get_mut(vec_idx)
+            .unwrap_unchecked()
+            .val
     }
 
     /// Get the block metadata at the given tile, mutably, without checking
@@ -554,18 +599,11 @@ impl ChunkBlocks {
         M: 'static,
     {
         unsafe {
-            let ptr =
-                if self.meta_pre_get::<M>(lti) {
-                    self.in_place[lti].as_mut_ptr() as *mut M
-                } else {
-                    let vec_idx = self.in_place[lti].assume_init_read() as usize;
-                    self.out_of_place
-                        .get(vec_idx)
-                        .unwrap_unchecked()
-                        .ptr
-                        as *mut M
-                };
-            &mut *ptr
+            &mut *match self.meta_pre_get::<M>(lti) {
+                MetaLayout::InPlace { .. } => self.in_place[lti].as_ptr() as *mut M,
+                MetaLayout::SemiInPlace { .. } => self.out_of_place_mut(lti) as *mut usize as *mut M,
+                MetaLayout::OutOfPlace { .. } => *self.out_of_place_mut(lti) as *mut M,
+            }
         }
     }
 
@@ -650,49 +688,69 @@ impl ChunkBlocks {
                     drop_in_place(self.in_place[lti].as_mut_ptr() as *mut u8);
                 }
             }
+            MetaLayout::SemiInPlace { drop_in_place } => {
+                // semi-in-place
+                self.drop_existing_meta_vec_inner::<VEC_REMOVE, _>(lti, |ptr| unsafe {
+                    if let Some(drop_in_place) = drop_in_place {
+                        drop_in_place(ptr as *mut usize as *mut u8);
+                    }
+                });
+            }
             MetaLayout::OutOfPlace { drop_free } => {
                 // out of place
-
-                // run destructor and deallocate
-                let vec_idx = self.in_place[lti].assume_init_read();
-                let ptr = self.out_of_place
-                    .get(vec_idx as usize)
-                    .unwrap_unchecked()
-                    .ptr;
-
-                // if destructor panics, still remove from vector before
-                // unwinding
-                let panic = catch_unwind(AssertUnwindSafe(|| {
-                    drop_free(ptr);
-                }))
-                    .err();
-
-                // swap-remove from vector and update accordingly
-                if VEC_REMOVE {
-                    if vec_idx as usize + 1 == self.out_of_place.len() {
-                        // trivial case
-                        self.out_of_place
-                            .pop()
-                            .unwrap_unchecked();
-                    } else {
-                        // actual swap-remove case
-                        let replace_with = self.out_of_place
-                            .pop()
-                            .unwrap_unchecked();
-                        *self.out_of_place
-                            .get_mut(vec_idx as usize)
-                            .unwrap_unchecked() = replace_with;
-
-                        // this part is very important:
-                        self.in_place[replace_with.lti].write(vec_idx);
-                    }
-                }
-
-                // resume unwinding if destructor panicked
-                if let Some(panic) = panic {
-                    resume_unwind(panic);
-                }
+                self.drop_existing_meta_vec_inner::<VEC_REMOVE, _>(lti, |ptr| unsafe {
+                    drop_free(*ptr as *mut u8);
+                });
             }
+        }
+    }
+
+    unsafe fn drop_existing_meta_vec_inner<const VEC_REMOVE: bool, C>(
+        &mut self,
+        lti: u16,
+        cleanup: C,
+    )
+    where
+        C: FnOnce(&mut usize),
+    {
+        // run destructor and deallocate
+        let vec_idx = self.in_place[lti].assume_init_read();
+        let ptr = &mut self.out_of_place
+            .get_mut(vec_idx as usize)
+            .unwrap_unchecked()
+            .val;
+
+        // if destructor panics, still remove from vector before
+        // unwinding
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            cleanup(ptr);
+        }))
+            .err();
+
+        // swap-remove from vector and update accordingly
+        if VEC_REMOVE {
+            if vec_idx as usize + 1 == self.out_of_place.len() {
+                // trivial case
+                self.out_of_place
+                    .pop()
+                    .unwrap_unchecked();
+            } else {
+                // actual swap-remove case
+                let replace_with = self.out_of_place
+                    .pop()
+                    .unwrap_unchecked();
+                *self.out_of_place
+                    .get_mut(vec_idx as usize)
+                    .unwrap_unchecked() = replace_with;
+
+                // this part is very important:
+                self.in_place[replace_with.lti].write(vec_idx);
+            }
+        }
+
+        // resume unwinding if destructor panicked
+        if let Some(panic) = panic {
+            resume_unwind(panic);
         }
     }
 
@@ -703,7 +761,7 @@ impl ChunkBlocks {
         bid: RawBlockId,
         tid: TypeId,
         type_name: &'static str,
-    ) -> bool {
+    ) -> MetaLayout {
         let registered = &self.registry.items[bid.0 as usize];
         assert!(
             registered.meta_type_id == tid,
@@ -711,10 +769,7 @@ impl ChunkBlocks {
             type_name,
             registered.meta_type_name,
         );
-        matches!(
-            registered.meta_layout,
-            MetaLayout::InPlace { .. },
-        )
+        registered.meta_layout
     }
 
     // write the block ID and metadata at the given tile without reading or
@@ -726,23 +781,26 @@ impl ChunkBlocks {
         &mut self,
         lti: u16,
         bid: RawBlockId,
-        in_place: bool,
+        layout: MetaLayout,
         meta: MaybeUninit<usize>,
     ) {
         self.bids[lti] = bid;
-        if in_place {
-            // in-place
-            ptr::copy(
-                meta.as_ptr() as *const u16,
-                self.in_place[lti].as_mut_ptr(),
-                1,
-            );
-        } else {
-            // out of place
-            let ptr = meta.assume_init_read() as *mut u8;
-            let vec_idx = self.out_of_place.len() as u16;
-            self.out_of_place.push(OutOfPlaceElem { ptr, lti });
-            self.in_place[lti].write(vec_idx);
+        match layout {
+            MetaLayout::InPlace { .. } => {
+                // in-place
+                ptr::copy(
+                    meta.as_ptr() as *const u16,
+                    self.in_place[lti].as_mut_ptr(),
+                    1,
+                );
+            }
+            MetaLayout::SemiInPlace { .. } | MetaLayout::OutOfPlace { .. } => {
+                // out of place
+                let val = meta.assume_init_read();
+                let vec_idx = self.out_of_place.len() as u16;
+                self.out_of_place.push(OutOfPlaceElem { val, lti });
+                self.in_place[lti].write(vec_idx);
+            }
         }
     }
 
@@ -751,7 +809,7 @@ impl ChunkBlocks {
         &mut self,
         lti: u16,
         bid: RawBlockId,
-        in_place: bool,
+        layout: MetaLayout,
         meta: MaybeUninit<usize>,
     ) {
         // clean up the existing metadata at that tile
@@ -765,7 +823,7 @@ impl ChunkBlocks {
             .err();
 
         // write new data
-        self.inner_write(lti, bid, in_place, meta);
+        self.inner_write(lti, bid, layout, meta);
 
         // resume unwinding if destructor panicked
         if let Some(panic) = panic {
@@ -779,11 +837,11 @@ impl ChunkBlocks {
         bid: RawBlockId,
         meta: ErasedBlockMeta,
     ) {
-        let in_place = self.pre_set(bid, meta.type_id, meta.type_name);
-
+        let layout = self.pre_set(bid, meta.type_id, meta.type_name);
         unsafe {
-            self.inner_set(lti, bid, in_place, meta.data);
+            self.inner_set(lti, bid, layout, meta.data);
         }
+        forget(meta);
     }
 
     /// Set the block ID and metadata at the given tile, by `RawBlockId`.
@@ -793,15 +851,15 @@ impl ChunkBlocks {
     where
         M: 'static,
     {
-        let in_place = self.pre_set(
+        let layout = self.pre_set(
             bid,
             TypeId::of::<M>(),
             type_name::<M>(),
         );
 
         unsafe {
-            let value = pack_metadata_value(in_place, meta);
-            self.inner_set(lti, bid, in_place, value);
+            let value = pack_metadata_value(layout, meta);
+            self.inner_set(lti, bid, layout, value);
         }
     }
 
@@ -821,12 +879,12 @@ impl ChunkBlocks {
         &mut self,
         lti: u16,
         bid: RawBlockId,
-        in_place: bool,
+        layout: MetaLayout,
         meta: MaybeUninit<usize>,
     ) -> (RawBlockId, ErasedBlockMeta) {
         // take ownership of the existing metadata at that tile
         let pre_bid = self.bids[lti];
-        let registered = &self.registry.items[bid.0 as usize];
+        let registered = &self.registry.items[pre_bid.0 as usize];
         let mut pre_meta_data = MaybeUninit::uninit();
         match registered.meta_layout {
             MetaLayout::InPlace { .. } => {
@@ -836,13 +894,13 @@ impl ChunkBlocks {
                     1,
                 );
             }
-            MetaLayout::OutOfPlace { .. } => {
+            MetaLayout::SemiInPlace { .. } | MetaLayout::OutOfPlace { .. } => {
                 let vec_idx = self.in_place[lti].assume_init_read();
-                let ptr = self.out_of_place
-                    .get(vec_idx as usize)
+                let val = self.out_of_place
+                    .get_mut(vec_idx as usize)
                     .unwrap_unchecked()
-                    .ptr;
-                pre_meta_data.write(ptr as usize);
+                    .val;
+                pre_meta_data.write(val);
                 if vec_idx as usize + 1 == self.out_of_place.len() {
                     self.out_of_place
                         .pop()
@@ -868,7 +926,7 @@ impl ChunkBlocks {
         };
 
         // write new data
-        self.inner_write(lti, bid, in_place, meta);
+        self.inner_write(lti, bid, layout, meta);
 
         // done
         (pre_bid, pre_meta)
@@ -881,11 +939,12 @@ impl ChunkBlocks {
         meta: ErasedBlockMeta,
     ) -> (RawBlockId, ErasedBlockMeta)
     {
-        let in_place = self.pre_set(bid, meta.type_id, meta.type_name);
-
-        unsafe {
-            self.inner_replace(lti, bid, in_place, meta.data)
-        }
+        let layout = self.pre_set(bid, meta.type_id, meta.type_name);
+        let result = unsafe {
+            self.inner_replace(lti, bid, layout, meta.data)
+        };
+        forget(meta);
+        result
     }
 
     pub fn raw_replace<M>(
@@ -897,15 +956,15 @@ impl ChunkBlocks {
     where
         M: 'static,
     {
-        let in_place = self.pre_set(
+        let layout = self.pre_set(
             bid,
             TypeId::of::<M>(),
             type_name::<M>(),
         );
 
         unsafe {
-            let value = pack_metadata_value(in_place, meta);
-            self.inner_replace(lti, bid, in_place, value)
+            let value = pack_metadata_value(layout, meta);
+            self.inner_replace(lti, bid, layout, value)
         }
     }
 
@@ -928,18 +987,9 @@ impl ChunkBlocks {
             let bid = self.bids[lti];
             let registered = &self.registry.items[bid.0 as usize];
             let ptr = match registered.meta_layout {
-                MetaLayout::InPlace { .. } => {
-                    // in-place
-                    self.in_place[lti].as_ptr() as *mut u8
-                }
-                MetaLayout::OutOfPlace { .. } => {
-                    // out of place
-                    let vec_idx = self.in_place[lti].assume_init_read();
-                    self.out_of_place
-                        .get(vec_idx as usize)
-                        .unwrap_unchecked()
-                        .ptr
-                }
+                MetaLayout::InPlace { .. } => self.in_place[lti].as_ptr() as *mut u8,
+                MetaLayout::SemiInPlace { .. } => self.out_of_place(lti) as *const usize as *const u8,
+                MetaLayout::OutOfPlace { .. } => *self.out_of_place(lti) as *const u8,
             };
             MetaDebug {
                 ptr,
@@ -951,7 +1001,7 @@ impl ChunkBlocks {
 }
 
 struct MetaDebug<'a> {
-    ptr: *mut u8,
+    ptr: *const u8,
     f: unsafe fn(*const u8, &mut Formatter) -> fmt::Result,
     _p: PhantomData<&'a ChunkBlocks>,
 }
