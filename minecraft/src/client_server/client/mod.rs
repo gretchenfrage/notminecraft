@@ -874,10 +874,7 @@ impl GuiStateFrame for Client {
                         .unwrap_or(0.into());
                     getter.gtc_get(gtc).map(|tile| (
                         tile,
-                        ErasedBidMeta::new(
-                            ctx.global().game.content_stone.bid_stone,
-                            Rgb::new(0xff, 0x00, 0xff),
-                        ),
+                        ErasedBidMeta::new(ctx.global().game.content_stone.bid_stone, ()),
                         true,
                     ))
                 }

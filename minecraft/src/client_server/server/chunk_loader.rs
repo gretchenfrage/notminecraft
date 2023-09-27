@@ -200,7 +200,7 @@ impl LoadChunkThreadState {
                     //let depth = height - y;
                     //debug_assert!(depth >= 1);
 
-                    chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, cc_ltc_to_gtc(cc, ltc).map(|n| ((n % 0xff + 0xff) % 0xff) as u8).into());
+                    chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, ());
                 }
             }
         }

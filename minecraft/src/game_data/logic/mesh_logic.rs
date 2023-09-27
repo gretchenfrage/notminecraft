@@ -12,7 +12,6 @@ pub enum BlockMeshLogic {
 pub struct BlockMeshLogicFullCube {
     pub tex_indices: PerFace<usize>,
     pub transparent: bool,
-    pub rgb_u8_meta: bool,
 }
 
 impl BlockMeshLogic {
@@ -20,7 +19,6 @@ impl BlockMeshLogic {
         BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
             tex_indices: PerFace::repeat(tex_index),
             transparent: false,
-            rgb_u8_meta: false,
         })
     }
 
@@ -28,7 +26,6 @@ impl BlockMeshLogic {
         BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
             tex_indices,
             transparent: false,
-            rgb_u8_meta: false,
         })
     }
 
@@ -36,15 +33,6 @@ impl BlockMeshLogic {
         BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
             tex_indices: PerFace::repeat(tex_index),
             transparent: true,
-            rgb_u8_meta: false,
-        })
-    }
-
-    pub fn basic_cube_rgb_u8_meta(tex_index: usize) -> Self {
-        BlockMeshLogic::FullCube(BlockMeshLogicFullCube {
-            tex_indices: PerFace::repeat(tex_index),
-            transparent: false,
-            rgb_u8_meta: true,
         })
     }
 

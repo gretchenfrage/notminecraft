@@ -137,5 +137,4 @@ macro_rules! transcloner {
 
 transcloner!(
     Unit (),
-    RgbU8 vek::Rgb<u8>,
 );
