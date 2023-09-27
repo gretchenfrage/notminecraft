@@ -223,6 +223,18 @@ pub struct ErasedTileBlock {
     pub meta: ErasedBlockMeta,
 }
 
+impl ErasedTileBlock {
+    pub fn new<M>(bid: BlockId<M>, meta: M) -> Self
+    where
+        M: Debug + Send + Sync + 'static,
+    {
+        ErasedTileBlock {
+            bid: bid.bid,
+            meta: ErasedBlockMeta::new(meta),
+        }
+    }
+}
+
 /// A single type-erased self-contained block metadata.
 ///
 /// Because of this being fully self-contained, each instance of this struct
@@ -831,17 +843,22 @@ impl ChunkBlocks {
         }
     }
 
+    /// Set the block ID and metadata at the given tile with type-erased
+    /// metadata.
+    ///
+    /// Panics if `tile_block`'s metadata is the wrong type for its bid
+    /// (unlikely to occur accidentally if constructed with
+    /// `ErasedTileBlock::new`).
     pub fn erased_set(
         &mut self,
         lti: u16,
-        bid: RawBlockId,
-        meta: ErasedBlockMeta,
+        tile_block: ErasedTileBlock,
     ) {
-        let layout = self.pre_set(bid, meta.type_id, meta.type_name);
+        let layout = self.pre_set(tile_block.bid, tile_block.meta.type_id, tile_block.meta.type_name);
         unsafe {
-            self.inner_set(lti, bid, layout, meta.data);
+            self.inner_set(lti, tile_block.bid, layout, tile_block.meta.data);
         }
-        forget(meta);
+        forget(tile_block.meta);
     }
 
     /// Set the block ID and metadata at the given tile, by `RawBlockId`.
@@ -881,7 +898,7 @@ impl ChunkBlocks {
         bid: RawBlockId,
         layout: MetaLayout,
         meta: MaybeUninit<usize>,
-    ) -> (RawBlockId, ErasedBlockMeta) {
+    ) -> ErasedTileBlock {
         // take ownership of the existing metadata at that tile
         let pre_bid = self.bids[lti];
         let registered = &self.registry.items[pre_bid.0 as usize];
@@ -929,30 +946,42 @@ impl ChunkBlocks {
         self.inner_write(lti, bid, layout, meta);
 
         // done
-        (pre_bid, pre_meta)
+        ErasedTileBlock {
+            bid: pre_bid,
+            meta: pre_meta,
+        }
     }
 
+    /// Replace the block id and metadata the given tile, returning the old bid
+    /// and metadata, both receiving and returning metadata type-erased.
+    ///
+    /// Panics if `tile_block`'s metadata is the wrong type for its bid
+    /// (unlikely to occur accidentally if constructed with
+    /// `ErasedTileBlock::new`).
     pub fn erased_replace(
         &mut self,
         lti: u16,
-        bid: RawBlockId,
-        meta: ErasedBlockMeta,
-    ) -> (RawBlockId, ErasedBlockMeta)
+        tile_block: ErasedTileBlock
+    ) -> ErasedTileBlock
     {
-        let layout = self.pre_set(bid, meta.type_id, meta.type_name);
+        let layout = self.pre_set(tile_block.bid, tile_block.meta.type_id, tile_block.meta.type_name);
         let result = unsafe {
-            self.inner_replace(lti, bid, layout, meta.data)
+            self.inner_replace(lti, tile_block.bid, layout, tile_block.meta.data)
         };
-        forget(meta);
+        forget(tile_block.meta);
         result
     }
 
+    /// Replace the block id and metadata the given tile, by `RawBlockId`,
+    /// returning the old bid and metadata type erased.
+    ///
+    /// Panics if `M` is not the meta type for `bid`.
     pub fn raw_replace<M>(
         &mut self,
         lti: u16,
         bid: RawBlockId,
         meta: M,
-    ) -> (RawBlockId, ErasedBlockMeta)
+    ) -> ErasedTileBlock
     where
         M: 'static,
     {
@@ -968,12 +997,17 @@ impl ChunkBlocks {
         }
     }
 
+    /// Replace the block id and metadata the given tile, returning the old bid
+    /// and metadata type erased.
+    ///
+    /// Panics if `M` is not the meta type for `bid` (unlikely to occur
+    /// accidentally).
     pub fn replace<M>(
         &mut self,
         lti: u16,
         bid: BlockId<M>,
         meta: M,
-    ) -> (RawBlockId, ErasedBlockMeta)
+    ) -> ErasedTileBlock
     where
         M: 'static,
     {

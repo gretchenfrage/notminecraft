@@ -8,7 +8,7 @@ use crate::{
         ChunkBlocks,
         RawBlockId,
         BlockId,
-        ErasedBlockMeta,
+        ErasedTileBlock,
     },
     per_tile::PerTile,
     per_tile_sparse::PerTileSparse,
@@ -246,9 +246,9 @@ impl<'a> TileBlockWrite<'a> {
         }
     }
 
-    pub fn erased_set(&mut self, bid: RawBlockId, meta: ErasedBlockMeta)
+    pub fn erased_set(&mut self, tile_block: ErasedTileBlock)
     {
-        self.chunk.erased_set(self.lti, bid, meta);
+        self.chunk.erased_set(self.lti, tile_block);
     }
 
     /// Set the block ID and metadata at this tile, by `RawBlockId`.
@@ -272,20 +272,16 @@ impl<'a> TileBlockWrite<'a> {
         self.chunk.set(self.lti, bid, meta);
     }
 
-    pub fn erased_replace(
-        &mut self,
-        bid: RawBlockId,
-        meta: ErasedBlockMeta,
-    ) -> (RawBlockId, ErasedBlockMeta)
+    pub fn erased_replace(&mut self, tile_block: ErasedTileBlock) -> ErasedTileBlock
     {
-        self.chunk.erased_replace(self.lti, bid, meta)
+        self.chunk.erased_replace(self.lti, tile_block)
     }
 
     pub fn raw_replace<M>(
         &mut self,
         bid: RawBlockId,
         meta: M,
-    ) -> (RawBlockId, ErasedBlockMeta)
+    ) -> ErasedTileBlock
     where
         M: 'static,
     {
@@ -296,7 +292,7 @@ impl<'a> TileBlockWrite<'a> {
         &mut self,
         bid: BlockId<M>,
         meta: M,
-    ) -> (RawBlockId, ErasedBlockMeta)
+    ) -> ErasedTileBlock
     where
         M: 'static,
     {
