@@ -156,6 +156,7 @@ macro_rules! connection_states {
                     debug_assert_eq!(all_idx, all_idx2);
                     let new_state_idx = self.state_conns.$lower.insert(all_idx);
                     self.all_conns[all_idx].state = ConnState::$camel;
+                    self.all_conns[all_idx].state_idx = new_state_idx;
                     $conn_key(ConnKeyInner {
                         all_idx,
                         state_idx: new_state_idx,

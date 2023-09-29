@@ -358,7 +358,7 @@ impl Server {
     fn on_received(&mut self, raw_key: usize, msg: UpMessage) {
         let ck = self.conn_states.lookup(raw_key);
         
-        if let Err(e) = self.on_received_inner(ck, msg) {
+        if let Err(e) = self.on_received_inner(ck, msg){
             error!(%e, "closing connection due to error processing its message");
             self.connections[ck].send(down::Close {});
             if let AnyConnKey::Client(ck) = ck {
@@ -441,7 +441,7 @@ impl Server {
 
         // transition connection state
         let ck = self.conn_states.transition_to_client(ck);
-        
+
         // decide its initial char state
         let char_state = CharState {
             pos: [0.0, 80.0, 0.0].into(),
