@@ -27,6 +27,7 @@ use crate::{
         hex_color::hex_color,
         secs_rem::secs_rem,
     },
+    settings::Settings,
 };
 use chunk_data::*;
 use mesh_data::*;
@@ -289,7 +290,7 @@ impl Client {
             client_char_name_layed_out: SparseVec::new(),
 
             menu_stack: Vec::new(),
-            menu_resources: MenuResources::new(ctx.assets),
+            menu_resources: MenuResources::new(ctx),
 
             chat: GuiChat::new(),
 
@@ -732,7 +733,9 @@ impl GuiStateFrame for Client {
             self.vel.z = vel_xz.y;
 
             // jumping
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
+            if ctx.global().focus_level == FocusLevel::MouseCaptured
+                && ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space)
+            {
                 self.try_jump();
             }
         } else {
@@ -744,15 +747,17 @@ impl GuiStateFrame for Client {
             // noclip movement
             let mut noclip_move = Vec3::new(walking_xz.x, 0.0, walking_xz.y);
 
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
-                noclip_move.y += 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
-                noclip_move.y -= 1.0;
-            }
+            if ctx.global().focus_level == FocusLevel::MouseCaptured {
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::Space) {
+                    noclip_move.y += 1.0;
+                }
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LShift) {
+                    noclip_move.y -= 1.0;
+                }
 
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LControl) {
-                noclip_move *= NOCLIP_FAST_MULTIPLIER;
+                if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LControl) {
+                    noclip_move *= NOCLIP_FAST_MULTIPLIER;
+                }
             }
 
             self.char_state.pos += noclip_move * NOCLIP_SPEED * elapsed;
@@ -837,8 +842,12 @@ impl GuiStateFrame for Client {
         }
 
         // sun
-        self.day_night_time += elapsed / 240.0;
-        self.day_night_time %= 1.0;
+        if ctx.settings().day_night {
+            self.day_night_time += elapsed / 240.0;
+            self.day_night_time %= 1.0;
+        } else {
+            self.day_night_time = 0.25;
+        }
     }
 
     fn on_captured_mouse_move(&mut self, _: &GuiWindowContext, amount: Vec2<f32>) {
@@ -959,10 +968,12 @@ impl GuiStateFrame for Client {
                         .exitable_via_inventory_button()
                 )
             {
-                self.menu_stack.pop();
-                if self.menu_stack.is_empty() {
-                    ctx.global().capture_mouse();
-                }
+                //self.menu_stack.pop();
+                //if self.menu_stack.is_empty() {
+                //    ctx.global().capture_mouse();
+                //}
+                self.menu_stack.clear();
+                ctx.global().capture_mouse();
             } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
                 if let Some(&mut Menu::ChatInput {
                     t_preventer: _,
@@ -1119,10 +1130,13 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         );
 
         // determine fog
-        let fog = Fog::Earth {
-            start: 100.0,
-            end: 150.0,
-            day_night_time: inner.day_night_time,
+        let fog = match ctx.settings().fog {
+            true => Fog::Earth {
+                start: 100.0,
+                end: 150.0,
+                day_night_time: inner.day_night_time,
+            },
+            false => Fog::None,
         };
 
         // draw sky
@@ -1298,34 +1312,54 @@ fn draw_debug_box(canvas: &mut Canvas3, pos: impl Into<Vec3<f32>>, ext: impl Int
 #[derive(Debug)]
 struct MenuResources {
     esc_menu_title_text: GuiTextBlock<true>,
+    options_menu_title_text: GuiTextBlock<true>,
     exit_menu_button: MenuButton,
     exit_game_button: MenuButton,
     options_button: MenuButton,
-    
+    options_fog_button: OptionsOnOffButton,
+    options_day_night_button: OptionsOnOffButton,
+    options_done_button: MenuButton,
+
     effect_queue: MenuEffectQueue,
 }
 
 impl MenuResources {
-    fn new(assets: &Assets) -> Self {
+    fn new(ctx: &GuiGlobalContext) -> Self {
         let esc_menu_title_text = GuiTextBlock::new(&GuiTextBlockConfig {
             text: "Game menu",
-            font: assets.font,
+            font: ctx.assets.font,
+            logical_font_size: 16.0,
+            color: Rgba::white(),
+            h_align: HAlign::Center,
+            v_align: VAlign::Bottom,
+        });
+        let options_menu_title_text = GuiTextBlock::new(&GuiTextBlockConfig {
+            text: &ctx.assets.lang.options_title,
+            font: ctx.assets.font,
             logical_font_size: 16.0,
             color: Rgba::white(),
             h_align: HAlign::Center,
             v_align: VAlign::Bottom,
         });
         let exit_menu_button = menu_button("Back to game")
-            .build(assets);
+            .build(ctx.assets);
         let exit_game_button = menu_button("Save and quit to title")
-            .build(assets);
-        let options_button = menu_button(&assets.lang.menu_options)
-            .build(assets);
+            .build(ctx.assets);
+        let options_button = menu_button(&ctx.assets.lang.menu_options)
+            .build(ctx.assets);
+        let options_fog_button = OptionsOnOffButton::new("Fog");
+        let options_day_night_button = OptionsOnOffButton::new("Day Night");
+        let options_done_button = menu_button(&ctx.assets.lang.gui_done)
+            .build(ctx.assets);
         MenuResources {
             esc_menu_title_text,
+            options_menu_title_text,
             exit_menu_button,
             exit_game_button,
             options_button,
+            options_fog_button,
+            options_day_night_button,
+            options_done_button,
 
             effect_queue: RefCell::new(VecDeque::new()),
         }
@@ -1342,6 +1376,53 @@ impl MenuResources {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct OptionsOnOffButton {
+    name: String,
+    button_on: Option<(MenuButton, bool)>,
+}
+
+impl OptionsOnOffButton {
+    fn new(name: &str) -> Self {
+        OptionsOnOffButton {
+            name: name.to_owned(),
+            button_on: None,
+        }
+    }
+
+    fn gui<'a, F>(
+        &'a mut self,
+        ctx: &GuiGlobalContext, // TODO: "lazy block"
+        mut settings_on: F,
+    ) -> impl GuiBlock<'a, DimParentSets, DimChildSets>
+    where
+        F: FnMut(&mut Settings) -> &mut bool + 'a,
+    {
+        let on = *settings_on(&mut *ctx.settings.borrow_mut());
+        if self.button_on.as_ref()
+            .map(|&(_, cached_on)| cached_on != on)
+            .unwrap_or(true)
+        {
+            let mut text = self.name.clone();
+            text.push_str(": ");
+            text.push_str(match on {
+                true => &ctx.assets.lang.options_on,
+                false => &ctx.assets.lang.options_off,
+            });
+            self.button_on = Some((menu_button(&text).build(ctx.assets), on));
+        }
+
+        self.button_on.as_mut().unwrap().0.gui(move |ctx| {
+            {
+                let mut settings = ctx.settings.borrow_mut();
+                let on = settings_on(&mut *settings);
+                *on = !*on;
+            }
+            ctx.save_settings();
+        })
     }
 }
 
@@ -1365,7 +1446,8 @@ enum Menu {
         text: String,
         text_block: GuiTextBlock<true>,
         blinker: bool,
-    }
+    },
+    Settings,
 }
 
 impl Menu {
@@ -1401,7 +1483,7 @@ impl Menu {
             &mut Menu::ChatInput {
                 ref mut text_block,
                 ..
-            } => GuiEither::B(v_align(1.0,
+            } => GuiEither::B(GuiEither::A(v_align(1.0,
                 v_stack(0.0, (
                     h_align(0.0,
                         chat.take().unwrap().gui(false)
@@ -1426,6 +1508,33 @@ impl Menu {
                         )
                     ),
                 ))
+            ))),
+            &mut Menu::Settings => GuiEither::B(GuiEither::B(
+                align([0.5, 0.0],
+                    logical_width(400.0,
+                        v_stack(0.0, (
+                            logical_height(40.0, gap()),
+                            &mut resources.options_menu_title_text,
+                            logical_height(22.0, gap()),
+                            h_align(0.5,
+                                h_stack_auto(20.0, (
+                                    logical_width(300.0,
+                                        v_stack(8.0, (
+                                            resources.options_fog_button.gui(ctx.global(), |s| &mut s.fog),
+                                        ))
+                                    ),
+                                    logical_width(300.0,
+                                        v_stack(8.0, (
+                                            resources.options_day_night_button.gui(ctx.global(), |s| &mut s.day_night),
+                                        ))
+                                    ),
+                                ))
+                            ),
+                            logical_height(32.0, gap()),
+                            resources.options_done_button.gui(on_options_done_click(&resources.effect_queue)),
+                        ))
+                    )
+                )
             )),
         }
     }
@@ -1435,6 +1544,7 @@ impl Menu {
             &Menu::EscMenu => false,
             &Menu::Inventory => true,
             &Menu::ChatInput { .. } => false,
+            &Menu::Settings => false,
         }
     }
 
@@ -1456,12 +1566,17 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
     ctx.pop_state_frame();
 }
 
-fn on_options_click<'a>(_effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
+fn on_options_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
     |_| {
-
+        effect_queue.borrow_mut().push_back(MenuEffect::PushMenu(Menu::Settings));
     }
 }
 
+fn on_options_done_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {
+    |_| {
+        effect_queue.borrow_mut().push_back(MenuEffect::PopMenu);
+    }
+}
 
 // ==== chat stuff ====
 

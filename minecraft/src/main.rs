@@ -17,6 +17,7 @@ pub mod game_binschema;
 pub mod menu;
 pub mod save_file;
 pub mod thread_pool;
+pub mod settings;
 
 
 use crate::{

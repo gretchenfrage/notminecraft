@@ -5,6 +5,7 @@ use crate::{
     sound::SoundPlayer,
     thread_pool::ThreadPool,
     game_data::GameData,
+    settings::{Settings, SETTINGS_FILE_NAME},
     gui::{
         gui_event_loop::EventLoopEffectQueue,
         state_frame::GuiStateFrame,
@@ -19,7 +20,7 @@ use graphics::{
 };
 use std::{
     collections::HashSet,
-    cell::RefCell,
+    cell::{RefCell, Ref},
     sync::Arc,
     time::Duration,
 };
@@ -49,6 +50,7 @@ pub struct GuiGlobalContext<'c> {
     pub sound_player: &'c SoundPlayer,
     pub assets: &'c Assets,
     pub data_dir: &'c DataDir,
+    pub settings: &'c RefCell<Settings>,
     pub game: &'c Arc<GameData>,
     /// Window focus level.
     pub focus_level: FocusLevel,
@@ -119,6 +121,16 @@ impl<'c> GuiGlobalContext<'c> {
             || self.pressed_keys_semantic.contains(&VirtualKeyCode::RControl)
         }
     }
+
+    pub fn settings(&self) -> Ref<Settings> {
+        self.settings.borrow()
+    }
+
+    pub fn save_settings(&self) {
+        if let Err(e) = self.settings.borrow().write(self.data_dir.subdir(SETTINGS_FILE_NAME)) {
+            error!(%e, "error saving settings");
+        }
+    }
 }
 
 impl<'c> GuiSpatialContext<'c> {
@@ -141,6 +153,10 @@ impl<'c> GuiSpatialContext<'c> {
 
     pub fn assets(&self) -> &'c Assets {
         &self.global.assets
+    }
+
+    pub fn settings(&self) -> Ref<Settings> {
+        self.global.settings()
     }
 
     pub fn game(&self) -> &'c Arc<GameData> {
@@ -188,6 +204,10 @@ impl<'c> GuiWindowContext<'c> {
 
     pub fn assets(&self) -> &'c Assets {
         &self.spatial.global.assets
+    }
+
+    pub fn settings(&self) -> Ref<Settings> {
+        self.spatial.global.settings()
     }
 
     pub fn game(&self) -> &'c Arc<GameData> {

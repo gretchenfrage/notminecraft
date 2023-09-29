@@ -30,6 +30,7 @@ futures = "0.3"
 parking_lot = "0.12"
 url = "2"
 arboard = "3"
+serde_json = "1"
 
 [dependencies.graphics]
 path = "../graphics"
@@ -64,3 +65,7 @@ features = ["time", "io-std", "rt", "rt-multi-thread"]
 [dependencies.reqwest]
 version = "0.11"
 features = ["stream"]
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]

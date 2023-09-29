@@ -97,8 +97,11 @@ lang!(
     gui_done,
     gui_cancel,
 
+    options_title,
+    options_on,
+    options_off,
+
     multiplayer_title,
-    
     multiplayer_connect,
 
     tile_stone_name,

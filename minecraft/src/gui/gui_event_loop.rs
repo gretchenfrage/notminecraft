@@ -4,6 +4,7 @@ use crate::{
 	sound::SoundPlayer,
 	thread_pool::ThreadPool,
 	game_data::GameData,
+	settings::{Settings, SETTINGS_FILE_NAME},
 	gui::{
 		context::{
 			GuiGlobalContext,
@@ -132,6 +133,7 @@ struct State {
     sound_player: SoundPlayer,
     assets: Assets,
     data_dir: DataDir,
+    settings: RefCell<Settings>,
     game: Arc<GameData>,
     focus_level: FocusLevel,
 	pressed_keys_semantic: HashSet<VirtualKeyCode>,
@@ -182,6 +184,7 @@ impl State {
 			thread_pool,
 			sound_player,
 			assets,
+			settings: RefCell::new(Settings::read(data_dir.subdir(SETTINGS_FILE_NAME))),
 			data_dir,
 			game,
 			focus_level: FocusLevel::Focused,
@@ -218,6 +221,7 @@ impl State {
 					sound_player: &self.sound_player,
 					assets: &self.assets,
 					data_dir: &self.data_dir,
+					settings: &self.settings,
 					game: &self.game,
 					focus_level: self.focus_level,
 					pressed_keys_semantic:
