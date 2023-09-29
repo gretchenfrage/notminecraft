@@ -127,6 +127,8 @@ struct State {
 	calibration_time_since_epoch: Duration,
 
     renderer: RefCell<Renderer>,
+    frame_duration_target: Duration,
+    next_frame_target: Instant,
     tokio: Handle,
     clipboard: Clipboard,
     thread_pool: ThreadPool,
@@ -154,6 +156,7 @@ struct State {
 impl State {
 	fn new(
 		window: &Window,
+		frame_duration_target: Duration,
 		renderer: Renderer,
 		tokio: Handle,
 		thread_pool: ThreadPool,
@@ -179,6 +182,9 @@ impl State {
 					Duration::ZERO
 				}),
 			renderer: RefCell::new(renderer),
+			frame_duration_target,
+			// random default value, hopefully never gets used
+			next_frame_target: Instant::now(),
 			tokio,
 			clipboard: Clipboard::new(),
 			thread_pool,
@@ -215,6 +221,8 @@ impl State {
 					event_loop: &self.effect_queue,
 					time_since_epoch: Instant::now() - self.calibration_instant + self.calibration_time_since_epoch,
 					renderer: &self.renderer,
+					frame_duration_target: self.frame_duration_target,
+					next_frame_target: self.next_frame_target,
 					tokio: &self.tokio,
 					clipboard: &self.clipboard,
 					thread_pool: &self.thread_pool,
@@ -278,7 +286,7 @@ impl GuiEventLoop {
 			.build(&event_loop)
 			.expect("failed to build window");
 		let window = Arc::new(window);
-
+	
 		let renderer = Renderer::new(Arc::clone(&window))
 			.block_on()
 			.expect("failed to create renderer");
@@ -302,9 +310,18 @@ impl GuiEventLoop {
 		data_dir: DataDir,
 		game: Arc<GameData>,
 	) -> ! {
+		// decide what FPS to try and render at
+		const MIN_AUTO_MILLIHERTZ: u32 = 1000 * 60;
+		let millihertz = self.event_loop.available_monitors()
+			.filter_map(|monitor| monitor.refresh_rate_millihertz())
+			.filter(|&millihertz| millihertz >= MIN_AUTO_MILLIHERTZ)
+			.max()
+			.unwrap_or(MIN_AUTO_MILLIHERTZ);
+
 		let mut stack = Stack::new(state_frame);
 		let mut state = State::new(
 			&self.window,
+			Duration::from_secs(1000) / millihertz,
 			self.renderer,
 			self.tokio,
 			self.thread_pool,
@@ -313,15 +330,6 @@ impl GuiEventLoop {
 			data_dir,
 			game,
 		);
-
-		// decide what FPS to try and render at
-		const MIN_AUTO_MILLIHERTZ: u32 = 1000 * 60;
-		let millihertz = self.event_loop.available_monitors()
-			.filter_map(|monitor| monitor.refresh_rate_millihertz())
-			.filter(|&millihertz| millihertz >= MIN_AUTO_MILLIHERTZ)
-			.max()
-			.unwrap_or(MIN_AUTO_MILLIHERTZ);
-		let delay_between_frames = Duration::from_secs(1000) / millihertz;
 
 		let mut prev_update_time = None;
 		let mut fps_queue = VecDeque::new();
@@ -345,7 +353,8 @@ impl GuiEventLoop {
 						StartCause::Init => true,
 					};
 					if frame_is_happening {
-						*control_flow = ControlFlow::WaitUntil(now + delay_between_frames);
+						state.next_frame_target = now + state.frame_duration_target;
+						*control_flow = ControlFlow::WaitUntil(state.next_frame_target);
 					}
 				}
 				Event::WindowEvent { event, .. } => match event {

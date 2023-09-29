@@ -51,7 +51,10 @@ use std::{
         Instant,
         Duration,
     },
-    mem::take,
+    mem::{
+        take,
+        replace,
+    },
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -553,6 +556,48 @@ impl Client {
         Ok(())
     }
 
+    fn on_chunk_meshed(&mut self, meshed_chunk: MeshedChunk) {
+        let MeshedChunk { cc, ci, mesh } = meshed_chunk;
+
+        // enqueue buffered block updates
+        let chunk_tile_meshes = self.tile_meshes.get_mut(cc, ci);
+        match chunk_tile_meshes {
+            &mut MaybePendingChunkMesh::Pending(
+                PendingChunkMesh { ref buffered_updates, .. }
+            ) => for &lti in buffered_updates {
+                self.block_updates.enqueue_tile_key(TileKey { cc, ci, lti });
+            },
+            &mut MaybePendingChunkMesh::ChunkMesh(_) => unreachable!(),
+        }
+
+        // enqueue block updates for internal fecs
+        for fec in FACES_EDGES_CORNERS {
+            let ranges: Vec3<Range<i64>> = fec
+                .to_signs()
+                .zip(CHUNK_EXTENT)
+                .map(|(sign, extent)| match sign {
+                    Sign::Neg => 0..1,
+                    Sign::Zero => 1..extent - 1,
+                    Sign::Pos => extent - 1..extent,
+                });
+
+            for z in ranges.z {
+                for y in ranges.y.clone() {
+                    for x in ranges.x.clone() {
+                        self.block_updates.enqueue_tile_key(TileKey {
+                            cc,
+                            ci,
+                            lti: ltc_to_lti(Vec3 { x, y, z }),
+                        });
+                    }
+                }
+            }
+        }
+
+        // switch over
+        *chunk_tile_meshes = MaybePendingChunkMesh::ChunkMesh(mesh);
+    }
+
     fn on_ground(&self) -> bool {
         self.time_since_ground < GROUND_DETECTION_PERIOD
         && self.time_since_jumped > GROUND_DETECTION_PERIOD
@@ -604,6 +649,63 @@ impl GuiStateFrame for Client {
     impl_visit_nodes!();
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+        // process async events
+
+        // TODO: this is a crude form of rate limiting
+        //       a better version would involve QUIC and winit user events
+        let mut t = Instant::now();
+        let process_async_cutoff = t + ctx.global().frame_duration_target / 3;
+        let mut opt_t_msg = Some(Duration::ZERO);
+        let mut opt_t_chunk = Some(Duration::ZERO);
+        loop {
+            if let Some(t_msg) = opt_t_msg
+                .filter(|&t_msg| opt_t_chunk
+                    .map(|t_chunk| t_msg <= t_chunk)
+                    .unwrap_or(true))
+            {
+                // messages from the server
+                let opt_msg = match self.connection.poll() {
+                    Ok(opt_msg) => opt_msg,
+                    Err(e) => {
+                        error!(%e, "client connection error");
+                        ctx.global().pop_state_frame();
+                        return;
+                    }
+                };
+                if let Some(msg) = opt_msg {
+                    if let Err(e) = self.on_network_message(msg, ctx.global()) {
+                        error!(%e, "error processing message from server");
+                        ctx.global().pop_state_frame();
+                        return;
+                    }
+
+                    let old_t = replace(&mut t, Instant::now());
+                    opt_t_msg = Some(t_msg + (t - old_t));
+                } else {
+                    opt_t_msg = None;
+                }
+            } else if let Some(t_chunk) = opt_t_chunk
+                .filter(|&t_chunk| opt_t_msg
+                    .map(|t_msg| t_chunk <= t_msg)
+                    .unwrap_or(true))
+            {
+                // chunks finished being meshed
+                if let Some(meshed_chunk) = self.chunk_mesher.try_recv() {
+                    self.on_chunk_meshed(meshed_chunk);
+                    let old_t = replace(&mut t, Instant::now());
+                    opt_t_chunk = Some(t_chunk + (t - old_t));
+                } else {
+                    opt_t_chunk = None;
+                }
+            } else {
+                break;
+            }
+
+            if t > process_async_cutoff {
+                break;
+            }
+        }
+
         // menu stuff
         self.menu_resources.process_effect_queue(&mut self.menu_stack);
 
@@ -620,66 +722,6 @@ impl GuiStateFrame for Client {
             if *blinker != prev_blinker {
                 *text_block = make_chat_input_text_block(text, *blinker, ctx.global());
             }
-        }
-
-        // deal with messages from the server
-        loop {
-            match self.connection.poll() {
-                Ok(Some(msg)) => {
-                    if let Err(e) = self.on_network_message(msg, ctx.global()) {
-                        error!(%e, "error processing message from server");
-                        ctx.global().pop_state_frame();
-                        return;
-                    }
-                },
-                Ok(None) => break,
-                Err(e) => {
-                    error!(%e, "client connection error");
-                    ctx.global().pop_state_frame();
-                    return;
-                }
-            }
-        }
-
-        // deal with chunks finished being initially meshed
-        while let Some(MeshedChunk { cc, ci, mesh }) = self.chunk_mesher.try_recv() {
-            // enqueue buffered block updates
-            let chunk_tile_meshes = self.tile_meshes.get_mut(cc, ci);
-            match chunk_tile_meshes {
-                &mut MaybePendingChunkMesh::Pending(
-                    PendingChunkMesh { ref buffered_updates, .. }
-                ) => for &lti in buffered_updates {
-                    self.block_updates.enqueue_tile_key(TileKey { cc, ci, lti });
-                },
-                &mut MaybePendingChunkMesh::ChunkMesh(_) => unreachable!(),
-            }
-
-            // enqueue block updates for internal fecs
-            for fec in FACES_EDGES_CORNERS {
-                let ranges: Vec3<Range<i64>> = fec
-                    .to_signs()
-                    .zip(CHUNK_EXTENT)
-                    .map(|(sign, extent)| match sign {
-                        Sign::Neg => 0..1,
-                        Sign::Zero => 1..extent - 1,
-                        Sign::Pos => extent - 1..extent,
-                    });
-
-                for z in ranges.z {
-                    for y in ranges.y.clone() {
-                        for x in ranges.x.clone() {
-                            self.block_updates.enqueue_tile_key(TileKey {
-                                cc,
-                                ci,
-                                lti: ltc_to_lti(Vec3 { x, y, z }),
-                            });
-                        }
-                    }
-                }
-            }
-
-            // switch over
-            *chunk_tile_meshes = MaybePendingChunkMesh::ChunkMesh(mesh);
         }
 
         // do block updates
