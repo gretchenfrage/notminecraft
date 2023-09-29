@@ -757,6 +757,10 @@ impl GuiStateFrame for Client {
 
                 if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::LControl) {
                     noclip_move *= NOCLIP_FAST_MULTIPLIER;
+
+                    if ctx.global().pressed_mouse_buttons.contains(&MouseButton::Middle) {
+                        noclip_move *= NOCLIP_FAST_MULTIPLIER;
+                    }
                 }
             }
 
@@ -1199,6 +1203,11 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .translate(pos)
                     .draw_mesh(chunk_mesh.mesh(), &ctx.assets().blocks);
             }
+
+            // debug outline
+            if ctx.settings().chunk_outline {
+                draw_debug_box(&mut canvas, pos, ext);
+            }
         }
 
         // my character
@@ -1272,7 +1281,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         }
 
         // debug box for load dist
-        if false {
+        if ctx.settings().load_dist_outline {
             let load_dist = inner.load_dist as f32;
             let chunk_ext = CHUNK_EXTENT.map(|n| n as f32);
 
@@ -1318,6 +1327,8 @@ struct MenuResources {
     options_button: MenuButton,
     options_fog_button: OptionsOnOffButton,
     options_day_night_button: OptionsOnOffButton,
+    options_load_dist_outline_button: OptionsOnOffButton,
+    options_chunk_outline_button: OptionsOnOffButton,
     options_done_button: MenuButton,
 
     effect_queue: MenuEffectQueue,
@@ -1349,6 +1360,8 @@ impl MenuResources {
             .build(ctx.assets);
         let options_fog_button = OptionsOnOffButton::new("Fog");
         let options_day_night_button = OptionsOnOffButton::new("Day Night");
+        let options_load_dist_outline_button = OptionsOnOffButton::new("Load Distance Outline");
+        let options_chunk_outline_button = OptionsOnOffButton::new("Chunk Outline");
         let options_done_button = menu_button(&ctx.assets.lang.gui_done)
             .build(ctx.assets);
         MenuResources {
@@ -1359,6 +1372,8 @@ impl MenuResources {
             options_button,
             options_fog_button,
             options_day_night_button,
+            options_load_dist_outline_button,
+            options_chunk_outline_button,
             options_done_button,
 
             effect_queue: RefCell::new(VecDeque::new()),
@@ -1520,12 +1535,14 @@ impl Menu {
                                 h_stack_auto(20.0, (
                                     logical_width(300.0,
                                         v_stack(8.0, (
+                                            resources.options_day_night_button.gui(ctx.global(), |s| &mut s.day_night),
                                             resources.options_fog_button.gui(ctx.global(), |s| &mut s.fog),
                                         ))
                                     ),
                                     logical_width(300.0,
                                         v_stack(8.0, (
-                                            resources.options_day_night_button.gui(ctx.global(), |s| &mut s.day_night),
+                                            resources.options_load_dist_outline_button.gui(ctx.global(), |s| &mut s.load_dist_outline),
+                                            resources.options_chunk_outline_button.gui(ctx.global(), |s| &mut s.chunk_outline),
                                         ))
                                     ),
                                 ))

@@ -19,6 +19,8 @@ pub const SETTINGS_FILE_NAME: &'static str = "settings.json";
 pub struct Settings {
     pub fog: bool,
     pub day_night: bool,
+    pub load_dist_outline: bool,
+    pub chunk_outline: bool,
 }
 
 impl Default for Settings {
@@ -26,6 +28,8 @@ impl Default for Settings {
         Settings {
             fog: true,
             day_night: true,
+            load_dist_outline: false,
+            chunk_outline: false,
         }
     }
 }
