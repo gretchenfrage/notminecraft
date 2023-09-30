@@ -3,10 +3,7 @@
 use crate::{
     game_data::GameData,
     client_server::{
-        message::{
-            UpMessage,
-            DownMessage,
-        },
+        message::*,
         server::event::EventSender,
         client,
     },
@@ -20,7 +17,13 @@ use binschema::{
 };
 use std::{
     time::Duration,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU64,
+            Ordering,
+        },
+    },
     marker::Unpin,
 };
 use anyhow::{Result, anyhow};
@@ -303,10 +306,23 @@ async fn handle_tcp_connection(
     // split it into sink half and stream half
     let (ws_send, mut ws_recv) = ws.split();
 
+    // create the "accept more chunks budget"
+    //
+    // it's kinda awkward to be handling this here but whatever. the client is
+    // not allowed to send more AcceptMoreChunks than it has received AddChunk,
+    // and we make sure to enforce this because otherwise a client could
+    // perform a slow read denial of service attack where it keeps requesting
+    // more chunks without actually reading them from the network connection
+    // causing recv_to_transmit to fill up until the server runs out of memory
+    // at disproportionately little cost to the client.
+    let accept_more_chunks_budget_1 = Arc::new(AtomicU64::new(0));
+    let accept_more_chunks_budget_2 = Arc::clone(&accept_more_chunks_budget_1);
+
     // spawn a new task to handle the send half
     async fn try_do_send_half(
         mut recv_to_transmit: TokioUnboundedReceiver<DownMessage>,
         mut ws_send: impl Sink<WsMessage, Error=WsError> + Unpin,
+        accept_more_chunks_budget: Arc<AtomicU64>,
         game: Arc<GameData>,
     ) -> Result<()> {
         let schema = DownMessage::schema(&game);
@@ -315,6 +331,10 @@ async fn handle_tcp_connection(
         //let mut dbg_buf = Vec::new();
 
         while let Some(msg) = recv_to_transmit.recv().await {
+            if matches!(msg, DownMessage::AddChunk(_)) {
+                accept_more_chunks_budget.fetch_add(1, Ordering::SeqCst);
+            }
+
             // encode message
             let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
             let mut buf = Vec::new();
@@ -345,7 +365,12 @@ async fn handle_tcp_connection(
     // messages, returns Err if ends due to connection actually closing.
     let game_2 = Arc::clone(&game);
     let send_task = rt.spawn(async move {
-        if let Err(e) = try_do_send_half(recv_to_transmit, ws_send, game_2).await {
+        if let Err(e) = try_do_send_half(
+            recv_to_transmit,
+            ws_send,
+            accept_more_chunks_budget_1,
+            game_2,
+        ).await {
             error!(%e, "connection send half error");
             Err(())
         } else {
@@ -399,6 +424,15 @@ async fn handle_tcp_connection(
                             break;
                         }
                     };
+
+                    if let &UpMessage::AcceptMoreChunks(up::AcceptMoreChunks { number }) = &msg {
+                        let prev_budget = accept_more_chunks_budget_2
+                            .fetch_sub(number as u64, Ordering::SeqCst);
+                        if number as u64 > prev_budget {
+                            error!("AcceptMoreChunks message exceeded allowed values");
+                            break;
+                        }
+                    }
 
                     // deliver
                     let _ = send_event.send(NetworkEvent::Received(key, msg));
