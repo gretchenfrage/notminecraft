@@ -1,4 +1,5 @@
 
+use crate::util::array::ArrayBuilder;
 use std::{
     any::Any,
     sync::Arc,
@@ -13,6 +14,7 @@ use crossbeam_channel::{
     unbounded,
 };
 
+pub const PRIORITY_LEVELS: usize = 2;
 
 /// Pool of threads for processing moderately heavy-weight jobs.
 #[derive(Debug, Clone)]
@@ -32,7 +34,8 @@ pub struct ThreadPoolDomain<T> {
 #[derive(Debug)]
 struct ThreadPoolState {
     index_state: Mutex<DomainIndexState>,
-    send_any: Sender<MsgToAny>,
+    send_any_token: Sender<()>,
+    send_anys: [Sender<MsgToAny>; PRIORITY_LEVELS],
     send_alls: Vec<Sender<MsgToAll>>,
 }
 
@@ -63,9 +66,13 @@ struct MsgToAny {
 }
 
 
-fn thread_body(recv_any: Receiver<MsgToAny>, recv_all: Receiver<MsgToAll>) {
+fn thread_body(
+    recv_any_token: Receiver<()>,
+    recv_anys: [Receiver<MsgToAny>; PRIORITY_LEVELS],
+    recv_all: Receiver<MsgToAll>,
+) {
     let mut domains = Slab::new();
-    while let Ok(MsgToAny { domain_idx, domain_ctr, job }) = recv_any.recv() {
+    while recv_any_token.recv().is_ok() {
         while let Ok(msg_all) = recv_all.try_recv() {
             match msg_all {
                 MsgToAll::AddDomain { domain_idx, domain_ctr, state } => {
@@ -78,6 +85,10 @@ fn thread_body(recv_any: Receiver<MsgToAny>, recv_all: Receiver<MsgToAll>) {
                 }
             }
         }
+        let MsgToAny { domain_idx, domain_ctr, job } = recv_anys.iter()
+            .rev()
+            .find_map(|recv_any| recv_any.try_recv().ok())
+            .unwrap();
         if let Some((ref mut domain, _)) = domains
             .get_mut(domain_idx)
             .filter(|&&mut (_, domain_ctr2)| domain_ctr == domain_ctr2)
@@ -90,12 +101,21 @@ fn thread_body(recv_any: Receiver<MsgToAny>, recv_all: Receiver<MsgToAll>) {
 impl ThreadPool {
     /// Spawn a new thread pool with as many threads as there are CPUs.
     pub fn new() -> Self {
-        let (send_any, recv_any) = unbounded();
+        let (send_any_token, recv_any_token) = unbounded();
+        let mut send_anys = ArrayBuilder::new();
+        let mut recv_anys = ArrayBuilder::new();
+        for _ in 0..PRIORITY_LEVELS {
+            let (send_any, recv_any) = unbounded();
+            send_anys.push(send_any);
+            recv_anys.push(recv_any);
+        }
+        let recv_anys = recv_anys.build();
         let send_alls = (0..num_cpus::get())
             .map(|_| {
-                let recv_any = recv_any.clone();
+                let recv_any_token = recv_any_token.clone();
+                let recv_anys = recv_anys.clone();
                 let (send_all, recv_all) = unbounded();
-                spawn(move || thread_body(recv_any, recv_all));
+                spawn(move || thread_body(recv_any_token, recv_anys, recv_all));
                 send_all
             })
             .collect();
@@ -105,7 +125,8 @@ impl ThreadPool {
                     assigner: Slab::new(),
                     counter: 0,
                 }),
-                send_any,
+                send_any_token,
+                send_anys: send_anys.build(),
                 send_alls,
             }),
         }
@@ -149,12 +170,13 @@ impl ThreadPool {
 impl<T: 'static> ThreadPoolDomain<T> {
     /// Submit a task to be run on some thread. Please consider catching
     /// panics.
-    pub fn submit<F: FnOnce(&mut T) + Send + 'static>(&self, job: F) {
-        self.state.send_any.send(MsgToAny {
+    pub fn submit<F: FnOnce(&mut T) + Send + 'static>(&self, job: F, priority: usize) {
+        self.state.send_anys[priority].send(MsgToAny {
             domain_idx: self.domain_idx,
             domain_ctr: self.domain_ctr,
             job: Box::new(move |state| job(state.downcast_mut().unwrap())),
         }).unwrap();
+        self.state.send_any_token.send(()).unwrap();
     }
 }
 

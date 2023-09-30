@@ -74,7 +74,7 @@ impl<T, const N: usize> ArrayBuilder<T, N> {
     pub fn push(&mut self, elem: T) {
         unsafe {
             assert!(self.i < N, "push to fully filled ArrayBuilder");
-            *(self.array.as_mut_ptr() as *mut T).add(self.i) = elem;
+            (self.array.as_mut_ptr() as *mut T).add(self.i).write(elem);
             self.i += 1;
         }
     }

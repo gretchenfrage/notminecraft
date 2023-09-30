@@ -124,7 +124,7 @@ impl ChunkLoader {
     pub fn request(&self, cc: Vec3<i64>) -> LoadChunkAbortHandle {
         let aborted_1 = Arc::new(AtomicBool::new(false));
         let aborted_2 = Arc::clone(&aborted_1);
-        self.threads.submit(move |state| state.service_request(cc, aborted_1));
+        self.threads.submit(move |state| state.service_request(cc, aborted_1), 0);
         LoadChunkAbortHandle {
             aborted: aborted_2,
         }

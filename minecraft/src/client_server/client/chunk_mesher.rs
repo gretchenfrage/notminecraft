@@ -83,7 +83,7 @@ impl ChunkMesher {
     ) -> MeshChunkAbortHandle {
         let aborted_1 = Arc::new(AtomicBool::new(false));
         let aborted_2 = Arc::clone(&aborted_1);
-        self.threads.submit(move |state| state.service_request(cc, ci, chunk_blocks, aborted_1));
+        self.threads.submit(move |state| state.service_request(cc, ci, chunk_blocks, aborted_1), 1);
         MeshChunkAbortHandle { aborted: aborted_2 }
     }
 
