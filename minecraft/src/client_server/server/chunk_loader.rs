@@ -4,6 +4,7 @@ use crate::{
     client_server::server::event::EventSender,
     save_file::{
         SaveFile,
+        WriteEntry,
         read_key,
     },
     thread_pool::{
@@ -24,6 +25,7 @@ use std::{
         },
         Arc,
     },
+    iter::once,
 };
 use bracket_noise::prelude::FastNoise;
 use anyhow::{Result, Error, anyhow};
@@ -164,10 +166,16 @@ impl LoadChunkThreadState {
             let mut chunk_tile_blocks = ChunkBlocks::new(&self.game.blocks);
             self.generate_chunk_blocks(cc, &mut chunk_tile_blocks);
 
+            // pre-save it
+            self.save.write(once(WriteEntry::Chunk(
+                cc,
+                self.game.clone_chunk_blocks(&chunk_tile_blocks),
+            )))?;
+
             ReadyChunk {
                 cc,
                 chunk_tile_blocks,
-                saved: false,
+                saved: true,
             }
         })
     }
