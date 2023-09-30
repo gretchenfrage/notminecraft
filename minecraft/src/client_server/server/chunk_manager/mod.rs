@@ -1,5 +1,9 @@
 
-use chunk_data::*;
+
+mod client_add_chunk_manager;
+
+
+use self::client_add_chunk_manager::ClientAddChunkManager;
 use crate::client_server::server::{
     chunk_loader::{
         ChunkLoader,
@@ -8,6 +12,7 @@ use crate::client_server::server::{
     },
     per_connection::*,
 };
+use chunk_data::*;
 use std::{
     num::NonZeroU64,
     collections::{
@@ -49,8 +54,6 @@ use slab::Slab;
 //   was loaded.
 //
 // misc invariants:
-// - for a loaded chunk and client, iff a chunk client interest exists for
-//   them, the client has that chunk loaded.
 // - for a loading chunk and client, iff a chunk client interest exists for
 //   them, a corresponding flag is set in loading_interest
 
@@ -78,6 +81,10 @@ pub struct ChunkManager {
     // notable invariants:
     // - reverse of clientside_chunks
     clientside_cis: PerChunk<PerClientConn<Option<usize>>>,
+
+    // for each client, sub-manager for the limited rate at which additional
+    // chunks can be added to it.
+    add_chunk_mgr: PerClientConn<ClientAddChunkManager>,
 
     // for each chunk, whether that chunk's current state is completely saved.
     saved: PerChunk<bool>,
@@ -150,6 +157,7 @@ impl ChunkManager {
             chunks: LoadedChunks::new(),
             clientside_chunks: PerClientConn::new(),
             clientside_cis: PerChunk::new(),
+            add_chunk_mgr: PerClientConn::new(),
             saved: PerChunk::new(),
             load_request_count: PerChunk::new(),
             loading_chunks: HashMap::new(),
@@ -161,6 +169,7 @@ impl ChunkManager {
     /// This does _not_ require draining the effect queue.
     pub fn add_client(&mut self, ck: ClientConnKey) {
         self.clientside_chunks.insert(ck, Slab::new());
+        self.add_chunk_mgr.insert(ck, ClientAddChunkManager::new(&self.chunks));
 
         for (cc, ci) in self.chunks.iter() {
             self.clientside_cis.get_mut(cc, ci).insert(ck, None);
@@ -173,15 +182,17 @@ impl ChunkManager {
         &mut self,
         ck: ClientConnKey,
         chunk_interests: impl IntoIterator<Item=Vec3<i64>>,
+        conn_states: &ConnStates,
     ) {
         // remove chunk interests, but don't bother updating data structures
         // for that client or producing effects to update that client.
         for cc in chunk_interests {
-            self.internal_remove_chunk_client_interest(ck, cc, false);
+            self.internal_remove_chunk_client_interest(ck, cc, conn_states, false);
         }
 
         // remove data structures for that client
         self.clientside_chunks.remove(ck);
+        self.add_chunk_mgr.remove(ck);
         
         for (cc, ci) in self.chunks.iter() {
             self.clientside_cis.get_mut(cc, ci).remove(ck);
@@ -225,7 +236,7 @@ impl ChunkManager {
 
     /// Decrement the load request count for the given cc. Must correspond to
     /// a previous direct call to incr_load_request_count.
-    pub fn decr_load_request_count(&mut self, cc: Vec3<i64>) {
+    pub fn decr_load_request_count(&mut self, cc: Vec3<i64>, conn_states: &ConnStates) {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // already loaded
             // decrement count
@@ -234,10 +245,12 @@ impl ChunkManager {
             *count -= 1;
 
             // if count reached 0 and already saved, remove it immediately.
+            // (otherwise, will be removed when saved if count is still 0).
             if *count == 0 && !self.saved.get(cc, ci) {
-                self.remove_chunk(cc, ci);
+                self.remove_chunk(cc, ci, conn_states);
             }
         } else {
+            // get
             let mut entry =
                 match self.loading_chunks.entry(cc) {
                     hash_map::Entry::Occupied(entry) => entry,
@@ -273,8 +286,9 @@ impl ChunkManager {
         self.incr_load_request_count(cc, conn_states);
 
         if let Some(ci) = self.chunks.getter().get(cc) {
-            // if the chunk is already loaded, add it to the client
-            self.add_chunk_to_client(cc, ci, ck);
+            // if the chunk is already loaded, add it to the client, modulo
+            // add chunk to client rate limiting
+            self.maybe_add_chunk_to_client(cc, ci, ck);
         } else {
             // if the chunk is still being loaded, mark the client as
             // interested in it when it's ready
@@ -284,11 +298,25 @@ impl ChunkManager {
         }
     }
 
+    /// Permit `amount` additional "add chunk to client" operations to occur to
+    /// the client.
+    pub fn increase_client_add_chunk_budget(&mut self, ck: ClientConnKey, amount: u32) {
+        self.add_chunk_mgr[ck].increase_budget(amount);
+        while let Some((cc, ci)) = self.add_chunk_mgr[ck].poll_queue() {
+            self.add_chunk_to_client(cc, ci, ck);
+        }
+    }
+
     /// Remove the chunk client interest for the given cc and client. Must not
     /// do redundantly. Also automatically decrements the load request count
     /// for that cc.
-    pub fn remove_chunk_client_interest(&mut self, ck: ClientConnKey, cc: Vec3<i64>) {
-        self.internal_remove_chunk_client_interest(ck, cc, true);
+    pub fn remove_chunk_client_interest(
+        &mut self,
+        ck: ClientConnKey,
+        cc: Vec3<i64>,
+        conn_states: &ConnStates,
+    ) {
+        self.internal_remove_chunk_client_interest(ck, cc, conn_states, true);
     }
 
     /// Call upon receiving a ready chunk event.
@@ -305,6 +333,9 @@ impl ChunkManager {
         self.clientside_cis.add(cc, ci, conn_states.new_mapped_per_client(|_| None));
         self.saved.add(cc, ci, ready_chunk.saved);
         self.load_request_count.add(cc, ci, loading_chunk.load_request_count.into());
+        for ck in conn_states.iter_client() {
+            self.add_chunk_mgr[ck].on_add_chunk(cc, ci);
+        }
 
         // tell the user to add the chunk
         self.effects.push_back(Effect::AddChunk { // TODO: could simplify this
@@ -312,23 +343,24 @@ impl ChunkManager {
             ci,
         });
 
-        // for each client interested in it, add it to that client
+        // for each client interested in it, add it to that client, modulo add
+        // chunk to client rate limiting
         for ck in conn_states.iter_client() {
             if loading_chunk.interest[ck] {
-                self.add_chunk_to_client(cc, ci, ck);
+                self.maybe_add_chunk_to_client(cc, ci, ck);
             }
         }
     }
 
     /// Mark a loaded chunk as saved.
-    pub fn mark_saved(&mut self, cc: Vec3<i64>, ci: usize) {
+    pub fn mark_saved(&mut self, cc: Vec3<i64>, ci: usize, conn_states: &ConnStates) {
         if *self.load_request_count.get(cc, ci) > 0 {
             // simply mark it as saved
             *self.saved.get_mut(cc, ci) = true;
         } else {
             // waiting for it to be saved was the only reason it was still
             // loaded, so just remove it.
-            self.remove_chunk(cc, ci);
+            self.remove_chunk(cc, ci, conn_states);
         }
     }
 
@@ -340,12 +372,24 @@ impl ChunkManager {
     }
 
     // internal method for when it's time to remove a loaded chunk.
-    fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize) {
+    fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize, conn_states: &ConnStates) {
         self.chunks.remove(cc);
         self.clientside_cis.remove(cc, ci);
         self.saved.remove(cc, ci);
         self.load_request_count.remove(cc, ci);
+        for ck in conn_states.iter_client() {
+            self.add_chunk_mgr[ck].on_remove_chunk(cc, ci);
+        }
         self.effects.push_back(Effect::RemoveChunk { cc, ci });
+    }
+
+    // internal method for when it's time to add a loaded chunk to a client,
+    // or enqueue it to be added to the client once the client's add chunk
+    // rate limitation permits it.
+    fn maybe_add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, ck: ClientConnKey) {
+        if self.add_chunk_mgr[ck].maybe_add_chunk_to_client(cc, ci) {
+            self.add_chunk_to_client(cc, ci, ck);
+        }
     }
 
     // internal method for when it's time to add a loaded chunk to a client.
@@ -367,28 +411,40 @@ impl ChunkManager {
         &mut self,
         ck: ClientConnKey,
         cc: Vec3<i64>,
+        conn_states: &ConnStates,
         update_client: bool,
     ) {
-        if let Some(ci) = self.chunks.getter().get(cc) {
-            // if the chunk is already loaded, remove it from the client.
-            let clientside_ci = self.clientside_cis.get_mut(cc, ci)[ck].take().unwrap();
-            if update_client {
-                self.clientside_chunks[ck].remove(clientside_ci);
-                self.effects.push_back(Effect::RemoveChunkFromClient {
-                    cc,
-                    ci,
-                    ck,
-                    clientside_ci,
-                });
+        if update_client {
+            if let Some(ci) = self.chunks.getter().get(cc) {
+                // if the chunk is already loaded, remove it from the client if
+                // it was added to the client
+                let clientside_ci = self.clientside_cis.get_mut(cc, ci)[ck].take();
+
+                if let Some(clientside_ci) = clientside_ci {
+                    // if indeed it was added to the client, remove it from the
+                    // client
+                    self.clientside_chunks[ck].remove(clientside_ci);
+                    self.effects.push_back(Effect::RemoveChunkFromClient {
+                        cc,
+                        ci,
+                        ck,
+                        clientside_ci,
+                    });
+                } else {
+                    // elsewise, it must be pending in the queue of chunks to
+                    // be added to the client when rate limits permit it, so
+                    // remove it from that queue
+                    self.add_chunk_mgr[ck].remove_from_queue(cc, ci);
+                }
+            } else if let Some(loading_chunk) = self.loading_chunks.get_mut(&cc) {
+                // if the chunk is still loading, un-mark the client's interest.
+                loading_chunk.interest[ck] = false;
             }
-        } else if let Some(loading_chunk) = self.loading_chunks.get_mut(&cc) {
-            // if the chunk is still loading, un-mark the client's interest.
-            loading_chunk.interest[ck] = false;
         }
 
         // decrement the load request count. this will handle possibly unloading
         // the chunk from the server or aborting a pending load request.
-        self.decr_load_request_count(cc);
+        self.decr_load_request_count(cc, conn_states);
     }
 
     /// Get the set of fully loaded chunks in the server.

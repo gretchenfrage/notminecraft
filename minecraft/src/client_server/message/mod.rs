@@ -50,6 +50,9 @@ message_enum!(up UpMessage {
         username: String,
     }
     JoinGame {}
+    AcceptMoreChunks {
+        number: u32,
+    }
     SetTileBlock {
         gtc: Vec3<i64>,
         bid_meta: ErasedBidMeta,

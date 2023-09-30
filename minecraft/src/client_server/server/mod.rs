@@ -269,7 +269,7 @@ impl Server {
             .iter_unsaved()
             .map(|(cc, ci, _)| (cc, ci)).collect::<Vec<_>>() // TODO: bleh
         {
-            self.chunk_mgr.mark_saved(cc, ci);
+            self.chunk_mgr.mark_saved(cc, ci, &self.conn_states);
             self.process_chunk_mgr_effects();
         }
     }
@@ -348,7 +348,7 @@ impl Server {
         self.username_clients.remove(&username).unwrap();
 
         // tell chunk manager it's gone
-        self.chunk_mgr.remove_client(ck, char_load_range(char_state).iter());
+        self.chunk_mgr.remove_client(ck, char_load_range(char_state).iter(), &self.conn_states);
         self.process_chunk_mgr_effects();
 
         // announce
@@ -406,6 +406,7 @@ impl Server {
 
             LogIn on_received_log_in,
             JoinGame on_received_join_game,
+            AcceptMoreChunks on_received_accept_more_chunks,
             SetTileBlock on_received_set_tile_block,
             Say on_received_say,
             SetCharState on_received_set_char_state,
@@ -538,6 +539,13 @@ impl Server {
         Ok(())
     }
 
+    fn on_received_accept_more_chunks(&mut self, msg: up::AcceptMoreChunks, ck: ClientConnKey) -> Result<()> {
+        let up::AcceptMoreChunks { number } = msg;
+        self.chunk_mgr.increase_client_add_chunk_budget(ck, number);
+        self.process_chunk_mgr_effects();
+        Ok(())
+    }
+
     fn on_received_set_tile_block(&mut self, msg: up::SetTileBlock, _: ClientConnKey) -> Result<()> {
         let up::SetTileBlock { gtc, bid_meta } = msg;
 
@@ -612,7 +620,7 @@ impl Server {
         let old_char_load_range = char_load_range(old_char_state);
         let new_char_load_range = char_load_range(char_state);
         for cc in old_char_load_range.iter_diff(new_char_load_range) {
-            self.chunk_mgr.remove_chunk_client_interest(ck, cc);
+            self.chunk_mgr.remove_chunk_client_interest(ck, cc, &self.conn_states);
             self.process_chunk_mgr_effects();
         }
         for cc in dist_sorted_ccs(new_char_load_range.iter_diff(old_char_load_range), char_state.pos) {

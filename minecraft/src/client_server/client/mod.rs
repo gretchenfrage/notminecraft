@@ -472,6 +472,7 @@ impl Client {
             abort,
             ..
         }) = self.tile_meshes.remove(cc, ci) {
+            self.connection.send(up::AcceptMoreChunks { number: 1 });
             abort.abort();
         }
         self.block_updates.remove_chunk(cc, ci);
@@ -558,6 +559,8 @@ impl Client {
 
     fn on_chunk_meshed(&mut self, meshed_chunk: MeshedChunk) {
         let MeshedChunk { cc, ci, mesh } = meshed_chunk;
+
+        self.connection.send(up::AcceptMoreChunks { number: 1 });
 
         // enqueue buffered block updates
         let chunk_tile_meshes = self.tile_meshes.get_mut(cc, ci);
