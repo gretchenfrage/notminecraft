@@ -29,12 +29,17 @@ use crate::{
         Assets,
     },
     thread_pool::ThreadPool,
+    save_file::SaveFile,
+    client_server::server::ServerHandle,
 };
 use get_assets::DataDir;
 use std::{
     fs::File,
     sync::Arc,
-    env,
+    env::{
+        self,
+        args,
+    },
     panic,
     io::{
         Write,
@@ -64,6 +69,7 @@ use anyhow::{
     ensure,
     bail,
 };
+use crossbeam_channel::bounded;
 
 
 const DEFAULT_FILTER: &'static str =
@@ -153,71 +159,58 @@ fn main() {
     let game = Arc::new(game);
     let data_dir = DataDir::new();
 
-    /*
-    // maybe run headless
+    // parse args
     let args = args().collect::<Vec<_>>();
-    let mut client_only = false;
     match &args.iter().map(|s| s.as_str()).collect::<Vec<_>>()[..] {
-        &[_] => (),
+        &[_] => {
+            // run client
+            // download assets, maybe
+            let _ = rt
+                .block_on(asset_download_prompt(&data_dir))
+                .map_err(|e| error!(%e, "unable to acquire assets"));
+
+            // initialize rest of game runtime, including actually loading assets
+            let mut event_loop = GuiEventLoop::new(rt.handle(), thread_pool.clone());
+
+            let assets = rt
+                .block_on(async {
+                    let mut loader = AssetLoader::new(&data_dir, &mut event_loop.renderer);
+                    Assets::load(&mut loader).await
+                });
+
+            let gui_state = MainMenu::new(
+                &event_loop.renderer,
+                &assets
+            );
+
+            // enter window event loop
+            event_loop.run(Box::new(gui_state), assets, data_dir, game);
+        },
         &[_, "--server"] => {
+            // run server
             info!("running server");
-            let result = client_server::server::run_networked_server(rt.handle(), &thread_pool, &data_dir, &game);
-            match result {
-                Ok(()) => {
-                    info!("server shutting down");
-                    return;
-                }
+            let save = match SaveFile::open("server", &data_dir, &game) {
+                Ok(save) => save,
                 Err(e) => {
-                    error!(%e, "server shutting down");
+                    error!(%e, "error opening save file");
                     std::process::exit(1);
-                },
+                }
             };
-        }
-        &[_, "--client-only"] => {
-            client_only = true;
+            let server = ServerHandle::start(save, &game, rt.handle(), &thread_pool);
+            let _network_bind = server.open_to_network("0.0.0.0:35565");
+
+            let (send_ctrlc, recv_ctrlc) = bounded(1);
+            if let Err(e) = ctrlc::set_handler(move || { let _ = send_ctrlc.send(()); }) {
+                error!(%e, "error setting ctrlc handler");
+            }
+            let _ = recv_ctrlc.recv();
+            
+            info!("shutting down");
+            server.stop();
         }
         _ => {
             error!("invalid CLI args");
             std::process::exit(2);
         }
     };
-    */
-
-    // download assets, maybe
-    let _ = rt
-        .block_on(asset_download_prompt(&data_dir))
-        .map_err(|e| error!(%e, "unable to acquire assets"));
-
-    // initialize rest of game runtime, including actually loading assets
-    let mut event_loop = GuiEventLoop::new(rt.handle(), thread_pool.clone());
-
-    let assets = rt
-        .block_on(async {
-            let mut loader = AssetLoader::new(&data_dir, &mut event_loop.renderer);
-            Assets::load(&mut loader).await
-        });
-
-    /*
-    if !client_only {
-        // start server in a background thread
-        let rt_handle = Handle::clone(&rt.handle());
-        let game_2 = Arc::clone(&game);
-        let data_dir = data_dir.clone();
-        std::thread::spawn(move || {
-            let result = client_server::server::run_networked_server(&rt_handle, &thread_pool, &data_dir, &game_2);
-            match result {
-                Ok(()) => info!("server shutting down"),
-                Err(e) => error!(%e, "server shutting down"),
-            };
-        });
-    }
-    */
-    
-    let gui_state = MainMenu::new(
-        &event_loop.renderer,
-        &assets
-    );
-
-    // enter window event loop
-    event_loop.run(Box::new(gui_state), assets, data_dir, game);
 }

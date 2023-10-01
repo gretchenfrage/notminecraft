@@ -13,6 +13,7 @@ use binschema::{
     CoderState,
     Encoder,
     Decoder,
+    Schema,
 };
 use std::{
     time::Duration,
@@ -178,6 +179,12 @@ impl NetworkServer {
         let rt_2 = Handle::clone(&rt);
         let game = Arc::clone(&game);
         NetworkBindGuard(rt.spawn(async move {
+            // initialize schemas
+            let down_schema = Arc::new(DownMessage::schema(&game));
+            info!("DownMessage schema:\n{}", down_schema.pretty_fmt());
+            let up_schema = Arc::new(UpMessage::schema(&game));
+            info!("UpMessage schema:\n{}", up_schema.pretty_fmt());
+
             // TCP bind with exponential backoff
             let mut backoff = Duration::from_millis(100);
             let listener = loop {
@@ -202,6 +209,8 @@ impl NetworkServer {
                         let slab = Arc::clone(&slab);
                         let rt = Handle::clone(&rt_2);
                         let send_event = send_event.clone();
+                        let up_schema = Arc::clone(&up_schema);
+                        let down_schema = Arc::clone(&down_schema);
                         let game = Arc::clone(&game);
                         rt_2.spawn(async move {
                             // new task just to handle this TCP connection
@@ -210,6 +219,8 @@ impl NetworkServer {
                                 slab,
                                 &rt,
                                 send_event,
+                                down_schema,
+                                up_schema,
                                 game,
                             ).await;
                             if let Err(e) = result {
@@ -262,6 +273,8 @@ async fn handle_tcp_connection(
     slab: Arc<Mutex<Slab<()>>>,
     rt: &Handle,
     send_event: EventSender<NetworkEvent>,
+    down_schema: Arc<Schema>,
+    up_schema: Arc<Schema>,
     game: Arc<GameData>,
 ) -> Result<()> {
     // do the handshake to upgrade it to websocket
@@ -300,10 +313,9 @@ async fn handle_tcp_connection(
         mut recv_to_transmit: TokioUnboundedReceiver<DownMessage>,
         mut ws_send: impl Sink<WsMessage, Error=WsError> + Unpin,
         accept_more_chunks_budget: Arc<AtomicU64>,
+        down_schema: Arc<Schema>,
         game: Arc<GameData>,
     ) -> Result<()> {
-        let schema = DownMessage::schema(&game);
-        info!("DownMessage schema:\n{}", schema.pretty_fmt());
         let mut coder_state_alloc = CoderStateAlloc::new();
         //let mut dbg_buf = Vec::new();
 
@@ -313,7 +325,7 @@ async fn handle_tcp_connection(
             }
 
             // encode message
-            let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
+            let mut coder_state = CoderState::new(&*down_schema, coder_state_alloc, None);
             let mut buf = Vec::new();
             msg.encode(&mut Encoder::new(&mut coder_state, &mut buf), &game)?;
             coder_state.is_finished_or_err()?;
@@ -345,6 +357,7 @@ async fn handle_tcp_connection(
             recv_to_transmit,
             ws_send,
             accept_more_chunks_budget_1,
+            down_schema,
             game_2,
         ).await {
             error!(%e, "connection send half error");
@@ -362,7 +375,6 @@ async fn handle_tcp_connection(
     // this connection. this prevents race conditions where an event could be
     // presented to the user after the event that removes this connection from
     // existence was already sent to the user.
-    let schema = UpMessage::schema(&game);
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     loop {
@@ -389,7 +401,7 @@ async fn handle_tcp_connection(
                     // binary websocket message received
 
                     // decode message
-                    let mut coder_state = CoderState::new(&schema, coder_state_alloc, None);
+                    let mut coder_state = CoderState::new(&*up_schema, coder_state_alloc, None);
                     let msg = match UpMessage::decode(
                         &mut Decoder::new(&mut coder_state, &mut &buf[..]),
                         &game,

@@ -274,5 +274,7 @@ async fn try_do_send_half(
 
     }
 
+    ws_send.send(WsMessage::Close(None)).await?;
+
     Ok(())
 }

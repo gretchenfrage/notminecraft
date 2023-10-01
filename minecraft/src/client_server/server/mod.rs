@@ -416,7 +416,9 @@ impl Server {
         
         for ck2 in self.conn_states.iter_client() {
             if let Some(clientside_client_key) = self.client_clientside_keys[ck2].remove(ck) {
+                self.clientside_client_keys[ck2].remove(clientside_client_key);
                 // remove from other clients while we're at it
+                debug!("sending to {:?} RemoveClient({:?}) about {:?} (it left)", ck2, clientside_client_key, ck);
                 self.connections[ck2].send(down::RemoveClient {
                     client_key: clientside_client_key,
                 });
@@ -557,6 +559,7 @@ impl Server {
             let clientside_client_key = self.clientside_client_keys[ck].insert(ck2);
             self.client_clientside_keys[ck][ck2] = Some(clientside_client_key);
 
+            debug!("sending to {:?} AddClient({:?}) about {:?} (bring up to speed)", ck, clientside_client_key, ck2);
             self.connections[ck].send(down::AddClient {
                 client_key: clientside_client_key,
                 username: self.usernames[ck2].clone(),
@@ -568,6 +571,7 @@ impl Server {
         let own_clientside_client_key = self.clientside_client_keys[ck].insert(ck);
         self.client_clientside_keys[ck][ck] = Some(own_clientside_client_key);
 
+        debug!("sending to {:?} AddClient({:?}) about {:?} (tell it about itself)", ck, own_clientside_client_key, ck);
         self.connections[ck].send(down::AddClient {
             client_key: own_clientside_client_key,
             username: self.usernames[ck].clone(),
@@ -607,6 +611,7 @@ impl Server {
             let clientside_client_key = self.clientside_client_keys[ck2].insert(ck);
             self.client_clientside_keys[ck2][ck] = Some(clientside_client_key);
 
+            debug!("sending to {:?} AddClient({:?}) about {:?} (it joined)", ck2, clientside_client_key, ck);
             self.connections[ck2].send(down::AddClient {
                 client_key: clientside_client_key,
                 username: self.usernames[ck].clone(),

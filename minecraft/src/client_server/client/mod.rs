@@ -518,6 +518,7 @@ impl Client {
     
     fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) -> Result<()> {
         let down::AddClient { client_key, username, char_state } = msg;
+        debug!(?client_key, vacant_key=?self.clients.vacant_key(), "client adding");
         ensure!(
             self.clients.insert(()) == client_key,
             "AddClient message client key did not correspond to slab behavior",
@@ -544,6 +545,7 @@ impl Client {
     
     fn on_network_message_remove_client(&mut self, msg: down::RemoveClient) -> Result<()> {
         let down::RemoveClient { client_key } = msg;
+        debug!(?client_key, "client removing");
         self.clients.remove(client_key);
         self.client_username.remove(client_key);
         self.client_char_state.remove(client_key);
