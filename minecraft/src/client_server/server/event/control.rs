@@ -1,7 +1,4 @@
 
-use crossbeam_channel::Sender;
-
-
 // ==== control events ====
 
 /// Trusted command to reconfigure the server somehow.

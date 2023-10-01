@@ -5,7 +5,6 @@ use crate::{
     client_server::{
         message::*,
         server::event::EventSender,
-        client,
     },
     game_binschema::GameBinschema,
 };
@@ -46,6 +45,7 @@ use tokio::{
         UnboundedReceiver as TokioUnboundedReceiver,
         unbounded_channel as tokio_unbounded_channel,
     },
+    task::AbortHandle,
 };
 use tokio_tungstenite::{
     accept_async,
@@ -103,8 +103,8 @@ impl Connection {
     }
 }
 
-/// Handle to the asynchronous system that serves network connections. Source
-/// of network events.
+/// Serialization point of network events--used to open to network or to
+/// internal clients.
 #[derive(Debug)]
 pub struct NetworkServer {
     send_event: EventSender<NetworkEvent>,
@@ -118,55 +118,25 @@ pub struct NetworkServer {
     slab: Arc<Mutex<Slab<()>>>,
 }
 
-/// It is possible to construct a `NetworkServer` without actually opening it
-/// to the network immediately. It is possible to then, at some later point, open
-/// it to the network. That's what this is for.
-#[derive(Debug, Clone)]
-pub struct NetworkServerOpener {
-    send_event: EventSender<NetworkEvent>,
-    slab: Arc<Mutex<Slab<()>>>,
+/// See `NetworkServer.open_to_network`.
+#[derive(Debug)]
+#[must_use]
+pub struct NetworkBindGuard(AbortHandle);
+
+impl Drop for NetworkBindGuard {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 impl NetworkServer {
-    /// Construct a `NetworkServer` and a corresponding `NetworkServerOpener`. The
-    /// network server will not actually spawn tasks that start serving network
-    /// connections until the opener is called upon to open it. The convenience
-    /// `NetworkServer::open` method does that automatically.
-    pub fn new(send_event: EventSender<NetworkEvent>) -> (Self, NetworkServerOpener) {
-        let slab = Arc::new(Mutex::new(Slab::new()));
-        (
-            NetworkServer {
-                send_event: send_event.clone(),
-                slab: Arc::clone(&slab),
-            },
-            NetworkServerOpener {
-                send_event,
-                slab,
-            }
-        )
-    }
-
-    /// Convenience method to construct a `NetworkServer` and spawn tasks that
-    /// opens it up to the network.
-    pub fn new_networked(
-        send_event: EventSender<NetworkEvent>,
-        bind_to: impl ToSocketAddrs + Send + Sync + 'static,
-        rt: &Handle,
-        game: &Arc<GameData>,
-    ) -> Self {
-        let (server, opener) = Self::new(send_event);
-        opener.open(bind_to, rt, game);
-        server
-    }
-
-    /// Convenience method to construct a `NetworkServer` that isn't opened up
-    /// to a network along with a client `Connection` linked up in-memory.
-    pub fn new_internal(
-        send_event: EventSender<NetworkEvent>,
-    ) -> (Self, client::connection::Connection) {
-        let (server, _) = Self::new(send_event);
-        let client = server.create_in_mem_client().into();
-        (server, client)
+    /// Construct a network server. This does not actually open it to the
+    /// network.
+    pub fn new(send_event: EventSender<NetworkEvent>) -> Self {
+        NetworkServer {
+            send_event: send_event.clone(),
+            slab: Arc::new(Mutex::new(Slab::new())),
+        }
     }
     
     /// Create a new in-memory network client that just passes its messages
@@ -189,55 +159,25 @@ impl NetworkServer {
             recv: recv_down,
         }
     }
-}
 
-/// A client connection to a `NetworkServer` in the same process that doesn't
-/// actually use the network.
-#[derive(Debug)]
-pub struct InMemClient {
-    key: usize,
-    send_event: EventSender<NetworkEvent>,
-    slab: Arc<Mutex<Slab<()>>>,
-    recv: Receiver<DownMessage>,
-}
-
-impl InMemClient {
-    pub fn send(&self, msg: UpMessage) {
-        let _ = self.send_event.send(NetworkEvent::Received(self.key, msg));
-    }
-
-    pub fn poll(&self) -> Result<Option<DownMessage>> {
-        match self.recv.try_recv() {
-            Ok(msg) => Ok(Some(msg)),
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => Err(anyhow!("internal server disconnected")),
-        }
-    }
-}
-
-impl Drop for InMemClient {
-    fn drop(&mut self) {
-        let mut slab_guard = self.slab.lock();
-        slab_guard.remove(self.key);
-        let _ = self.send_event.send(NetworkEvent::Disconnected(self.key));
-        drop(slab_guard); // take care to send event before unlocking
-    }
-}
-
-impl NetworkServerOpener {
     /// Spawn tasks onto the runtime that bind to the port and begin serving
     /// network connections on it.
-    pub fn open(
+    ///
+    /// Returns a `NetworkBindGuard` which when dropped aborts the task for
+    /// accepting new connections. It does not, however, actually kill all
+    /// active connections when it does so.
+    pub fn open_to_network(
         &self,
         bind_to: impl ToSocketAddrs + Send + Sync + 'static,
         rt: &Handle,
         game: &Arc<GameData>,
-    ) {
-        let NetworkServerOpener { send_event, slab } = self.clone();
+    ) -> NetworkBindGuard {
+        let send_event = self.send_event.clone();
+        let slab = self.slab.clone();
 
         let rt_2 = Handle::clone(&rt);
         let game = Arc::clone(&game);
-        rt.spawn(async move {
+        NetworkBindGuard(rt.spawn(async move {
             // TCP bind with exponential backoff
             let mut backoff = Duration::from_millis(100);
             let listener = loop {
@@ -280,7 +220,40 @@ impl NetworkServerOpener {
                     Err(e) => warn!(%e, "failure accepting TCP connection"),
                 }
             }
-        });
+        }).abort_handle())
+    }
+}
+
+/// A client connection to a `NetworkServer` in the same process that doesn't
+/// actually use the network.
+#[derive(Debug)]
+pub struct InMemClient {
+    key: usize,
+    send_event: EventSender<NetworkEvent>,
+    slab: Arc<Mutex<Slab<()>>>,
+    recv: Receiver<DownMessage>,
+}
+
+impl InMemClient {
+    pub fn send(&self, msg: UpMessage) {
+        let _ = self.send_event.send(NetworkEvent::Received(self.key, msg));
+    }
+
+    pub fn poll(&self) -> Result<Option<DownMessage>> {
+        match self.recv.try_recv() {
+            Ok(msg) => Ok(Some(msg)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(anyhow!("internal server disconnected")),
+        }
+    }
+}
+
+impl Drop for InMemClient {
+    fn drop(&mut self) {
+        let mut slab_guard = self.slab.lock();
+        slab_guard.remove(self.key);
+        let _ = self.send_event.send(NetworkEvent::Disconnected(self.key));
+        drop(slab_guard); // take care to send event before unlocking
     }
 }
 
@@ -359,7 +332,6 @@ async fn handle_tcp_connection(
 
             // send message
             ws_send.send(WsMessage::Binary(buf)).await?;
-
         }
 
         Ok(())

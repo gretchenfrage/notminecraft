@@ -11,7 +11,6 @@ use self::{
         Connection,
         NetworkEvent,
         NetworkServer,
-        NetworkServerOpener,
         ToSocketAddrs,
     },
     chunk_loader::{
@@ -43,7 +42,6 @@ use crate::{
     thread_pool::ThreadPool,
 };
 use chunk_data::*;
-use get_assets::DataDir;
 use std::{
     sync::Arc,
     time::{
@@ -63,6 +61,9 @@ use slab::Slab;
 use vek::*;
 
 
+pub use self::connection::NetworkBindGuard;
+
+
 const TICK: Duration = Duration::from_millis(50);
 const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
 
@@ -80,9 +81,7 @@ pub struct ServerHandle {
     tokio: Handle,
     game: Arc<GameData>,
 
-    // TODO: there's no longer a reason for these structs to be separate
     network_server: NetworkServer,
-    network_server_opener: NetworkServerOpener,
 }
 
 impl ServerHandle {
@@ -94,7 +93,7 @@ impl ServerHandle {
         thread_pool: &ThreadPool,
     ) -> Self {
         let (send_event, recv_event) = event_channel();
-        let (network_server, network_server_opener) = NetworkServer::new(send_event.network_sender());
+        let network_server = NetworkServer::new(send_event.network_sender());
         let thread = thread::spawn({
             let send_event = send_event.clone();
             let game = Arc::clone(game);
@@ -109,7 +108,6 @@ impl ServerHandle {
             game: Arc::clone(game),
 
             network_server,
-            network_server_opener,
         }
     }
 
@@ -129,8 +127,8 @@ impl ServerHandle {
     pub fn open_to_network(
         &self,
         bind_to: impl ToSocketAddrs + Send + Sync + 'static,
-    ) {
-        self.network_server_opener.open(bind_to, &self.tokio, &self.game);
+    ) -> NetworkBindGuard {
+        self.network_server.open_to_network(bind_to, &self.tokio, &self.game)
     }
 
     /// Open up a connection for a client within the same process.

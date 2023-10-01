@@ -29,7 +29,10 @@ use crate::{
     settings::Settings,
     client_server::{
         message::*,
-        server::ServerHandle,
+        server::{
+            ServerHandle,
+            NetworkBindGuard,
+        },
     },
     save_file::SaveFile,
 };
@@ -89,7 +92,7 @@ const GROUND_DETECTION_PERIOD: f32 = 1.0 / 20.0;
 /// GUI state frame for multiplayer game client.
 #[derive(Debug)]
 pub struct Client {
-    internal_server: Option<ServerHandle>,
+    internal_server: Option<InternalServer>,
     connection: Connection,
 
     char_mesh: CharMesh,
@@ -146,6 +149,12 @@ struct PendingChunkMesh {
     abort: MeshChunkAbortHandle,
     buffered_updates: Vec<u16>,
     update_buffered: PerTileBool,
+}
+
+#[derive(Debug)]
+struct InternalServer {
+    server: ServerHandle,
+    bind_to_lan: Option<NetworkBindGuard>,
 }
 
 fn get_username() -> String {
@@ -278,7 +287,10 @@ impl Client {
         ctx.capture_mouse();
 
         Client {
-            internal_server,
+            internal_server: internal_server.map(|server| InternalServer {
+                server,
+                bind_to_lan: None,
+            }),
             connection,
 
             char_mesh,
@@ -338,7 +350,7 @@ impl Client {
                 if open_menu.has_darkened_background() {
                     Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
                 } else { None },
-                open_menu.gui(&mut self.menu_resources, &mut chat, &self.internal_server, ctx),
+                open_menu.gui(&mut self.menu_resources, &mut chat, &mut self.internal_server, ctx),
             )));
         layer((
             WorldGuiBlock {
@@ -1537,7 +1549,7 @@ impl Menu {
         &'a mut self,
         resources: &'a mut MenuResources,
         chat: &mut Option<&'a mut GuiChat>,
-        internal_server: &'a Option<ServerHandle>,
+        internal_server: &'a mut Option<InternalServer>,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
@@ -1551,7 +1563,7 @@ impl Menu {
                             logical_height(8.0, gap()),
                             resources.exit_game_button.gui(on_exit_game_click),
                             logical_height(8.0, gap()),
-                            resources.open_to_lan_button.gui(on_open_to_lan_click(&internal_server)),
+                            resources.open_to_lan_button.gui(on_open_to_lan_click(internal_server)),
                             logical_height(56.0 - 48.0, gap()),
                             resources.options_button.gui(on_options_click(&resources.effect_queue)),
                         ))
@@ -1653,13 +1665,16 @@ fn on_exit_game_click(ctx: &GuiGlobalContext) {
     ctx.pop_state_frame();
 }
 
-fn on_open_to_lan_click<'a>(internal_server: &'a Option<ServerHandle>) -> impl FnOnce(&GuiGlobalContext) + 'a {
+fn on_open_to_lan_click<'a>(internal_server: &'a mut Option<InternalServer>) -> impl FnOnce(&GuiGlobalContext) + 'a {
     move |_| {
-        if let &Some(ref internal_server) = internal_server {
-            let bind_to = "0.0.0.0:35565";
-            info!("binding to {}", bind_to);
-            internal_server.open_to_network(bind_to);
-            info!("done");
+        if let &mut Some(ref mut internal_server) = internal_server {
+            if internal_server.bind_to_lan.is_none() {
+                let bind_to = "0.0.0.0:35565";
+                info!("binding to {}", bind_to);
+                internal_server.bind_to_lan = Some(internal_server.server.open_to_network(bind_to));
+            } else {
+                error!("already bound to lan");
+            }
         } else {
             error!("cannot open to LAN because not the host");
         }

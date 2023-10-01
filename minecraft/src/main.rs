@@ -40,14 +40,10 @@ use std::{
         Write,
         stdout,
     },
-    env::args,
 };
 use backtrace::Backtrace;
 use tokio::{
-    runtime::{
-        Runtime,
-        Handle,
-    },
+    runtime::Runtime,
     io::{
         stdin,
         BufReader,
