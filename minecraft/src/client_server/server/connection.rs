@@ -37,7 +37,6 @@ use parking_lot::Mutex;
 use tokio::{
     runtime::Handle,
     net::{
-        ToSocketAddrs,
         TcpListener,
         TcpStream,
     },
@@ -60,6 +59,9 @@ use futures::{
     select,
 };
 use slab::Slab;
+
+
+pub use tokio::net::ToSocketAddrs;
 
 
 /// Event delivered to the server thread that something network-y happened.
@@ -103,6 +105,7 @@ impl Connection {
 
 /// Handle to the asynchronous system that serves network connections. Source
 /// of network events.
+#[derive(Debug)]
 pub struct NetworkServer {
     send_event: EventSender<NetworkEvent>,
     // the slab is used to assign connection keys. it is also used to serialize
@@ -118,6 +121,7 @@ pub struct NetworkServer {
 /// It is possible to construct a `NetworkServer` without actually opening it
 /// to the network immediately. It is possible to then, at some later point, open
 /// it to the network. That's what this is for.
+#[derive(Debug, Clone)]
 pub struct NetworkServerOpener {
     send_event: EventSender<NetworkEvent>,
     slab: Arc<Mutex<Slab<()>>>,
@@ -224,12 +228,12 @@ impl NetworkServerOpener {
     /// Spawn tasks onto the runtime that bind to the port and begin serving
     /// network connections on it.
     pub fn open(
-        self,
+        &self,
         bind_to: impl ToSocketAddrs + Send + Sync + 'static,
         rt: &Handle,
         game: &Arc<GameData>,
     ) {
-        let NetworkServerOpener { send_event, slab } = self;
+        let NetworkServerOpener { send_event, slab } = self.clone();
 
         let rt_2 = Handle::clone(&rt);
         let game = Arc::clone(&game);

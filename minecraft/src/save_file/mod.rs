@@ -262,6 +262,7 @@ impl SaveFile {
 
 impl Clone for SaveFile {
     fn clone(&self) -> Self {
+        debug!("save_file::SaveFile.clone");
         SaveFile {
             shared: Arc::clone(&self.shared),
             coder_state_alloc: None,

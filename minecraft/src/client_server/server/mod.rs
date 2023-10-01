@@ -11,6 +11,8 @@ use self::{
         Connection,
         NetworkEvent,
         NetworkServer,
+        NetworkServerOpener,
+        ToSocketAddrs,
     },
     chunk_loader::{
         ChunkLoader,
@@ -20,8 +22,10 @@ use self::{
     event::{
         Event,
         EventSenders,
+        EventSender,
         EventReceiver,
         event_channel,
+        control::ControlEvent,
     },
     per_connection::*,
 };
@@ -47,7 +51,10 @@ use std::{
         Instant,
     },
     collections::HashMap,
-    thread,
+    thread::{
+        self,
+        JoinHandle,
+    },
     mem::replace,
 };
 use tokio::runtime::Handle;
@@ -64,46 +71,81 @@ const LOAD_Y_END: i64 = 2;
 const INITIAL_LOAD_DISTANCE: i64 = 8;
 
 
-/// Spawn a new thread which runs a server forever without it being open to
-/// the network, only open to an in-mem connection, which is returned.
-pub fn spawn_internal_server(
-    thread_pool: ThreadPool,
-    data_dir: &DataDir,
-    game: &Arc<GameData>,
-) -> client::connection::Connection {
-    let (send_event, recv_event) = event_channel();
-    let (_, client) = NetworkServer::new_internal(send_event.network_sender());
-    let data_dir = data_dir.clone();
-    let game = Arc::clone(&game);
-    thread::spawn(move || {
-        if let Err(e) = run_server(send_event, recv_event, &thread_pool, &data_dir, &game) {
-            error!(?e, "internal server crashed");
+/// Handle to a running server thread.
+#[derive(Debug)]
+pub struct ServerHandle {
+    thread: Option<JoinHandle<()>>,
+    send_control: EventSender<ControlEvent>,
+
+    tokio: Handle,
+    game: Arc<GameData>,
+
+    // TODO: there's no longer a reason for these structs to be separate
+    network_server: NetworkServer,
+    network_server_opener: NetworkServerOpener,
+}
+
+impl ServerHandle {
+    /// Start the server thread.
+    pub fn start(
+        save: SaveFile,
+        game: &Arc<GameData>,
+        tokio: &Handle,
+        thread_pool: &ThreadPool,
+    ) -> Self {
+        let (send_event, recv_event) = event_channel();
+        let (network_server, network_server_opener) = NetworkServer::new(send_event.network_sender());
+        let thread = thread::spawn({
+            let send_event = send_event.clone();
+            let game = Arc::clone(game);
+            let thread_pool = thread_pool.clone();
+            move || Server::new(save, send_event, recv_event, &thread_pool, &game).run()
+        });
+        ServerHandle {
+            thread: Some(thread),
+            send_control: send_event.control_sender(),
+            
+            tokio: tokio.clone(),
+            game: Arc::clone(game),
+
+            network_server,
+            network_server_opener,
         }
-    });
-    client
+    }
+
+    /// Stop the server cleanly and wait for it to shut down.
+    pub fn stop(mut self) {
+        self.inner_stop();
+    }
+
+    fn inner_stop(&mut self) {
+        self.send_control.send(ControlEvent::Stop);
+        if self.thread.take().unwrap().join().is_err() {
+            error!("server thread panicked");
+        }
+    }
+
+    /// Open up the server to the network.
+    pub fn open_to_network(
+        &self,
+        bind_to: impl ToSocketAddrs + Send + Sync + 'static,
+    ) {
+        self.network_server_opener.open(bind_to, &self.tokio, &self.game);
+    }
+
+    /// Open up a connection for a client within the same process.
+    pub fn internal_connection(&self) -> client::connection::Connection {
+        self.network_server.create_in_mem_client().into()
+    }
 }
 
-/// Spawn a server, open it to the network, and attempt to run it forever in
-/// the current thread.
-pub fn run_networked_server(
-    rt: &Handle,
-    thread_pool: &ThreadPool,
-    data_dir: &DataDir,
-    game: &Arc<GameData>,
-) -> Result<()> {
-    let (send_event, recv_event) = event_channel();
-    NetworkServer::new_networked(send_event.network_sender(), "127.0.0.1:35565", rt, game);
-    run_server(send_event, recv_event, thread_pool, data_dir, game)
-}
-
-fn run_server(
-    send_event: EventSenders,
-    recv_event: EventReceiver,
-    thread_pool: &ThreadPool,
-    data_dir: &DataDir,
-    game: &Arc<GameData>,
-) -> Result<()> {
-    Server::new(send_event, recv_event, thread_pool, data_dir, game)?.run()
+impl Drop for ServerHandle {
+    fn drop(&mut self) {
+        if self.thread.is_some() {
+            warn!("ServerHandle dropped without being stopped (stopping now)");
+            self.inner_stop();
+        }
+    }
 }
 
 
@@ -146,18 +188,28 @@ struct LastProcessed {
     increased: bool,
 }
 
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+struct IsClosingErr;
+
+// kinda a hack since std::ops::Try isn't stabilized
+type IsClosing = std::result::Result<(), IsClosingErr>;
+
+const CLOSING: IsClosing = std::result::Result::Err(IsClosingErr);
+
+const NOT_CLOSING: IsClosing = std::result::Result::Ok(());
+
+
 impl Server {
     /// Construct. This is expected to be immediately followed by `run`.
     fn new(
+        save: SaveFile,
         send_event: EventSenders,
         recv_event: EventReceiver,
         thread_pool: &ThreadPool,
-        data_dir: &DataDir,
         game: &Arc<GameData>,
-    ) -> Result<Self> {
-        let save = SaveFile::open("server", data_dir, game)?;
-
-        Ok(Server {
+    ) -> Self {
+        Server {
             game: Arc::clone(&game),
             recv_event,
             
@@ -182,21 +234,34 @@ impl Server {
 
             usernames: PerClientConn::new(),
             username_clients: HashMap::new(),
-
-        })
+        }
     }
 
-    /// Run the server forever.
-    fn run(&mut self) -> ! {
+    /// Run the server indefinitely.
+    fn run(&mut self) {
         self.request_load_initial_chunks();
     
-        loop {
-            trace!("doing tick");
-            self.do_tick();
-            self.update_time_stuff_after_doing_tick();
-            self.maybe_save();
-            self.process_events_until_next_tick();
+        while self.run_loop_iteration() == NOT_CLOSING {}
+
+        for ck in self.conn_states.iter_any() {
+            // privacy concern
+            if ck.state() == ConnState::Closed {
+                continue;
+            }
+
+            self.connections[ck].send(down::Close {
+                message: "Server shutting down.".into(),
+            });
         }
+    }
+
+    fn run_loop_iteration(&mut self) -> IsClosing {
+        trace!("doing tick");
+        self.do_tick();
+        self.update_time_stuff_after_doing_tick();
+        self.maybe_save();
+        self.process_events_until_next_tick()?;
+        NOT_CLOSING
     }
 
     /// Do a tick.
@@ -251,12 +316,25 @@ impl Server {
 
     /// Save unsaved chunks if it's been long enough since the last save.
     fn maybe_save(&mut self) {
-        if self.tick - self.last_tick_saved < TICKS_BETWEEN_SAVES {
-            return;
-        }
+        if self.tick - self.last_tick_saved >= TICKS_BETWEEN_SAVES {
+            self.last_tick_saved = self.tick;
 
+            self.save();
+        
+            for (cc, ci) in self.chunk_mgr
+                .iter_unsaved()
+                .map(|(cc, ci, _)| (cc, ci)).collect::<Vec<_>>() // TODO: bleh
+            {
+                self.chunk_mgr.mark_saved(cc, ci, &self.conn_states);
+                self.process_chunk_mgr_effects();
+            }
+        }
+    }
+
+    /// Save unsaved chunks. Only does the actual save operation, doesn't update
+    /// other accounting information.
+    fn save(&mut self) {
         trace!("saving");
-        self.last_tick_saved = self.tick;
 
         let writes = self.chunk_mgr.iter_unsaved()
             .map(|(cc, ci, _)| WriteEntry::Chunk(
@@ -264,22 +342,25 @@ impl Server {
                 self.game.clone_chunk_blocks(self.tile_blocks.get(cc, ci)),
             ));
         self.save.write(writes).unwrap(); // TODO: don't panic
-        
-        for (cc, ci) in self.chunk_mgr
-            .iter_unsaved()
-            .map(|(cc, ci, _)| (cc, ci)).collect::<Vec<_>>() // TODO: bleh
-        {
-            self.chunk_mgr.mark_saved(cc, ci, &self.conn_states);
-            self.process_chunk_mgr_effects();
-        }
     }
 
     /// Wait for and process events until `self.next_tick`.
-    fn process_events_until_next_tick(&mut self) {
+    fn process_events_until_next_tick(&mut self) -> IsClosing {
         while let Some(event) = self.recv_event.recv_any_by(self.next_tick) {
             match event {
+                Event::Control(event) => self.on_control_event(event)?,
                 Event::Network(event) => self.on_first_available_network_event(event),
                 Event::LoadChunk(event) => self.on_load_chunk_event(event),
+            }
+        }
+        NOT_CLOSING
+    }
+
+    fn on_control_event(&mut self, event: ControlEvent) -> IsClosing {
+        match event {
+            ControlEvent::Stop => {
+                self.save();
+                return CLOSING;
             }
         }
     }
@@ -360,7 +441,9 @@ impl Server {
         
         if let Err(e) = self.on_received_inner(ck, msg){
             error!(%e, "closing connection due to error processing its message");
-            self.connections[ck].send(down::Close {});
+            self.connections[ck].send(down::Close {
+                message: "Protocol violation.".into(),
+            });
             if let AnyConnKey::Client(ck) = ck {
                 self.on_client_disconnected(ck);
             }

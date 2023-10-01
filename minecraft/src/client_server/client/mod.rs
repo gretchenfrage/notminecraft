@@ -15,7 +15,6 @@ use self::{
         MeshChunkAbortHandle,
     },
 };
-use super::message::*;
 use crate::{
     asset::Assets,
     block_update_queue::BlockUpdateQueue,
@@ -28,6 +27,11 @@ use crate::{
         secs_rem::secs_rem,
     },
     settings::Settings,
+    client_server::{
+        message::*,
+        server::ServerHandle,
+    },
+    save_file::SaveFile,
 };
 use chunk_data::*;
 use mesh_data::*;
@@ -85,6 +89,7 @@ const GROUND_DETECTION_PERIOD: f32 = 1.0 / 20.0;
 /// GUI state frame for multiplayer game client.
 #[derive(Debug)]
 pub struct Client {
+    internal_server: Option<ServerHandle>,
     connection: Connection,
 
     char_mesh: CharMesh,
@@ -170,12 +175,29 @@ fn get_username() -> String {
 }
 
 impl Client {
-    pub fn connect(address: &str, ctx: &GuiGlobalContext) -> Self {
-        let connection = Connection::connect(address, ctx.tokio, ctx.game);
-        Self::new(connection, ctx)
+    /// Start an internal server and create a client connected to it.
+    pub fn new_internal(save: SaveFile, ctx: &GuiGlobalContext) -> Self {
+        let internal_server = ServerHandle::start(
+            save,
+            ctx.game,
+            ctx.tokio,
+            ctx.thread_pool,
+        );
+        let connection = internal_server.internal_connection();
+        Self::inner_new(Some(internal_server), connection, ctx)
     }
 
-    pub fn new(mut connection: Connection, ctx: &GuiGlobalContext) -> Self {
+    /// Connect to a server via network.
+    pub fn connect(address: &str, ctx: &GuiGlobalContext) -> Self {
+        let connection = Connection::connect(address, ctx.tokio, ctx.game);
+        Self::inner_new(None, connection, ctx)
+    }
+
+    fn inner_new(
+        internal_server: Option<ServerHandle>,
+        mut connection: Connection,
+        ctx: &GuiGlobalContext,
+    ) -> Self {
         let username = get_username();
         let char_state = CharState {
             pos: [0.0, 80.0, 0.0].into(),
@@ -256,6 +278,7 @@ impl Client {
         ctx.capture_mouse();
 
         Client {
+            internal_server,
             connection,
 
             char_mesh,
@@ -315,7 +338,7 @@ impl Client {
                 if open_menu.has_darkened_background() {
                     Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
                 } else { None },
-                open_menu.gui(&mut self.menu_resources, &mut chat, ctx),
+                open_menu.gui(&mut self.menu_resources, &mut chat, &self.internal_server, ctx),
             )));
         layer((
             WorldGuiBlock {
@@ -381,8 +404,8 @@ impl Client {
     }
 
     fn on_network_message_close(&mut self, msg: down::Close) -> Result<()> {
-        let down::Close {} = msg;
-        bail!("server closed connection");
+        let down::Close { message } = msg;
+        bail!("server closed connection: {:?}", message);
     }
 
     fn on_network_message_accept_login(&mut self, msg: down::AcceptLogin) -> Result<()> {
@@ -1375,6 +1398,7 @@ struct MenuResources {
     options_load_dist_outline_button: OptionsOnOffButton,
     options_chunk_outline_button: OptionsOnOffButton,
     options_done_button: MenuButton,
+    open_to_lan_button: MenuButton,
 
     effect_queue: MenuEffectQueue,
 }
@@ -1397,18 +1421,15 @@ impl MenuResources {
             h_align: HAlign::Center,
             v_align: VAlign::Bottom,
         });
-        let exit_menu_button = menu_button("Back to game")
-            .build(ctx.assets);
-        let exit_game_button = menu_button("Save and quit to title")
-            .build(ctx.assets);
-        let options_button = menu_button(&ctx.assets.lang.menu_options)
-            .build(ctx.assets);
+        let exit_menu_button = menu_button("Back to game").build(ctx.assets);
+        let exit_game_button = menu_button("Save and quit to title").build(ctx.assets);
+        let options_button = menu_button(&ctx.assets.lang.menu_options).build(ctx.assets);
         let options_fog_button = OptionsOnOffButton::new("Fog");
         let options_day_night_button = OptionsOnOffButton::new("Day Night");
         let options_load_dist_outline_button = OptionsOnOffButton::new("Load Distance Outline");
         let options_chunk_outline_button = OptionsOnOffButton::new("Chunk Outline");
-        let options_done_button = menu_button(&ctx.assets.lang.gui_done)
-            .build(ctx.assets);
+        let options_done_button = menu_button(&ctx.assets.lang.gui_done).build(ctx.assets);
+        let open_to_lan_button = menu_button("Open to LAN").build(ctx.assets);
         MenuResources {
             esc_menu_title_text,
             options_menu_title_text,
@@ -1420,6 +1441,7 @@ impl MenuResources {
             options_load_dist_outline_button,
             options_chunk_outline_button,
             options_done_button,
+            open_to_lan_button,
 
             effect_queue: RefCell::new(VecDeque::new()),
         }
@@ -1515,6 +1537,7 @@ impl Menu {
         &'a mut self,
         resources: &'a mut MenuResources,
         chat: &mut Option<&'a mut GuiChat>,
+        internal_server: &'a Option<ServerHandle>,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         match self {
@@ -1527,7 +1550,9 @@ impl Menu {
                             resources.exit_menu_button.gui(on_exit_menu_click(&resources.effect_queue)),
                             logical_height(8.0, gap()),
                             resources.exit_game_button.gui(on_exit_game_click),
-                            logical_height(56.0, gap()),
+                            logical_height(8.0, gap()),
+                            resources.open_to_lan_button.gui(on_open_to_lan_click(&internal_server)),
+                            logical_height(56.0 - 48.0, gap()),
                             resources.options_button.gui(on_options_click(&resources.effect_queue)),
                         ))
                     )
@@ -1626,6 +1651,19 @@ fn on_exit_menu_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&Gui
 
 fn on_exit_game_click(ctx: &GuiGlobalContext) {
     ctx.pop_state_frame();
+}
+
+fn on_open_to_lan_click<'a>(internal_server: &'a Option<ServerHandle>) -> impl FnOnce(&GuiGlobalContext) + 'a {
+    move |_| {
+        if let &Some(ref internal_server) = internal_server {
+            let bind_to = "0.0.0.0:35565";
+            info!("binding to {}", bind_to);
+            internal_server.open_to_network(bind_to);
+            info!("done");
+        } else {
+            error!("cannot open to LAN because not the host");
+        }
+    }
 }
 
 fn on_options_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&GuiGlobalContext) + 'a {

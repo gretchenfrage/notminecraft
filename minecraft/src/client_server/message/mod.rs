@@ -66,7 +66,9 @@ message_enum!(up UpMessage {
 });
 
 message_enum!(down DownMessage {
-    Close {}
+    Close {
+        message: String,
+    }
     AcceptLogin {}
     ShouldJoinGame {
         own_client_key: usize,

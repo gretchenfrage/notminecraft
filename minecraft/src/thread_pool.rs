@@ -1,3 +1,6 @@
+// TODO: this no is efficient in terms of concurrency stuff
+//       I do hope it's overshadowed by the cost of the tasks themselves, but
+//       if not, I may want to optimize this itself more
 
 use crate::util::array::ArrayBuilder;
 use std::{
@@ -12,6 +15,7 @@ use crossbeam_channel::{
     Sender,
     Receiver,
     unbounded,
+    bounded,
 };
 
 pub const PRIORITY_LEVELS: usize = 2;
@@ -20,6 +24,54 @@ pub const PRIORITY_LEVELS: usize = 2;
 #[derive(Debug, Clone)]
 pub struct ThreadPool {
     state: Arc<ThreadPoolState>,
+}
+
+#[derive(Debug)]
+struct ThreadPoolState {
+    index_state: Mutex<DomainIndexState>,
+
+    // queue of jobs for each priority level
+    send_jobs: [Sender<Job>; PRIORITY_LEVELS],
+    // thing in state for each worker
+    workers: Vec<WorkerSenders>,
+}
+
+#[derive(Debug)]
+struct DomainIndexState {
+    assigner: Slab<u128>,
+    counter: u128,
+}
+
+#[derive(Debug)]
+struct WorkerSenders {
+    // when a job is submitted, it's sent into the job queue for its priority
+    // level, and then a token is sent to all workers.
+    //
+    // when a domain is added or removed, the appropriate Reconfigure message
+    // is sent to all workers, and then a token is sent to all works.
+    send_token: Sender<()>,
+    send_reconfigure: Sender<Reconfigure>,
+}
+
+/// Instruction to the worker to reconfigure itself.
+enum Reconfigure {
+    AddDomain {
+        domain_idx: usize,
+        domain_ctr: u128,
+        state: Box<dyn Any + Send>,
+    },
+    RemoveDomain {
+        domain_idx: usize,
+        domain_ctr: u128,
+        send_dropped: Sender<()>,
+    },
+}
+
+/// A job to be done.
+struct Job {
+    domain_idx: usize,
+    domain_ctr: u128,
+    job: Box<dyn FnOnce(&mut dyn Any) + Send>,
 }
 
 /// See `ThreadPool.create_domain`.
@@ -31,103 +83,132 @@ pub struct ThreadPoolDomain<T> {
     _p: PhantomData<T>,
 }
 
-#[derive(Debug)]
-struct ThreadPoolState {
-    index_state: Mutex<DomainIndexState>,
-    send_any_token: Sender<()>,
-    send_anys: [Sender<MsgToAny>; PRIORITY_LEVELS],
-    send_alls: Vec<Sender<MsgToAll>>,
-}
 
-#[derive(Debug)]
-struct DomainIndexState {
-    assigner: Slab<u128>,
-    counter: u128,
-}
-
-/// Message that is sent to be picked up be all threads.
-enum MsgToAll {
-    AddDomain {
-        domain_idx: usize,
-        domain_ctr: u128,
-        state: Box<dyn Any + Send>,
-    },
-    RemoveDomain {
-        domain_idx: usize,
-        domain_ctr: u128,
-    },  
-}
-
-/// Message that is sent to be picked up by any one thread.
-struct MsgToAny {
-    domain_idx: usize,
-    domain_ctr: u128,
-    job: Box<dyn FnOnce(&mut dyn Any) + Send>,
-}
-
-
-fn thread_body(
-    recv_any_token: Receiver<()>,
-    recv_anys: [Receiver<MsgToAny>; PRIORITY_LEVELS],
-    recv_all: Receiver<MsgToAll>,
+// body of a worker thread
+fn worker_thread(
+    recv_jobs: [Receiver<Job>; PRIORITY_LEVELS],
+    recv_token: Receiver<()>,
+    recv_reconfigure: Receiver<Reconfigure>,
 ) {
+    // domain state and counter
     let mut domains = Slab::new();
-    while recv_any_token.recv().is_ok() {
-        while let Ok(msg_all) = recv_all.try_recv() {
-            match msg_all {
-                MsgToAll::AddDomain { domain_idx, domain_ctr, state } => {
+    // max domain_ctr we've ever added, even if we've removed it
+    let mut max_domain_ctr = 0;
+    // jobs for which we haven't yet initialized their necessary domain
+    let mut delayed: Vec<Option<Job>> = Vec::new();
+
+    while recv_token.recv().is_ok() {
+        if let Ok(reconfigure) = recv_reconfigure.try_recv() {
+            // attribute token to reconfigure message
+            //
+            // it's intentional that we process all reconfigures before
+            // processing jobs even if we're essentially reordering out
+            // attribution of what triggered these tokens.
+            //
+            // as for changes to domain idx and domain ctr, these should be
+            // nicely serialized by the domain index state mutex.
+            match reconfigure {
+                Reconfigure::AddDomain { domain_idx, domain_ctr, state } => {
+                    // add domain
                     let domain_idx2 = domains.insert((state, domain_ctr));
                     debug_assert_eq!(domain_idx, domain_idx2);
+                    // it's ok that this starts as 0 because idk magic
+                    // I don't think the race condition can occur in that case
+                    debug_assert!(max_domain_ctr == 0 || domain_ctr == max_domain_ctr + 1);
+                    max_domain_ctr = domain_ctr;
+
+                    // then see if that allows us to now run any delayed jobs
+                    delayed.retain_mut(|job|
+                        if job.as_ref().unwrap().domain_ctr > max_domain_ctr {
+                            // still can't run it, so retain it
+                            true
+                        } else {
+                            // try and run it now, then discard it
+                            run_job_unless_stale(job.take().unwrap(), &mut domains);
+                            false
+                        }
+                    );
                 }
-                MsgToAll::RemoveDomain { domain_idx, domain_ctr } => {
-                    let (_, domain_ctr2) = domains.remove(domain_idx);
+                Reconfigure::RemoveDomain { domain_idx, domain_ctr, send_dropped } => {
+                    // remove domain
+                    let (state, domain_ctr2) = domains.remove(domain_idx);
                     debug_assert_eq!(domain_ctr, domain_ctr2);
+
+                    // drop state then let the other half know we've done so
+                    drop(state);
+                    let _ = send_dropped.send(());
                 }
             }
-        }
-        let MsgToAny { domain_idx, domain_ctr, job } = recv_anys.iter()
-            .rev()
-            .find_map(|recv_any| recv_any.try_recv().ok())
-            .unwrap();
-        if let Some((ref mut domain, _)) = domains
-            .get_mut(domain_idx)
-            .filter(|&&mut (_, domain_ctr2)| domain_ctr == domain_ctr2)
-        {
-            job(domain.as_mut());
+        } else {
+            // attribute token to job entering some priority queue
+            // attempt to pull the highest priority job
+            if let Some(job) = recv_jobs.iter()
+                .rev()
+                .find_map(|recv_any| recv_any.try_recv().ok())
+            {
+                if job.domain_ctr > max_domain_ctr {
+                    // there's possible race conditions here where we receive a
+                    // job before we receive the AddDomain it needs to run, so
+                    // we buffer it for once we can run it
+                    delayed.push(Some(job));
+                } else {
+                    // but otherwise, try and run it now!
+                    run_job_unless_stale(job, &mut domains);
+                }
+            }
+            // if we didn't find any we just assume other workers snatched up
+            // all the jobs those tokens were about, which is fine
         }
     }
 }
 
+fn run_job_unless_stale(job: Job, domains: &mut Slab<(Box<dyn Any + Send>, u128)>) {
+    // if the domain ctr doesn't match, assume that this is a
+    // stale job for a removed domain, and just discard it
+    if let Some((ref mut state, _)) = domains
+        .get_mut(job.domain_idx)
+        .filter(|&&mut (_, domain_ctr)| domain_ctr == job.domain_ctr)
+    {
+        // but if we can run the job now, run it!
+        (job.job)(&mut **state);
+    }
+}
+
+
 impl ThreadPool {
     /// Spawn a new thread pool with as many threads as there are CPUs.
     pub fn new() -> Self {
-        let (send_any_token, recv_any_token) = unbounded();
-        let mut send_anys = ArrayBuilder::new();
-        let mut recv_anys = ArrayBuilder::new();
+        let mut send_jobs = ArrayBuilder::new();
+        let mut recv_jobs = ArrayBuilder::new();
         for _ in 0..PRIORITY_LEVELS {
-            let (send_any, recv_any) = unbounded();
-            send_anys.push(send_any);
-            recv_anys.push(recv_any);
+            let (send_job, recv_job) = unbounded();
+            send_jobs.push(send_job);
+            recv_jobs.push(recv_job);
         }
-        let recv_anys = recv_anys.build();
-        let send_alls = (0..num_cpus::get())
+        let send_jobs = send_jobs.build();
+        let recv_jobs = recv_jobs.build();
+
+        let workers = (0..num_cpus::get())
             .map(|_| {
-                let recv_any_token = recv_any_token.clone();
-                let recv_anys = recv_anys.clone();
-                let (send_all, recv_all) = unbounded();
-                spawn(move || thread_body(recv_any_token, recv_anys, recv_all));
-                send_all
+                let recv_jobs = recv_jobs.clone();
+                let (send_token, recv_token) = unbounded();
+                let (send_reconfigure, recv_reconfigure) = unbounded();
+                spawn(move || worker_thread(recv_jobs, recv_token, recv_reconfigure));
+                WorkerSenders {
+                    send_token,
+                    send_reconfigure,
+                }
             })
             .collect();
+
         ThreadPool {
             state: Arc::new(ThreadPoolState {
                 index_state: Mutex::new(DomainIndexState {
                     assigner: Slab::new(),
                     counter: 0,
                 }),
-                send_any_token,
-                send_anys: send_anys.build(),
-                send_alls,
+                send_jobs,
+                workers,
             }),
         }
     }
@@ -146,16 +227,21 @@ impl ThreadPool {
         T: Send + 'static
     {
         let mut guard = self.state.index_state.lock();
+
         let domain_ctr = guard.counter;
         guard.counter = guard.counter.checked_add(1).unwrap();
+
         let domain_idx = guard.assigner.insert(domain_ctr);
-        for send_all in &self.state.send_alls {
-            send_all.send(MsgToAll::AddDomain {
+
+        for worker in &self.state.workers {
+            worker.send_reconfigure.send(Reconfigure::AddDomain {
                 domain_idx,
                 domain_ctr,
                 state: Box::new(create_state()),
             }).unwrap();
+            worker.send_token.send(()).unwrap();
         }
+
         drop(guard);
 
         ThreadPoolDomain {
@@ -171,25 +257,44 @@ impl<T: 'static> ThreadPoolDomain<T> {
     /// Submit a task to be run on some thread. Please consider catching
     /// panics.
     pub fn submit<F: FnOnce(&mut T) + Send + 'static>(&self, job: F, priority: usize) {
-        self.state.send_anys[priority].send(MsgToAny {
+        self.state.send_jobs[priority].send(Job {
             domain_idx: self.domain_idx,
             domain_ctr: self.domain_ctr,
-            job: Box::new(move |state| job(state.downcast_mut().unwrap())),
+            job: Box::new(move |state| {
+                job(state.downcast_mut().unwrap());
+            }),
         }).unwrap();
-        self.state.send_any_token.send(()).unwrap();
+
+        for worker in &self.state.workers {
+            worker.send_token.send(()).unwrap();
+        }
     }
 }
 
+/// This not only triggers the threads to drop their state for this domain, it
+/// actually blocks until they've all done so.
 impl<T> Drop for ThreadPoolDomain<T> {
     fn drop(&mut self) {
+        let (send_dropped, recv_dropped) = bounded(self.state.workers.len());
+
         let mut guard = self.state.index_state.lock();
+
         let domain_ctr2 = guard.assigner.remove(self.domain_idx);
         debug_assert_eq!(self.domain_ctr, domain_ctr2);
-        for send_all in &self.state.send_alls {
-            send_all.send(MsgToAll::RemoveDomain {
+
+        for worker in &self.state.workers {
+            worker.send_reconfigure.send(Reconfigure::RemoveDomain {
                 domain_idx: self.domain_idx,
                 domain_ctr: self.domain_ctr,
+                send_dropped: send_dropped.clone(),
             }).unwrap();
+            worker.send_token.send(()).unwrap();
+        }
+
+        drop(guard);
+        
+        for _ in 0..self.state.workers.len() {
+            recv_dropped.recv().unwrap();
         }
     }
 }

@@ -1,4 +1,9 @@
+/// Server events.
 
+pub mod control;
+
+
+use self::control::ControlEvent;
 use crossbeam_channel::{
     Sender,
     Receiver,
@@ -190,6 +195,7 @@ macro_rules! server_events {
 
 // the order in which these appear will be the priority in which they're dispensed
 server_events!(
+    Control(ControlEvent) send_control recv_control control_sender recv_control_now recv_control_by,
     Network(NetworkEvent) send_network recv_network network_sender recv_network_now recv_network_by,
     LoadChunk(LoadChunkEvent) send_chunk recv_chunk chunk_sender recv_chunk_now recv_chunk_by,
 );

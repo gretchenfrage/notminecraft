@@ -157,6 +157,7 @@ fn main() {
     let game = Arc::new(game);
     let data_dir = DataDir::new();
 
+    /*
     // maybe run headless
     let args = args().collect::<Vec<_>>();
     let mut client_only = false;
@@ -184,6 +185,7 @@ fn main() {
             std::process::exit(2);
         }
     };
+    */
 
     // download assets, maybe
     let _ = rt
@@ -199,6 +201,7 @@ fn main() {
             Assets::load(&mut loader).await
         });
 
+    /*
     if !client_only {
         // start server in a background thread
         let rt_handle = Handle::clone(&rt.handle());
@@ -212,6 +215,7 @@ fn main() {
             };
         });
     }
+    */
     
     let gui_state = MainMenu::new(
         &event_loop.renderer,

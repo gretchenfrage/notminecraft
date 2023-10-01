@@ -7,10 +7,8 @@ use crate::{
     asset::Assets,
     gui::prelude::*,
 	util::hex_color::hex_color,
-    client_server::{
-        client::Client,
-        server::spawn_internal_server,
-    },
+    client_server::client::Client,
+    save_file::SaveFile,
 };
 use graphics::{
 	Renderer,
@@ -142,8 +140,8 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    let connection = spawn_internal_server(ctx.thread_pool.clone(), ctx.data_dir, ctx.game);
-    ctx.push_state_frame(Client::new(connection, ctx));
+    let save = SaveFile::open("server", ctx.data_dir, ctx.game).unwrap(); // TODO: don't panic
+    ctx.push_state_frame(Client::new_internal(save, ctx));
 }
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {
