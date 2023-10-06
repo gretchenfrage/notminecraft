@@ -1,9 +1,8 @@
 //! Erased item metadata.
 //!
-//! Basically a `Box<dyn Any + Debug + Clone>` but:
+//! Basically a `Box<dyn Any + Debug + Clone + PartialEq + Send + Sync + 'static>` but:
 //!
-//! - Debug-formatting actually works.
-//! - Cloning works, also.
+//! - Formatting, cloning, and equality checks actually work.
 //! - The inner type `()` is represented as a null pointer.
 
 use std::{
@@ -21,9 +20,11 @@ unsafe trait MetaTrait {
     fn debug_fmt(&self, f: &mut Formatter) -> fmt::Result;
 
     fn clone(&self) -> ItemMeta;
+
+    fn eq(&self, other: &dyn MetaTrait) -> bool;
 }
 
-unsafe impl<T: Debug + Clone + Send + Sync + 'static> MetaTrait for T {
+unsafe impl<T: Debug + Clone + PartialEq + Send + Sync + 'static> MetaTrait for T {
     fn type_info(&self) -> (TypeId, &'static str) {
         (TypeId::of::<T>(), type_name::<T>())
     }
@@ -35,12 +36,29 @@ unsafe impl<T: Debug + Clone + Send + Sync + 'static> MetaTrait for T {
     fn clone(&self) -> ItemMeta {
         ItemMeta::new(<T as Clone>::clone(self))
     }
+
+    fn eq(&self, other: &dyn MetaTrait) -> bool {
+        let (other_tid, other_type_name) = other.type_info();
+
+        if other_tid == TypeId::of::<T>() {
+            unsafe {
+                <T as PartialEq>::eq(self, &*(other as *const dyn MetaTrait as *const T))
+            }
+        } else {
+            warn!(
+                lhs_type_name=%type_name::<T>(),
+                rhs_type_name=%other_type_name,
+                "equality comparison between item metadata of different types",
+            );
+            false
+        }
+    }
 }
 
 
 pub struct ItemMeta(Option<Box<dyn MetaTrait + Send + Sync>>);
 
-impl<M: Debug + Clone + Send + Sync + 'static> From<Box<M>> for ItemMeta {
+impl<M: Debug + Clone + PartialEq + Send + Sync + 'static> From<Box<M>> for ItemMeta {
     fn from(b: Box<M>) -> Self {
         ItemMeta(Some(b as _))
     }
@@ -49,7 +67,7 @@ impl<M: Debug + Clone + Send + Sync + 'static> From<Box<M>> for ItemMeta {
 impl ItemMeta {
     pub fn new<M>(meta: M) -> Self
     where
-        M: Debug + Clone + Send + Sync + 'static,
+        M: Debug + Clone + PartialEq + Send + Sync + 'static,
     {
         if TypeId::of::<M>() == TypeId::of::<()>() {
             ItemMeta(None)
@@ -177,6 +195,16 @@ impl Clone for ItemMeta {
             (**inner).clone()
         } else {
             ItemMeta::new(())
+        }
+    }
+}
+
+impl PartialEq for ItemMeta {
+    fn eq(&self, other: &ItemMeta) -> bool {
+        match (self.0.as_ref(), other.0.as_ref()) {
+            (Some(a), Some(b)) => a.eq(&**b),
+            (None, None) => true,
+            _ => false,
         }
     }
 }

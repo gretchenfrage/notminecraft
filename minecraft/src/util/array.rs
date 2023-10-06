@@ -99,6 +99,14 @@ impl<T, const N: usize> Drop for ArrayBuilder<T, N> {
     }
 }
 
+pub fn array_from_fn<F: FnMut(usize) -> T, T, const N: usize>(mut f: F) -> [T; N] {
+    let mut array = ArrayBuilder::new();
+    for i in 0..N {
+        array.push(f(i));
+    }
+    array.build()
+}
+
 /*
 
     doesn't compile on stable yet

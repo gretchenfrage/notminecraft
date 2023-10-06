@@ -31,6 +31,7 @@ pub use self::{
     game_gui_macro::game_gui,
     text::{
         GuiTextBlockConfig,
+        GuiTextBlockInner,
         GuiTextBlock, 
     },
 };

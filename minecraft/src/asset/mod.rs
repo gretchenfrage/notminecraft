@@ -18,7 +18,10 @@ use crate::{
         tile_9_crop,
     },
 };
-use std::cmp::max;
+use std::{
+    cmp::max,
+    ops::Index,
+};
 use graphics::frame_content::{
     FontId,
     GpuImageArray,
@@ -81,6 +84,16 @@ macro_rules! lang {
                 )*}
             }
         }
+
+        impl Index<LangKey> for Lang {
+            type Output = str;
+
+            fn index(&self, key: LangKey) -> &str {
+                match key {$(
+                    LangKey::$item => &self.$item,
+                )*}
+            }
+        }
     };
 }
 
@@ -140,7 +153,7 @@ pub struct Assets {
     pub grass_dig_sound: SoundEffect,
 
     //pub block_item_mesh: Mesh,
-    pub item_meshes: Vec<ItemMesh>,
+    //pub item_meshes: Vec<ItemMesh>,
 
     pub gui_inventory: GpuImageArray,
 
@@ -214,15 +227,15 @@ impl Assets {
             grass_step_sound: loader.load_sound_effect("sound3/step/grass*.ogg").await,
             grass_dig_sound: loader.load_sound_effect("sound3/dig/grass*.ogg").await,
             
-            item_meshes: vec![
-                ItemMesh::load_basic_block(&loader, BTI_STONE),
-                ItemMesh::load_basic_block(&loader, BTI_DIRT),
-                ItemMesh::load_grass_block(&loader),
-                ItemMesh::load_basic_block(&loader, BTI_PLANKS),
-                ItemMesh::load_basic_block(&loader, BTI_BRICK),
-                ItemMesh::load_basic_block(&loader, BTI_GLASS),
-                ItemMesh::Item(ITI_STICK),
-            ],
+            //item_meshes: vec![
+            //    ItemMesh::load_basic_block(&loader, BTI_STONE),
+            //    ItemMesh::load_basic_block(&loader, BTI_DIRT),
+            //    ItemMesh::load_grass_block(&loader),
+            //    ItemMesh::load_basic_block(&loader, BTI_PLANKS),
+            //    ItemMesh::load_basic_block(&loader, BTI_BRICK),
+            //    ItemMesh::load_basic_block(&loader, BTI_GLASS),
+            //    ItemMesh::Item(ITI_STICK),
+            //],
             
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
             

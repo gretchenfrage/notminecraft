@@ -1,5 +1,6 @@
 
 use crate::item::RawItemId;
+use std::ops::Index;
 
 
 /// Association of `Option<T>` for each item.
@@ -45,5 +46,13 @@ impl<T> PerItem<T> {
             warn!("overwrite of non-None PerItem value");
         }
         self.vals[idx] = Some(val)
+    }
+}
+
+impl<B: Into<RawItemId>, T> Index<B> for PerItem<T> {
+    type Output = T;
+
+    fn index(&self, bid: B) -> &T {
+        self.get(bid)
     }
 }

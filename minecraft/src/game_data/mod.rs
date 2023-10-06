@@ -6,7 +6,8 @@ pub mod content;
 
 
 pub use self::logic::{
-    mesh_logic,
+    block_mesh_logic,
+    item_mesh_logic,
     hitscan_logic,
     physics_logic,
     transclone_logic,
@@ -15,15 +16,26 @@ pub use self::logic::{
 
 use self::{
     per_block::PerBlock,
-    mesh_logic::BlockMeshLogic,
+    per_item::PerItem,
+    block_mesh_logic::BlockMeshLogic,
+    item_mesh_logic::ItemMeshLogic,
     hitscan_logic::BlockHitscanLogic,
     physics_logic::BlockPhysicsLogic,
     transclone_logic::{Transcloner, TransclonerFor},
+    content::ContentModules,
+};
+use crate::{
+    item::{
+        ItemRegistry,
+        ItemId,
+    },
+    asset::LangKey,
 };
 use chunk_data::*;
 use std::{
     sync::Arc,
     fmt::Debug,
+    num::NonZeroU8,
 };
 
 
@@ -31,19 +43,27 @@ pub mod content_module_prelude {
     pub use super::{
         GameDataBuilder,
         per_block::PerBlock,
-        mesh_logic::BlockMeshLogic,
+        block_mesh_logic::BlockMeshLogic,
+        item_mesh_logic::ItemMeshLogic,
         hitscan_logic::BlockHitscanLogic,
         physics_logic::BlockPhysicsLogic,
         transclone_logic::{Transcloner, TransclonerFor},
         content,
     };
-    pub use crate::asset::consts::*;
+    pub use crate::{
+        asset::{
+            consts::*,
+            LangKey,
+        },
+        item::*,
+    };
     pub use chunk_data::*;
 }
 
 
 #[derive(Debug)]
 pub struct GameDataBuilder {
+    // ==== blocks ====
     pub blocks: BlockRegistry,
 
     // required (doesn't have default):
@@ -55,6 +75,22 @@ pub struct GameDataBuilder {
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
+
+
+    // ==== items ====
+    pub items: ItemRegistry,
+
+    // required (doesn't have default):
+    pub items_machine_name: PerItem<String>,
+
+    // optional (has default):
+    pub items_meta_transcloner: PerItem<Transcloner>,
+    pub items_name: PerItem<Option<LangKey>>,
+    pub items_mesh_logic: PerItem<ItemMeshLogic>,
+    /// Inclusive upper bound on how many can be stacked.
+    pub items_max_count: PerItem<NonZeroU8>,
+    /// Inclusive upper bound on its damage level.
+    pub items_max_damage: PerItem<u16>,
 }
 
 impl GameDataBuilder {
@@ -75,22 +111,44 @@ impl GameDataBuilder {
         self.blocks_meta_transcloner.set(bid, M::transcloner_for());
         bid
     }
+
+    pub fn register_item<M>(
+        &mut self,
+        machine_name: &str,
+        name: LangKey,
+        mesh_logic: ItemMeshLogic,
+    ) -> ItemId<M>
+    where
+        M: TransclonerFor,
+    {
+        let iid = self.items.register();
+        self.items_machine_name.set(iid, machine_name.to_owned());
+        self.items_meta_transcloner.set(iid, M::transcloner_for());
+        self.items_name.set(iid, Some(name));
+        self.items_mesh_logic.set(iid, mesh_logic);
+        iid
+    }
 }
 
 #[derive(Debug)]
 pub struct GameData {
     pub blocks: Arc<BlockRegistry>,
-    
     pub blocks_machine_name: PerBlock<String>,
-    pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,    
-
+    pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
     pub blocks_meta_transcloner: PerBlock<Transcloner>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
 
-    pub content_air: content::air::ContentModule,
-    pub content_stone: content::stone::ContentModule,
+    pub items: ItemRegistry,
+    pub items_machine_name: PerItem<String>,
+    pub items_mesh_logic: PerItem<ItemMeshLogic>,
+    pub items_meta_transcloner: PerItem<Transcloner>,
+    pub items_name: PerItem<Option<LangKey>>,
+    pub items_max_count: PerItem<NonZeroU8>,
+    pub items_max_damage: PerItem<u16>,
+
+    pub content: ContentModules,
 }
 
 
@@ -106,10 +164,19 @@ impl GameData {
             blocks_hitscan_logic: PerBlock::new(BlockHitscanLogic::BasicCube),
             blocks_physics_logic: PerBlock::new(BlockPhysicsLogic::BasicCube),
             blocks_can_place_over: PerBlock::new(false),
+
+            items: ItemRegistry::new(),
+
+            items_machine_name: PerItem::new_no_default(),
+            items_mesh_logic: PerItem::new_no_default(),
+
+            items_meta_transcloner: PerItem::new(Transcloner::Unit),
+            items_name: PerItem::new(None),
+            items_max_count: PerItem::new(64.try_into().unwrap()),
+            items_max_damage: PerItem::new(0),
         };
 
-        let content_air = content::air::ContentModule::init(&mut builder);
-        let content_stone = content::stone::ContentModule::init(&mut builder);
+        let content = ContentModules::init(&mut builder);
 
         for bid in builder.blocks.iter() {
             debug_assert_eq!(
@@ -119,6 +186,9 @@ impl GameData {
                 &builder.blocks_machine_name[bid],
             );
         }
+
+        // TODO: validate item metadata type
+        // TODO: warn about item types without names
 
         GameData {
             blocks: builder.blocks.finalize(),
@@ -131,8 +201,17 @@ impl GameData {
             blocks_physics_logic: builder.blocks_physics_logic,
             blocks_can_place_over: builder.blocks_can_place_over,
 
-            content_air,
-            content_stone,
+            items: builder.items,
+
+            items_machine_name: builder.items_machine_name,
+
+            items_meta_transcloner: builder.items_meta_transcloner,
+            items_name: builder.items_name,
+            items_mesh_logic: builder.items_mesh_logic,
+            items_max_count: builder.items_max_count,
+            items_max_damage: builder.items_max_damage,
+
+            content
         }
     }
 

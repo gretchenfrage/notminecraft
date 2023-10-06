@@ -25,6 +25,7 @@ use crate::{
     util::{
         hex_color::hex_color,
         secs_rem::secs_rem,
+        array::array_from_fn,
     },
     settings::Settings,
     client_server::{
@@ -35,6 +36,11 @@ use crate::{
         },
     },
     save_file::SaveFile,
+    item::*,
+    game_data::{
+        per_item::PerItem,
+        item_mesh_logic::ItemMeshLogic,
+    },
 };
 use chunk_data::*;
 use mesh_data::*;
@@ -62,6 +68,9 @@ use std::{
         take,
         replace,
     },
+    fmt::Debug,
+    iter::once,
+    mem::swap,
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -131,11 +140,29 @@ pub struct Client {
     menu_stack: Vec<Menu>,
     menu_resources: MenuResources,
 
+    items_mesh: PerItem<ItemMesh>,
+
     chat: GuiChat,
 
     day_night_time: f32,
     white_pixel: GpuImageArray,
     stars: Mesh,
+
+    held_item: ItemSlot,
+
+    inventory_slots: Box<[ItemSlot; 36]>,
+    inventory_slots_state: Box<[ItemSlotGuiState; 36]>,
+
+    inventory_slots_armor: [ItemSlot; 4],
+    inventory_slots_armor_state: [ItemSlotGuiState; 4],
+    
+    inventory_slots_crafting: [ItemSlot; 4],
+    inventory_slots_crafting_state: [ItemSlotGuiState; 4],
+
+    inventory_slot_crafting_output: ItemSlot,
+    inventory_slot_crafting_output_state: ItemSlotGuiState,
+
+    hotbar_slots_state: [ItemSlotGuiState; 9],
 }
 
 #[derive(Debug)]
@@ -155,6 +182,11 @@ struct PendingChunkMesh {
 struct InternalServer {
     server: ServerHandle,
     bind_to_lan: Option<NetworkBindGuard>,
+}
+
+#[derive(Debug)]
+struct ItemMesh {
+    mesh: Mesh,
 }
 
 fn get_username() -> String {
@@ -284,6 +316,60 @@ impl Client {
         }
         let stars = stars.upload(&*ctx.renderer.borrow());
 
+        let inventory_slots = Box::new(array_from_fn(|_| RefCell::new(None)));
+        *inventory_slots[7].borrow_mut() = Some(ItemStack {
+            iid: ctx.game.content.stone.iid_stone.into(),
+            meta: ItemMeta::new(()),
+            count: 14.try_into().unwrap(),
+            damage: 40,
+        });
+
+        let mut items_mesh = PerItem::new_no_default();
+        for iid in ctx.game.items.iter() {
+            items_mesh.set(iid, match &ctx.game.items_mesh_logic[iid] {
+                &ItemMeshLogic::FullCube {
+                    top_tex_index,
+                    left_tex_index,
+                    right_tex_index,
+                } => {
+                    const LEFT_SHADE: f32 = 0x48 as f32 / 0x8f as f32;
+                    const RIGHT_SHADE: f32 = 0x39 as f32 / 0x8f as f32;
+
+                    let mut mesh_buf = MeshData::new();
+                    mesh_buf.add_quad(&Quad {
+                        pos_start: [1.0, 1.0, 0.0].into(),
+                        pos_ext_1: [-1.0, 0.0, 0.0].into(),
+                        pos_ext_2: [0.0, 0.0, 1.0].into(),
+                        tex_start: 0.0.into(),
+                        tex_extent: 1.0.into(),
+                        vert_colors: [Rgba::white(); 4],
+                        tex_index: top_tex_index,
+                    });
+                    mesh_buf.add_quad(&Quad {
+                        pos_start: [0.0, 0.0, 0.0].into(),
+                        pos_ext_1: [0.0, 1.0, 0.0].into(),
+                        pos_ext_2: [1.0, 0.0, 0.0].into(),
+                        tex_start: 0.0.into(),
+                        tex_extent: 1.0.into(),
+                        vert_colors: [[LEFT_SHADE, LEFT_SHADE, LEFT_SHADE, 1.0].into(); 4],
+                        tex_index: left_tex_index,
+                    });
+                    mesh_buf.add_quad(&Quad {
+                        pos_start: [1.0, 0.0, 0.0].into(),
+                        pos_ext_1: [0.0, 1.0, 0.0].into(),
+                        pos_ext_2: [0.0, 0.0, 1.0].into(),
+                        tex_start: 0.0.into(),
+                        tex_extent: 1.0.into(),
+                        vert_colors: [[RIGHT_SHADE, RIGHT_SHADE, RIGHT_SHADE, 1.0].into(); 4],
+                        tex_index: right_tex_index,
+                    });
+                    ItemMesh {
+                        mesh: mesh_buf.upload(&*ctx.renderer.borrow()),
+                    }
+                }
+            });
+        }
+
         ctx.capture_mouse();
 
         Client {
@@ -330,11 +416,30 @@ impl Client {
             menu_stack: Vec::new(),
             menu_resources: MenuResources::new(ctx),
 
+            items_mesh,
+
             chat: GuiChat::new(),
 
             day_night_time: 0.1,
             white_pixel,
             stars,
+
+            held_item: RefCell::new(None),
+
+            //inventory_slots: Box::new(array_from_fn(|_| RefCell::new(None))),
+            inventory_slots,
+            inventory_slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
+
+            inventory_slots_armor: array_from_fn(|_| RefCell::new(None)),
+            inventory_slots_armor_state: array_from_fn(|_| ItemSlotGuiState::new()),
+
+            inventory_slots_crafting: array_from_fn(|_| RefCell::new(None)),
+            inventory_slots_crafting_state: array_from_fn(|_| ItemSlotGuiState::new()),
+
+            inventory_slot_crafting_output: RefCell::new(None),
+            inventory_slot_crafting_output_state: ItemSlotGuiState::new(),
+
+            hotbar_slots_state: array_from_fn(|_| ItemSlotGuiState::new()),
         }
     }
 
@@ -350,7 +455,22 @@ impl Client {
                 if open_menu.has_darkened_background() {
                     Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
                 } else { None },
-                open_menu.gui(&mut self.menu_resources, &mut chat, &mut self.internal_server, ctx),
+                open_menu.gui(
+                    &mut self.menu_resources,
+                    &mut chat,
+                    &mut self.internal_server,
+                    &self.items_mesh,
+                    &self.held_item,
+                    &self.inventory_slots,
+                    &mut self.inventory_slots_state,
+                    &self.inventory_slots_armor,
+                    &mut self.inventory_slots_armor_state,
+                    &self.inventory_slots_crafting,
+                    &mut self.inventory_slots_crafting_state,
+                    &self.inventory_slot_crafting_output,
+                    &mut self.inventory_slot_crafting_output_state,
+                    ctx,
+                ),
             )));
         layer((
             WorldGuiBlock {
@@ -378,6 +498,26 @@ impl Client {
                 stars: &self.stars,
                 white_pixel: &self.white_pixel,
             },
+            align([0.5, 1.0],
+                logical_size([364.0, 44.0],
+                    layer((
+                        &ctx.assets().hud_hotbar,
+                        align(0.5,
+                            ItemGrid {
+                                slots: (&self.inventory_slots[..9]).iter(),
+                                slots_state: self.hotbar_slots_state.iter_mut(),
+                                held: &self.held_item,
+                                grid_size: [9, 1].into(),
+                                config: ItemGridConfig {
+                                    pad: 4.0,
+                                    ..ItemGridConfig::default()
+                                },
+                                items_mesh: &self.items_mesh,
+                            }
+                        ),
+                    ))
+                )
+            ),
             align(0.5,
                 logical_size(30.0,
                     Crosshair
@@ -969,7 +1109,7 @@ impl GuiStateFrame for Client {
                         .unwrap_or(0.into());
                     getter.gtc_get(gtc).map(|tile| (
                         tile,
-                        ErasedBidMeta::new(ctx.global().game.content_stone.bid_stone, ()),
+                        ErasedBidMeta::new(ctx.global().game.content.stone.bid_stone, ()),
                         true,
                     ))
                 }
@@ -1054,10 +1194,6 @@ impl GuiStateFrame for Client {
                         .exitable_via_inventory_button()
                 )
             {
-                //self.menu_stack.pop();
-                //if self.menu_stack.is_empty() {
-                //    ctx.global().capture_mouse();
-                //}
                 self.menu_stack.clear();
                 ctx.global().capture_mouse();
             } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
@@ -1075,7 +1211,6 @@ impl GuiStateFrame for Client {
                     ref mut text,
                     ..
                 }) = self.menu_stack.iter_mut().rev().next() {
-                    //self.chat.add_line(format!("<me> {}", text), ctx.global());
                     self.connection.send(up::Say {
                         text: take(text),
                     });
@@ -1147,13 +1282,6 @@ struct WorldGuiBlock<'a> {
     pointing: bool,
     load_dist: u8,
 
-    bob_animation: f32,
-    third_person: bool,
-
-    chunks: &'a LoadedChunks,
-    tile_blocks: &'a PerChunk<ChunkBlocks>,
-    tile_meshes: &'a mut PerChunk<MaybePendingChunkMesh>,
-
     char_mesh: &'a CharMesh,
     char_name_layed_out: &'a LayedOutTextBlock,
 
@@ -1164,6 +1292,13 @@ struct WorldGuiBlock<'a> {
     day_night_time: f32,
     stars: &'a Mesh,
     white_pixel: &'a GpuImageArray,
+
+    bob_animation: f32,
+    third_person: bool,
+
+    chunks: &'a LoadedChunks,
+    tile_blocks: &'a PerChunk<ChunkBlocks>,
+    tile_meshes: &'a mut PerChunk<MaybePendingChunkMesh>,
 }
 
 impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
@@ -1444,6 +1579,7 @@ impl MenuResources {
         let options_chunk_outline_button = OptionsOnOffButton::new("Chunk Outline");
         let options_done_button = menu_button(&ctx.assets.lang.gui_done).build(ctx.assets);
         let open_to_lan_button = menu_button("Open to LAN").build(ctx.assets);
+
         MenuResources {
             esc_menu_title_text,
             options_menu_title_text,
@@ -1456,7 +1592,6 @@ impl MenuResources {
             options_chunk_outline_button,
             options_done_button,
             open_to_lan_button,
-
             effect_queue: RefCell::new(VecDeque::new()),
         }
     }
@@ -1552,8 +1687,26 @@ impl Menu {
         resources: &'a mut MenuResources,
         chat: &mut Option<&'a mut GuiChat>,
         internal_server: &'a mut Option<InternalServer>,
+        items_mesh: &'a PerItem<ItemMesh>,
+        held_item: &'a ItemSlot,
+        inventory_slots: &'a Box<[ItemSlot; 36]>,
+        inventory_slots_state: &'a mut Box<[ItemSlotGuiState; 36]>,
+
+        inventory_slots_armor: &'a [ItemSlot; 4],
+        inventory_slots_armor_state: &'a mut [ItemSlotGuiState; 4],
+        
+        inventory_slots_crafting: &'a [ItemSlot; 4],
+        inventory_slots_crafting_state: &'a mut [ItemSlotGuiState; 4],
+
+        inventory_slot_crafting_output: &'a ItemSlot,
+        inventory_slot_crafting_output_state: &'a mut ItemSlotGuiState,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+        let (
+            inventory_slots_state_bottom,
+            inventory_slots_state_top,
+        ) = inventory_slots_state.split_at_mut(9);
+
         match self {
             &mut Menu::EscMenu => GuiEither::A(GuiEither::A(align(0.5,
                 logical_size([400.0, 320.0],
@@ -1573,10 +1726,70 @@ impl Menu {
                 )
             ))),
             &mut Menu::Inventory => GuiEither::A(GuiEither::B(align(0.5,
-                game_gui!(
-                    [176, 166],
-                    &ctx.assets().gui_inventory,
-                    []
+                logical_size(Vec2::new(176.0, 166.0) * 2.0,
+                    layer((
+                        &ctx.assets().gui_inventory,
+                        margin(14.0, 0.0, 166.0, 0.0,
+                            align(0.0,
+                                ItemGrid {
+                                    slots: (&inventory_slots[9..]).iter(),
+                                    slots_state: inventory_slots_state_top.iter_mut(),
+                                    held: held_item,
+                                    grid_size: [9, 3].into(),
+                                    config: ItemGridConfig::default(),
+                                    items_mesh: &items_mesh,
+                                }
+                            )
+                        ),
+                        margin(14.0, 0.0, 282.0, 0.0,
+                            align(0.0,
+                                ItemGrid {
+                                    slots: (&inventory_slots[..9]).iter(),
+                                    slots_state: inventory_slots_state_bottom.iter_mut(),
+                                    held: held_item,
+                                    grid_size: [9, 1].into(),
+                                    config: ItemGridConfig::default(),
+                                    items_mesh: &items_mesh,
+                                }
+                            )
+                        ),
+                        margin(14.0, 0.0, 14.0, 0.0,
+                            align(0.0,
+                                ItemGrid {
+                                    slots: inventory_slots_armor,
+                                    slots_state: inventory_slots_armor_state,
+                                    held: held_item,
+                                    grid_size: [1, 4].into(),
+                                    config: ItemGridConfig::default(),
+                                    items_mesh: &items_mesh,
+                                }
+                            )
+                        ),
+                        margin(174.0, 0.0, 50.0, 0.0,
+                            align(0.0,
+                                ItemGrid {
+                                    slots: inventory_slots_crafting,
+                                    slots_state: inventory_slots_crafting_state,
+                                    held: held_item,
+                                    grid_size: [2, 2].into(),
+                                    config: ItemGridConfig::default(),
+                                    items_mesh: &items_mesh,
+                                }
+                            )
+                        ),
+                        margin(286.0, 0.0, 70.0, 0.0,
+                            align(0.0,
+                                ItemGrid {
+                                    slots: once(inventory_slot_crafting_output),
+                                    slots_state: once(inventory_slot_crafting_output_state),
+                                    held: held_item,
+                                    grid_size: [1, 1].into(),
+                                    config: ItemGridConfig::default(),
+                                    items_mesh: &items_mesh,
+                                }
+                            )
+                        ),
+                    ))
                 )
             ))),
             &mut Menu::ChatInput {
@@ -1694,6 +1907,514 @@ fn on_options_done_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&
         effect_queue.borrow_mut().push_back(MenuEffect::PopMenu);
     }
 }
+
+
+/// Like layer but works with an iterator of GuiBlock rather than a
+/// GuiBlockSeq. GuiBlockSeq is more difficult to implement than an iterator,
+/// but those difficulties can be bypassed in cases where the sequence length
+/// or the elements sizing logic don't affect the sizing logic of the parent,
+/// such as in this case.
+fn iter_layer<'a, I>(iter: I) -> impl GuiBlock<'a, DimParentSets, DimParentSets>
+where
+    I: IntoIterator,
+    <I as IntoIterator>::IntoIter: DoubleEndedIterator,
+    <I as IntoIterator>::Item: GuiBlock<'a, DimParentSets, DimParentSets>,
+{
+    IterLayer(iter.into_iter())
+}
+
+
+#[derive(Debug)]
+struct IterLayer<I>(I);
+
+impl<
+    'a,
+    I: Iterator + DoubleEndedIterator,
+> GuiBlock<'a, DimParentSets, DimParentSets> for IterLayer<I>
+where
+    <I as Iterator>::Item: GuiBlock<'a, DimParentSets, DimParentSets>,
+{
+    type Sized = IterLayerSized<I>;
+
+    fn size(
+        self,
+        _: &GuiGlobalContext<'a>,
+        w: f32,
+        h: f32,
+        scale: f32,
+    ) -> ((), (), Self::Sized) {
+        ((), (), IterLayerSized {
+            iter: self.0,
+            w,
+            h,
+            scale,
+        })
+    }
+}
+
+
+#[derive(Debug)]
+struct IterLayerSized<I> {
+    iter: I,
+    w: f32,
+    h: f32,
+    scale: f32,
+}
+
+impl<
+    'a,
+    I: Iterator + DoubleEndedIterator,
+> SizedGuiBlock<'a> for IterLayerSized<I>
+where
+    <I as Iterator>::Item: GuiBlock<'a, DimParentSets, DimParentSets>,
+{
+    fn visit_nodes<T: GuiVisitorTarget<'a>>(
+        self,
+        visitor: &mut GuiVisitor<'a, '_, T>,
+        forward: bool,
+    ) {
+        if forward {
+            for block in self.iter {
+                block
+                    .size(visitor.ctx.global, self.w, self.h, self.scale)
+                    .2.visit_nodes(visitor, true);
+            }
+        } else {
+            for block in self.iter.rev() {
+                block
+                    .size(visitor.ctx.global, self.w, self.h, self.scale)
+                    .2.visit_nodes(visitor, false);
+            }
+        }
+    }
+}
+
+
+#[derive(Debug)]
+struct ItemSlotGuiState {
+    cached_count: Option<u8>,
+    count_text: Option<GuiTextBlockInner>,
+
+    cached_iid: Option<RawItemId>,
+    name_text: Option<GuiTextBlockInner>,
+}
+
+impl ItemSlotGuiState {
+    pub fn new() -> Self {
+        ItemSlotGuiState {
+            cached_count: None,
+            count_text: None,
+
+            cached_iid: None,
+            name_text: None,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct ItemGridConfig {
+    /// Makes slots bigger than their default logical size of 32 
+    slot_scale: f32,
+    /// Logical padding around slots.
+    pad: f32,
+}
+
+impl Default for ItemGridConfig {
+    fn default() -> Self {
+        ItemGridConfig {
+            slot_scale: 1.0,
+            pad: 2.0,
+        }
+    }
+}
+
+const SLOT_DEFAULT_SLOT_SIZE: f32 = 32.0;
+const SLOT_DEFAULT_TEXT_SIZE: f32 = 16.0;
+
+#[derive(Debug)]
+struct ItemGrid<'a, I1, I2> {
+    slots: I1,
+    slots_state: I2,
+    held: &'a ItemSlot,
+    grid_size: Extent2<u32>,
+    config: ItemGridConfig,
+    items_mesh: &'a PerItem<ItemMesh>,
+}
+
+#[derive(Debug)]
+struct ItemGridSized<'a, I1, I2> {
+    inner: ItemGrid<'a, I1, I2>,
+    scale: f32,
+}
+
+impl<
+    'a,
+    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
+    I2: IntoIterator<Item=&'a mut ItemSlotGuiState> + Debug,
+> GuiBlock<'a, DimChildSets, DimChildSets> for ItemGrid<'a, I1, I2> {
+    type Sized = ItemGridSized<'a, I1, I2>;
+
+    fn size(
+        self,
+        _: &GuiGlobalContext<'a>,
+        (): (),
+        (): (),
+        scale: f32,
+    ) -> (f32, f32, Self::Sized) {
+        let size = self.grid_size.map(|n| n as f32)
+            * (SLOT_DEFAULT_SLOT_SIZE * self.config.slot_scale + self.config.pad * 2.0)
+            * scale;
+        (size.w, size.h, ItemGridSized {
+            inner: self,
+            scale,
+        })
+    }
+}
+
+impl<
+    'a,
+    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
+    I2: IntoIterator<Item=&'a mut ItemSlotGuiState> + Debug,
+> GuiNode<'a> for ItemGridSized<'a, I1, I2> {
+    fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
+        let &ItemGridSized { ref inner, scale } = self;
+        let size = inner.grid_size.map(|n| n as f32)
+            * (SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale + inner.config.pad * 2.0)
+            * scale;
+        ctx.cursor_in_area(0.0, size)
+    }
+
+    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
+        let ItemGridSized { inner, scale } = self;
+        
+        let slot_inner_size = SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale * scale;
+        let pad_size = inner.config.pad * scale;
+        let slot_outer_size = slot_inner_size + pad_size * 2.0;
+
+        let cursor_over = ctx.cursor_pos
+            .map(|pos| pos / slot_outer_size)
+            .map(|xy| xy.map(|n| n.floor() as i64))
+            .filter(|xy| xy
+                .zip::<u32>(inner.grid_size.into())
+                .map(|(n, bound)| n >= 0 && n < bound as i64)
+                .reduce_and())
+            .map(|xy| xy.map(|n| n as u32));
+
+        let mut cursor_over_name_gui: Option<(
+            &'a ItemSlot,
+            &'a mut Option<RawItemId>,
+            &'a mut Option<GuiTextBlockInner>,
+        )> = None;
+
+        let mut slots = inner.slots.into_iter();
+        let mut slots_state = inner.slots_state.into_iter();
+
+        for y in 0..inner.grid_size.h {
+            for x in 0..inner.grid_size.w {
+                let xy = Vec2 { x, y };
+
+                let slot: &'a ItemSlot = slots.next()
+                    .expect("ItemGrid slots produced None when expected Some");
+                let slot_state: &'a mut ItemSlotGuiState = slots_state.next()
+                    .expect("ItemGrid slots_state produced None when expected Some");
+
+                let mut canvas = canvas.reborrow()
+                    .translate(xy.map(|n| n as f32) * slot_outer_size);
+
+                if true {
+                    canvas.reborrow()
+                        .translate(pad_size)
+                        .color([1.0, 0.0, 0.0, 0.5])
+                        .draw_solid(slot_inner_size);
+                }
+                
+                let slot_ref = slot.borrow();
+                
+                let count = slot_ref.as_ref()
+                    .map(|stack| stack.count.get())
+                    .filter(|&n| n > 1);
+                if count != slot_state.cached_count {
+                    slot_state.cached_count = count;
+                    slot_state.count_text = count
+                        .map(|n| GuiTextBlockInner::new(
+                            &GuiTextBlockConfig {
+                                text: &n.to_string(),
+                                font: ctx.assets().font,
+                                logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
+                                color: Rgba::white(),
+                                h_align: HAlign::Right,
+                                v_align: VAlign::Bottom,
+                            },
+                            false,
+                        ));
+                }
+
+                if let &Some(ref stack) = &*slot_ref {
+                    canvas.reborrow()
+                        .scale(slot_outer_size)
+                        .begin_3d(
+                            Mat4::new(
+                                1.0,  0.0,  0.0, 0.5,
+                                0.0, -1.0,  0.0, 0.5,
+                                0.0,  0.0, 0.01, 0.5,
+                                0.0,  0.0,  0.0, 1.0,
+                            ),
+                            Fog::None,
+                        )
+                        .scale(0.56)
+                        .rotate(Quaternion::rotation_x(-PI * 0.17))
+                        .rotate(Quaternion::rotation_y(PI / 4.0))
+                        .translate(-0.5)
+                        .draw_mesh(
+                            &inner.items_mesh[stack.iid].mesh,
+                            &ctx.assets().blocks,
+                        );
+
+                    if let Some(count_text) = slot_state.count_text.as_mut() {
+                        count_text.draw(
+                            slot_outer_size.into(),
+                            scale,
+                            &mut canvas,
+                            &ctx.global.renderer.borrow(),
+                        );
+                    }
+                }
+
+                if cursor_over == Some(xy) {
+                    cursor_over_name_gui = Some((
+                        slot,
+                        &mut slot_state.cached_iid,
+                        &mut slot_state.name_text,
+                    ));
+                }
+            }
+        }
+
+        if let Some(xy) = cursor_over {
+            const SELECTED_ALPHA: f32 = (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32);
+            const NAME_TAG_BG_ALPHA: f32 = (0xc6 as f32 - 0x31 as f32) / 0xc6 as f32;
+
+            canvas.reborrow()
+                .translate(xy.map(|n| n as f32) * slot_outer_size)
+                .translate(pad_size)
+                .color([1.0, 1.0, 1.0, SELECTED_ALPHA])
+                .draw_solid(slot_inner_size);
+
+            let (slot, cached_iid, name_text) = cursor_over_name_gui.unwrap();
+            let slot_ref = slot.borrow();
+
+            let iid = slot_ref.as_ref().map(|stack| stack.iid);
+            if *cached_iid != iid {
+                *cached_iid = iid;
+                *name_text = iid.map(|iid| GuiTextBlockInner::new(
+                    &GuiTextBlockConfig {
+                        text: ctx.game().items_name[iid]
+                            .map(|lang_key| &ctx.assets().lang[lang_key])
+                            .unwrap_or_else(|| &ctx.game().items_machine_name[iid]),
+                        font: ctx.assets().font,
+                        logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
+                        color: Rgba::white(),
+                        h_align: HAlign::Left,
+                        v_align: VAlign::Top,
+                    },
+                    false,
+                ));
+            }
+
+            if let Some(name_text) = name_text.as_mut() {
+                let [
+                    name_text_min,
+                    mut name_text_max,
+                ] = name_text.content_bounds(None, scale, &*ctx.global.renderer.borrow());
+                
+                let px_adjust = SLOT_DEFAULT_TEXT_SIZE * scale / 8.0;
+                name_text_max += Vec2::from(px_adjust);
+
+                let mut name_pos = ctx.cursor_pos.unwrap();
+                name_pos -= name_pos % (2.0 * scale);
+                name_pos += Vec2::new(18.0, -31.0) * scale;
+                name_pos -= name_text_min;
+
+                let border = px_adjust * 3.0;
+
+                let name_tag_size = name_text_max - name_text_min + 2.0 * border;
+
+                let mut canvas = canvas.reborrow()
+                    .translate(name_pos);
+
+                canvas.reborrow()
+                    .color([0.0, 0.0, 0.0, NAME_TAG_BG_ALPHA])
+                    .draw_solid(name_tag_size);
+
+                name_text.draw(
+                    0.0.into(),
+                    scale,
+                    &mut canvas.reborrow().translate(border),
+                    &*ctx.global.renderer.borrow(),
+                )
+            }
+        }
+    }
+
+    fn on_cursor_click(self, ctx: GuiSpatialContext, hits: bool, button: MouseButton) {
+        let ItemGridSized { inner, scale } = self;
+        
+        // layout calculation
+        let slot_outer_size = 
+            (SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale + inner.config.pad * 2.0)
+            * scale;
+
+        // calculate which slot clicked, or return
+        if !hits { return }
+        let xy = match ctx.cursor_pos
+            .map(|pos| pos / slot_outer_size)
+            .map(|xy| xy.map(|n| n.floor() as i64))
+            .filter(|xy| xy
+                .zip::<u32>(inner.grid_size.into())
+                .map(|(n, bound)| n >= 0 && n < bound as i64)
+                .reduce_and())
+            .map(|xy| xy.map(|n| n as u32))
+        {
+            Some(xy) => xy,
+            None => return,
+        };
+
+        // convert to index and get actual slot
+        let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
+        let slot = inner.slots.into_iter().nth(i)
+            .expect("ItemGrid slots produced None when expected Some");
+        
+        // borrow
+        let mut slot_mut = slot.borrow_mut();
+        let mut held_mut = inner.held.borrow_mut();
+
+        if button == MouseButton::Left {
+            // left click
+            // take ownership of both stacks, remember to put them back if we want to
+            match (held_mut.take(), slot_mut.take()) {
+                (Some(mut held), Some(mut slot)) => {
+                    // both held and slot have stack
+                    if held.iid == slot.iid
+                        && held.meta == slot.meta
+                        && held.damage == slot.damage
+                    {
+                        // stacks have same item
+
+                        // number of items to transfer from held to slot
+                        let transfer = u8::min(
+                            // number of items in held
+                            held.count.get(),
+                            // number of additional items slot could receive
+                            ctx.game().items_max_count[slot.iid].get().saturating_sub(slot.count.get()),
+                        );
+
+                        // add to slot, give back ownership
+                        slot.count = (slot.count.get() + transfer).try_into().unwrap();
+                        *slot_mut = Some(slot);
+
+                        // subtract from held, give back ownership or leave it none
+                        if let Ok(held_new_count) = (held.count.get() - transfer).try_into() {
+                            held.count = held_new_count;
+                            *held_mut = Some(held)
+                        }
+                    } else {
+                        // stacks have different items
+                        // swap them
+                        *held_mut = Some(slot);
+                        *slot_mut = Some(held);
+                    }
+                }
+                (opt_held, opt_slot) => {
+                    // otherwise, swap them (regardless of further specifics)
+                    *held_mut = opt_slot;
+                    *slot_mut = opt_held;
+                }
+            }
+        } else if button == MouseButton::Right {
+            // right click
+            // take ownership of both stacks, remember to put them back if we want to
+            match (held_mut.take(), slot_mut.take()) {
+                (Some(mut held), Some(mut slot)) => {
+                    // both held and slot have stack
+                    if held.iid == slot.iid
+                        && held.meta == slot.meta
+                        && held.damage == slot.damage
+                    {
+                        // stacks have same item
+                        if let Some(slot_new_count) = slot.count.get()
+                            .checked_add(1)
+                            .filter(|&n| n <= ctx.game().items_max_count[held.iid].get())
+                        {
+                            // slot has room for another item
+                            
+                            // add to slot, give back ownership
+                            slot.count = slot_new_count.try_into().unwrap();
+                            *slot_mut = Some(slot);
+
+                            // subtract from held, give back ownership or leave it none
+                            if let Ok(held_new_count) = (held.count.get() - 1).try_into() {
+                                held.count = held_new_count;
+                                *held_mut = Some(held)
+                            }
+                        } else {
+                            // slot is full
+                            // give back ownership of both without modifying
+                            *held_mut = Some(held);
+                            *slot_mut = Some(slot);
+                        }
+                    } else {
+                        // stacks have different items
+                        // swap them
+                        *held_mut = Some(slot);
+                        *slot_mut = Some(held);
+                    }
+                }
+                (Some(mut held), None) => {
+                    // only held has stack
+
+                    // put one item in slot
+                    *slot_mut = Some(ItemStack {
+                        iid: held.iid,
+                        meta: held.meta.clone(),
+                        count: 1.try_into().unwrap(),
+                        damage: held.damage,
+                    });
+
+                    // subtract from held, give back ownership or leave it none
+                    if let Ok(held_new_count) = (held.count.get() - 1).try_into() {
+                        held.count = held_new_count;
+                        *held_mut = Some(held);
+                    }
+
+                }
+                (None, Some(mut slot)) => {
+                    // only slot has stack
+
+                    // amount to leave = half, round down
+                    let slot_new_count = slot.count.get() / 2;
+                    // amount to take = half, round up
+                    let held_new_count = slot.count.get() - slot_new_count;
+
+                    // put in held
+                    *held_mut = Some(ItemStack {
+                        iid: slot.iid,
+                        meta: slot.meta.clone(),
+                        count: held_new_count.try_into().unwrap(),
+                        damage: slot.damage,
+                    });
+
+                    // subtract from slot, give back ownership or leave it none
+                    if let Ok(slot_new_count) = slot_new_count.try_into() {
+                        slot.count = slot_new_count;
+                        *slot_mut = Some(slot)
+                    }
+                }
+                (None, None) => {} // both are empty, nothing to do
+            }
+        }
+    }
+}
+
 
 // ==== chat stuff ====
 

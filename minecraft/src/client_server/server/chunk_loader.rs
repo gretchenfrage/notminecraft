@@ -208,7 +208,7 @@ impl LoadChunkThreadState {
                     //let depth = height - y;
                     //debug_assert!(depth >= 1);
 
-                    chunk_tile_blocks.set(lti, self.game.content_stone.bid_stone, ());
+                    chunk_tile_blocks.set(lti, self.game.content.stone.bid_stone, ());
                 }
             }
         }
