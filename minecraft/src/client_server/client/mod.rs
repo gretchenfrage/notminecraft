@@ -38,6 +38,7 @@ use crate::{
     save_file::SaveFile,
     item::*,
     game_data::{
+        GameData,
         per_item::PerItem,
         item_mesh_logic::ItemMeshLogic,
     },
@@ -70,7 +71,7 @@ use std::{
     },
     fmt::Debug,
     iter::once,
-    mem::swap,
+    sync::Arc,
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -149,6 +150,7 @@ pub struct Client {
     stars: Mesh,
 
     held_item: ItemSlot,
+    held_item_state: ItemSlotGuiStateNoninteractive,
 
     inventory_slots: Box<[ItemSlot; 36]>,
     inventory_slots_state: Box<[ItemSlotGuiState; 36]>,
@@ -162,7 +164,7 @@ pub struct Client {
     inventory_slot_crafting_output: ItemSlot,
     inventory_slot_crafting_output_state: ItemSlotGuiState,
 
-    hotbar_slots_state: [ItemSlotGuiState; 9],
+    hotbar_slots_state: [ItemSlotGuiStateNoninteractive; 9],
 }
 
 #[derive(Debug)]
@@ -425,6 +427,7 @@ impl Client {
             stars,
 
             held_item: RefCell::new(None),
+            held_item_state: ItemSlotGuiStateNoninteractive::new(),
 
             //inventory_slots: Box::new(array_from_fn(|_| RefCell::new(None))),
             inventory_slots,
@@ -439,7 +442,7 @@ impl Client {
             inventory_slot_crafting_output: RefCell::new(None),
             inventory_slot_crafting_output_state: ItemSlotGuiState::new(),
 
-            hotbar_slots_state: array_from_fn(|_| ItemSlotGuiState::new()),
+            hotbar_slots_state: array_from_fn(|_| ItemSlotGuiStateNoninteractive::new()),
         }
     }
 
@@ -461,6 +464,7 @@ impl Client {
                     &mut self.internal_server,
                     &self.items_mesh,
                     &self.held_item,
+                    &mut self.held_item_state,
                     &self.inventory_slots,
                     &mut self.inventory_slots_state,
                     &self.inventory_slots_armor,
@@ -469,6 +473,9 @@ impl Client {
                     &mut self.inventory_slots_crafting_state,
                     &self.inventory_slot_crafting_output,
                     &mut self.inventory_slot_crafting_output_state,
+                    &self.char_mesh,
+                    self.char_state.pitch,
+                    self.char_state.pointing,
                     ctx,
                 ),
             )));
@@ -506,7 +513,7 @@ impl Client {
                             ItemGrid {
                                 slots: (&self.inventory_slots[..9]).iter(),
                                 slots_state: self.hotbar_slots_state.iter_mut(),
-                                held: &self.held_item,
+                                click_logic: NoninteractiveItemSlotClickLogic,
                                 grid_size: [9, 1].into(),
                                 config: ItemGridConfig {
                                     pad: 4.0,
@@ -1104,14 +1111,22 @@ impl GuiStateFrame for Client {
                     false,
                 )),
                 MouseButton::Right => {
-                    let gtc = looking_at.tile.gtc() + looking_at.face
-                        .map(|face| face.to_vec())
-                        .unwrap_or(0.into());
-                    getter.gtc_get(gtc).map(|tile| (
-                        tile,
-                        ErasedBidMeta::new(ctx.global().game.content.stone.bid_stone, ()),
-                        true,
-                    ))
+                    if looking_at.tile.get(&self.tile_blocks).get() == ctx.game().content.chest.bid_chest {
+                        self.menu_stack.push(Menu::Chest {
+                            gtc: looking_at.tile.gtc(),
+                        });
+                        ctx.global().uncapture_mouse();
+                        None
+                    } else {
+                        let gtc = looking_at.tile.gtc() + looking_at.face
+                            .map(|face| face.to_vec())
+                            .unwrap_or(0.into());
+                        getter.gtc_get(gtc).map(|tile| (
+                            tile,
+                            ErasedBidMeta::new(ctx.global().game.content.chest.bid_chest, ()),
+                            true,
+                        ))
+                    }
                 }
                 _ => None
             } {
@@ -1679,6 +1694,9 @@ enum Menu {
         blinker: bool,
     },
     Settings,
+    Chest {
+        gtc: Vec3<i64>,
+    }
 }
 
 impl Menu {
@@ -1688,7 +1706,10 @@ impl Menu {
         chat: &mut Option<&'a mut GuiChat>,
         internal_server: &'a mut Option<InternalServer>,
         items_mesh: &'a PerItem<ItemMesh>,
+
         held_item: &'a ItemSlot,
+        held_item_state: &'a mut ItemSlotGuiStateNoninteractive,
+
         inventory_slots: &'a Box<[ItemSlot; 36]>,
         inventory_slots_state: &'a mut Box<[ItemSlotGuiState; 36]>,
 
@@ -1700,6 +1721,11 @@ impl Menu {
 
         inventory_slot_crafting_output: &'a ItemSlot,
         inventory_slot_crafting_output_state: &'a mut ItemSlotGuiState,
+
+        char_mesh: &'a CharMesh,
+        head_pitch: f32,
+        pointing: bool,
+
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         let (
@@ -1708,7 +1734,7 @@ impl Menu {
         ) = inventory_slots_state.split_at_mut(9);
 
         match self {
-            &mut Menu::EscMenu => GuiEither::A(GuiEither::A(align(0.5,
+            &mut Menu::EscMenu => GuiEither::A(GuiEither::A(GuiEither::A(align(0.5,
                 logical_size([400.0, 320.0],
                     v_align(0.0,
                         v_stack(0.0, (
@@ -1724,17 +1750,30 @@ impl Menu {
                         ))
                     )
                 )
-            ))),
-            &mut Menu::Inventory => GuiEither::A(GuiEither::B(align(0.5,
+            )))),
+            &mut Menu::Inventory => GuiEither::A(GuiEither::A(GuiEither::B(align(0.5,
                 logical_size(Vec2::new(176.0, 166.0) * 2.0,
                     layer((
                         &ctx.assets().gui_inventory,
+                        margin(52.0, 0.0, 160.0, 0.0,
+                            align(0.0,
+                                logical_size([104.0, 140.0],
+                                    CharMeshGuiBlock {
+                                        char_mesh,
+                                        head_pitch,
+                                        pointing,
+                                    }
+                                )
+                            )
+                        ),
                         margin(14.0, 0.0, 166.0, 0.0,
                             align(0.0,
                                 ItemGrid {
                                     slots: (&inventory_slots[9..]).iter(),
                                     slots_state: inventory_slots_state_top.iter_mut(),
-                                    held: held_item,
+                                    click_logic: StorageItemSlotClickLogic {
+                                        held: held_item,
+                                    },
                                     grid_size: [9, 3].into(),
                                     config: ItemGridConfig::default(),
                                     items_mesh: &items_mesh,
@@ -1746,7 +1785,9 @@ impl Menu {
                                 ItemGrid {
                                     slots: (&inventory_slots[..9]).iter(),
                                     slots_state: inventory_slots_state_bottom.iter_mut(),
-                                    held: held_item,
+                                    click_logic: StorageItemSlotClickLogic {
+                                        held: held_item,
+                                    },
                                     grid_size: [9, 1].into(),
                                     config: ItemGridConfig::default(),
                                     items_mesh: &items_mesh,
@@ -1758,7 +1799,9 @@ impl Menu {
                                 ItemGrid {
                                     slots: inventory_slots_armor,
                                     slots_state: inventory_slots_armor_state,
-                                    held: held_item,
+                                    click_logic: StorageItemSlotClickLogic {
+                                        held: held_item,
+                                    },
                                     grid_size: [1, 4].into(),
                                     config: ItemGridConfig::default(),
                                     items_mesh: &items_mesh,
@@ -1770,7 +1813,9 @@ impl Menu {
                                 ItemGrid {
                                     slots: inventory_slots_crafting,
                                     slots_state: inventory_slots_crafting_state,
-                                    held: held_item,
+                                    click_logic: StorageItemSlotClickLogic {
+                                        held: held_item,
+                                    },
                                     grid_size: [2, 2].into(),
                                     config: ItemGridConfig::default(),
                                     items_mesh: &items_mesh,
@@ -1782,20 +1827,27 @@ impl Menu {
                                 ItemGrid {
                                     slots: once(inventory_slot_crafting_output),
                                     slots_state: once(inventory_slot_crafting_output_state),
-                                    held: held_item,
+                                    click_logic: StorageItemSlotClickLogic {
+                                        held: held_item,
+                                    },
                                     grid_size: [1, 1].into(),
                                     config: ItemGridConfig::default(),
                                     items_mesh: &items_mesh,
                                 }
                             )
                         ),
+                        HeldItemGuiBlock {
+                            held: held_item,
+                            held_state: held_item_state,
+                            items_mesh: &items_mesh,
+                        }
                     ))
                 )
-            ))),
+            )))),
             &mut Menu::ChatInput {
                 ref mut text_block,
                 ..
-            } => GuiEither::B(GuiEither::A(v_align(1.0,
+            } => GuiEither::A(GuiEither::B(GuiEither::A(v_align(1.0,
                 v_stack(0.0, (
                     h_align(0.0,
                         chat.take().unwrap().gui(false)
@@ -1820,8 +1872,8 @@ impl Menu {
                         )
                     ),
                 ))
-            ))),
-            &mut Menu::Settings => GuiEither::B(GuiEither::B(
+            )))),
+            &mut Menu::Settings => GuiEither::A(GuiEither::B(GuiEither::B(
                 align([0.5, 0.0],
                     logical_width(400.0,
                         v_stack(0.0, (
@@ -1849,7 +1901,49 @@ impl Menu {
                         ))
                     )
                 )
-            )),
+            ))),
+            &mut Menu::Chest { gtc } => GuiEither::B(
+                align(0.5,
+                    logical_size([352.0, 444.0],
+                        layer((
+                            &ctx.assets().gui_chest,
+                            margin(14.0, 0.0, 278.0, 0.0,
+                                align(0.0,
+                                    ItemGrid {
+                                        slots: (&inventory_slots[9..]).iter(),
+                                        slots_state: inventory_slots_state_top.iter_mut(),
+                                        click_logic: StorageItemSlotClickLogic {
+                                            held: held_item,
+                                        },
+                                        grid_size: [9, 3].into(),
+                                        config: ItemGridConfig::default(),
+                                        items_mesh: &items_mesh,
+                                    }
+                                )
+                            ),
+                            margin(14.0, 0.0, 394.0, 0.0,
+                                align(0.0,
+                                    ItemGrid {
+                                        slots: (&inventory_slots[..9]).iter(),
+                                        slots_state: inventory_slots_state_bottom.iter_mut(),
+                                        click_logic: StorageItemSlotClickLogic {
+                                            held: held_item,
+                                        },
+                                        grid_size: [9, 1].into(),
+                                        config: ItemGridConfig::default(),
+                                        items_mesh: &items_mesh,
+                                    }
+                                )
+                            ),
+                            HeldItemGuiBlock {
+                                held: held_item,
+                                held_state: held_item_state,
+                                items_mesh: &items_mesh,
+                            }
+                        ))
+                    )
+                )
+            ),
         }
     }
 
@@ -1859,6 +1953,7 @@ impl Menu {
             &Menu::Inventory => true,
             &Menu::ChatInput { .. } => false,
             &Menu::Settings => false,
+            &Menu::Chest { .. } => true,
         }
     }
 
@@ -1908,7 +2003,34 @@ fn on_options_done_click<'a>(effect_queue: &'a MenuEffectQueue) -> impl FnOnce(&
     }
 }
 
+#[derive(Debug)]
+struct CharMeshGuiBlock<'a> {
+    char_mesh: &'a CharMesh,
+    head_pitch: f32,
+    pointing: bool,
+}
 
+impl<'a> GuiNode<'a> for SimpleGuiBlock<CharMeshGuiBlock<'a>> {
+    never_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        let mut canvas = canvas.reborrow()
+            .scale(self.size)
+            .begin_3d(
+                ViewProj::orthographic(
+                    [0.0, PLAYER_HEIGHT / 2.0, -5.0],
+                    Quaternion::identity(),
+                    3.2,
+                    self.size
+                ),
+                Fog::None,
+            )
+            .rotate(Quaternion::rotation_y(PI));
+        self.inner.char_mesh.draw(&mut canvas, ctx.assets(), self.inner.head_pitch, self.inner.pointing);
+    }
+}
+
+/*
 /// Like layer but works with an iterator of GuiBlock rather than a
 /// GuiBlockSeq. GuiBlockSeq is more difficult to implement than an iterator,
 /// but those difficulties can be bypassed in cases where the sequence length
@@ -1988,12 +2110,26 @@ where
         }
     }
 }
+*/
 
+#[derive(Debug)]
+struct ItemSlotGuiStateNoninteractive {
+    cached_count: Option<u8>,
+    count_text: Option<GuiTextBlockInner>,
+}
+
+impl ItemSlotGuiStateNoninteractive {
+    pub fn new() -> Self {
+        ItemSlotGuiStateNoninteractive {
+            cached_count: None,
+            count_text: None,
+        }
+    }
+}
 
 #[derive(Debug)]
 struct ItemSlotGuiState {
-    cached_count: Option<u8>,
-    count_text: Option<GuiTextBlockInner>,
+    inner: ItemSlotGuiStateNoninteractive,
 
     cached_iid: Option<RawItemId>,
     name_text: Option<GuiTextBlockInner>,
@@ -2002,8 +2138,7 @@ struct ItemSlotGuiState {
 impl ItemSlotGuiState {
     pub fn new() -> Self {
         ItemSlotGuiState {
-            cached_count: None,
-            count_text: None,
+            inner: ItemSlotGuiStateNoninteractive::new(),
 
             cached_iid: None,
             name_text: None,
@@ -2032,27 +2167,31 @@ const SLOT_DEFAULT_SLOT_SIZE: f32 = 32.0;
 const SLOT_DEFAULT_TEXT_SIZE: f32 = 16.0;
 
 #[derive(Debug)]
-struct ItemGrid<'a, I1, I2> {
+struct ItemGrid<'a, I1, I2, C> {
     slots: I1,
     slots_state: I2,
-    held: &'a ItemSlot,
+    click_logic: C,
     grid_size: Extent2<u32>,
     config: ItemGridConfig,
     items_mesh: &'a PerItem<ItemMesh>,
 }
 
 #[derive(Debug)]
-struct ItemGridSized<'a, I1, I2> {
-    inner: ItemGrid<'a, I1, I2>,
+struct ItemGridSized<'a, I1, I2, C> {
+    inner: ItemGrid<'a, I1, I2, C>,
     scale: f32,
 }
 
 impl<
     'a,
     I1: IntoIterator<Item=&'a ItemSlot> + Debug,
-    I2: IntoIterator<Item=&'a mut ItemSlotGuiState> + Debug,
-> GuiBlock<'a, DimChildSets, DimChildSets> for ItemGrid<'a, I1, I2> {
-    type Sized = ItemGridSized<'a, I1, I2>;
+    I2: IntoIterator + Debug,
+    C: ItemSlotClickLogic<'a> + Debug,
+> GuiBlock<'a, DimChildSets, DimChildSets> for ItemGrid<'a, I1, I2, C>
+where
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
+{
+    type Sized = ItemGridSized<'a, I1, I2, C>;
 
     fn size(
         self,
@@ -2071,222 +2210,288 @@ impl<
     }
 }
 
-impl<
-    'a,
-    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
-    I2: IntoIterator<Item=&'a mut ItemSlotGuiState> + Debug,
-> GuiNode<'a> for ItemGridSized<'a, I1, I2> {
-    fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
-        let &ItemGridSized { ref inner, scale } = self;
-        let size = inner.grid_size.map(|n| n as f32)
-            * (SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale + inner.config.pad * 2.0)
-            * scale;
-        ctx.cursor_in_area(0.0, size)
-    }
+#[derive(Debug, Copy, Clone)]
+struct ItemSlotLayoutCalcs {
+    // side length of each slot not including pad 
+    slot_inner_size: f32,
+    // thickness of pad around each slot
+    pad_size: f32,
+    // side length of each slot including pad
+    slot_outer_size: f32,
+}
 
-    fn draw(self, ctx: GuiSpatialContext, canvas: &mut Canvas2<'a, '_>) {
-        let ItemGridSized { inner, scale } = self;
-        
-        let slot_inner_size = SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale * scale;
-        let pad_size = inner.config.pad * scale;
+impl ItemSlotLayoutCalcs {
+    fn new(scale: f32, config: &ItemGridConfig) -> Self {
+        let slot_inner_size = SLOT_DEFAULT_SLOT_SIZE * config.slot_scale * scale;
+        let pad_size = config.pad * scale;
         let slot_outer_size = slot_inner_size + pad_size * 2.0;
 
+        ItemSlotLayoutCalcs {
+            slot_inner_size,
+            pad_size,
+            slot_outer_size,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct ItemGridLayoutCalcs {
+    inner: ItemSlotLayoutCalcs,
+    // size of entire grid
+    size: Extent2<f32>,
+    // grid coordinates of moused-over slot
+    cursor_over: Option<Vec2<u32>>,
+}
+
+impl ItemGridLayoutCalcs {
+    fn new(
+        ctx: GuiSpatialContext,
+        scale: f32,
+        grid_size: Extent2<u32>,
+        config: &ItemGridConfig,
+    ) -> Self {
+        let inner = ItemSlotLayoutCalcs::new(scale, config);
+        let size = grid_size.map(|n| n as f32) * inner.slot_outer_size;
+
         let cursor_over = ctx.cursor_pos
-            .map(|pos| pos / slot_outer_size)
+            .map(|pos| pos / inner.slot_outer_size)
             .map(|xy| xy.map(|n| n.floor() as i64))
             .filter(|xy| xy
-                .zip::<u32>(inner.grid_size.into())
+                .zip::<u32>(grid_size.into())
                 .map(|(n, bound)| n >= 0 && n < bound as i64)
                 .reduce_and())
             .map(|xy| xy.map(|n| n as u32));
 
-        let mut cursor_over_name_gui: Option<(
-            &'a ItemSlot,
-            &'a mut Option<RawItemId>,
-            &'a mut Option<GuiTextBlockInner>,
-        )> = None;
-
-        let mut slots = inner.slots.into_iter();
-        let mut slots_state = inner.slots_state.into_iter();
-
-        for y in 0..inner.grid_size.h {
-            for x in 0..inner.grid_size.w {
-                let xy = Vec2 { x, y };
-
-                let slot: &'a ItemSlot = slots.next()
-                    .expect("ItemGrid slots produced None when expected Some");
-                let slot_state: &'a mut ItemSlotGuiState = slots_state.next()
-                    .expect("ItemGrid slots_state produced None when expected Some");
-
-                let mut canvas = canvas.reborrow()
-                    .translate(xy.map(|n| n as f32) * slot_outer_size);
-
-                if true {
-                    canvas.reborrow()
-                        .translate(pad_size)
-                        .color([1.0, 0.0, 0.0, 0.5])
-                        .draw_solid(slot_inner_size);
-                }
-                
-                let slot_ref = slot.borrow();
-                
-                let count = slot_ref.as_ref()
-                    .map(|stack| stack.count.get())
-                    .filter(|&n| n > 1);
-                if count != slot_state.cached_count {
-                    slot_state.cached_count = count;
-                    slot_state.count_text = count
-                        .map(|n| GuiTextBlockInner::new(
-                            &GuiTextBlockConfig {
-                                text: &n.to_string(),
-                                font: ctx.assets().font,
-                                logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
-                                color: Rgba::white(),
-                                h_align: HAlign::Right,
-                                v_align: VAlign::Bottom,
-                            },
-                            false,
-                        ));
-                }
-
-                if let &Some(ref stack) = &*slot_ref {
-                    canvas.reborrow()
-                        .scale(slot_outer_size)
-                        .begin_3d(
-                            Mat4::new(
-                                1.0,  0.0,  0.0, 0.5,
-                                0.0, -1.0,  0.0, 0.5,
-                                0.0,  0.0, 0.01, 0.5,
-                                0.0,  0.0,  0.0, 1.0,
-                            ),
-                            Fog::None,
-                        )
-                        .scale(0.56)
-                        .rotate(Quaternion::rotation_x(-PI * 0.17))
-                        .rotate(Quaternion::rotation_y(PI / 4.0))
-                        .translate(-0.5)
-                        .draw_mesh(
-                            &inner.items_mesh[stack.iid].mesh,
-                            &ctx.assets().blocks,
-                        );
-
-                    if let Some(count_text) = slot_state.count_text.as_mut() {
-                        count_text.draw(
-                            slot_outer_size.into(),
-                            scale,
-                            &mut canvas,
-                            &ctx.global.renderer.borrow(),
-                        );
-                    }
-                }
-
-                if cursor_over == Some(xy) {
-                    cursor_over_name_gui = Some((
-                        slot,
-                        &mut slot_state.cached_iid,
-                        &mut slot_state.name_text,
-                    ));
-                }
-            }
-        }
-
-        if let Some(xy) = cursor_over {
-            const SELECTED_ALPHA: f32 = (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32);
-            const NAME_TAG_BG_ALPHA: f32 = (0xc6 as f32 - 0x31 as f32) / 0xc6 as f32;
-
-            canvas.reborrow()
-                .translate(xy.map(|n| n as f32) * slot_outer_size)
-                .translate(pad_size)
-                .color([1.0, 1.0, 1.0, SELECTED_ALPHA])
-                .draw_solid(slot_inner_size);
-
-            let (slot, cached_iid, name_text) = cursor_over_name_gui.unwrap();
-            let slot_ref = slot.borrow();
-
-            let iid = slot_ref.as_ref().map(|stack| stack.iid);
-            if *cached_iid != iid {
-                *cached_iid = iid;
-                *name_text = iid.map(|iid| GuiTextBlockInner::new(
-                    &GuiTextBlockConfig {
-                        text: ctx.game().items_name[iid]
-                            .map(|lang_key| &ctx.assets().lang[lang_key])
-                            .unwrap_or_else(|| &ctx.game().items_machine_name[iid]),
-                        font: ctx.assets().font,
-                        logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
-                        color: Rgba::white(),
-                        h_align: HAlign::Left,
-                        v_align: VAlign::Top,
-                    },
-                    false,
-                ));
-            }
-
-            if let Some(name_text) = name_text.as_mut() {
-                let [
-                    name_text_min,
-                    mut name_text_max,
-                ] = name_text.content_bounds(None, scale, &*ctx.global.renderer.borrow());
-                
-                let px_adjust = SLOT_DEFAULT_TEXT_SIZE * scale / 8.0;
-                name_text_max += Vec2::from(px_adjust);
-
-                let mut name_pos = ctx.cursor_pos.unwrap();
-                name_pos -= name_pos % (2.0 * scale);
-                name_pos += Vec2::new(18.0, -31.0) * scale;
-                name_pos -= name_text_min;
-
-                let border = px_adjust * 3.0;
-
-                let name_tag_size = name_text_max - name_text_min + 2.0 * border;
-
-                let mut canvas = canvas.reborrow()
-                    .translate(name_pos);
-
-                canvas.reborrow()
-                    .color([0.0, 0.0, 0.0, NAME_TAG_BG_ALPHA])
-                    .draw_solid(name_tag_size);
-
-                name_text.draw(
-                    0.0.into(),
-                    scale,
-                    &mut canvas.reborrow().translate(border),
-                    &*ctx.global.renderer.borrow(),
-                )
-            }
+        ItemGridLayoutCalcs {
+            inner,
+            size,
+            cursor_over,
         }
     }
+}
 
-    fn on_cursor_click(self, ctx: GuiSpatialContext, hits: bool, button: MouseButton) {
-        let ItemGridSized { inner, scale } = self;
-        
-        // layout calculation
-        let slot_outer_size = 
-            (SLOT_DEFAULT_SLOT_SIZE * inner.config.slot_scale + inner.config.pad * 2.0)
-            * scale;
+#[derive(Debug)]
+struct HeldItemGuiBlock<'a> {
+    held: &'a ItemSlot,
+    held_state: &'a mut ItemSlotGuiStateNoninteractive,
+    items_mesh: &'a PerItem<ItemMesh>,
+}
 
-        // calculate which slot clicked, or return
-        if !hits { return }
-        let xy = match ctx.cursor_pos
-            .map(|pos| pos / slot_outer_size)
-            .map(|xy| xy.map(|n| n.floor() as i64))
-            .filter(|xy| xy
-                .zip::<u32>(inner.grid_size.into())
-                .map(|(n, bound)| n >= 0 && n < bound as i64)
-                .reduce_and())
-            .map(|xy| xy.map(|n| n as u32))
-        {
-            Some(xy) => xy,
-            None => return,
-        };
+#[derive(Debug)]
+struct HeldItemGuiBlockSized<'a> {
+    inner: HeldItemGuiBlock<'a>,
+    scale: f32,
+}
 
-        // convert to index and get actual slot
-        let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
-        let slot = inner.slots.into_iter().nth(i)
-            .expect("ItemGrid slots produced None when expected Some");
-        
+impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a> {
+    type Sized = HeldItemGuiBlockSized<'a>;
+
+    fn size(self, _: &GuiGlobalContext, _: f32, _: f32, scale: f32) -> ((), (), Self::Sized) {
+        ((), (), HeldItemGuiBlockSized { inner: self, scale })
+    }
+}
+
+impl<'a> GuiNode<'a> for HeldItemGuiBlockSized<'a> {
+    never_blocks_cursor_impl!();
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        if let Some(pos) = ctx.cursor_pos {
+            let layout = ItemSlotLayoutCalcs::new(self.scale, &ItemGridConfig::default());
+            let mut canvas = canvas.reborrow()
+                .translate(pos)
+                .translate(-layout.slot_outer_size / 2.0);
+            draw_item_noninteractive(
+                ctx,
+                &mut canvas,
+                self.scale,
+                &layout,
+                self.inner.held.borrow().as_ref(),
+                self.inner.held_state,
+                self.inner.items_mesh,
+            );
+        }
+    }
+}
+
+fn draw_item_noninteractive<'a>(
+    ctx: GuiSpatialContext<'a>,
+    canvas: &mut Canvas2<'a, '_>,
+    scale: f32,
+    layout: &ItemSlotLayoutCalcs,
+    stack: Option<&ItemStack>,
+    slot_state: &'a mut ItemSlotGuiStateNoninteractive,
+    items_mesh: &'a PerItem<ItemMesh>,
+) {
+    // revalidate count text
+    let count = stack
+        .map(|stack| stack.count.get())
+        .filter(|&n| n > 1);
+    if count != slot_state.cached_count {
+        slot_state.cached_count = count;
+        slot_state.count_text = count
+            .map(|n| GuiTextBlockInner::new(
+                &GuiTextBlockConfig {
+                    text: &n.to_string(),
+                    font: ctx.assets().font,
+                    logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
+                    color: Rgba::white(),
+                    h_align: HAlign::Right,
+                    v_align: VAlign::Bottom,
+                },
+                false,
+            ));
+    }
+
+    if let Some(stack) = stack {
+        // draw item mesh
+        let mesh_size = layout.slot_inner_size * 1.1;
+        canvas.reborrow()
+            .translate(layout.slot_outer_size / 2.0)
+            .scale(mesh_size)
+            .translate(-0.5)
+            .begin_3d(
+                Mat4::new(
+                    1.0,  0.0,  0.0, 0.5,
+                    0.0, -1.0,  0.0, 0.5,
+                    0.0,  0.0, 0.01, 0.5,
+                    0.0,  0.0,  0.0, 1.0,
+                ),
+                Fog::None,
+            )
+            .scale(0.56)
+            .rotate(Quaternion::rotation_x(-PI * 0.17))
+            .rotate(Quaternion::rotation_y(PI / 4.0))
+            .translate(-0.5)
+            .draw_mesh(
+                &items_mesh[stack.iid].mesh,
+                &ctx.assets().blocks,
+            );
+
+        // draw count text
+        if let Some(count_text) = slot_state.count_text.as_mut() {
+            count_text.draw(
+                layout.slot_outer_size.into(),
+                scale,
+                canvas,
+                &ctx.global.renderer.borrow(),
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ItemNameDrawer<'a> {
+    slot: &'a ItemSlot,
+    cached_iid: &'a mut Option<RawItemId>,
+    name_text: &'a mut Option<GuiTextBlockInner>,
+}
+
+impl<'a> ItemNameDrawer<'a> {
+    fn draw(
+        self,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+    ) {
+        const NAME_TAG_BG_ALPHA: f32 = (0xc6 as f32 - 0x31 as f32) / 0xc6 as f32;
+
+        let ItemNameDrawer { slot, cached_iid, name_text } = self;
+
+        let slot_ref = slot.borrow();
+
+        // revalidate name text
+        let iid = slot_ref.as_ref().map(|stack| stack.iid);
+        if *cached_iid != iid {
+            *cached_iid = iid;
+            *name_text = iid.map(|iid| GuiTextBlockInner::new(
+                &GuiTextBlockConfig {
+                    text: ctx.game().items_name[iid]
+                        .map(|lang_key| &ctx.assets().lang[lang_key])
+                        .unwrap_or_else(|| &ctx.game().items_machine_name[iid]),
+                    font: ctx.assets().font,
+                    logical_font_size: SLOT_DEFAULT_TEXT_SIZE,
+                    color: Rgba::white(),
+                    h_align: HAlign::Left,
+                    v_align: VAlign::Top,
+                },
+                false,
+            ));
+        }
+
+        // draw name tag
+        if let Some(name_text) = name_text.as_mut() {
+            let [
+                name_text_min,
+                mut name_text_max,
+            ] = name_text.content_bounds(None, scale, &*ctx.global.renderer.borrow());
+            
+            let px_adjust = SLOT_DEFAULT_TEXT_SIZE * scale / 8.0;
+            name_text_max += Vec2::from(px_adjust);
+
+            let mut name_pos = ctx.cursor_pos.unwrap();
+            name_pos -= name_pos % (2.0 * scale);
+            name_pos += Vec2::new(18.0, -31.0) * scale;
+            name_pos -= name_text_min;
+
+            let border = px_adjust * 3.0;
+
+            let name_tag_size = name_text_max - name_text_min + 2.0 * border;
+
+            let mut canvas = canvas.reborrow()
+                .translate(name_pos);
+
+            // name tag background
+            canvas.reborrow()
+                .color([0.0, 0.0, 0.0, NAME_TAG_BG_ALPHA])
+                .draw_solid(name_tag_size);
+
+            // name tag text
+            name_text.draw(
+                0.0.into(),
+                scale,
+                &mut canvas.reborrow().translate(border),
+                &*ctx.global.renderer.borrow(),
+            )
+        }
+    }
+}
+
+trait ItemSlotClickLogic<'a> {
+    fn on_click(
+        self,
+        slot: &'a ItemSlot,
+        button: MouseButton,
+        game: &Arc<GameData>,
+    );
+}
+
+#[derive(Debug, Copy, Clone)]
+struct NoninteractiveItemSlotClickLogic;
+
+impl<'a> ItemSlotClickLogic<'a> for NoninteractiveItemSlotClickLogic {
+    fn on_click(
+        self,
+        _slot: &'a ItemSlot,
+        _button: MouseButton,
+        _game: &Arc<GameData>,
+    ) {}
+}
+
+#[derive(Debug, Copy, Clone)]
+struct StorageItemSlotClickLogic<'a> {
+    held: &'a ItemSlot,
+}
+
+impl<'a> ItemSlotClickLogic<'a> for StorageItemSlotClickLogic<'a> {
+    fn on_click(
+        self,
+        slot: &'a ItemSlot,
+        button: MouseButton,
+        game: &Arc<GameData>,
+    ) {
         // borrow
         let mut slot_mut = slot.borrow_mut();
-        let mut held_mut = inner.held.borrow_mut();
+        let mut held_mut = self.held.borrow_mut();
 
         if button == MouseButton::Left {
             // left click
@@ -2305,7 +2510,7 @@ impl<
                             // number of items in held
                             held.count.get(),
                             // number of additional items slot could receive
-                            ctx.game().items_max_count[slot.iid].get().saturating_sub(slot.count.get()),
+                            game.items_max_count[slot.iid].get().saturating_sub(slot.count.get()),
                         );
 
                         // add to slot, give back ownership
@@ -2343,7 +2548,7 @@ impl<
                         // stacks have same item
                         if let Some(slot_new_count) = slot.count.get()
                             .checked_add(1)
-                            .filter(|&n| n <= ctx.game().items_max_count[held.iid].get())
+                            .filter(|&n| n <= game.items_max_count[held.iid].get())
                         {
                             // slot has room for another item
                             
@@ -2412,6 +2617,212 @@ impl<
                 (None, None) => {} // both are empty, nothing to do
             }
         }
+    }
+}
+
+trait ItemSlotGuiStateGeneral<'a> {
+    type DrawCursorOverState;
+
+    fn draw(
+        self,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+        layout: &ItemGridLayoutCalcs,
+        slot: &'a ItemSlot,
+        items_mesh: &'a PerItem<ItemMesh>,
+    ) -> Self::DrawCursorOverState;
+
+    fn draw_cursor_over(
+        state: Self::DrawCursorOverState,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+        xy: Vec2<u32>,
+        layout: &ItemGridLayoutCalcs,
+    );
+}
+
+impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiState {
+    type DrawCursorOverState = ItemNameDrawer<'a>;
+
+    fn draw(
+        self,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+        layout: &ItemGridLayoutCalcs,
+        slot: &'a ItemSlot,
+        items_mesh: &'a PerItem<ItemMesh>,
+    ) -> Self::DrawCursorOverState {
+        draw_item_noninteractive(
+            ctx,
+            canvas,
+            scale,
+            &layout.inner,
+            slot.borrow().as_ref(),
+            &mut self.inner,
+            items_mesh,
+        );
+        ItemNameDrawer {
+            slot,
+            cached_iid: &mut self.cached_iid,
+            name_text: &mut self.name_text,
+        }
+    }
+
+    fn draw_cursor_over(
+        state: Self::DrawCursorOverState,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+        xy: Vec2<u32>,
+        layout: &ItemGridLayoutCalcs,
+    ) {
+        const SELECTED_ALPHA: f32 = (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32);
+            
+        // slot "moused over" highlight
+        canvas.reborrow()
+            .translate(xy.map(|n| n as f32) * layout.inner.slot_outer_size)
+            .translate(layout.inner.pad_size)
+            .color([1.0, 1.0, 1.0, SELECTED_ALPHA])
+            .draw_solid(layout.inner.slot_inner_size);
+
+        state.draw(
+            ctx,
+            canvas,
+            scale,
+        );
+    }
+}
+
+impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiStateNoninteractive {
+    type DrawCursorOverState = ();
+
+    fn draw(
+        self,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        scale: f32,
+        layout: &ItemGridLayoutCalcs,
+        slot: &'a ItemSlot,
+        items_mesh: &'a PerItem<ItemMesh>,
+    ) -> Self::DrawCursorOverState {
+        draw_item_noninteractive(
+            ctx,
+            canvas,
+            scale,
+            &layout.inner,
+            slot.borrow().as_ref(),
+            self,
+            items_mesh,
+        );
+    }
+
+    fn draw_cursor_over(
+        _state: Self::DrawCursorOverState,
+        _ctx: GuiSpatialContext<'a>,
+        _canvas: &mut Canvas2<'a, '_>,
+        _scale: f32,
+        _xy: Vec2<u32>,
+        _layout: &ItemGridLayoutCalcs,
+    ) {}
+}
+
+impl<
+    'a,
+    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
+    I2: IntoIterator + Debug,
+    C: ItemSlotClickLogic<'a> + Debug,
+> GuiNode<'a> for ItemGridSized<'a, I1, I2, C>
+where
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
+{
+    fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
+        let &ItemGridSized { ref inner, scale } = self;
+        let size = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config).size;
+        ctx.cursor_in_area(0.0, size)
+    }
+
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        let ItemGridSized { inner, scale } = self;
+        
+        // layout calcs
+        let layout = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config);
+
+        let mut draw_cursor_over_state = None;
+
+        // render slots
+        let mut slots = inner.slots.into_iter();
+        let mut slots_state = inner.slots_state.into_iter();
+
+        for y in 0..inner.grid_size.h {
+            for x in 0..inner.grid_size.w {
+                let xy = Vec2 { x, y };
+
+                let slot = slots.next()
+                    .expect("ItemGrid slots produced None when expected Some");
+                let slot_state = slots_state.next()
+                    .expect("ItemGrid slots_state produced None when expected Some");
+
+                let mut canvas = canvas.reborrow()
+                    .translate(xy.map(|n| n as f32) * layout.inner.slot_outer_size);
+
+                // debug background
+                if false {
+                    canvas.reborrow()
+                        .translate(layout.inner.pad_size)
+                        .color([1.0, 0.0, 0.0, 0.5])
+                        .draw_solid(layout.inner.slot_inner_size);
+                }
+
+                let curr_draw_cursor_over_state = slot_state.draw(
+                    ctx,
+                    &mut canvas,
+                    scale,
+                    &layout,
+                    slot,
+                    inner.items_mesh,
+                );
+
+                if layout.cursor_over == Some(xy) {
+                    draw_cursor_over_state = Some(curr_draw_cursor_over_state);
+                }
+            }
+        }
+
+        // specifics for moused over slot
+        if let Some(xy) = layout.cursor_over {
+            <<I2 as IntoIterator>::Item as ItemSlotGuiStateGeneral<'a>>::draw_cursor_over(
+                draw_cursor_over_state.unwrap(),
+                ctx,
+                canvas,
+                scale,
+                xy,
+                &layout,
+            );
+        }
+    }
+
+    fn on_cursor_click(self, ctx: GuiSpatialContext, hits: bool, button: MouseButton) {
+        let ItemGridSized { inner, scale } = self;
+        
+        // layout calculation
+        let cursor_over = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config).cursor_over;
+
+        // calculate which slot clicked, or return
+        if !hits { return }
+        let xy = match cursor_over {
+            Some(xy) => xy,
+            None => return,
+        };
+
+        // convert to index and get actual slot
+        let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
+        let slot = inner.slots.into_iter().nth(i)
+            .expect("ItemGrid slots produced None when expected Some");
+        
+        inner.click_logic.on_click(slot, button, ctx.game());
     }
 }
 

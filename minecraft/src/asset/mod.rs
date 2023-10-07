@@ -47,6 +47,9 @@ pub mod consts {
     pub const BTI_LOG_TOP: usize = 8;
     pub const BTI_DOOR_UPPER: usize = 9;
     pub const BTI_DOOR_LOWER: usize = 10;
+    pub const BTI_CHEST_FRONT: usize = 11;
+    pub const BTI_CHEST_SIDE: usize = 12;
+    pub const BTI_CHEST_TOP_BOTTOM: usize = 13;
 
     // item texture indexes (ITIs):
 
@@ -156,6 +159,7 @@ pub struct Assets {
     //pub item_meshes: Vec<ItemMesh>,
 
     pub gui_inventory: GpuImageArray,
+    pub gui_chest: GpuImageArray,
 
     pub vignette: GpuImageArray,
     pub sun: GpuImageArray,
@@ -218,6 +222,9 @@ impl Assets {
                 [5, 1], // 8: log top
                 [1, 5], // 9: door upper
                 [1, 6], // 10: door lower
+                [11, 1],
+                [10, 1],
+                [9, 1],
             ]),
             items: items.load_sprite_array([
                 [5, 3], // 0: stick
@@ -238,6 +245,7 @@ impl Assets {
             //],
             
             gui_inventory: loader.load_image_clipper("gui/inventory.png", 256).await.load_clip([0, 0], [176, 166]),
+            gui_chest: loader.load_image_clipper("gui/container.png", 256).await.load_clip([0, 0], [176, 222]),
             
             vignette: load_vignette(loader).await,
             sun: load_sun_moon(loader, "terrain/sun.png").await,

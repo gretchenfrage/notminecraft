@@ -2,6 +2,7 @@
 use crate::{
     game_data::GameData,
     game_binschema::GameBinschema,
+    item::erased::ItemMeta,
 };
 use chunk_data::*;
 use binschema::{*, error::*};
@@ -119,6 +120,37 @@ macro_rules! transcloner {
             ) -> Result<ErasedBlockMeta> {
                 Ok(match self {$(
                     &Transcloner::$variant => ErasedBlockMeta::new(
+                        <$type as GameBinschema>::decode(decoder, game)?
+                    ),
+                )*})
+            }
+
+            /// Encode an `ItemMeta` (just the metadata, not the
+            /// surrounding enum).
+            pub fn encode_item_meta(
+                &self,
+                meta: &ItemMeta,
+                encoder: &mut Encoder<Vec<u8>>,
+                game: &Arc<GameData>,
+            ) -> Result<()> {
+                match self {$(
+                    &Transcloner::$variant => <$type as GameBinschema>::encode(
+                        meta.cast::<$type>(),
+                        encoder,
+                        game,
+                    ),
+                )*}
+            }
+
+            /// Decode an `ItemMeta` (just the metadata, not the
+            /// surrounding enum).
+            pub fn decode_item_meta(
+                &self,
+                decoder: &mut Decoder<&[u8]>,
+                game: &Arc<GameData>,
+            ) -> Result<ItemMeta> {
+                Ok(match self {$(
+                    &Transcloner::$variant => ItemMeta::new(
                         <$type as GameBinschema>::decode(decoder, game)?
                     ),
                 )*})

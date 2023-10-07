@@ -2,6 +2,10 @@
 use crate::{
     game_data::GameData,
     util::array::ArrayBuilder,
+    item::{
+        ItemStack,
+        RawItemId,
+    },
 };
 use binschema::{*, error::*};
 use chunk_data::*;
@@ -10,6 +14,7 @@ use std::{
     sync::Arc,
     iter,
     hash::Hash,
+    cell::RefCell,
 };
 use vek::*;
 
@@ -311,7 +316,21 @@ impl<T: GameBinschema> GameBinschema for Box<T> {
         T::decode(decoder, game).map(Box::new)
     }
 }
+/*
+impl<T: GameBinschema> GameBinschema for RefCell<T> {
+    fn schema(game: &Arc<GameData>) -> Schema {
+        T::schema(game)
+    }
 
+    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        T::encode(&*self.borrow(), encoder, game)
+    }
+
+    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+        T::decode(decoder, game).map(RefCell::new)
+    }
+}
+*/
 macro_rules! vek_vec_game_binschema {
     ($n:expr, $v:ident {$( $f:ident ),*})=>{
         impl<T: GameBinschema> GameBinschema for $v<T> {
@@ -442,5 +461,57 @@ impl GameBinschema for ChunkBlocks {
         }
         decoder.finish_seq()?;
         Ok(chunk)
+    }
+}
+
+impl GameBinschema for ItemStack {
+    fn schema(game: &Arc<GameData>) -> Schema {
+        Schema::Enum(game.items.iter()
+            .map(|iid| EnumSchemaVariant {
+                name: game.items_machine_name[iid].clone(),
+                inner: game.items_meta_transcloner[iid].instance_schema(game),
+            })
+            .collect())
+    }
+
+    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        encoder.begin_struct()?;
+        encoder.begin_struct_field("item")?;
+        encoder.begin_enum(self.iid.0 as usize, &game.items_machine_name[self.iid])?;
+        game.items_meta_transcloner[self.iid].encode_item_meta(
+            &self.meta,
+            encoder,
+            game,
+        )?;
+        encoder.begin_struct_field("count")?;
+        encoder.encode_u8(self.count.get())?;
+        encoder.begin_struct_field("damage")?;
+        encoder.encode_u16(self.damage)?;
+        encoder.finish_struct()
+    }
+
+    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+        decoder.begin_struct()?;
+        decoder.begin_struct_field("item")?;
+        let iid = RawItemId(decoder.begin_enum()? as u16);
+        decoder.begin_enum_variant(&game.items_machine_name[iid])?;
+        let meta = game.items_meta_transcloner[iid].decode_item_meta(
+            decoder,
+            game,
+        )?;
+        Ok(ItemStack {
+            iid,
+            meta,
+            count: {
+                decoder.begin_struct_field("count")?;
+                decoder.decode_u8()?
+                    .try_into()
+                    .map_err(|_| Error::other("decoded ItemStack with count=0"))?
+            },
+            damage: {
+                decoder.begin_struct_field("damage")?;
+                decoder.decode_u16()?
+            },
+        })
     }
 }

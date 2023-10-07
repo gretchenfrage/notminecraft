@@ -66,7 +66,39 @@ impl ViewProj {
         //ViewProj(proj)
     }
 
-    // TODO orthographics
+    /// Orthographic camera at position `pos`, pointing in direction `dir`
+    /// (rotated from "forward and pointing +z"), with the given width of the view.
+    /// Height is computed from the given width and the aspect ratio derived from `size`.
+    pub fn orthographic(
+        pos: impl Into<Vec3<f32>>,
+        dir: impl Into<Quaternion<f32>>,
+        width: f32,
+        size: impl Into<Extent2<f32>>
+    ) -> Self {
+        let view1 = Mat4::<f32>::translation_3d(-pos.into());
+        let view2 = Mat4::<f32>::from(-dir.into());
+        
+        let size = size.into();
+        let aspect_ratio = size.w / size.h;
+        
+        let half_width = width * 0.5;
+        let half_height = half_width / aspect_ratio;
+
+        let left = -half_width;
+        let right = half_width;
+        let bottom = -half_height;
+        let top = half_height;
+
+        let near = 0.1;
+        let far = 5000.0;
+
+        let proj = Mat4::<f32>::orthographic_lh_zo(FrustumPlanes { left, right, bottom, top, near, far });
+        
+        let adjust = Mat4::<f32>::scaling_3d([1.0, -1.0, 1.0]);
+        let adjust_translation = Mat4::<f32>::translation_3d([0.5, -0.5, 0.0]);
+        
+        ViewProj(adjust_translation * adjust * proj * view2 * view1)
+    }
 
     pub fn extract_frustum_planes(&self) -> [Vec4<f32>; 6] {
         let rows = self.0.into_row_arrays();

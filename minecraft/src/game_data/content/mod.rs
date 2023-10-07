@@ -29,4 +29,5 @@ macro_rules! content {
 content!(
     air,
     stone,
+    chest,
 );
