@@ -14,7 +14,6 @@ use std::{
     sync::Arc,
     iter,
     hash::Hash,
-    cell::RefCell,
 };
 use vek::*;
 

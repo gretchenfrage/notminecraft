@@ -76,7 +76,6 @@ pub mod view_proj;
 pub mod frame_content;
 mod render_instrs;
 mod uniform_buffer;
-//mod draw_command_encoder; TODO dleetete it
 
 
 //const SWAPCHAIN_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm; TODO why can't it be this?

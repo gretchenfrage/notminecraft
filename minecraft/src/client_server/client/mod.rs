@@ -27,7 +27,6 @@ use crate::{
         array::{
             ArrayBuilder,
             array_from_fn,
-            array_each_mut,
         },
         sparse_vec::SparseVec,
     },
@@ -1719,6 +1718,7 @@ enum Menu {
     },
     Settings,
     Chest {
+        #[allow(dead_code)]
         gtc: Vec3<i64>,
     }
 }
@@ -1927,7 +1927,7 @@ impl Menu {
                     )
                 )
             ))),
-            &mut Menu::Chest { gtc } => GuiEither::B(
+            &mut Menu::Chest { gtc: _ /* TODO */ } => GuiEither::B(
                 align(0.5,
                     logical_size([352.0, 444.0],
                         layer((
@@ -2528,7 +2528,7 @@ impl<H: BorrowItemSlot> ItemSlotClickLogic for StorageItemSlotClickLogic<H> {
     ) {
         // borrow
         let mut held_guard = self.held.borrow();
-        let mut held_mut = H::deref(&mut held_guard);
+        let held_mut = H::deref(&mut held_guard);
 
         if button == MouseButton::Left {
             // left click
@@ -2791,7 +2791,7 @@ impl<'b> BorrowItemSlot for &'b mut ItemSlot {
         &mut **self
     }
 
-    fn deref<'g, 'a>(mut guard: &'g mut &'a mut ItemSlot) -> &'g mut ItemSlot {
+    fn deref<'g, 'a>(guard: &'g mut &'a mut ItemSlot) -> &'g mut ItemSlot {
         &mut **guard
     }
 }
@@ -2805,7 +2805,7 @@ impl<'b> BorrowItemSlot for &'b RefCell<ItemSlot> {
         RefCell::borrow_mut(&**self)
     }
 
-    fn deref<'g, 'a>(mut guard: &'g mut cell::RefMut<'a, ItemSlot>) -> &'g mut ItemSlot {
+    fn deref<'g, 'a>(guard: &'g mut cell::RefMut<'a, ItemSlot>) -> &'g mut ItemSlot {
         &mut **guard
     }
 }
@@ -2819,7 +2819,7 @@ impl<'b> BorrowItemSlot for Rc<RefCell<&'b mut ItemSlot>> {
         RefCell::borrow_mut(&**self)
     }
 
-    fn deref<'g, 'a>(mut guard: &'g mut cell::RefMut<'a, &'b mut ItemSlot>) -> &'g mut ItemSlot {
+    fn deref<'g, 'a>(guard: &'g mut cell::RefMut<'a, &'b mut ItemSlot>) -> &'g mut ItemSlot {
         &mut ***guard
     }
 }
@@ -2856,7 +2856,7 @@ where
             for x in 0..inner.grid_size.w {
                 let xy = Vec2 { x, y };
 
-                let mut borrow_slot = slots.next()
+                let borrow_slot = slots.next()
                     .expect("ItemGrid slots produced None when expected Some");
                 let slot_state = slots_state.next()
                     .expect("ItemGrid slots_state produced None when expected Some");

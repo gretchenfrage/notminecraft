@@ -7,14 +7,12 @@
 //! instance, as well as other components such as count and durability.
 
 pub mod erased;
-//pub mod slots;
 
 
 use std::{
     marker::PhantomData,
     fmt::{self, Formatter, Debug},
     num::NonZeroU8,
-    cell::RefCell,
 };
 
 pub use self::erased::ItemMeta;
