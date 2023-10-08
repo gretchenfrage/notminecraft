@@ -7,7 +7,7 @@ use crate::{
     asset::Assets,
     gui::prelude::*,
 	util::hex_color::hex_color,
-    client_server::client::Client,
+    client::Client,
     save_file::SaveFile,
 };
 use graphics::{

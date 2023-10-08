@@ -1,7 +1,7 @@
 
 use crate::{
     game_data::GameData,
-    client_server::server::event::EventSender,
+    server::event::EventSender,
     save_file::{
         SaveFile,
         WriteEntry,

@@ -28,10 +28,6 @@ use self::{
     },
     per_connection::*,
 };
-use super::{
-    message::*,
-    client,
-};
 use crate::{
     game_data::GameData,
     util::chunk_range::ChunkRange,
@@ -40,6 +36,8 @@ use crate::{
         WriteEntry,
     },
     thread_pool::ThreadPool,
+    message::*,
+    client,
 };
 use chunk_data::*;
 use std::{

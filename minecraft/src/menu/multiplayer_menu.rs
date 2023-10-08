@@ -2,7 +2,7 @@
 use crate::{
     gui::prelude::*,
     util::hex_color::hex_color,
-    client_server::client::Client,
+    client::Client,
 };
 use graphics::prelude::*;
 use vek::*;

@@ -2,10 +2,8 @@
 
 use crate::{
     game_data::GameData,
-    client_server::{
-        message::*,
-        server::event::EventSender,
-    },
+    message::*,
+    server::event::EventSender,
     game_binschema::GameBinschema,
 };
 use binschema::{

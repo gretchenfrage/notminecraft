@@ -11,7 +11,7 @@ use crossbeam_channel::{
     RecvTimeoutError,
     unbounded,
 };
-use crate::client_server::server::{
+use crate::server::{
     connection::NetworkEvent,
     chunk_loader::LoadChunkEvent,
 };

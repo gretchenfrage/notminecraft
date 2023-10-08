@@ -1,5 +1,5 @@
 
-use crate::client_server::message::{Edit, edit};
+use crate::message::{Edit, edit};
 use crate::block_update_queue::BlockUpdateQueue;
 use chunk_data::*;
 use vek::*;

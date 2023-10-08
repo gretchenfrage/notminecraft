@@ -12,12 +12,14 @@ pub mod block_update_queue;
 pub mod game_data;
 pub mod item;
 pub mod physics;
-pub mod client_server;
 pub mod game_binschema;
 pub mod menu;
 pub mod save_file;
 pub mod thread_pool;
 pub mod settings;
+pub mod client;
+pub mod server;
+pub mod message;
 
 
 use crate::{
@@ -30,7 +32,7 @@ use crate::{
     },
     thread_pool::ThreadPool,
     save_file::SaveFile,
-    client_server::server::ServerHandle,
+    server::ServerHandle,
 };
 use get_assets::DataDir;
 use std::{

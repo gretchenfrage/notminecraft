@@ -4,7 +4,7 @@ use super::{
     apply_edit::apply_edit,
 };
 use crate::{
-    client_server::message::*,
+    message::*,
     block_update_queue::BlockUpdateQueue,
     util::sparse_vec::SparseVec,
 };

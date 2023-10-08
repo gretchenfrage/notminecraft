@@ -4,7 +4,7 @@ mod client_add_chunk_manager;
 
 
 use self::client_add_chunk_manager::ClientAddChunkManager;
-use crate::client_server::server::{
+use crate::server::{
     chunk_loader::{
         ChunkLoader,
         ReadyChunk,

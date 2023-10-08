@@ -32,12 +32,10 @@ use crate::{
         number_key::num_row_key,
     },
     settings::Settings,
-    client_server::{
-        message::*,
-        server::{
-            ServerHandle,
-            NetworkBindGuard,
-        },
+    message::*,
+    server::{
+        ServerHandle,
+        NetworkBindGuard,
     },
     save_file::SaveFile,
     item::*,

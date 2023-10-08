@@ -1,13 +1,11 @@
 //! Client-side connection handling.
 
 use crate::{
-    client_server::{
-        message::{
-            UpMessage,
-            DownMessage,
-        },
-        server::connection::InMemClient,
+    message::{
+        UpMessage,
+        DownMessage,
     },
+    server::connection::InMemClient,
     game_data::GameData,
     game_binschema::GameBinschema,
 };
