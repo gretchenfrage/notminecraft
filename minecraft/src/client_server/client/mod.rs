@@ -20,12 +20,16 @@ use crate::{
     block_update_queue::BlockUpdateQueue,
     chunk_mesh::ChunkMesh,
     gui::prelude::*,
-    util::sparse_vec::SparseVec,
     physics::prelude::*,
     util::{
         hex_color::hex_color,
         secs_rem::secs_rem,
-        array::array_from_fn,
+        array::{
+            ArrayBuilder,
+            array_from_fn,
+            array_each_mut,
+        },
+        sparse_vec::SparseVec,
     },
     settings::Settings,
     client_server::{
@@ -59,7 +63,11 @@ use std::{
         Deref,
     },
     f32::consts::PI,
-    cell::RefCell,
+    cell::{
+        self,
+        RefCell
+    },
+    rc::Rc,
     collections::VecDeque,
     time::{
         Instant,
@@ -149,7 +157,7 @@ pub struct Client {
     white_pixel: GpuImageArray,
     stars: Mesh,
 
-    held_item: ItemSlot,
+    held_item: RefCell<ItemSlot>,
     held_item_state: ItemSlotGuiStateNoninteractive,
 
     inventory_slots: Box<[ItemSlot; 36]>,
@@ -318,8 +326,8 @@ impl Client {
         }
         let stars = stars.upload(&*ctx.renderer.borrow());
 
-        let inventory_slots = Box::new(array_from_fn(|_| RefCell::new(None)));
-        *inventory_slots[7].borrow_mut() = Some(ItemStack {
+        let mut inventory_slots = Box::new(array_from_fn(|_| None));
+        inventory_slots[7] = Some(ItemStack {
             iid: ctx.game.content.stone.iid_stone.into(),
             meta: ItemMeta::new(()),
             count: 14.try_into().unwrap(),
@@ -433,13 +441,13 @@ impl Client {
             inventory_slots,
             inventory_slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
 
-            inventory_slots_armor: array_from_fn(|_| RefCell::new(None)),
+            inventory_slots_armor: array_from_fn(|_| None),
             inventory_slots_armor_state: array_from_fn(|_| ItemSlotGuiState::new()),
 
-            inventory_slots_crafting: array_from_fn(|_| RefCell::new(None)),
+            inventory_slots_crafting: array_from_fn(|_| None),
             inventory_slots_crafting_state: array_from_fn(|_| ItemSlotGuiState::new()),
 
-            inventory_slot_crafting_output: RefCell::new(None),
+            inventory_slot_crafting_output: None,
             inventory_slot_crafting_output_state: ItemSlotGuiState::new(),
 
             hotbar_slots_state: array_from_fn(|_| ItemSlotGuiStateNoninteractive::new()),
@@ -453,6 +461,18 @@ impl Client {
         const MENU_DARKENED_BACKGROUND_ALPHA: f32 = 1.0 - 0x2a as f32 / 0x97 as f32;
 
         let mut chat = Some(&mut self.chat);
+        
+        let (
+            inventory_slots_bottom,
+            inventory_slots_top,
+        ) = self.inventory_slots.split_at_mut(9);
+
+        let mut rc_inventory_slots_bottom = ArrayBuilder::new();
+        for slot in inventory_slots_bottom {
+            rc_inventory_slots_bottom.push(Rc::new(RefCell::new(slot)));
+        }
+        let rc_inventory_slots_bottom: [Rc<RefCell<&'a mut ItemSlot>>; 9] = rc_inventory_slots_bottom.build();
+
         let menu_gui = self.menu_stack.iter_mut().rev().next()
             .map(|open_menu| layer((
                 if open_menu.has_darkened_background() {
@@ -465,13 +485,14 @@ impl Client {
                     &self.items_mesh,
                     &self.held_item,
                     &mut self.held_item_state,
-                    &self.inventory_slots,
+                    &rc_inventory_slots_bottom,
+                    inventory_slots_top,
                     &mut self.inventory_slots_state,
-                    &self.inventory_slots_armor,
+                    &mut self.inventory_slots_armor,
                     &mut self.inventory_slots_armor_state,
-                    &self.inventory_slots_crafting,
+                    &mut self.inventory_slots_crafting,
                     &mut self.inventory_slots_crafting_state,
-                    &self.inventory_slot_crafting_output,
+                    &mut self.inventory_slot_crafting_output,
                     &mut self.inventory_slot_crafting_output_state,
                     &self.char_mesh,
                     self.char_state.pitch,
@@ -511,7 +532,7 @@ impl Client {
                         &ctx.assets().hud_hotbar,
                         align(0.5,
                             ItemGrid {
-                                slots: (&self.inventory_slots[..9]).iter(),
+                                slots: rc_inventory_slots_bottom,
                                 slots_state: self.hotbar_slots_state.iter_mut(),
                                 click_logic: NoninteractiveItemSlotClickLogic,
                                 grid_size: [9, 1].into(),
@@ -1707,19 +1728,20 @@ impl Menu {
         internal_server: &'a mut Option<InternalServer>,
         items_mesh: &'a PerItem<ItemMesh>,
 
-        held_item: &'a ItemSlot,
+        held_item: &'a RefCell<ItemSlot>,
         held_item_state: &'a mut ItemSlotGuiStateNoninteractive,
 
-        inventory_slots: &'a Box<[ItemSlot; 36]>,
+        inventory_slots_bottom: &[Rc<RefCell<&'a mut ItemSlot>>; 9],
+        inventory_slots_top: &'a mut [ItemSlot],
         inventory_slots_state: &'a mut Box<[ItemSlotGuiState; 36]>,
 
-        inventory_slots_armor: &'a [ItemSlot; 4],
+        inventory_slots_armor: &'a mut [ItemSlot; 4],
         inventory_slots_armor_state: &'a mut [ItemSlotGuiState; 4],
         
-        inventory_slots_crafting: &'a [ItemSlot; 4],
+        inventory_slots_crafting: &'a mut [ItemSlot; 4],
         inventory_slots_crafting_state: &'a mut [ItemSlotGuiState; 4],
 
-        inventory_slot_crafting_output: &'a ItemSlot,
+        inventory_slot_crafting_output: &'a mut ItemSlot,
         inventory_slot_crafting_output_state: &'a mut ItemSlotGuiState,
 
         char_mesh: &'a CharMesh,
@@ -1727,7 +1749,7 @@ impl Menu {
         pointing: bool,
 
         ctx: &'a GuiWindowContext,
-    ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+    ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> + 'a {
         let (
             inventory_slots_state_bottom,
             inventory_slots_state_top,
@@ -1769,7 +1791,7 @@ impl Menu {
                         margin(14.0, 0.0, 166.0, 0.0,
                             align(0.0,
                                 ItemGrid {
-                                    slots: (&inventory_slots[9..]).iter(),
+                                    slots: inventory_slots_top,
                                     slots_state: inventory_slots_state_top.iter_mut(),
                                     click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
@@ -1783,7 +1805,7 @@ impl Menu {
                         margin(14.0, 0.0, 282.0, 0.0,
                             align(0.0,
                                 ItemGrid {
-                                    slots: (&inventory_slots[..9]).iter(),
+                                    slots: inventory_slots_bottom.clone(),
                                     slots_state: inventory_slots_state_bottom.iter_mut(),
                                     click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
@@ -1910,7 +1932,7 @@ impl Menu {
                             margin(14.0, 0.0, 278.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
-                                        slots: (&inventory_slots[9..]).iter(),
+                                        slots: inventory_slots_top,
                                         slots_state: inventory_slots_state_top.iter_mut(),
                                         click_logic: StorageItemSlotClickLogic {
                                             held: held_item,
@@ -1921,10 +1943,11 @@ impl Menu {
                                     }
                                 )
                             ),
+                            
                             margin(14.0, 0.0, 394.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
-                                        slots: (&inventory_slots[..9]).iter(),
+                                        slots: inventory_slots_bottom.clone(),
                                         slots_state: inventory_slots_state_bottom.iter_mut(),
                                         click_logic: StorageItemSlotClickLogic {
                                             held: held_item,
@@ -1935,6 +1958,7 @@ impl Menu {
                                     }
                                 )
                             ),
+                            
                             HeldItemGuiBlock {
                                 held: held_item,
                                 held_state: held_item_state,
@@ -2184,12 +2208,13 @@ struct ItemGridSized<'a, I1, I2, C> {
 
 impl<
     'a,
-    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
+    I1: IntoIterator + Debug,
     I2: IntoIterator + Debug,
-    C: ItemSlotClickLogic<'a> + Debug,
+    C: ItemSlotClickLogic + Debug,
 > GuiBlock<'a, DimChildSets, DimChildSets> for ItemGrid<'a, I1, I2, C>
 where
-    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
+    <I1 as IntoIterator>::Item: BorrowItemSlot,
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a, <I1 as IntoIterator>::Item>,
 {
     type Sized = ItemGridSized<'a, I1, I2, C>;
 
@@ -2271,41 +2296,49 @@ impl ItemGridLayoutCalcs {
 }
 
 #[derive(Debug)]
-struct HeldItemGuiBlock<'a> {
-    held: &'a ItemSlot,
+struct HeldItemGuiBlock<'a, H> {
+    held: H,
     held_state: &'a mut ItemSlotGuiStateNoninteractive,
     items_mesh: &'a PerItem<ItemMesh>,
 }
 
 #[derive(Debug)]
-struct HeldItemGuiBlockSized<'a> {
-    inner: HeldItemGuiBlock<'a>,
+struct HeldItemGuiBlockSized<'a, H> {
+    inner: HeldItemGuiBlock<'a, H>,
     scale: f32,
 }
 
-impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a> {
-    type Sized = HeldItemGuiBlockSized<'a>;
+impl<
+    'a,
+    H: BorrowItemSlot + Debug,
+> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a, H> {
+    type Sized = HeldItemGuiBlockSized<'a, H>;
 
     fn size(self, _: &GuiGlobalContext, _: f32, _: f32, scale: f32) -> ((), (), Self::Sized) {
         ((), (), HeldItemGuiBlockSized { inner: self, scale })
     }
 }
 
-impl<'a> GuiNode<'a> for HeldItemGuiBlockSized<'a> {
+impl<
+    'a,
+    H: BorrowItemSlot + Debug,
+> GuiNode<'a> for HeldItemGuiBlockSized<'a, H> {
     never_blocks_cursor_impl!();
 
-    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(mut self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         if let Some(pos) = ctx.cursor_pos {
             let layout = ItemSlotLayoutCalcs::new(self.scale, &ItemGridConfig::default());
             let mut canvas = canvas.reborrow()
                 .translate(pos)
                 .translate(-layout.slot_outer_size / 2.0);
+            let mut held_guard = self.inner.held.borrow();
+            let held = H::deref(&mut held_guard);
             draw_item_noninteractive(
                 ctx,
                 &mut canvas,
                 self.scale,
                 &layout,
-                self.inner.held.borrow().as_ref(),
+                held.as_ref(),
                 self.inner.held_state,
                 self.inner.items_mesh,
             );
@@ -2380,13 +2413,13 @@ fn draw_item_noninteractive<'a>(
 }
 
 #[derive(Debug)]
-struct ItemNameDrawer<'a> {
-    slot: &'a ItemSlot,
+struct ItemNameDrawer<'a, I> {
+    borrow_slot: I,
     cached_iid: &'a mut Option<RawItemId>,
     name_text: &'a mut Option<GuiTextBlockInner>,
 }
 
-impl<'a> ItemNameDrawer<'a> {
+impl<'a, I: BorrowItemSlot> ItemNameDrawer<'a, I> {
     fn draw(
         self,
         ctx: GuiSpatialContext<'a>,
@@ -2395,12 +2428,13 @@ impl<'a> ItemNameDrawer<'a> {
     ) {
         const NAME_TAG_BG_ALPHA: f32 = (0xc6 as f32 - 0x31 as f32) / 0xc6 as f32;
 
-        let ItemNameDrawer { slot, cached_iid, name_text } = self;
+        let ItemNameDrawer { mut borrow_slot, cached_iid, name_text } = self;
 
-        let slot_ref = slot.borrow();
+        let mut slot_guard = borrow_slot.borrow();
+        let slot = I::deref(&mut slot_guard);
 
         // revalidate name text
-        let iid = slot_ref.as_ref().map(|stack| stack.iid);
+        let iid = slot.as_ref().map(|stack| stack.iid);
         if *cached_iid != iid {
             *cached_iid = iid;
             *name_text = iid.map(|iid| GuiTextBlockInner::new(
@@ -2456,10 +2490,10 @@ impl<'a> ItemNameDrawer<'a> {
     }
 }
 
-trait ItemSlotClickLogic<'a> {
+trait ItemSlotClickLogic {
     fn on_click(
         self,
-        slot: &'a ItemSlot,
+        slot: &mut ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
     );
@@ -2468,30 +2502,30 @@ trait ItemSlotClickLogic<'a> {
 #[derive(Debug, Copy, Clone)]
 struct NoninteractiveItemSlotClickLogic;
 
-impl<'a> ItemSlotClickLogic<'a> for NoninteractiveItemSlotClickLogic {
+impl ItemSlotClickLogic for NoninteractiveItemSlotClickLogic {
     fn on_click(
         self,
-        _slot: &'a ItemSlot,
+        _slot: &mut ItemSlot,
         _button: MouseButton,
         _game: &Arc<GameData>,
     ) {}
 }
 
 #[derive(Debug, Copy, Clone)]
-struct StorageItemSlotClickLogic<'a> {
-    held: &'a ItemSlot,
+struct StorageItemSlotClickLogic<H> {
+    held: H,
 }
 
-impl<'a> ItemSlotClickLogic<'a> for StorageItemSlotClickLogic<'a> {
+impl<H: BorrowItemSlot> ItemSlotClickLogic for StorageItemSlotClickLogic<H> {
     fn on_click(
-        self,
-        slot: &'a ItemSlot,
+        mut self,
+        slot_mut: & mut ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
     ) {
         // borrow
-        let mut slot_mut = slot.borrow_mut();
-        let mut held_mut = self.held.borrow_mut();
+        let mut held_guard = self.held.borrow();
+        let mut held_mut = H::deref(&mut held_guard);
 
         if button == MouseButton::Left {
             // left click
@@ -2620,7 +2654,7 @@ impl<'a> ItemSlotClickLogic<'a> for StorageItemSlotClickLogic<'a> {
     }
 }
 
-trait ItemSlotGuiStateGeneral<'a> {
+trait ItemSlotGuiStateGeneral<'a, I> {
     type DrawCursorOverState;
 
     fn draw(
@@ -2629,7 +2663,7 @@ trait ItemSlotGuiStateGeneral<'a> {
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        slot: &'a ItemSlot,
+        borrow_slot: I,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState;
 
@@ -2643,8 +2677,8 @@ trait ItemSlotGuiStateGeneral<'a> {
     );
 }
 
-impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiState {
-    type DrawCursorOverState = ItemNameDrawer<'a>;
+impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotGuiState {
+    type DrawCursorOverState = ItemNameDrawer<'a, I>;
 
     fn draw(
         self,
@@ -2652,20 +2686,24 @@ impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiState {
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        slot: &'a ItemSlot,
+        mut borrow_slot: I,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState {
-        draw_item_noninteractive(
-            ctx,
-            canvas,
-            scale,
-            &layout.inner,
-            slot.borrow().as_ref(),
-            &mut self.inner,
-            items_mesh,
-        );
+        {
+            let mut slot_guard = borrow_slot.borrow();
+            let slot = I::deref(&mut slot_guard); 
+            draw_item_noninteractive(
+                ctx,
+                canvas,
+                scale,
+                &layout.inner,
+                slot.as_ref(),
+                &mut self.inner,
+                items_mesh,
+            );
+        }
         ItemNameDrawer {
-            slot,
+            borrow_slot,
             cached_iid: &mut self.cached_iid,
             name_text: &mut self.name_text,
         }
@@ -2696,7 +2734,7 @@ impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiState {
     }
 }
 
-impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiStateNoninteractive {
+impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotGuiStateNoninteractive {
     type DrawCursorOverState = ();
 
     fn draw(
@@ -2705,15 +2743,17 @@ impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiStateNoninteractive 
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        slot: &'a ItemSlot,
+        mut borrow_slot: I,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState {
+        let mut slot_guard = borrow_slot.borrow();
+        let slot = I::deref(&mut slot_guard);
         draw_item_noninteractive(
             ctx,
             canvas,
             scale,
             &layout.inner,
-            slot.borrow().as_ref(),
+            slot.as_ref(),
             self,
             items_mesh,
         );
@@ -2729,14 +2769,67 @@ impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiStateNoninteractive 
     ) {}
 }
 
+trait BorrowItemSlot {
+    type Guard<'a>
+    where
+        Self: 'a;
+
+    fn borrow<'a>(&'a mut self) -> Self::Guard<'a>;
+
+    fn deref<'g, 'a>(guard: &'g mut Self::Guard<'a>) -> &'g mut ItemSlot;
+}
+
+impl<'b> BorrowItemSlot for &'b mut ItemSlot {
+    type Guard<'a> = &'a mut ItemSlot
+    where
+        Self: 'a;
+
+    fn borrow<'a>(&'a mut self) -> Self::Guard<'a> {
+        &mut **self
+    }
+
+    fn deref<'g, 'a>(mut guard: &'g mut &'a mut ItemSlot) -> &'g mut ItemSlot {
+        &mut **guard
+    }
+}
+
+impl<'b> BorrowItemSlot for &'b RefCell<ItemSlot> {
+    type Guard<'a> = cell::RefMut<'a, ItemSlot>
+    where
+        Self: 'a;
+
+    fn borrow<'a>(&'a mut self) -> Self::Guard<'a> {
+        RefCell::borrow_mut(&**self)
+    }
+
+    fn deref<'g, 'a>(mut guard: &'g mut cell::RefMut<'a, ItemSlot>) -> &'g mut ItemSlot {
+        &mut **guard
+    }
+}
+
+impl<'b> BorrowItemSlot for Rc<RefCell<&'b mut ItemSlot>> {
+    type Guard<'a> = cell::RefMut<'a, &'b mut ItemSlot>
+    where
+        Self: 'a;
+
+    fn borrow<'a>(&'a mut self) -> Self::Guard<'a> {
+        RefCell::borrow_mut(&**self)
+    }
+
+    fn deref<'g, 'a>(mut guard: &'g mut cell::RefMut<'a, &'b mut ItemSlot>) -> &'g mut ItemSlot {
+        &mut ***guard
+    }
+}
+
 impl<
     'a,
-    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
+    I1: IntoIterator + Debug,
     I2: IntoIterator + Debug,
-    C: ItemSlotClickLogic<'a> + Debug,
+    C: ItemSlotClickLogic + Debug,
 > GuiNode<'a> for ItemGridSized<'a, I1, I2, C>
 where
-    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
+    <I1 as IntoIterator>::Item: BorrowItemSlot,
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a, <I1 as IntoIterator>::Item>,
 {
     fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
         let &ItemGridSized { ref inner, scale } = self;
@@ -2760,10 +2853,13 @@ where
             for x in 0..inner.grid_size.w {
                 let xy = Vec2 { x, y };
 
-                let slot = slots.next()
+                let mut borrow_slot = slots.next()
                     .expect("ItemGrid slots produced None when expected Some");
                 let slot_state = slots_state.next()
                     .expect("ItemGrid slots_state produced None when expected Some");
+
+                //let mut slot_guard = borrow_slot.borrow();
+                //let slot = <<I1 as IntoIterator>::Item as BorrowItemSlot<'_>>::deref(&mut slot_guard);
 
                 let mut canvas = canvas.reborrow()
                     .translate(xy.map(|n| n as f32) * layout.inner.slot_outer_size);
@@ -2781,7 +2877,7 @@ where
                     &mut canvas,
                     scale,
                     &layout,
-                    slot,
+                    borrow_slot,
                     inner.items_mesh,
                 );
 
@@ -2793,7 +2889,7 @@ where
 
         // specifics for moused over slot
         if let Some(xy) = layout.cursor_over {
-            <<I2 as IntoIterator>::Item as ItemSlotGuiStateGeneral<'a>>::draw_cursor_over(
+            <<I2 as IntoIterator>::Item as ItemSlotGuiStateGeneral<_>>::draw_cursor_over(
                 draw_cursor_over_state.unwrap(),
                 ctx,
                 canvas,
@@ -2819,8 +2915,11 @@ where
 
         // convert to index and get actual slot
         let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
-        let slot = inner.slots.into_iter().nth(i)
+        let mut borrow_slot = inner.slots.into_iter().nth(i)
             .expect("ItemGrid slots produced None when expected Some");
+
+        let mut slot_guard = borrow_slot.borrow();
+        let slot = <<I1 as IntoIterator>::Item as BorrowItemSlot>::deref(&mut slot_guard);
         
         inner.click_logic.on_click(slot, button, ctx.game());
     }
