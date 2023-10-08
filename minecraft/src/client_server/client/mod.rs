@@ -29,6 +29,7 @@ use crate::{
             array_from_fn,
         },
         sparse_vec::SparseVec,
+        number_key::num_row_key,
     },
     settings::Settings,
     client_server::{
@@ -172,6 +173,7 @@ pub struct Client {
     inventory_slot_crafting_output_state: ItemSlotGuiState,
 
     hotbar_slots_state: [ItemSlotGuiStateNoninteractive; 9],
+    hotbar_selected: u8,
 }
 
 #[derive(Debug)]
@@ -450,6 +452,7 @@ impl Client {
             inventory_slot_crafting_output_state: ItemSlotGuiState::new(),
 
             hotbar_slots_state: array_from_fn(|_| ItemSlotGuiStateNoninteractive::new()),
+            hotbar_selected: 0,
         }
     }
 
@@ -542,6 +545,15 @@ impl Client {
                                 items_mesh: &self.items_mesh,
                             }
                         ),
+                        align([self.hotbar_selected as f32 / 8.0, 0.5],
+                            logical_size(44.0,
+                                align(0.5,
+                                    logical_size(48.0,
+                                        &ctx.assets().hud_hotbar_selected,
+                                    )
+                                )
+                            )
+                        )
                     ))
                 )
             ),
@@ -1173,6 +1185,10 @@ impl GuiStateFrame for Client {
                         return;
                     }
                 }
+
+                if !placing {
+                    //ctx.sound_player().play(&ctx.assets().grass_dig_sound, 1.0);
+                }
                 
                 self.connection.send(up::SetTileBlock {
                     gtc: tile.gtc(),
@@ -1222,6 +1238,10 @@ impl GuiStateFrame for Client {
                 self.char_state.load_dist = self.char_state.load_dist.saturating_add(1);
             } else if key == VirtualKeyCode::PageDown {
                 self.char_state.load_dist = self.char_state.load_dist.saturating_sub(1);
+            } else if let Some(n) = num_row_key(key) {
+                if n >= 1 && n <= 9 {
+                    self.hotbar_selected = n - 1;
+                }
             }
         } else {
             // menu style
@@ -1292,8 +1312,16 @@ impl GuiStateFrame for Client {
     }
 
     fn on_captured_mouse_scroll(&mut self, _: &GuiWindowContext, amount: ScrolledAmount) {
-        self.day_night_time += amount.to_pixels(16.0).y / 8000.0;
-        self.day_night_time %= 1.0;
+        //self.day_night_time += amount.to_pixels(16.0).y / 8000.0;
+        //self.day_night_time %= 1.0;
+        
+        /*self.scroll_accum += amount.to_pixles(16.0) / 16.0;
+        if self.scroll_accum.abs() > 1.0 {
+
+            self.hotbar_selected = self.hotbar_selected
+                .wrapping_add((((self.scroll_accum as i32 % 0xff) + 0xff) % 0xff) as u8) % 9;
+
+        }*/ // TODO im too tired to do this right now
     }
 
     fn on_focus_change(&mut self, ctx: &GuiWindowContext) {
