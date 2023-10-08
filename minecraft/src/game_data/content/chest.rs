@@ -1,6 +1,9 @@
 
 use game_binschema_derive::GameBinschema;
-use crate::game_data::content_module_prelude::*;
+use crate::{
+    game_data::content_module_prelude::*,
+    util::array::array_from_fn,
+};
 
 
 #[derive(Debug)]
@@ -28,7 +31,15 @@ impl ContentModule {
 }
 
 /// Metadata for chest blocks.
-#[derive(Debug, Clone, GameBinschema, Default)]
+#[derive(Debug, Clone, GameBinschema)]
 pub struct ChestBlockMeta {
-    pub slots: [ItemSlot; 27],
+    pub slots: [ItemSlot; 54],
+}
+
+impl Default for ChestBlockMeta {
+    fn default() -> Self {
+        ChestBlockMeta {
+            slots: array_from_fn(|_| None)
+        }
+    }
 }
