@@ -150,9 +150,4 @@ impl ItemStack {
     }
 }
 
-/*
-/// `RefCell<Option<ItemStack>>`, commonly used type.
-pub type ItemSlot = RefCell<Option<ItemStack>>;
-*/
-
 pub type ItemSlot = Option<ItemStack>;

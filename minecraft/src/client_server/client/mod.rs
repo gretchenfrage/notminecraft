@@ -1144,7 +1144,10 @@ impl GuiStateFrame for Client {
                             .unwrap_or(0.into());
                         getter.gtc_get(gtc).map(|tile| (
                             tile,
-                            ErasedBidMeta::new(ctx.global().game.content.chest.bid_chest, ()),
+                            ErasedBidMeta::new(
+                                ctx.global().game.content.chest.bid_chest,
+                                Default::default(),
+                            ),
                             true,
                         ))
                     }

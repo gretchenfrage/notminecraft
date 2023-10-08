@@ -1,6 +1,9 @@
 
 use crate::{
-    game_data::GameData,
+    game_data::{
+        GameData,
+        content,
+    },
     game_binschema::GameBinschema,
     item::erased::ItemMeta,
 };
@@ -11,30 +14,60 @@ use std::{
     any::TypeId,
 };
 
-pub trait TransclonerFor: Sized {
-    fn transcloner_for() -> Transcloner;
-}
 
 macro_rules! transcloner {
-    ($( $variant:ident $type:ty, )*)=>{
-        /// Transcoder / cloner of type erased type.
+    (
+        $transcloner:ident $transcloner_for:ident {$(
+            $variant:ident $type:ty,
+        )*}
+    )=>{
+
         #[derive(Debug)]
-        pub enum Transcloner {$(
+        pub enum $transcloner {$(
             $variant,
         )*}
+        
+        pub trait $transcloner_for: Sized {
+            fn transcloner_for() -> $transcloner;
+        }
 
-        impl Transcloner {
+        impl $transcloner {
             /// Get the type id of the represented type.
             pub fn instance_type_id(&self) -> TypeId {
                 match self {$(
-                    &Transcloner::$variant => TypeId::of::<$type>(),
+                    &$transcloner::$variant => TypeId::of::<$type>(),
                 )*}
             }
 
+            /// Get the schema of the represented type.
+            pub fn instance_schema(&self, game: &Arc<GameData>) -> Schema {
+                match self {$(
+                    &$transcloner::$variant => <$type as GameBinschema>::schema(game),
+                )*}
+            }
+        }
+
+        $(
+            impl $transcloner_for for $type {
+                fn transcloner_for() -> $transcloner {
+                    $transcloner::$variant
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! block_transcloner {
+    ($( $variant:ident $type:ty, )*)=>{
+        transcloner!(BlockTranscloner BlockTransclonerFor {$(
+            $variant $type,
+        )*});
+
+        impl BlockTranscloner {
             /// Clone the bid + meta at one tile block to another. 
             pub fn clone_tile_block_meta(&self, a: TileBlockRead, mut b: TileBlockWrite) {
                 match self {$(
-                    &Transcloner::$variant => {
+                    &BlockTranscloner::$variant => {
                         b.raw_set(
                             a.get(),
                             <$type as Clone>::clone(a.raw_meta::<$type>()),
@@ -46,16 +79,9 @@ macro_rules! transcloner {
             /// Clone an `ErasedBlockMeta`.
             pub fn clone_erased_block_meta(&self, a: &ErasedBlockMeta) -> ErasedBlockMeta {
                 match self {$(
-                    &Transcloner::$variant => ErasedBlockMeta::new(
+                    &BlockTranscloner::$variant => ErasedBlockMeta::new(
                         <$type as Clone>::clone(a.cast::<$type>())
                     ),
-                )*}
-            }
-
-            /// Get the schema of the represented type.
-            pub fn instance_schema(&self, game: &Arc<GameData>) -> Schema {
-                match self {$(
-                    &Transcloner::$variant => <$type as GameBinschema>::schema(game),
                 )*}
             }
 
@@ -68,7 +94,7 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &Transcloner::$variant => <$type as GameBinschema>::encode(
+                    &BlockTranscloner::$variant => <$type as GameBinschema>::encode(
                         tile.raw_meta::<$type>(),
                         encoder,
                         game,
@@ -86,7 +112,7 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &Transcloner::$variant => tile.raw_set(
+                    &BlockTranscloner::$variant => tile.raw_set(
                         bid,
                         <$type as GameBinschema>::decode(decoder, game)?,
                     ),
@@ -103,7 +129,7 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &Transcloner::$variant => <$type as GameBinschema>::encode(
+                    &BlockTranscloner::$variant => <$type as GameBinschema>::encode(
                         meta.cast::<$type>(),
                         encoder,
                         game,
@@ -119,12 +145,22 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<ErasedBlockMeta> {
                 Ok(match self {$(
-                    &Transcloner::$variant => ErasedBlockMeta::new(
+                    &BlockTranscloner::$variant => ErasedBlockMeta::new(
                         <$type as GameBinschema>::decode(decoder, game)?
                     ),
                 )*})
             }
+        }
+    };
+}
 
+macro_rules! item_transcloner {
+    ($( $variant:ident $type:ty, )*)=>{
+        transcloner!(ItemTranscloner ItemTransclonerFor {$(
+            $variant $type,
+        )*});
+
+        impl ItemTranscloner {
             /// Encode an `ItemMeta` (just the metadata, not the
             /// surrounding enum).
             pub fn encode_item_meta(
@@ -134,7 +170,7 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &Transcloner::$variant => <$type as GameBinschema>::encode(
+                    &ItemTranscloner::$variant => <$type as GameBinschema>::encode(
                         meta.cast::<$type>(),
                         encoder,
                         game,
@@ -150,23 +186,20 @@ macro_rules! transcloner {
                 game: &Arc<GameData>,
             ) -> Result<ItemMeta> {
                 Ok(match self {$(
-                    &Transcloner::$variant => ItemMeta::new(
+                    &ItemTranscloner::$variant => ItemMeta::new(
                         <$type as GameBinschema>::decode(decoder, game)?
                     ),
                 )*})
             }
         }
-
-        $(
-            impl TransclonerFor for $type {
-                fn transcloner_for() -> Transcloner {
-                    Transcloner::$variant
-                }
-            }
-        )*
     };
 }
 
-transcloner!(
+block_transcloner!(
+    Unit (),
+    ChestBlockMeta content::chest::ChestBlockMeta,
+);
+
+item_transcloner!(
     Unit (),
 );

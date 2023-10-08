@@ -5,7 +5,7 @@ use crate::game_data::content_module_prelude::*;
 
 #[derive(Debug)]
 pub struct ContentModule {
-    pub bid_chest: BlockId<()>,
+    pub bid_chest: BlockId<ChestBlockMeta>,
 }
 
 impl ContentModule {

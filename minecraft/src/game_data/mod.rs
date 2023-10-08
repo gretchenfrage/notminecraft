@@ -21,7 +21,12 @@ use self::{
     item_mesh_logic::ItemMeshLogic,
     hitscan_logic::BlockHitscanLogic,
     physics_logic::BlockPhysicsLogic,
-    transclone_logic::{Transcloner, TransclonerFor},
+    transclone_logic::{
+        BlockTranscloner,
+        BlockTransclonerFor,
+        ItemTranscloner,
+        ItemTransclonerFor,
+    },
     content::ContentModules,
 };
 use crate::{
@@ -47,7 +52,12 @@ pub mod content_module_prelude {
         item_mesh_logic::ItemMeshLogic,
         hitscan_logic::BlockHitscanLogic,
         physics_logic::BlockPhysicsLogic,
-        transclone_logic::{Transcloner, TransclonerFor},
+        transclone_logic::{
+            BlockTranscloner,
+            BlockTransclonerFor,
+            ItemTranscloner,
+            ItemTransclonerFor,
+        },
         content,
     };
     pub use crate::{
@@ -71,7 +81,7 @@ pub struct GameDataBuilder {
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
 
     // optional (has default):
-    pub blocks_meta_transcloner: PerBlock<Transcloner>,
+    pub blocks_meta_transcloner: PerBlock<BlockTranscloner>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
@@ -84,7 +94,7 @@ pub struct GameDataBuilder {
     pub items_machine_name: PerItem<String>,
 
     // optional (has default):
-    pub items_meta_transcloner: PerItem<Transcloner>,
+    pub items_meta_transcloner: PerItem<ItemTranscloner>,
     pub items_name: PerItem<Option<LangKey>>,
     pub items_mesh_logic: PerItem<ItemMeshLogic>,
     /// Inclusive upper bound on how many can be stacked.
@@ -103,7 +113,7 @@ impl GameDataBuilder {
         mesh_logic: BlockMeshLogic,
     ) -> BlockId<M>
     where
-        M: Debug + Send + Sync + TransclonerFor + 'static,
+        M: Debug + Send + Sync + BlockTransclonerFor + 'static,
     {
         let bid = self.blocks.register();
         self.blocks_machine_name.set(bid, machine_name.to_owned());
@@ -119,7 +129,7 @@ impl GameDataBuilder {
         mesh_logic: ItemMeshLogic,
     ) -> ItemId<M>
     where
-        M: TransclonerFor,
+        M: ItemTransclonerFor,
     {
         let iid = self.items.register();
         self.items_machine_name.set(iid, machine_name.to_owned());
@@ -135,7 +145,7 @@ pub struct GameData {
     pub blocks: Arc<BlockRegistry>,
     pub blocks_machine_name: PerBlock<String>,
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
-    pub blocks_meta_transcloner: PerBlock<Transcloner>,
+    pub blocks_meta_transcloner: PerBlock<BlockTranscloner>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
@@ -143,7 +153,7 @@ pub struct GameData {
     pub items: ItemRegistry,
     pub items_machine_name: PerItem<String>,
     pub items_mesh_logic: PerItem<ItemMeshLogic>,
-    pub items_meta_transcloner: PerItem<Transcloner>,
+    pub items_meta_transcloner: PerItem<ItemTranscloner>,
     pub items_name: PerItem<Option<LangKey>>,
     pub items_max_count: PerItem<NonZeroU8>,
     pub items_max_damage: PerItem<u16>,
@@ -160,7 +170,7 @@ impl GameData {
             blocks_machine_name: PerBlock::new_no_default(),
             blocks_mesh_logic: PerBlock::new_no_default(),
 
-            blocks_meta_transcloner: PerBlock::new(Transcloner::Unit),
+            blocks_meta_transcloner: PerBlock::new(BlockTranscloner::Unit),
             blocks_hitscan_logic: PerBlock::new(BlockHitscanLogic::BasicCube),
             blocks_physics_logic: PerBlock::new(BlockPhysicsLogic::BasicCube),
             blocks_can_place_over: PerBlock::new(false),
@@ -170,7 +180,7 @@ impl GameData {
             items_machine_name: PerItem::new_no_default(),
             items_mesh_logic: PerItem::new_no_default(),
 
-            items_meta_transcloner: PerItem::new(Transcloner::Unit),
+            items_meta_transcloner: PerItem::new(ItemTranscloner::Unit),
             items_name: PerItem::new(None),
             items_max_count: PerItem::new(64.try_into().unwrap()),
             items_max_damage: PerItem::new(0),
