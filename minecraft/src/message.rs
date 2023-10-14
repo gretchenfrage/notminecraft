@@ -42,9 +42,26 @@ macro_rules! message_enum {
 }
 
 message_enum!(edit Edit {
-    SetTileBlock {
+    Tile {
+        ci: usize,
         lti: u16,
+        edit: TileEdit,
+    }
+    InventorySlot {
+        slot_idx: usize,
+        edit: InventorySlotEdit,
+    }
+});
+
+message_enum!(tile_edit TileEdit {
+    SetTileBlock {
         bid_meta: ErasedBidMeta,
+    }
+});
+
+message_enum!(inventory_slot_edit InventorySlotEdit {
+    SetInventorySlot {
+        slot_val: ItemSlot,
     }
 });
 
@@ -97,7 +114,6 @@ message_enum!(down DownMessage {
     }
     ApplyEdit {
         ack: Option<u64>,
-        ci: usize,
         edit: Edit,
     }
     Ack {

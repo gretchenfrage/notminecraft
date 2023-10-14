@@ -656,7 +656,6 @@ impl Server {
             let clientside_client_key = self.clientside_client_keys[ck2].insert(ck);
             self.client_clientside_keys[ck2][ck] = Some(clientside_client_key);
 
-            debug!("sending to {:?} AddClient({:?}) about {:?} (it joined)", ck2, clientside_client_key, ck);
             self.connections[ck2].send(down::AddClient {
                 client_key: clientside_client_key,
                 username: self.usernames[ck].clone(),
@@ -697,10 +696,12 @@ impl Server {
                 };
                 self.connections[ck2].send(down::ApplyEdit {
                     ack,
-                    ci: clientside_ci,
-                    edit: edit::SetTileBlock {
+                    edit: edit::Tile {
+                        ci: clientside_ci,
                         lti: tile.lti,
-                        bid_meta: self.game.clone_erased_tile_block(&bid_meta),
+                        edit: tile_edit::SetTileBlock {
+                            bid_meta: self.game.clone_erased_tile_block(&bid_meta),
+                        }.into(),
                     }.into(),
                 });
             }

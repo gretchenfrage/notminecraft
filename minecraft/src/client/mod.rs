@@ -44,6 +44,7 @@ use self::{
         char_mesh::CharMesh,
         item_mesh::ItemMesh,
     },
+    apply_edit::EditWorld,
 };
 use crate::{
     block_update_queue::BlockUpdateQueue,
@@ -739,10 +740,14 @@ impl Client {
     fn on_network_message_apply_edit(&mut self, msg: down::ApplyEdit) -> Result<()> {
         self.prediction.process_apply_edit_msg(
             msg,
-            &self.chunks,
-            &self.ci_reverse_lookup,
-            &mut self.tile_blocks,
-            &mut self.block_updates,
+            &mut EditWorld {
+                chunks: &self.chunks,
+                getter: &self.chunks.getter(),
+                ci_reverse_lookup: &self.ci_reverse_lookup,
+                tile_blocks: &mut self.tile_blocks,
+                block_updates: &mut self.block_updates,
+                inventory_slots: &mut self.inventory_slots,
+            },
         );
 
         Ok(())
@@ -752,10 +757,14 @@ impl Client {
         let down::Ack { last_processed } = msg;
         self.prediction.process_ack(
             last_processed,
-            &self.chunks,
-            &self.ci_reverse_lookup,
-            &mut self.tile_blocks,
-            &mut self.block_updates,
+            &mut EditWorld {
+                chunks: &self.chunks,
+                getter: &self.chunks.getter(),
+                ci_reverse_lookup: &self.ci_reverse_lookup,
+                tile_blocks: &mut self.tile_blocks,
+                block_updates: &mut self.block_updates,
+                inventory_slots: &mut self.inventory_slots,
+            },
         );
 
         Ok(())
@@ -1198,16 +1207,22 @@ impl GuiStateFrame for Client {
                     bid_meta: ctx.game().clone_erased_tile_block(&bid_meta),
                 });
                 self.prediction.make_prediction(
-                    edit::SetTileBlock {
+                    edit::Tile {
+                        ci: tile.ci,
                         lti: tile.lti,
-                        bid_meta,
+                        edit: tile_edit::SetTileBlock {
+                            bid_meta,
+                        }.into(),
                     }.into(),
-                    tile.cc,
-                    tile.ci,
-                    &getter,
+                    &mut EditWorld {
+                        chunks: &self.chunks,
+                        getter: &getter,
+                        ci_reverse_lookup: &self.ci_reverse_lookup,
+                        tile_blocks: &mut self.tile_blocks,
+                        block_updates: &mut self.block_updates,
+                        inventory_slots: &mut self.inventory_slots,
+                    },
                     &self.connection,
-                    &mut self.tile_blocks,
-                    &mut self.block_updates,
                 );
             }
         }
