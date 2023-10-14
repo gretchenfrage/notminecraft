@@ -2,6 +2,7 @@
 //! save file.
 
 use crate::{
+    save_file::content::*,
     game_data::GameData,
     game_binschema::GameBinschema,
 };
@@ -164,7 +165,7 @@ macro_rules! key_types {
                     stringify!($key).into(),
                     <$key_ty as GameBinschema>::schema(game),
                     <$val_ty as GameBinschema>::schema(game),
-                )
+                ),
             )*]
         }
     };
@@ -173,4 +174,5 @@ macro_rules! key_types {
 
 key_types!(
     Chunk(Vec3<i64>) => ChunkBlocks,
+    Player(String) => PlayerData,
 );

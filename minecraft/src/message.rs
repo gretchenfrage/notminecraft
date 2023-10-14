@@ -1,6 +1,9 @@
 //! Messages sent between client and server.
 
-use crate::game_binschema::GameBinschema;
+use crate::{
+    game_binschema::GameBinschema,
+    item::ItemSlot,
+};
 use chunk_data::*;
 use vek::*;
 
@@ -69,7 +72,9 @@ message_enum!(down DownMessage {
     Close {
         message: String,
     }
-    AcceptLogin {}
+    AcceptLogin {
+        inventory_slots: [ItemSlot; 36],
+    }
     ShouldJoinGame {
         own_client_key: usize,
     }

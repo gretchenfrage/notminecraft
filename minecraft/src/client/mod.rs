@@ -329,7 +329,7 @@ impl Client {
             star.clear();
         }
         let stars = stars.upload(&*ctx.renderer.borrow());
-
+        /*
         let mut inventory_slots = Box::new(array_from_fn(|_| None));
         inventory_slots[7] = Some(ItemStack {
             iid: ctx.game.content.stone.iid_stone.into(),
@@ -337,7 +337,7 @@ impl Client {
             count: 14.try_into().unwrap(),
             damage: 40,
         });
-
+        */
         let mut items_mesh = PerItem::new_no_default();
         for iid in ctx.game.items.iter() {
             items_mesh.set(iid, match &ctx.game.items_mesh_logic[iid] {
@@ -441,8 +441,8 @@ impl Client {
             held_item: RefCell::new(None),
             held_item_state: ItemSlotGuiStateNoninteractive::new(),
 
-            //inventory_slots: Box::new(array_from_fn(|_| RefCell::new(None))),
-            inventory_slots,
+            inventory_slots: Box::new(array_from_fn(|_| None)),
+            //inventory_slots,
             inventory_slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
 
             inventory_slots_armor: array_from_fn(|_| None),
@@ -603,7 +603,8 @@ impl Client {
     }
 
     fn on_network_message_accept_login(&mut self, msg: down::AcceptLogin) -> Result<()> {
-        let down::AcceptLogin {} = msg;
+        let down::AcceptLogin { inventory_slots } = msg;
+        *self.inventory_slots = inventory_slots;
         info!("server accepted login");
         Ok(())
     }
@@ -700,7 +701,6 @@ impl Client {
     
     fn on_network_message_add_client(&mut self, msg: down::AddClient, ctx: &GuiGlobalContext) -> Result<()> {
         let down::AddClient { client_key, username, char_state } = msg;
-        debug!(?client_key, vacant_key=?self.clients.vacant_key(), "client adding");
         ensure!(
             self.clients.insert(()) == client_key,
             "AddClient message client key did not correspond to slab behavior",

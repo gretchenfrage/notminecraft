@@ -30,14 +30,19 @@ use self::{
 };
 use crate::{
     game_data::GameData,
-    util::chunk_range::ChunkRange,
+    util::{
+        chunk_range::ChunkRange,
+        array::array_from_fn,
+    },
     save_file::{
         SaveFile,
         WriteEntry,
+        read_key,
     },
     thread_pool::ThreadPool,
-    message::*,
     client,
+    message::*,
+    item::*,
 };
 use chunk_data::*;
 use std::{
@@ -521,9 +526,51 @@ impl Server {
             username = username2;
         }
 
+        // look up in save file
+        // TODO: do this asynchronously
+        let (
+            char_state,
+            inventory_slots,
+        ) = self.save.read(read_key::Player(username.clone()))?
+            .map(|player_data| (
+                CharState {
+                    pos: player_data.pos,
+                    pitch: f32::to_radians(-30.0),
+                    yaw: f32::to_radians(0.0),
+                    pointing: false,
+                    load_dist: 6,
+                },
+                player_data.inventory_slots,
+            ))
+            .unwrap_or_else(|| (
+                CharState {
+                    pos: [0.0, 80.0, 0.0].into(),
+                    pitch: f32::to_radians(-30.0),
+                    yaw: f32::to_radians(0.0),
+                    pointing: false,
+                    load_dist: 6,
+                },
+                {
+                    let mut inventory_slots = array_from_fn(|_| None);
+                    inventory_slots[7] = Some(ItemStack {
+                        iid: self.game.content.stone.iid_stone.into(),
+                        meta: ItemMeta::new(()),
+                        count: 14.try_into().unwrap(),
+                        damage: 40,
+                    });
+                    inventory_slots
+                }
+            ));
+
+        // accept login
+        self.connections[ck].send(down::AcceptLogin {
+            inventory_slots,
+        });
+
         // transition connection state
         let ck = self.conn_states.transition_to_client(ck);
 
+        /*
         // decide its initial char state
         let char_state = CharState {
             pos: [0.0, 80.0, 0.0].into(),
@@ -532,6 +579,7 @@ impl Server {
             pointing: false,
             load_dist: 6,
         };
+        */
 
         // insert into data structures
         self.in_game.insert(ck, false);
@@ -569,7 +617,6 @@ impl Server {
         let own_clientside_client_key = self.clientside_client_keys[ck].insert(ck);
         self.client_clientside_keys[ck][ck] = Some(own_clientside_client_key);
 
-        debug!("sending to {:?} AddClient({:?}) about {:?} (tell it about itself)", ck, own_clientside_client_key, ck);
         self.connections[ck].send(down::AddClient {
             client_key: own_clientside_client_key,
             username: self.usernames[ck].clone(),

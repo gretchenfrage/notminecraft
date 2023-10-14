@@ -1,5 +1,6 @@
 //! Save "file" handling (actually a rocksdb database).
 
+pub mod content;
 mod entry;
 
 use crate::game_data::GameData;
