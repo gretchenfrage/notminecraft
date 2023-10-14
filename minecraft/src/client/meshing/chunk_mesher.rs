@@ -6,7 +6,7 @@ use crate::{
         ThreadPoolDomain,
     },
     chunk_mesh::ChunkMesh,
-    client::tile_meshing::mesh_tile,
+    client::meshing::tile_meshing::mesh_tile,
 };
 use chunk_data::*;
 use mesh_data::MeshData;

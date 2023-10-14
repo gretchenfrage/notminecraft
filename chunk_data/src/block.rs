@@ -224,6 +224,7 @@ pub struct ErasedBidMeta {
 }
 
 impl ErasedBidMeta {
+    /// Constructor that helps avoids using the wrong metadata type.
     pub fn new<M>(bid: BlockId<M>, meta: M) -> Self
     where
         M: Debug + Send + Sync + 'static,
@@ -346,7 +347,7 @@ unsafe fn pack_metadata_value<M>(
     let mut packed = MaybeUninit::uninit();
     match layout {
         MetaLayout::InPlace { .. } | MetaLayout::SemiInPlace { .. } => {
-            *(packed.as_mut_ptr() as *mut M) = meta;
+            *(packed.as_mut_ptr() as *mut M) = meta; // TODO fix and whatnot
         }
         MetaLayout::OutOfPlace { .. } => {
             packed.write(Box::into_raw(Box::new(meta)) as usize);
