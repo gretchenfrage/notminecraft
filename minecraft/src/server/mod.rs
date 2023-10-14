@@ -173,6 +173,7 @@ struct Server {
 
     in_game: PerClientConn<bool>,
     char_states: PerClientConn<CharState>,
+    inventory_slots: PerClientConn<[ItemSlot; 36]>,
     open_game_menu: PerClientConn<Option<OpenGameMenu>>,
 
     // client A -> A's clientside client key for B, if exists -> client B
@@ -237,6 +238,7 @@ impl Server {
 
             in_game: PerClientConn::new(),
             char_states: PerClientConn::new(),
+            inventory_slots: PerClientConn::new(),
             open_game_menu: PerClientConn::new(),
 
             clientside_client_keys: PerClientConn::new(),
@@ -422,6 +424,7 @@ impl Server {
         // remove from data structures
         self.in_game.remove(ck);
         let char_state = self.char_states.remove(ck);
+        self.inventory_slots.remove(ck);
         self.open_game_menu.remove(ck);
         
         self.clientside_client_keys.remove(ck);
@@ -563,7 +566,7 @@ impl Server {
 
         // accept login
         self.connections[ck].send(down::AcceptLogin {
-            inventory_slots,
+            inventory_slots: inventory_slots.clone(),
         });
 
         // transition connection state
@@ -572,6 +575,7 @@ impl Server {
         // insert into data structures
         self.in_game.insert(ck, false);
         self.char_states.insert(ck, char_state);
+        self.inventory_slots.insert(ck, inventory_slots);
         self.open_game_menu.insert(ck, None);
 
         self.clientside_client_keys.insert(ck, Slab::new());
@@ -793,13 +797,33 @@ impl Server {
     }
 
     fn on_received_item_slot_add(&mut self, msg: up::ItemSlotAdd, ck: ClientConnKey) -> Result<()> {
-        let up::ItemSlotAdd { open_menu_msg_idx, stack } = msg;
+        let up::ItemSlotAdd { slot, open_menu_msg_idx, stack } = msg;
 
         if let Some(menu) = self.open_game_menu[ck]
             .filter(|open_menu| open_menu.valid && open_menu.open_menu_msg_idx == open_menu_msg_idx)
             .map(|open_menu| open_menu.menu)
         {
-            // TODO: do the actual doing of stuff here
+            match menu {
+                GameMenu::Inventory => {
+                    ensure!(slot < 36, "invalid inventory slot number");
+                    self.inventory_slots[ck][slot] = Some(stack.clone());
+                    let ack = if self.last_processed[ck].increased {
+                        self.last_processed[ck].increased = false;
+                        Some(self.last_processed[ck].num)
+                    } else {
+                        None
+                    };
+                    self.connections[ck].send(down::ApplyEdit {
+                        ack,
+                        edit: edit::InventorySlot {
+                            slot_idx: slot,
+                            edit: inventory_slot_edit::SetInventorySlot {
+                                slot_val: Some(stack),
+                            }.into(),
+                        }.into(),
+                    });
+                }
+            }
         }
 
         Ok(())

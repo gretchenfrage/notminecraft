@@ -18,6 +18,7 @@ use binschema::{
 use std::{
     sync::Arc,
     marker::Unpin,
+    cell::Cell,
 };
 use anyhow::{Result, anyhow, bail};
 use crossbeam_channel::{
@@ -52,7 +53,7 @@ use futures::{
 #[derive(Debug)]
 pub struct Connection {
     inner: ConnectionInner,
-    up_msg_idx: u64,
+    up_msg_idx: Cell<u64>,
 }
 
 #[derive(Debug)]
@@ -108,7 +109,7 @@ impl Connection {
                 send_up,
                 recv_down,
             },
-            up_msg_idx: 0,
+            up_msg_idx: Cell::new(0),
         }
     }
 
@@ -116,19 +117,19 @@ impl Connection {
     pub fn new_in_mem(inner: InMemClient) -> Self {
         Connection {
             inner: ConnectionInner::InMem(inner),
-            up_msg_idx: 0,
+            up_msg_idx:Cell::new(0),
         }
     }
 
     /// Asynchronously queue a message for sending, return immediately.
-    pub fn send(&mut self, msg: impl Into<UpMessage>) {
+    pub fn send(&self, msg: impl Into<UpMessage>) {
         match &self.inner {
             &ConnectionInner::Network { ref send_up, .. } => {
                 let _ = send_up.send(msg.into());
             }
             &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
         }
-        self.up_msg_idx += 1;
+        self.up_msg_idx.set(self.up_msg_idx.get() + 1);
     }
 
     /// Check for an asynchronously received message or error without blocking,
@@ -152,7 +153,7 @@ impl Connection {
     /// sent up to the server has an index of 1. (That avoids annoying edge cases
     /// in cases where no messages have been sent to the server).
     pub fn up_msg_idx(&self) -> u64 {
-        self.up_msg_idx
+        self.up_msg_idx.get()
     }
 }
 

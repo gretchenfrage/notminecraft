@@ -88,6 +88,7 @@ message_enum!(up UpMessage {
     }
     CloseGameMenu {}
     ItemSlotAdd {
+        slot: usize,
         open_menu_msg_idx: u64,
         stack: ItemStack,
     }

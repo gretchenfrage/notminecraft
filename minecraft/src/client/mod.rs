@@ -253,7 +253,7 @@ impl Client {
 
     fn inner_new(
         internal_server: Option<ServerHandle>,
-        mut connection: Connection,
+        connection: Connection,
         ctx: &GuiGlobalContext,
     ) -> Self {
         let username = get_username();
@@ -485,6 +485,7 @@ impl Client {
                     &mut chat,
                     &mut self.internal_server,
                     &self.items_mesh,
+                    &self.connection,
                     &self.held_item,
                     &mut self.held_item_state,
                     &rc_inventory_slots_bottom,
@@ -499,6 +500,7 @@ impl Client {
                     &self.char_mesh,
                     self.char_state.pitch,
                     self.char_state.pointing,
+                    self.open_menu_msg_idx,
                     ctx,
                 ),
             )));

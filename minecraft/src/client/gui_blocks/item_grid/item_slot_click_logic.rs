@@ -3,7 +3,11 @@ use crate::{
     item::*,
     gui::prelude::*,
     game_data::*,
-    client::gui_blocks::item_grid::borrow_item_slot::BorrowItemSlot,
+    client::{
+        gui_blocks::item_grid::borrow_item_slot::BorrowItemSlot,
+        connection::Connection,
+    },
+    message::*,
 };
 use std::sync::Arc;
 
@@ -27,6 +31,29 @@ impl ItemSlotClickLogic for NoninteractiveItemSlotClickLogic {
         _button: MouseButton,
         _game: &Arc<GameData>,
     ) {}
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct MultiplayerItemSlotClickLogic<'a> {
+    pub connection: &'a Connection,
+    pub open_menu_msg_idx: u64,
+}
+
+impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
+    fn on_click(
+        self,
+        _slot: &mut ItemSlot,
+        button: MouseButton,
+        game: &Arc<GameData>,
+    ) {
+        if button == MouseButton::Middle {
+            self.connection.send(up::ItemSlotAdd {
+                slot: 7,
+                open_menu_msg_idx: self.open_menu_msg_idx,
+                stack: ItemStack::new(game.content.stone.iid_stone, ()),
+            });
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -4,7 +4,10 @@ use crate::{
     client::{
         gui_blocks::{
             item_grid::{
-                item_slot_click_logic::StorageItemSlotClickLogic,
+                item_slot_click_logic::{
+                    StorageItemSlotClickLogic,
+                    MultiplayerItemSlotClickLogic,
+                },
                 item_slot_gui_state::{
                     ItemSlotGuiStateNoninteractive,
                     ItemSlotGuiState,
@@ -22,6 +25,7 @@ use crate::{
             },
             item_mesh::ItemMesh,
         },
+        connection::Connection,
         InternalServer,
     },
     item::*,
@@ -198,6 +202,7 @@ impl Menu {
         chat: &mut Option<&'a mut GuiChat>,
         internal_server: &'a mut Option<InternalServer>,
         items_mesh: &'a PerItem<ItemMesh>,
+        connection: &'a Connection,
 
         held_item: &'a RefCell<ItemSlot>,
         held_item_state: &'a mut ItemSlotGuiStateNoninteractive,
@@ -218,6 +223,8 @@ impl Menu {
         char_mesh: &'a CharMesh,
         head_pitch: f32,
         pointing: bool,
+
+        open_menu_msg_idx: Option<u64>,
 
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> + 'a {
@@ -264,8 +271,12 @@ impl Menu {
                                 ItemGrid {
                                     slots: inventory_slots_top,
                                     slots_state: inventory_slots_state_top.iter_mut(),
-                                    click_logic: StorageItemSlotClickLogic {
+                                    /*click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
+                                    },*/
+                                    click_logic: MultiplayerItemSlotClickLogic {
+                                        open_menu_msg_idx: open_menu_msg_idx.unwrap(),
+                                        connection,
                                     },
                                     grid_size: [9, 3].into(),
                                     config: ItemGridConfig::default(),
@@ -278,8 +289,14 @@ impl Menu {
                                 ItemGrid {
                                     slots: inventory_slots_bottom.clone(),
                                     slots_state: inventory_slots_state_bottom.iter_mut(),
-                                    click_logic: StorageItemSlotClickLogic {
+                                    /*click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
+                                    },*/
+                                    click_logic: MultiplayerItemSlotClickLogic {
+                                        // TODO: handling of open_menu_msg_idx Some vs None
+                                        // and its relation to menu stack seems kinda delicate
+                                        open_menu_msg_idx: open_menu_msg_idx.unwrap(),
+                                        connection,
                                     },
                                     grid_size: [9, 1].into(),
                                     config: ItemGridConfig::default(),
