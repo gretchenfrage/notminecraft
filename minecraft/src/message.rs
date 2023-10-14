@@ -2,7 +2,7 @@
 
 use crate::{
     game_binschema::GameBinschema,
-    item::ItemSlot,
+    item::*,
 };
 use chunk_data::*;
 use vek::*;
@@ -83,6 +83,14 @@ message_enum!(up UpMessage {
     SetCharState {
         char_state: CharState,
     }
+    OpenGameMenu {
+        menu: GameMenu,
+    }
+    CloseGameMenu {}
+    ItemSlotAdd {
+        open_menu_msg_idx: u64,
+        stack: ItemStack,
+    }
 });
 
 message_enum!(down DownMessage {
@@ -126,6 +134,9 @@ message_enum!(down DownMessage {
         client_key: usize,
         char_state: CharState,
     }
+    CloseGameMenu {
+        open_menu_msg_idx: u64,
+    }
 });
 
 /// State of a client's char that's set by the client and streamed back down
@@ -137,4 +148,10 @@ pub struct CharState {
     pub yaw: f32,
     pub pointing: bool,
     pub load_dist: u8,
+}
+
+/// An in-game menu a client can have open. 
+#[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
+pub enum GameMenu {
+    Inventory,
 }

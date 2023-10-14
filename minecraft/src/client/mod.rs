@@ -183,6 +183,8 @@ pub struct Client {
 
     hotbar_slots_state: [ItemSlotGuiStateNoninteractive; 9],
     hotbar_selected: u8,
+
+    open_menu_msg_idx: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -330,15 +332,7 @@ impl Client {
             star.clear();
         }
         let stars = stars.upload(&*ctx.renderer.borrow());
-        /*
-        let mut inventory_slots = Box::new(array_from_fn(|_| None));
-        inventory_slots[7] = Some(ItemStack {
-            iid: ctx.game.content.stone.iid_stone.into(),
-            meta: ItemMeta::new(()),
-            count: 14.try_into().unwrap(),
-            damage: 40,
-        });
-        */
+        
         let mut items_mesh = PerItem::new_no_default();
         for iid in ctx.game.items.iter() {
             items_mesh.set(iid, match &ctx.game.items_mesh_logic[iid] {
@@ -457,6 +451,8 @@ impl Client {
 
             hotbar_slots_state: array_from_fn(|_| ItemSlotGuiStateNoninteractive::new()),
             hotbar_selected: 0,
+
+            open_menu_msg_idx: None,
         }
     }
 
@@ -594,6 +590,7 @@ impl Client {
             DownMessage::Ack(msg) => self.on_network_message_ack(msg)?,
             DownMessage::ChatLine(msg) => self.on_network_message_chat_line(msg, ctx)?,
             DownMessage::SetCharState(msg) => self.on_network_message_set_char_state(msg)?,
+            DownMessage::CloseGameMenu(msg) => self.on_network_message_close_game_menu(msg)?,
         }
         Ok(())
     }
@@ -781,6 +778,16 @@ impl Client {
         let down::SetCharState { client_key, char_state } = msg;
         let () = self.clients[client_key];
         self.client_char_state[client_key] = char_state;
+
+        Ok(())
+    }
+
+    fn on_network_message_close_game_menu(&mut self, msg: down::CloseGameMenu) -> Result<()> {
+        let down::CloseGameMenu { open_menu_msg_idx } = msg;
+        if self.open_menu_msg_idx == Some(open_menu_msg_idx) {
+            self.menu_stack.pop().unwrap();
+            self.open_menu_msg_idx = None;
+        }
 
         Ok(())
     }
@@ -1239,6 +1246,10 @@ impl GuiStateFrame for Client {
             } else if key == VirtualKeyCode::E {
                 ctx.global().uncapture_mouse();
                 self.menu_stack.push(Menu::Inventory);
+                self.connection.send(up::OpenGameMenu {
+                    menu: GameMenu::Inventory,
+                });
+                self.open_menu_msg_idx = Some(self.connection.up_msg_idx());
             } else if key == VirtualKeyCode::T {
                 ctx.global().uncapture_mouse();
                 let blinker = secs_rem(ctx.global().time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
@@ -1270,7 +1281,9 @@ impl GuiStateFrame for Client {
                         .exitable_via_inventory_button()
                 )
             {
-                self.menu_stack.clear();
+                self.menu_stack.pop().unwrap();
+                self.connection.send(up::CloseGameMenu {});
+                self.open_menu_msg_idx = None;
                 ctx.global().capture_mouse();
             } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
                 if let Some(&mut Menu::ChatInput {

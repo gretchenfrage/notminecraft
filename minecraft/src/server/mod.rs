@@ -173,6 +173,7 @@ struct Server {
 
     in_game: PerClientConn<bool>,
     char_states: PerClientConn<CharState>,
+    open_game_menu: PerClientConn<Option<OpenGameMenu>>,
 
     // client A -> A's clientside client key for B, if exists -> client B
     clientside_client_keys: PerClientConn<Slab<ClientConnKey>>,
@@ -187,6 +188,13 @@ struct Server {
 struct LastProcessed {
     num: u64,
     increased: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct OpenGameMenu {
+    menu: GameMenu,
+    open_menu_msg_idx: u64,
+    valid: bool,
 }
 
 
@@ -229,6 +237,7 @@ impl Server {
 
             in_game: PerClientConn::new(),
             char_states: PerClientConn::new(),
+            open_game_menu: PerClientConn::new(),
 
             clientside_client_keys: PerClientConn::new(),
             client_clientside_keys: PerClientConn::new(),
@@ -413,6 +422,7 @@ impl Server {
         // remove from data structures
         self.in_game.remove(ck);
         let char_state = self.char_states.remove(ck);
+        self.open_game_menu.remove(ck);
         
         self.clientside_client_keys.remove(ck);
         self.client_clientside_keys.remove(ck);
@@ -496,6 +506,9 @@ impl Server {
             SetTileBlock on_received_set_tile_block,
             Say on_received_say,
             SetCharState on_received_set_char_state,
+            OpenGameMenu on_received_open_game_menu,
+            CloseGameMenu on_received_close_game_menu,
+            ItemSlotAdd on_received_item_slot_add,
         );
 
         Ok(())
@@ -526,41 +539,27 @@ impl Server {
             username = username2;
         }
 
-        // look up in save file
+        // look up in save file to decide its initial state
         // TODO: do this asynchronously
         let (
-            char_state,
+            pos,
             inventory_slots,
         ) = self.save.read(read_key::Player(username.clone()))?
             .map(|player_data| (
-                CharState {
-                    pos: player_data.pos,
-                    pitch: f32::to_radians(-30.0),
-                    yaw: f32::to_radians(0.0),
-                    pointing: false,
-                    load_dist: 6,
-                },
+                player_data.pos,
                 player_data.inventory_slots,
             ))
             .unwrap_or_else(|| (
-                CharState {
-                    pos: [0.0, 80.0, 0.0].into(),
-                    pitch: f32::to_radians(-30.0),
-                    yaw: f32::to_radians(0.0),
-                    pointing: false,
-                    load_dist: 6,
-                },
-                {
-                    let mut inventory_slots = array_from_fn(|_| None);
-                    inventory_slots[7] = Some(ItemStack {
-                        iid: self.game.content.stone.iid_stone.into(),
-                        meta: ItemMeta::new(()),
-                        count: 14.try_into().unwrap(),
-                        damage: 40,
-                    });
-                    inventory_slots
-                }
+                [0.0, 80.0, 0.0].into(),
+                array_from_fn(|_| None),
             ));
+        let char_state = CharState {
+            pos,
+            pitch: f32::to_radians(-30.0),
+            yaw: f32::to_radians(0.0),
+            pointing: false,
+            load_dist: 6,
+        };
 
         // accept login
         self.connections[ck].send(down::AcceptLogin {
@@ -570,20 +569,10 @@ impl Server {
         // transition connection state
         let ck = self.conn_states.transition_to_client(ck);
 
-        /*
-        // decide its initial char state
-        let char_state = CharState {
-            pos: [0.0, 80.0, 0.0].into(),
-            pitch: f32::to_radians(-30.0),
-            yaw: f32::to_radians(0.0),
-            pointing: false,
-            load_dist: 6,
-        };
-        */
-
         // insert into data structures
         self.in_game.insert(ck, false);
         self.char_states.insert(ck, char_state);
+        self.open_game_menu.insert(ck, None);
 
         self.clientside_client_keys.insert(ck, Slab::new());
         self.client_clientside_keys.insert(ck, self.conn_states.new_mapped_per_client(|_| None));
@@ -605,7 +594,6 @@ impl Server {
             let clientside_client_key = self.clientside_client_keys[ck].insert(ck2);
             self.client_clientside_keys[ck][ck2] = Some(clientside_client_key);
 
-            debug!("sending to {:?} AddClient({:?}) about {:?} (bring up to speed)", ck, clientside_client_key, ck2);
             self.connections[ck].send(down::AddClient {
                 client_key: clientside_client_key,
                 username: self.usernames[ck2].clone(),
@@ -633,6 +621,20 @@ impl Server {
         // tell it to join the game, once it finishes receiving prior messages
         self.connections[ck].send(down::ShouldJoinGame {
             own_client_key: own_clientside_client_key,
+        });
+
+        // debugging
+        self.connections[ck].send(down::ApplyEdit {
+            ack: None,
+            edit: edit::InventorySlot {
+                slot_idx: 2,
+                edit: inventory_slot_edit::SetInventorySlot {
+                    slot_val: Some(ItemStack::new(
+                        self.game.content.stone.iid_stone,
+                        (),
+                    )),
+                }.into(),
+            }.into(),
         });
 
         Ok(())
@@ -758,6 +760,46 @@ impl Server {
         for cc in dist_sorted_ccs(new_char_load_range.iter_diff(old_char_load_range), char_state.pos) {
             self.chunk_mgr.add_chunk_client_interest(ck, cc, &self.conn_states);
             self.process_chunk_mgr_effects();
+        }
+
+        Ok(())
+    }
+
+    fn on_received_open_game_menu(&mut self, msg: up::OpenGameMenu, ck: ClientConnKey) -> Result<()> {
+        let up::OpenGameMenu { menu } = msg;
+        
+        let valid = match &menu {
+            &GameMenu::Inventory => true,
+        };
+        let open_menu_msg_idx = self.last_processed[ck].num;
+        if !valid {
+            self.connections[ck].send(down::CloseGameMenu { open_menu_msg_idx });
+        }
+        self.open_game_menu[ck] = Some(OpenGameMenu {
+            menu,
+            open_menu_msg_idx,
+            valid,
+        });
+
+        Ok(())
+    }
+
+    fn on_received_close_game_menu(&mut self, msg: up::CloseGameMenu, ck: ClientConnKey) -> Result<()> {
+        let up::CloseGameMenu {} = msg;
+
+        self.open_game_menu[ck] = None;
+
+        Ok(())
+    }
+
+    fn on_received_item_slot_add(&mut self, msg: up::ItemSlotAdd, ck: ClientConnKey) -> Result<()> {
+        let up::ItemSlotAdd { open_menu_msg_idx, stack } = msg;
+
+        if let Some(menu) = self.open_game_menu[ck]
+            .filter(|open_menu| open_menu.valid && open_menu.open_menu_msg_idx == open_menu_msg_idx)
+            .map(|open_menu| open_menu.menu)
+        {
+            // TODO: do the actual doing of stuff here
         }
 
         Ok(())
