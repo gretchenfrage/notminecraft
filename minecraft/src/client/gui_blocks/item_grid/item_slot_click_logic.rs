@@ -57,10 +57,22 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
         game: &Arc<GameData>,
     ) {
         if button == MouseButton::Middle {
+            let slot_idx = slot_idx + self.slot_offset;
+            let stack = ItemStack::new(game.content.stone.iid_stone, ());
+
             self.connection.send(up::ItemSlotAdd {
-                slot: slot_idx + self.slot_offset,
+                slot: slot_idx,
                 open_menu_msg_idx: self.open_menu_msg_idx,
-                stack: ItemStack::new(game.content.stone.iid_stone, ()),
+                stack: stack.clone(),
+            });
+            self.predictions_to_make.borrow_mut().push_back(PredictionToMake {
+                edit: edit::InventorySlot {
+                    slot_idx: slot_idx,
+                    edit: inventory_slot_edit::SetInventorySlot {
+                        slot_val: Some(stack),
+                    }.into(),
+                }.into(),
+                up_msg_idx: self.connection.up_msg_idx(),
             });
         }
     }
