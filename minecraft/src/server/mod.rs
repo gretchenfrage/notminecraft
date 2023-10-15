@@ -35,6 +35,7 @@ use crate::{
         array::array_from_fn,
     },
     save_file::{
+        content::PlayerData,
         SaveFile,
         WriteEntry,
         read_key,
@@ -172,6 +173,7 @@ struct Server {
     last_processed: PerAnyConn<LastProcessed>,
 
     in_game: PerClientConn<bool>,
+    player_saved: PerClientConn<bool>,
     char_states: PerClientConn<CharState>,
     inventory_slots: PerClientConn<[ItemSlot; 36]>,
     open_game_menu: PerClientConn<Option<OpenGameMenu>>,
@@ -237,6 +239,7 @@ impl Server {
             last_processed: PerAnyConn::new(),
 
             in_game: PerClientConn::new(),
+            player_saved: PerClientConn::new(),
             char_states: PerClientConn::new(),
             inventory_slots: PerClientConn::new(),
             open_game_menu: PerClientConn::new(),
@@ -340,6 +343,10 @@ impl Server {
                 self.chunk_mgr.mark_saved(cc, ci, &self.conn_states);
                 self.process_chunk_mgr_effects();
             }
+
+            for ck in self.conn_states.iter_client() {
+                self.player_saved[ck] = true;
+            }
         }
     }
 
@@ -347,12 +354,21 @@ impl Server {
     /// other accounting information.
     fn save(&mut self) {
         trace!("saving");
-
+        // TODO: avoid actually looping through the whole world basically
         let writes = self.chunk_mgr.iter_unsaved()
             .map(|(cc, ci, _)| WriteEntry::Chunk(
                 cc,
                 self.game.clone_chunk_blocks(self.tile_blocks.get(cc, ci)),
-            ));
+            ))
+            .chain(self.conn_states.iter_client()
+                .filter(|&ck| !self.player_saved[ck])
+                .map(|ck| WriteEntry::Player(
+                    self.usernames[ck].clone(),
+                    PlayerData {
+                        pos: self.char_states[ck].pos,
+                        inventory_slots: self.inventory_slots[ck].clone(),
+                    },
+                )));
         self.save.write(writes).unwrap(); // TODO: don't panic
     }
 
@@ -423,6 +439,7 @@ impl Server {
     fn on_client_disconnected(&mut self, ck: ClientConnKey) {
         // remove from data structures
         self.in_game.remove(ck);
+        self.player_saved.remove(ck);
         let char_state = self.char_states.remove(ck);
         self.inventory_slots.remove(ck);
         self.open_game_menu.remove(ck);
@@ -573,6 +590,7 @@ impl Server {
 
         // insert into data structures
         self.in_game.insert(ck, false);
+        self.player_saved.insert(ck, false);
         self.char_states.insert(ck, char_state);
         self.inventory_slots.insert(ck, inventory_slots);
         self.open_game_menu.insert(ck, None);
@@ -807,6 +825,7 @@ impl Server {
                 GameMenu::Inventory => {
                     ensure!(slot < 36, "invalid inventory slot number");
                     self.inventory_slots[ck][slot] = Some(stack.clone());
+                    self.player_saved[ck] = false;
                     let ack = if self.last_processed[ck].increased {
                         self.last_processed[ck].increased = false;
                         Some(self.last_processed[ck].num)
@@ -827,6 +846,7 @@ impl Server {
                     ensure!(slot < 63, "invalid chest slot number");
                     if slot < 36 {
                         self.inventory_slots[ck][slot] = Some(stack.clone());
+                        self.player_saved[ck] = false;
                         let ack = if self.last_processed[ck].increased {
                             self.last_processed[ck].increased = false;
                             Some(self.last_processed[ck].num)
