@@ -155,4 +155,7 @@ pub struct CharState {
 #[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
 pub enum GameMenu {
     Inventory,
+    Chest {
+        gtc: Vec3<i64>,
+    },
 }

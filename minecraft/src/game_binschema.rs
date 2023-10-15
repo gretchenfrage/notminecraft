@@ -504,7 +504,7 @@ impl GameBinschema for ItemStack {
             decoder,
             game,
         )?;
-        Ok(ItemStack {
+        let val = ItemStack {
             iid,
             meta,
             count: {
@@ -517,6 +517,8 @@ impl GameBinschema for ItemStack {
                 decoder.begin_struct_field("damage")?;
                 decoder.decode_u16()?
             },
-        })
+        };
+        decoder.finish_struct()?;
+        Ok(val)
     }
 }

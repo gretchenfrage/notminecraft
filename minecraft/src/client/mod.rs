@@ -497,6 +497,8 @@ impl Client {
                     self.char_state.pitch,
                     self.char_state.pointing,
                     self.open_menu_msg_idx,
+                    &self.chunks.getter(),
+                    &self.tile_blocks,
                     ctx,
                 ),
             )));
@@ -1177,9 +1179,12 @@ impl GuiStateFrame for Client {
                 )),
                 MouseButton::Right => {
                     if looking_at.tile.get(&self.tile_blocks).get() == ctx.game().content.chest.bid_chest {
-                        self.menu_stack.push(Menu::Chest {
-                            gtc: looking_at.tile.gtc(),
+                        let gtc = looking_at.tile.gtc();
+                        self.menu_stack.push(Menu::chest(gtc));
+                        self.connection.send(up::OpenGameMenu {
+                            menu: GameMenu::Chest { gtc },
                         });
+                        self.open_menu_msg_idx = Some(self.connection.up_msg_idx());
                         ctx.global().uncapture_mouse();
                         None
                     } else {

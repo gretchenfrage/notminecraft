@@ -2,13 +2,17 @@
 use crate::{
     item::*,
     gui::prelude::*,
-    game_data::*,
+    game_data::{
+        content::chest::ChestBlockMeta,
+        *,
+    },
     client::{
         connection::Connection,
         PredictionToMake,
     },
     message::*,
 };
+use chunk_data::*;
 use std::{
     sync::Arc,
     collections::VecDeque,
@@ -45,6 +49,17 @@ pub struct MultiplayerItemSlotClickLogic<'a> {
     pub connection: &'a Connection,
     pub open_menu_msg_idx: u64,
     pub predictions_to_make: &'a RefCell<VecDeque<PredictionToMake>>,
+    pub idx_space: MultiplayerItemSlotIdxSpace<'a>,
+}
+
+#[derive(Debug, Clone)]
+pub enum MultiplayerItemSlotIdxSpace<'a> {
+    Inventory,
+    Chest {
+        ci: usize,
+        lti: u16,
+        meta: &'a ChestBlockMeta,
+    },
 }
 
 impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
@@ -64,18 +79,38 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
                 open_menu_msg_idx: self.open_menu_msg_idx,
                 stack: stack.clone(),
             });
-            self.predictions_to_make.borrow_mut().push_back(PredictionToMake {
-                edit: edit::InventorySlot {
+
+            let edit = match self.idx_space {
+                MultiplayerItemSlotIdxSpace::Inventory => edit::InventorySlot {
                     slot_idx: slot_idx,
                     edit: inventory_slot_edit::SetInventorySlot {
                         slot_val: Some(stack),
                     }.into(),
                 }.into(),
+                MultiplayerItemSlotIdxSpace::Chest { ci, lti, meta } => {
+                    let mut meta2 = meta.clone();
+                    meta2.slots[slot_idx - 36] = Some(stack.clone());
+                    edit::Tile {
+                        ci,
+                        lti,
+                        edit: tile_edit::SetTileBlock {
+                            bid_meta: ErasedBidMeta::new(
+                                game.content.chest.bid_chest,
+                                meta2,
+                            ),
+                        }.into(),
+                    }.into()
+                },
+            };
+            self.predictions_to_make.borrow_mut().push_back(PredictionToMake {
+                edit,
                 up_msg_idx: self.connection.up_msg_idx(),
             });
         }
     }
 }
+
+
 /*
 #[derive(Debug, Copy, Clone)]
 pub struct StorageItemSlotClickLogic<H> {

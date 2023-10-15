@@ -434,7 +434,6 @@ impl Server {
             if let Some(clientside_client_key) = self.client_clientside_keys[ck2].remove(ck) {
                 self.clientside_client_keys[ck2].remove(clientside_client_key);
                 // remove from other clients while we're at it
-                debug!("sending to {:?} RemoveClient({:?}) about {:?} (it left)", ck2, clientside_client_key, ck);
                 self.connections[ck2].send(down::RemoveClient {
                     client_key: clientside_client_key,
                 });
@@ -460,10 +459,10 @@ impl Server {
             self.connections[ck].send(down::Close {
                 message: "Protocol violation.".into(),
             });
+            self.conn_states.transition_to_closed(ck);
             if let AnyConnKey::Client(ck) = ck {
                 self.on_client_disconnected(ck);
             }
-            self.conn_states.transition_to_closed(ck);
         }
     }
 
@@ -774,6 +773,7 @@ impl Server {
         
         let valid = match &menu {
             &GameMenu::Inventory => true,
+            &GameMenu::Chest { gtc } => true, // TODO validation logic
         };
         let open_menu_msg_idx = self.last_processed[ck].num;
         if !valid {
@@ -822,6 +822,60 @@ impl Server {
                             }.into(),
                         }.into(),
                     });
+                }
+                GameMenu::Chest { gtc } => {
+                    ensure!(slot < 63, "invalid chest slot number");
+                    if slot < 36 {
+                        self.inventory_slots[ck][slot] = Some(stack.clone());
+                        let ack = if self.last_processed[ck].increased {
+                            self.last_processed[ck].increased = false;
+                            Some(self.last_processed[ck].num)
+                        } else {
+                            None
+                        };
+                        self.connections[ck].send(down::ApplyEdit {
+                            ack,
+                            edit: edit::InventorySlot {
+                                slot_idx: slot,
+                                edit: inventory_slot_edit::SetInventorySlot {
+                                    slot_val: Some(stack),
+                                }.into(),
+                            }.into(),
+                        });
+                    } else {
+                        // TODO: don't panic
+                        let tile = self.chunk_mgr.getter().gtc_get(gtc).unwrap();
+                        let meta = tile
+                            .get(&mut self.tile_blocks)
+                            .try_meta(self.game.content.chest.bid_chest).unwrap();
+                        meta.slots[slot - 36] = Some(stack.clone());
+
+                        for ck2 in self.conn_states.iter_client() {
+                            if let Some(clientside_ci) = self.chunk_mgr.clientside_ci(tile.cc, tile.ci, ck2) {
+                                let ack = if self.last_processed[ck2].increased {
+                                    self.last_processed[ck2].increased = false;
+                                    Some(self.last_processed[ck2].num)
+                                } else {
+                                    None
+                                };
+                                self.connections[ck2].send(down::ApplyEdit {
+                                    ack,
+                                    edit: edit::Tile {
+                                        ci: clientside_ci,
+                                        lti: tile.lti,
+                                        edit: tile_edit::SetTileBlock {
+                                            bid_meta: ErasedBidMeta::new(
+                                                self.game.content.chest.bid_chest,
+                                                meta.clone(),
+                                            ),
+                                        }.into(),
+                                    }.into(),
+                                });
+                            }
+                        }
+
+                        self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);
+                    }
                 }
             }
         }

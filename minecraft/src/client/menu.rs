@@ -6,6 +6,7 @@ use crate::{
             item_grid::{
                 item_slot_click_logic::{
                     MultiplayerItemSlotClickLogic,
+                    MultiplayerItemSlotIdxSpace,
                 },
                 item_slot_gui_state::{
                     ItemSlotGuiStateNoninteractive,
@@ -32,7 +33,9 @@ use crate::{
     item::*,
     game_data::per_item::PerItem,
     settings::Settings,
+    util::array::array_from_fn,
 };
+use chunk_data::*;
 use std::{
     iter::once,
     cell::RefCell,
@@ -191,12 +194,19 @@ pub enum Menu {
     },
     Settings,
     Chest {
-        #[allow(dead_code)]
         gtc: Vec3<i64>,
+        slots_state: Box<[ItemSlotGuiState; 27]>,
     }
 }
 
 impl Menu {
+    pub fn chest(gtc: Vec3<i64>) -> Self {
+        Menu::Chest {
+            gtc,
+            slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
+        }
+    }
+
     pub fn gui<'a>(
         &'a mut self,
         resources: &'a mut MenuResources,
@@ -226,6 +236,9 @@ impl Menu {
         pointing: bool,
 
         open_menu_msg_idx: Option<u64>,
+
+        getter: &Getter,
+        tile_blocks: &'a PerChunk<ChunkBlocks>,
 
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> + 'a {
@@ -280,6 +293,7 @@ impl Menu {
                                         open_menu_msg_idx: open_menu_msg_idx.unwrap(),
                                         connection,
                                         predictions_to_make,
+                                        idx_space: MultiplayerItemSlotIdxSpace::Inventory,
                                     },
                                     grid_size: [9, 3].into(),
                                     config: ItemGridConfig::default(),
@@ -302,6 +316,7 @@ impl Menu {
                                         open_menu_msg_idx: open_menu_msg_idx.unwrap(),
                                         connection,
                                         predictions_to_make,
+                                        idx_space: MultiplayerItemSlotIdxSpace::Inventory,
                                     },
                                     grid_size: [9, 1].into(),
                                     config: ItemGridConfig::default(),
@@ -418,19 +433,51 @@ impl Menu {
                     )
                 )
             ))),
-            &mut Menu::Chest { gtc: _ /* TODO */ } => GuiEither::B(
+            &mut Menu::Chest { gtc, ref mut slots_state } => GuiEither::B(
                 align(0.5,
                     logical_size([352.0, 336.0],
                         layer((
                             SingleChestBg,
-                            /*
+                            margin(14.0, 0.0, 34.0, 0.0,
+                                align(0.0,
+                                    {
+                                        // TODO: don't panic
+                                        let tile = getter.gtc_get(gtc).unwrap();
+                                        let meta = tile
+                                            .get(tile_blocks)
+                                            .try_meta(ctx.game().content.chest.bid_chest).unwrap();
+                                        ItemGrid {
+                                            slots: meta.slots.iter(),
+                                            slots_state: slots_state.iter_mut(),
+                                            click_logic: MultiplayerItemSlotClickLogic {
+                                                slot_offset: 36,
+                                                open_menu_msg_idx: open_menu_msg_idx.unwrap(),
+                                                connection,
+                                                predictions_to_make,
+                                                idx_space: MultiplayerItemSlotIdxSpace::Chest {
+                                                    ci: tile.ci,
+                                                    lti: tile.lti,
+                                                    meta,
+                                                },
+                                            },
+                                            grid_size: [9, 3].into(),
+                                            config: ItemGridConfig::default(),
+                                            items_mesh: items_mesh,
+                                        }
+                                    }
+                                )
+                            ),
                             margin(14.0, 0.0, 170.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
-                                        slots: inventory_slots_top,
+                                        slots: &inventory_slots[9..],
                                         slots_state: inventory_slots_state_top.iter_mut(),
-                                        click_logic: StorageItemSlotClickLogic {
-                                            held: held_item,
+                                        click_logic: MultiplayerItemSlotClickLogic {
+                                            slot_offset: 9,
+                                            open_menu_msg_idx: open_menu_msg_idx.unwrap(),
+                                            connection,
+                                            predictions_to_make,
+                                            idx_space: MultiplayerItemSlotIdxSpace::Inventory,
                                         },
                                         grid_size: [9, 3].into(),
                                         config: ItemGridConfig::default(),
@@ -441,17 +488,21 @@ impl Menu {
                             margin(14.0, 0.0, 286.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
-                                        slots: inventory_slots_bottom.clone(),
+                                        slots: &inventory_slots[..9],
                                         slots_state: inventory_slots_state_bottom.iter_mut(),
-                                        click_logic: StorageItemSlotClickLogic {
-                                            held: held_item,
+                                        click_logic: MultiplayerItemSlotClickLogic {
+                                            slot_offset: 0,
+                                            open_menu_msg_idx: open_menu_msg_idx.unwrap(),
+                                            connection,
+                                            predictions_to_make,
+                                            idx_space: MultiplayerItemSlotIdxSpace::Inventory,
                                         },
                                         grid_size: [9, 1].into(),
                                         config: ItemGridConfig::default(),
                                         items_mesh: &items_mesh,
                                     }
                                 )
-                            ),*/
+                            ),
                             HeldItemGuiBlock {
                                 held: held_item,
                                 held_state: held_item_state,
