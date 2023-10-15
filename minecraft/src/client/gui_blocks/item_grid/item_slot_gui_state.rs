@@ -5,7 +5,6 @@ use crate::{
     client::{
         gui_blocks::item_grid::{
             SLOT_DEFAULT_TEXT_SIZE,
-            borrow_item_slot::BorrowItemSlot,
             layout_calcs::ItemSlotLayoutCalcs,
             ItemGridLayoutCalcs,
         },
@@ -19,13 +18,13 @@ use vek::*;
 
 
 #[derive(Debug)]
-pub struct ItemNameDrawer<'a, I> {
-    pub borrow_slot: I,
+pub struct ItemNameDrawer<'a> {
+    pub slot: &'a ItemSlot,
     pub cached_iid: &'a mut Option<RawItemId>,
     pub name_text: &'a mut Option<GuiTextBlockInner>,
 }
 
-impl<'a, I: BorrowItemSlot> ItemNameDrawer<'a, I> {
+impl<'a> ItemNameDrawer<'a> {
     pub fn draw(
         self,
         ctx: GuiSpatialContext<'a>,
@@ -34,10 +33,7 @@ impl<'a, I: BorrowItemSlot> ItemNameDrawer<'a, I> {
     ) {
         const NAME_TAG_BG_ALPHA: f32 = (0xc6 as f32 - 0x31 as f32) / 0xc6 as f32;
 
-        let ItemNameDrawer { mut borrow_slot, cached_iid, name_text } = self;
-
-        let mut slot_guard = borrow_slot.borrow();
-        let slot = I::deref(&mut slot_guard);
+        let ItemNameDrawer { slot, cached_iid, name_text } = self;
 
         // revalidate name text
         let iid = slot.as_ref().map(|stack| stack.iid);
@@ -162,7 +158,7 @@ pub fn draw_item_noninteractive<'a>(
     }
 }
 
-pub trait ItemSlotGuiStateGeneral<'a, I> {
+pub trait ItemSlotGuiStateGeneral<'a> {
     type DrawCursorOverState;
 
     fn draw(
@@ -171,7 +167,7 @@ pub trait ItemSlotGuiStateGeneral<'a, I> {
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        borrow_slot: I,
+        slot: &'a ItemSlot,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState;
 
@@ -185,8 +181,8 @@ pub trait ItemSlotGuiStateGeneral<'a, I> {
     );
 }
 
-impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotGuiState {
-    type DrawCursorOverState = ItemNameDrawer<'a, I>;
+impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiState {
+    type DrawCursorOverState = ItemNameDrawer<'a>;
 
     fn draw(
         self,
@@ -194,24 +190,20 @@ impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotG
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        mut borrow_slot: I,
+        slot: &'a ItemSlot,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState {
-        {
-            let mut slot_guard = borrow_slot.borrow();
-            let slot = I::deref(&mut slot_guard); 
-            draw_item_noninteractive(
-                ctx,
-                canvas,
-                scale,
-                &layout.inner,
-                slot.as_ref(),
-                &mut self.inner,
-                items_mesh,
-            );
-        }
+        draw_item_noninteractive(
+            ctx,
+            canvas,
+            scale,
+            &layout.inner,
+            slot.as_ref(),
+            &mut self.inner,
+            items_mesh,
+        );
         ItemNameDrawer {
-            borrow_slot,
+            slot,
             cached_iid: &mut self.cached_iid,
             name_text: &mut self.name_text,
         }
@@ -242,7 +234,7 @@ impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotG
     }
 }
 
-impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotGuiStateNoninteractive {
+impl<'a> ItemSlotGuiStateGeneral<'a> for &'a mut ItemSlotGuiStateNoninteractive {
     type DrawCursorOverState = ();
 
     fn draw(
@@ -251,11 +243,9 @@ impl<'a, I: BorrowItemSlot> ItemSlotGuiStateGeneral<'a, I> for &'a mut ItemSlotG
         canvas: &mut Canvas2<'a, '_>,
         scale: f32,
         layout: &ItemGridLayoutCalcs,
-        mut borrow_slot: I,
+        slot: &'a ItemSlot,
         items_mesh: &'a PerItem<ItemMesh>,
     ) -> Self::DrawCursorOverState {
-        let mut slot_guard = borrow_slot.borrow();
-        let slot = I::deref(&mut slot_guard);
         draw_item_noninteractive(
             ctx,
             canvas,

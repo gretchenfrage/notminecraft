@@ -4,7 +4,6 @@ use crate::{
     gui::prelude::*,
     game_data::*,
     client::{
-        gui_blocks::item_grid::borrow_item_slot::BorrowItemSlot,
         connection::Connection,
         PredictionToMake,
     },
@@ -21,7 +20,7 @@ pub trait ItemSlotClickLogic {
     fn on_click(
         self,
         slot_idx: usize,
-        slot: &mut ItemSlot,
+        slot: &ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
     );
@@ -34,7 +33,7 @@ impl ItemSlotClickLogic for NoninteractiveItemSlotClickLogic {
     fn on_click(
         self,
         _slot_idx: usize,
-        _slot: &mut ItemSlot,
+        _slot: &ItemSlot,
         _button: MouseButton,
         _game: &Arc<GameData>,
     ) {}
@@ -52,7 +51,7 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
     fn on_click(
         self,
         slot_idx: usize,
-        _slot: &mut ItemSlot,
+        _slot: &ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
     ) {
@@ -77,7 +76,7 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
         }
     }
 }
-
+/*
 #[derive(Debug, Copy, Clone)]
 pub struct StorageItemSlotClickLogic<H> {
     pub held: H,
@@ -221,3 +220,4 @@ impl<H: BorrowItemSlot> ItemSlotClickLogic for StorageItemSlotClickLogic<H> {
         }
     }
 }
+*/

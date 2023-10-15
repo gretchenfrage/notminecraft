@@ -5,7 +5,6 @@ use crate::{
         gui_blocks::{
             item_grid::{
                 item_slot_click_logic::{
-                    StorageItemSlotClickLogic,
                     MultiplayerItemSlotClickLogic,
                 },
                 item_slot_gui_state::{
@@ -207,20 +206,19 @@ impl Menu {
         connection: &'a Connection,
         predictions_to_make: &'a RefCell<VecDeque<PredictionToMake>>,
 
-        held_item: &'a RefCell<ItemSlot>,
+        held_item: &'a ItemSlot,
         held_item_state: &'a mut ItemSlotGuiStateNoninteractive,
 
-        inventory_slots_bottom: &[Rc<RefCell<&'a mut ItemSlot>>; 9],
-        inventory_slots_top: &'a mut [ItemSlot],
+        inventory_slots: &'a [ItemSlot; 36],
         inventory_slots_state: &'a mut Box<[ItemSlotGuiState; 36]>,
 
-        inventory_slots_armor: &'a mut [ItemSlot; 4],
+        inventory_slots_armor: &'a [ItemSlot; 4],
         inventory_slots_armor_state: &'a mut [ItemSlotGuiState; 4],
         
-        inventory_slots_crafting: &'a mut [ItemSlot; 4],
+        inventory_slots_crafting: &'a [ItemSlot; 4],
         inventory_slots_crafting_state: &'a mut [ItemSlotGuiState; 4],
 
-        inventory_slot_crafting_output: &'a mut ItemSlot,
+        inventory_slot_crafting_output: &'a ItemSlot,
         inventory_slot_crafting_output_state: &'a mut ItemSlotGuiState,
 
         char_mesh: &'a CharMesh,
@@ -272,7 +270,7 @@ impl Menu {
                         margin(14.0, 0.0, 166.0, 0.0,
                             align(0.0,
                                 ItemGrid {
-                                    slots: inventory_slots_top,
+                                    slots: &inventory_slots[9..],
                                     slots_state: inventory_slots_state_top.iter_mut(),
                                     /*click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
@@ -292,7 +290,7 @@ impl Menu {
                         margin(14.0, 0.0, 282.0, 0.0,
                             align(0.0,
                                 ItemGrid {
-                                    slots: inventory_slots_bottom.clone(),
+                                    slots: &inventory_slots[..9],
                                     slots_state: inventory_slots_state_bottom.iter_mut(),
                                     /*click_logic: StorageItemSlotClickLogic {
                                         held: held_item,
@@ -425,6 +423,7 @@ impl Menu {
                     logical_size([352.0, 336.0],
                         layer((
                             SingleChestBg,
+                            /*
                             margin(14.0, 0.0, 170.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
@@ -452,7 +451,7 @@ impl Menu {
                                         items_mesh: &items_mesh,
                                     }
                                 )
-                            ),
+                            ),*/
                             HeldItemGuiBlock {
                                 held: held_item,
                                 held_state: held_item_state,

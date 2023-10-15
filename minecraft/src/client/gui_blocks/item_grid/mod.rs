@@ -1,12 +1,11 @@
 
 mod layout_calcs;
-pub mod borrow_item_slot;
+//pub mod borrow_item_slot;
 pub mod item_slot_click_logic;
 pub mod item_slot_gui_state;
 
 
 use self::{
-    borrow_item_slot::BorrowItemSlot,
     item_slot_click_logic::ItemSlotClickLogic,
     item_slot_gui_state::{
         ItemSlotGuiStateGeneral,
@@ -22,6 +21,7 @@ use crate::{
     gui::prelude::*,
     client::meshing::item_mesh::ItemMesh,
     game_data::per_item::PerItem,
+    item::*,
 };
 use graphics::prelude::*;
 use std::fmt::Debug;
@@ -29,34 +29,28 @@ use vek::*;
 
 
 #[derive(Debug)]
-pub struct HeldItemGuiBlock<'a, H> {
-    pub held: H,
+pub struct HeldItemGuiBlock<'a> {
+    pub held: &'a ItemSlot,
     pub held_state: &'a mut ItemSlotGuiStateNoninteractive,
     pub items_mesh: &'a PerItem<ItemMesh>,
 }
 
 #[derive(Debug)]
 #[doc(hidden)]
-pub struct HeldItemGuiBlockSized<'a, H> {
-    inner: HeldItemGuiBlock<'a, H>,
+pub struct HeldItemGuiBlockSized<'a> {
+    inner: HeldItemGuiBlock<'a>,
     scale: f32,
 }
 
-impl<
-    'a,
-    H: BorrowItemSlot + Debug,
-> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a, H> {
-    type Sized = HeldItemGuiBlockSized<'a, H>;
+impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a> {
+    type Sized = HeldItemGuiBlockSized<'a>;
 
     fn size(self, _: &GuiGlobalContext, _: f32, _: f32, scale: f32) -> ((), (), Self::Sized) {
         ((), (), HeldItemGuiBlockSized { inner: self, scale })
     }
 }
 
-impl<
-    'a,
-    H: BorrowItemSlot + Debug,
-> GuiNode<'a> for HeldItemGuiBlockSized<'a, H> {
+impl<'a> GuiNode<'a> for HeldItemGuiBlockSized<'a> {
     never_blocks_cursor_impl!();
 
     fn draw(mut self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
@@ -65,14 +59,12 @@ impl<
             let mut canvas = canvas.reborrow()
                 .translate(pos)
                 .translate(-layout.slot_outer_size / 2.0);
-            let mut held_guard = self.inner.held.borrow();
-            let held = H::deref(&mut held_guard);
             draw_item_noninteractive(
                 ctx,
                 &mut canvas,
                 self.scale,
                 &layout,
-                held.as_ref(),
+                self.inner.held.as_ref(),
                 self.inner.held_state,
                 self.inner.items_mesh,
             );
@@ -119,13 +111,12 @@ pub struct ItemGridSized<'a, I1, I2, C> {
 
 impl<
     'a,
-    I1: IntoIterator + Debug,
+    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
     I2: IntoIterator + Debug,
     C: ItemSlotClickLogic + Debug,
 > GuiBlock<'a, DimChildSets, DimChildSets> for ItemGrid<'a, I1, I2, C>
 where
-    <I1 as IntoIterator>::Item: BorrowItemSlot,
-    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a, <I1 as IntoIterator>::Item>,
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
 {
     type Sized = ItemGridSized<'a, I1, I2, C>;
 
@@ -150,13 +141,12 @@ where
 
 impl<
     'a,
-    I1: IntoIterator + Debug,
+    I1: IntoIterator<Item=&'a ItemSlot> + Debug,
     I2: IntoIterator + Debug,
     C: ItemSlotClickLogic + Debug,
 > GuiNode<'a> for ItemGridSized<'a, I1, I2, C>
 where
-    <I1 as IntoIterator>::Item: BorrowItemSlot,
-    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a, <I1 as IntoIterator>::Item>,
+    <I2 as IntoIterator>::Item: ItemSlotGuiStateGeneral<'a>,
 {
     fn blocks_cursor(&self, ctx: GuiSpatialContext) -> bool {
         let &ItemGridSized { ref inner, scale } = self;
@@ -180,13 +170,10 @@ where
             for x in 0..inner.grid_size.w {
                 let xy = Vec2 { x, y };
 
-                let borrow_slot = slots.next()
+                let slot = slots.next()
                     .expect("ItemGrid slots produced None when expected Some");
                 let slot_state = slots_state.next()
                     .expect("ItemGrid slots_state produced None when expected Some");
-
-                //let mut slot_guard = borrow_slot.borrow();
-                //let slot = <<I1 as IntoIterator>::Item as BorrowItemSlot<'_>>::deref(&mut slot_guard);
 
                 let mut canvas = canvas.reborrow()
                     .translate(xy.map(|n| n as f32) * layout.inner.slot_outer_size);
@@ -204,7 +191,7 @@ where
                     &mut canvas,
                     scale,
                     &layout,
-                    borrow_slot,
+                    slot,
                     inner.items_mesh,
                 );
 
@@ -216,7 +203,7 @@ where
 
         // specifics for moused over slot
         if let Some(xy) = layout.cursor_over {
-            <<I2 as IntoIterator>::Item as ItemSlotGuiStateGeneral<_>>::draw_cursor_over(
+            <<I2 as IntoIterator>::Item as ItemSlotGuiStateGeneral>::draw_cursor_over(
                 draw_cursor_over_state.unwrap(),
                 ctx,
                 canvas,
@@ -242,11 +229,8 @@ where
 
         // convert to index and get actual slot
         let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
-        let mut borrow_slot = inner.slots.into_iter().nth(i)
+        let slot = inner.slots.into_iter().nth(i)
             .expect("ItemGrid slots produced None when expected Some");
-
-        let mut slot_guard = borrow_slot.borrow();
-        let slot = <<I1 as IntoIterator>::Item as BorrowItemSlot>::deref(&mut slot_guard);
         
         inner.click_logic.on_click(i, slot, button, ctx.game());
     }

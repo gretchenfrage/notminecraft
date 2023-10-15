@@ -168,7 +168,7 @@ pub struct Client {
     white_pixel: GpuImageArray,
     stars: Mesh,
 
-    held_item: RefCell<ItemSlot>,
+    held_item: ItemSlot,
     held_item_state: ItemSlotGuiStateNoninteractive,
 
     inventory_slots: Box<[ItemSlot; 36]>,
@@ -441,11 +441,10 @@ impl Client {
             white_pixel,
             stars,
 
-            held_item: RefCell::new(None),
+            held_item: None,
             held_item_state: ItemSlotGuiStateNoninteractive::new(),
 
             inventory_slots: Box::new(array_from_fn(|_| None)),
-            //inventory_slots,
             inventory_slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
 
             inventory_slots_armor: array_from_fn(|_| None),
@@ -471,17 +470,6 @@ impl Client {
         const MENU_DARKENED_BACKGROUND_ALPHA: f32 = 1.0 - 0x2a as f32 / 0x97 as f32;
 
         let mut chat = Some(&mut self.chat);
-        
-        let (
-            inventory_slots_bottom,
-            inventory_slots_top,
-        ) = self.inventory_slots.split_at_mut(9);
-
-        let mut rc_inventory_slots_bottom = ArrayBuilder::new();
-        for slot in inventory_slots_bottom {
-            rc_inventory_slots_bottom.push(Rc::new(RefCell::new(slot)));
-        }
-        let rc_inventory_slots_bottom: [Rc<RefCell<&'a mut ItemSlot>>; 9] = rc_inventory_slots_bottom.build();
 
         let menu_gui = self.menu_stack.iter_mut().rev().next()
             .map(|open_menu| layer((
@@ -497,14 +485,13 @@ impl Client {
                     &self.predictions_to_make,
                     &self.held_item,
                     &mut self.held_item_state,
-                    &rc_inventory_slots_bottom,
-                    inventory_slots_top,
+                    &self.inventory_slots,
                     &mut self.inventory_slots_state,
-                    &mut self.inventory_slots_armor,
+                    &self.inventory_slots_armor,
                     &mut self.inventory_slots_armor_state,
-                    &mut self.inventory_slots_crafting,
+                    &self.inventory_slots_crafting,
                     &mut self.inventory_slots_crafting_state,
-                    &mut self.inventory_slot_crafting_output,
+                    &self.inventory_slot_crafting_output,
                     &mut self.inventory_slot_crafting_output_state,
                     &self.char_mesh,
                     self.char_state.pitch,
@@ -545,7 +532,7 @@ impl Client {
                         &ctx.assets().hud_hotbar,
                         align(0.5,
                             ItemGrid {
-                                slots: rc_inventory_slots_bottom,
+                                slots: &self.inventory_slots[..9],
                                 slots_state: self.hotbar_slots_state.iter_mut(),
                                 click_logic: NoninteractiveItemSlotClickLogic,
                                 grid_size: [9, 1].into(),
