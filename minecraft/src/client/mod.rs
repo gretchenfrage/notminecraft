@@ -89,6 +89,7 @@ use std::{
         replace,
     },
     fmt::Debug,
+    collections::VecDeque,
 };
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
@@ -147,6 +148,7 @@ pub struct Client {
     block_updates: BlockUpdateQueue,
 
     prediction: PredictionManager,
+    predictions_to_make: RefCell<VecDeque<PredictionToMake>>,
 
     clients: Slab<()>,
     my_client_key: Option<usize>,
@@ -204,6 +206,12 @@ pub struct PendingChunkMesh {
 pub struct InternalServer {
     server: ServerHandle,
     bind_to_lan: Option<NetworkBindGuard>,
+}
+
+#[derive(Debug)]
+pub struct PredictionToMake {
+    pub edit: Edit,
+    pub up_msg_idx: u64,
 }
 
 fn get_username() -> String {
@@ -391,7 +399,6 @@ impl Client {
             char_mesh,
             char_name_layed_out,
 
-
             char_state,
             noclip: true,
             vel: 0.0.into(),
@@ -414,6 +421,7 @@ impl Client {
             block_updates: BlockUpdateQueue::new(),
 
             prediction: PredictionManager::new(),
+            predictions_to_make: RefCell::new(VecDeque::new()),
 
             clients: Slab::new(),
             my_client_key: None,
@@ -486,6 +494,7 @@ impl Client {
                     &mut self.internal_server,
                     &self.items_mesh,
                     &self.connection,
+                    &self.predictions_to_make,
                     &self.held_item,
                     &mut self.held_item_state,
                     &rc_inventory_slots_bottom,
@@ -889,6 +898,22 @@ impl GuiStateFrame for Client {
     impl_visit_nodes!();
 
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+        let getter = self.chunks.getter();
+        while let Some(p) = self.predictions_to_make.borrow_mut().pop_front() {
+            self.prediction.make_prediction(
+                p.edit,
+                &mut EditWorld {
+                    chunks: &self.chunks,
+                    getter: &getter,
+                    ci_reverse_lookup: &self.ci_reverse_lookup,
+                    tile_blocks: &mut self.tile_blocks,
+                    block_updates: &mut self.block_updates,
+                    inventory_slots: &mut self.inventory_slots,
+                },
+                p.up_msg_idx,
+            );
+        }
+
         // process async events
 
         // TODO: this is a crude form of rate limiting
@@ -1231,7 +1256,7 @@ impl GuiStateFrame for Client {
                         block_updates: &mut self.block_updates,
                         inventory_slots: &mut self.inventory_slots,
                     },
-                    &self.connection,
+                    self.connection.up_msg_idx(),
                 );
             }
         }

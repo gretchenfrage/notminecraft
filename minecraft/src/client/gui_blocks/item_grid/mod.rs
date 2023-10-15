@@ -248,6 +248,6 @@ where
         let mut slot_guard = borrow_slot.borrow();
         let slot = <<I1 as IntoIterator>::Item as BorrowItemSlot>::deref(&mut slot_guard);
         
-        inner.click_logic.on_click(slot, button, ctx.game());
+        inner.click_logic.on_click(i, slot, button, ctx.game());
     }
 }

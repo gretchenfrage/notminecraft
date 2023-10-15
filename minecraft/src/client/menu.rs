@@ -27,6 +27,7 @@ use crate::{
         },
         connection::Connection,
         InternalServer,
+        PredictionToMake,
     },
     item::*,
     game_data::per_item::PerItem,
@@ -203,6 +204,7 @@ impl Menu {
         internal_server: &'a mut Option<InternalServer>,
         items_mesh: &'a PerItem<ItemMesh>,
         connection: &'a Connection,
+        predictions_to_make: &'a RefCell<VecDeque<PredictionToMake>>,
 
         held_item: &'a RefCell<ItemSlot>,
         held_item_state: &'a mut ItemSlotGuiStateNoninteractive,
@@ -275,8 +277,10 @@ impl Menu {
                                         held: held_item,
                                     },*/
                                     click_logic: MultiplayerItemSlotClickLogic {
+                                        slot_offset: 9,
                                         open_menu_msg_idx: open_menu_msg_idx.unwrap(),
                                         connection,
+                                        predictions_to_make,
                                     },
                                     grid_size: [9, 3].into(),
                                     config: ItemGridConfig::default(),
@@ -295,8 +299,10 @@ impl Menu {
                                     click_logic: MultiplayerItemSlotClickLogic {
                                         // TODO: handling of open_menu_msg_idx Some vs None
                                         // and its relation to menu stack seems kinda delicate
+                                        slot_offset: 0,
                                         open_menu_msg_idx: open_menu_msg_idx.unwrap(),
                                         connection,
+                                        predictions_to_make,
                                     },
                                     grid_size: [9, 1].into(),
                                     config: ItemGridConfig::default(),

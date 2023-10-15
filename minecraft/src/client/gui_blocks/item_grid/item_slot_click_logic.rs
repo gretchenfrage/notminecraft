@@ -6,15 +6,21 @@ use crate::{
     client::{
         gui_blocks::item_grid::borrow_item_slot::BorrowItemSlot,
         connection::Connection,
+        PredictionToMake,
     },
     message::*,
 };
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    collections::VecDeque,
+    cell::RefCell,
+};
 
 
 pub trait ItemSlotClickLogic {
     fn on_click(
         self,
+        slot_idx: usize,
         slot: &mut ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
@@ -27,28 +33,32 @@ pub struct NoninteractiveItemSlotClickLogic;
 impl ItemSlotClickLogic for NoninteractiveItemSlotClickLogic {
     fn on_click(
         self,
+        _slot_idx: usize,
         _slot: &mut ItemSlot,
         _button: MouseButton,
         _game: &Arc<GameData>,
     ) {}
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct MultiplayerItemSlotClickLogic<'a> {
+    pub slot_offset: usize,
     pub connection: &'a Connection,
     pub open_menu_msg_idx: u64,
+    pub predictions_to_make: &'a RefCell<VecDeque<PredictionToMake>>,
 }
 
 impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
     fn on_click(
         self,
+        slot_idx: usize,
         _slot: &mut ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,
     ) {
         if button == MouseButton::Middle {
             self.connection.send(up::ItemSlotAdd {
-                slot: 7,
+                slot: slot_idx + self.slot_offset,
                 open_menu_msg_idx: self.open_menu_msg_idx,
                 stack: ItemStack::new(game.content.stone.iid_stone, ()),
             });
@@ -64,6 +74,7 @@ pub struct StorageItemSlotClickLogic<H> {
 impl<H: BorrowItemSlot> ItemSlotClickLogic for StorageItemSlotClickLogic<H> {
     fn on_click(
         mut self,
+        _slot_idx: usize,
         slot_mut: & mut ItemSlot,
         button: MouseButton,
         game: &Arc<GameData>,

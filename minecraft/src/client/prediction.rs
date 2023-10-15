@@ -1,8 +1,5 @@
 
-use super::{
-    connection::Connection,
-    apply_edit::*,
-};
+use super::apply_edit::*;
 use crate::message::*;
 use chunk_data::*;
 use std::collections::VecDeque;
@@ -102,19 +99,19 @@ impl PredictionManager {
         &mut self,
         edit: Edit,
         world: &mut EditWorld,
-        connection: &Connection,
+        up_msg_idx: u64,
     ) {
         self.scope_state.do_edit_op(
             edit,
             Op {
-                connection,
+                up_msg_idx,
                 predictions: &mut self.predictions,
             },
             world,
         );
 
         struct Op<'a> {
-            connection: &'a Connection,
+            up_msg_idx: u64,
             predictions: &'a mut VecDeque<Option<Prediction>>,
         }
 
@@ -126,7 +123,7 @@ impl PredictionManager {
                 *ctx.has_prediction = true;
                 self.predictions.push_back(Some(Prediction {
                     reverser,
-                    up_msg_idx: self.connection.up_msg_idx(),
+                    up_msg_idx: self.up_msg_idx,
                 }));
             }
         }

@@ -465,12 +465,18 @@ impl GameBinschema for ChunkBlocks {
 
 impl GameBinschema for ItemStack {
     fn schema(game: &Arc<GameData>) -> Schema {
-        Schema::Enum(game.items.iter()
-            .map(|iid| EnumSchemaVariant {
-                name: game.items_machine_name[iid].clone(),
-                inner: game.items_meta_transcloner[iid].instance_schema(game),
-            })
-            .collect())
+        schema!(
+            struct {
+                (item: %Schema::Enum(game.items.iter()
+                    .map(|iid| EnumSchemaVariant {
+                        name: game.items_machine_name[iid].clone(),
+                        inner: game.items_meta_transcloner[iid].instance_schema(game),
+                    })
+                    .collect())),
+                (count: u8),
+                (damage: u16),
+            }
+        )
     }
 
     fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
