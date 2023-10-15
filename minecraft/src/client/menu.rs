@@ -17,6 +17,7 @@ use crate::{
                 ItemGrid,
             },
             chat::GuiChat,
+            single_chest_bg::SingleChestBg,
         },
         meshing::{
             char_mesh::{
@@ -309,7 +310,7 @@ impl Menu {
                                     items_mesh: &items_mesh,
                                 }
                             )
-                        ),
+                        ),/*
                         margin(14.0, 0.0, 14.0, 0.0,
                             align(0.0,
                                 ItemGrid {
@@ -352,6 +353,7 @@ impl Menu {
                                 }
                             )
                         ),
+                        */
                         HeldItemGuiBlock {
                             held: held_item,
                             held_state: held_item_state,
@@ -420,10 +422,10 @@ impl Menu {
             ))),
             &mut Menu::Chest { gtc: _ /* TODO */ } => GuiEither::B(
                 align(0.5,
-                    logical_size([352.0, 444.0],
+                    logical_size([352.0, 336.0],
                         layer((
-                            &ctx.assets().gui_chest,
-                            margin(14.0, 0.0, 278.0, 0.0,
+                            SingleChestBg,
+                            margin(14.0, 0.0, 170.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
                                         slots: inventory_slots_top,
@@ -437,8 +439,7 @@ impl Menu {
                                     }
                                 )
                             ),
-                            
-                            margin(14.0, 0.0, 394.0, 0.0,
+                            margin(14.0, 0.0, 286.0, 0.0,
                                 align(0.0,
                                     ItemGrid {
                                         slots: inventory_slots_bottom.clone(),
@@ -452,7 +453,6 @@ impl Menu {
                                     }
                                 )
                             ),
-                            
                             HeldItemGuiBlock {
                                 held: held_item,
                                 held_state: held_item_state,

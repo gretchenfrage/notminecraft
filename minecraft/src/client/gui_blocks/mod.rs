@@ -5,3 +5,4 @@ pub mod fade;
 pub mod vignette;
 pub mod world;
 pub mod crosshair;
+pub mod single_chest_bg;
