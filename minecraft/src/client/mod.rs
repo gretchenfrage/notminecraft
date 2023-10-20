@@ -3,8 +3,8 @@ pub mod connection;
 mod apply_edit;
 mod prediction;
 mod meshing;
-mod gui_blocks;
-mod menu;
+pub mod gui_blocks;
+pub mod menu;
 
 
 use self::{
@@ -33,6 +33,8 @@ use self::{
     menu::{
         Menu,
         MenuResources,
+        MenuGuiParams,
+        chat_input::ChatInput,
     },
     meshing::{
         chunk_mesher::{
@@ -53,10 +55,7 @@ use crate::{
     physics::prelude::*,
     util::{
         secs_rem::secs_rem,
-        array::{
-            ArrayBuilder,
-            array_from_fn,
-        },
+        array::array_default,
         sparse_vec::SparseVec,
         number_key::num_row_key,
     },
@@ -70,6 +69,7 @@ use crate::{
     game_data::{
         per_item::PerItem,
         item_mesh_logic::ItemMeshLogic,
+        content::chest::ChestMenu,
     },
 };
 use chunk_data::*;
@@ -79,7 +79,6 @@ use std::{
     ops::Range,
     f32::consts::PI,
     cell::RefCell,
-    rc::Rc,
     time::{
         Instant,
         Duration,
@@ -444,19 +443,19 @@ impl Client {
             held_item: None,
             held_item_state: ItemSlotGuiStateNoninteractive::new(),
 
-            inventory_slots: Box::new(array_from_fn(|_| None)),
-            inventory_slots_state: Box::new(array_from_fn(|_| ItemSlotGuiState::new())),
+            inventory_slots: Box::new(array_default()),
+            inventory_slots_state: Box::new(array_default()),
 
-            inventory_slots_armor: array_from_fn(|_| None),
-            inventory_slots_armor_state: array_from_fn(|_| ItemSlotGuiState::new()),
+            inventory_slots_armor: array_default(),
+            inventory_slots_armor_state: array_default(),
 
-            inventory_slots_crafting: array_from_fn(|_| None),
-            inventory_slots_crafting_state: array_from_fn(|_| ItemSlotGuiState::new()),
+            inventory_slots_crafting: array_default(),
+            inventory_slots_crafting_state: array_default(),
 
-            inventory_slot_crafting_output: None,
-            inventory_slot_crafting_output_state: ItemSlotGuiState::new(),
+            inventory_slot_crafting_output: Default::default(),
+            inventory_slot_crafting_output_state: Default::default(),
 
-            hotbar_slots_state: array_from_fn(|_| ItemSlotGuiStateNoninteractive::new()),
+            hotbar_slots_state: array_default(),
             hotbar_selected: 0,
 
             open_menu_msg_idx: None,
@@ -476,31 +475,31 @@ impl Client {
                 if open_menu.has_darkened_background() {
                     Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
                 } else { None },
-                open_menu.gui(
-                    &mut self.menu_resources,
-                    &mut chat,
-                    &mut self.internal_server,
-                    &self.items_mesh,
-                    &self.connection,
-                    &self.predictions_to_make,
-                    &self.held_item,
-                    &mut self.held_item_state,
-                    &self.inventory_slots,
-                    &mut self.inventory_slots_state,
-                    &self.inventory_slots_armor,
-                    &mut self.inventory_slots_armor_state,
-                    &self.inventory_slots_crafting,
-                    &mut self.inventory_slots_crafting_state,
-                    &self.inventory_slot_crafting_output,
-                    &mut self.inventory_slot_crafting_output_state,
-                    &self.char_mesh,
-                    self.char_state.pitch,
-                    self.char_state.pointing,
-                    self.open_menu_msg_idx,
-                    &self.chunks.getter(),
-                    &self.tile_blocks,
-                    ctx,
-                ),
+                open_menu.gui(MenuGuiParams {
+                    resources: &mut self.menu_resources,
+                    chat: &mut chat,
+                    internal_server: &mut self.internal_server,
+                    items_mesh: &self.items_mesh,
+                    connection: &self.connection,
+                    predictions_to_make: &self.predictions_to_make,
+                    held_item: &self.held_item,
+                    held_item_state: &mut self.held_item_state,
+                    inventory_slots: &self.inventory_slots,
+                    inventory_slots_state: &mut self.inventory_slots_state,
+                    inventory_slots_armor: &self.inventory_slots_armor,
+                    inventory_slots_armor_state: &mut self.inventory_slots_armor_state,
+                    inventory_slots_crafting: &self.inventory_slots_crafting,
+                    inventory_slots_crafting_state: &mut self.inventory_slots_crafting_state,
+                    inventory_slot_crafting_output: &self.inventory_slot_crafting_output,
+                    inventory_slot_crafting_output_state: &mut self.inventory_slot_crafting_output_state,
+                    char_mesh: &self.char_mesh,
+                    head_pitch: self.char_state.pitch,
+                    pointing: self.char_state.pointing,
+                    open_menu_msg_idx: self.open_menu_msg_idx,
+                    getter: &self.chunks.getter(),
+                    tile_blocks: &self.tile_blocks,
+                    ctx: ctx,
+                }),
             )));
         layer((
             WorldGuiBlock {
@@ -963,12 +962,12 @@ impl GuiStateFrame for Client {
         // menu stuff
         self.menu_resources.process_effect_queue(&mut self.menu_stack);
 
-        if let Some(&mut Menu::ChatInput {
+        if let Some(&mut Menu::ChatInput(ChatInput {
             ref mut t_preventer,
             ref mut blinker,
             ref text,
             ref mut text_block,
-        }) = self.menu_stack.iter_mut().rev().next() {
+        })) = self.menu_stack.iter_mut().rev().next() {
             *t_preventer = false;
 
             let prev_blinker = *blinker;
@@ -1180,7 +1179,7 @@ impl GuiStateFrame for Client {
                 MouseButton::Right => {
                     if looking_at.tile.get(&self.tile_blocks).get() == ctx.game().content.chest.bid_chest {
                         let gtc = looking_at.tile.gtc();
-                        self.menu_stack.push(Menu::chest(gtc));
+                        self.menu_stack.push(Menu::Chest(ChestMenu::new(gtc)));
                         self.connection.send(up::OpenGameMenu {
                             menu: GameMenu::Chest { gtc },
                         });
@@ -1272,12 +1271,12 @@ impl GuiStateFrame for Client {
             } else if key == VirtualKeyCode::T {
                 ctx.global().uncapture_mouse();
                 let blinker = secs_rem(ctx.global().time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
-                self.menu_stack.push(Menu::ChatInput {
+                self.menu_stack.push(Menu::ChatInput(ChatInput {
                     t_preventer: true,
                     text: String::new(),
                     text_block: make_chat_input_text_block("", blinker, ctx.global()),
                     blinker,
-                });
+                }));
             } else if key == VirtualKeyCode::F5 {
                 self.third_person = !self.third_person;
             } else if key == VirtualKeyCode::F9 {
@@ -1305,20 +1304,20 @@ impl GuiStateFrame for Client {
                 self.open_menu_msg_idx = None;
                 ctx.global().capture_mouse();
             } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
-                if let Some(&mut Menu::ChatInput {
+                if let Some(&mut Menu::ChatInput(ChatInput {
                     t_preventer: _,
                     ref mut text,
                     ref mut text_block,
                     blinker,
-                }) = self.menu_stack.iter_mut().rev().next() {
+                })) = self.menu_stack.iter_mut().rev().next() {
                     text.push_str(&ctx.global().clipboard.get());
                     *text_block = make_chat_input_text_block(text, blinker, ctx.global())
                 }
             } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
-                if let Some(&mut Menu::ChatInput {
+                if let Some(&mut Menu::ChatInput(ChatInput {
                     ref mut text,
                     ..
-                }) = self.menu_stack.iter_mut().rev().next() {
+                })) = self.menu_stack.iter_mut().rev().next() {
                     self.connection.send(up::Say {
                         text: take(text),
                     });
@@ -1330,12 +1329,12 @@ impl GuiStateFrame for Client {
     }
 
     fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
-        if let Some(&mut Menu::ChatInput {
+        if let Some(&mut Menu::ChatInput(ChatInput {
             ref mut t_preventer,
             ref mut text,
             ref mut text_block,
             blinker,
-        }) = self.menu_stack.iter_mut().rev().next() {
+        })) = self.menu_stack.iter_mut().rev().next() {
             if c.is_control() {
                 if c == '\u{8}' {
                     // backspace

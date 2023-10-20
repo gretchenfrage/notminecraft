@@ -791,7 +791,7 @@ impl Server {
         
         let valid = match &menu {
             &GameMenu::Inventory => true,
-            &GameMenu::Chest { gtc } => true, // TODO validation logic
+            &GameMenu::Chest { gtc: _ } => true, // TODO validation logic
         };
         let open_menu_msg_idx = self.last_processed[ck].num;
         if !valid {

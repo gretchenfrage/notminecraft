@@ -5,6 +5,19 @@ pub mod item_slot_click_logic;
 pub mod item_slot_gui_state;
 
 
+pub mod prelude {
+    pub use crate::client::gui_blocks::item_grid::{
+        item_slot_click_logic::{
+            MultiplayerItemSlotClickLogic,
+            MultiplayerItemSlotIdxSpace,
+        },
+        item_slot_gui_state::ItemSlotGuiState,
+        HeldItemGuiBlock,
+        ItemGridConfig,
+        ItemGrid,
+    };
+}
+
 use self::{
     item_slot_click_logic::ItemSlotClickLogic,
     item_slot_gui_state::{
@@ -53,7 +66,7 @@ impl<'a> GuiBlock<'a, DimParentSets, DimParentSets> for HeldItemGuiBlock<'a> {
 impl<'a> GuiNode<'a> for HeldItemGuiBlockSized<'a> {
     never_blocks_cursor_impl!();
 
-    fn draw(mut self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         if let Some(pos) = ctx.cursor_pos {
             let layout = ItemSlotLayoutCalcs::new(self.scale, &ItemGridConfig::default());
             let mut canvas = canvas.reborrow()

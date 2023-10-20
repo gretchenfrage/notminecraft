@@ -282,6 +282,12 @@ impl ItemSlotGuiStateNoninteractive {
     }
 }
 
+impl Default for ItemSlotGuiStateNoninteractive {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug)]
 pub struct ItemSlotGuiState {
     inner: ItemSlotGuiStateNoninteractive,
@@ -301,3 +307,8 @@ impl ItemSlotGuiState {
     }
 }
 
+impl Default for ItemSlotGuiState {
+    fn default() -> Self {
+        Self::new()
+    }
+}

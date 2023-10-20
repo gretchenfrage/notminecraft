@@ -107,6 +107,10 @@ pub fn array_from_fn<F: FnMut(usize) -> T, T, const N: usize>(mut f: F) -> [T; N
     array.build()
 }
 
+pub fn array_default<T: Default, const N: usize>() -> [T; N] {
+    array_from_fn(|_| T::default())
+}
+
 /*
 
     doesn't compile on stable yet

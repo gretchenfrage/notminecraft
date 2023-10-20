@@ -66,8 +66,18 @@ pub mod content_module_prelude {
             LangKey,
         },
         item::*,
+        util::array::array_default,
+        gui::prelude::*,
+        client::{
+            gui_blocks::item_grid::prelude::*,
+            menu::MenuGuiParams,
+        },
     };
     pub use chunk_data::*;
+    pub use mesh_data::*;
+    pub use graphics::prelude::*;
+    pub use game_binschema_derive::GameBinschema;
+    pub use vek::*;
 }
 
 
