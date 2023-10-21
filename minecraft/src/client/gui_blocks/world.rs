@@ -7,7 +7,10 @@ use crate::{
         MAX_BOB_SHIFT_V,
         MAX_BOB_SHIFT_H,
         MAX_BOB_ROLL_DEGS,
-        meshing::char_mesh::CharMesh,
+        meshing::{
+            char_mesh::CharMesh,
+            stars_mesh::StarsMesh,
+        },
         MaybePendingChunkMesh,
         cam_dir,
     },
@@ -44,8 +47,7 @@ pub struct WorldGuiBlock<'a> {
     pub client_char_name_layed_out: &'a SparseVec<LayedOutTextBlock>,
 
     pub day_night_time: f32,
-    pub stars: &'a Mesh,
-    pub white_pixel: &'a GpuImageArray,
+    pub stars: &'a StarsMesh,
 
     pub bob_animation: f32,
     pub third_person: bool,
@@ -125,13 +127,14 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
         // draw stars
         // intensity of it being day as opposed to night
         let day = (f32::sin(inner.day_night_time * PI * 2.0) + 0.6).clamp(0.0, 1.0);
-        canvas.reborrow()
-            .scale(self.size)
-            .begin_3d(view_proj, Fog::None)
-            .translate(cam_pos)
-            .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0))
-            .color([1.0, 1.0, 1.0, 1.0 - day])
-            .draw_mesh(inner.stars, inner.white_pixel);
+        inner.stars.draw(
+            &mut canvas.reborrow()
+                .scale(self.size)
+                .begin_3d(view_proj, Fog::None)
+                .translate(cam_pos)
+                .rotate(Quaternion::rotation_x(-inner.day_night_time * PI * 2.0))
+                .color([1.0, 1.0, 1.0, 1.0 - day])
+        );
 
         // draw sun and moon
         {

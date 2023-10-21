@@ -185,7 +185,6 @@ pub enum Menu {
 
 #[allow(unused_variables)]
 pub struct MenuGuiParams<'a, 'b> {
-    pub resources: &'a mut MenuResources,
     pub chat: &'b mut Option<&'a mut GuiChat>,
     pub internal_server: &'a mut Option<InternalServer>,
     pub items_mesh: &'a PerItem<ItemMesh>,
@@ -223,13 +222,24 @@ impl Menu {
     pub fn gui<'a>(
         &'a mut self,
         args: MenuGuiParams<'a, '_>,
+        resources: &'a mut MenuResources,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> + 'a {
         match self {
-            &mut Menu::EscMenu => GuiEither::A(GuiEither::A(GuiEither::A(esc_menu::gui(args)))),
+            &mut Menu::EscMenu => GuiEither::A(GuiEither::A(GuiEither::A(esc_menu::gui(args, resources)))),
             &mut Menu::Inventory => GuiEither::A(GuiEither::A(GuiEither::B(inventory::gui(args)))),
             &mut Menu::ChatInput(ref mut menu) => GuiEither::A(GuiEither::B(GuiEither::A(menu.gui(args)))),
-            &mut Menu::Settings => GuiEither::A(GuiEither::B(GuiEither::B(settings::gui(args)))),
+            &mut Menu::Settings => GuiEither::A(GuiEither::B(GuiEither::B(settings::gui(args, resources)))),
             &mut Menu::Chest(ref mut menu) => GuiEither::B(menu.gui(args)),
+        }
+    }
+
+    pub fn update(&mut self, ctx: &GuiGlobalContext) {
+        match self {
+            &mut Menu::ChatInput(ref mut menu) => menu.update(ctx),
+            &mut Menu::EscMenu
+            | &mut Menu::Inventory
+            | &mut Menu::Settings
+            | &mut Menu::Chest(_) => (),
         }
     }
 
@@ -251,3 +261,62 @@ impl Menu {
     }
 }
 
+#[derive(Debug)]
+pub struct MenuStack {
+    stack: Vec<Menu>,
+    resources: MenuResources, // TODO: merge resources into this?
+}
+
+impl MenuStack {
+    pub fn new(ctx: &GuiGlobalContext) -> Self {
+        MenuStack {
+            stack: Vec::new(),
+            resources: MenuResources::new(ctx),
+        }
+    }
+
+    #[must_use]
+    pub fn pop(&mut self) -> Option<Menu> {
+        self.stack.pop()
+    }
+
+    pub fn push(&mut self, menu: impl Into<Menu>) {
+        self.stack.push(menu.into());
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+
+    pub fn top(&self) -> Option<&Menu> {
+        self.stack.iter().rev().next()
+    }
+
+    pub fn top_mut(&mut self) -> Option<&mut Menu> {
+        self.stack.iter_mut().rev().next()
+    }
+
+    pub fn update(&mut self, ctx: &GuiGlobalContext) {
+        if let Some(menu) = self.stack.iter_mut().rev().next() {
+            menu.update(ctx);
+        }
+    }
+
+    pub fn gui<'a>(
+        &'a mut self,
+        args: MenuGuiParams<'a, '_>,
+    ) -> Option<impl GuiBlock<'a, DimParentSets, DimParentSets> + 'a> {
+        const MENU_DARKENED_BACKGROUND_ALPHA: f32 = 1.0 - 0x2a as f32 / 0x97 as f32;
+        self.stack.iter_mut().rev().next()
+            .map(|menu| layer((
+                if menu.has_darkened_background() {
+                    Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
+                } else { None },
+                menu.gui(args, &mut self.resources),
+            )))
+    }
+
+    pub fn process_effect_queue(&mut self) {
+        self.resources.process_effect_queue(&mut self.stack);
+    }
+}

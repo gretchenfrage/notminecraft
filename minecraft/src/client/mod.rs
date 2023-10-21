@@ -5,6 +5,7 @@ mod prediction;
 mod meshing;
 pub mod gui_blocks;
 pub mod menu;
+mod movement;
 
 
 use self::{
@@ -32,8 +33,8 @@ use self::{
     },
     menu::{
         Menu,
-        MenuResources,
         MenuGuiParams,
+        MenuStack,
         chat_input::ChatInput,
     },
     meshing::{
@@ -44,9 +45,17 @@ use self::{
         },
         tile_meshing::mesh_tile,
         char_mesh::CharMesh,
-        item_mesh::ItemMesh,
+        item_mesh::{
+            ItemMesh,
+            items_mesh,
+        },
+        stars_mesh::StarsMesh,
     },
     apply_edit::EditWorld,
+    movement::{
+        walking_xz,
+        walking_accel,
+    },
 };
 use crate::{
     block_update_queue::BlockUpdateQueue,
@@ -68,7 +77,6 @@ use crate::{
     item::*,
     game_data::{
         per_item::PerItem,
-        item_mesh_logic::ItemMeshLogic,
         content::chest::ChestMenu,
     },
 };
@@ -93,12 +101,7 @@ use std::{
 use slab::Slab;
 use anyhow::{Result, ensure, bail};
 use vek::*;
-use image::{
-    DynamicImage,
-    RgbaImage,
-};
-use rand::prelude::*;
-use rand_chacha::ChaCha20Rng;
+
 
 
 pub const CAMERA_HEIGHT: f32 = 1.6;
@@ -156,16 +159,14 @@ pub struct Client {
     client_char_state: SparseVec<CharState>,
     client_char_name_layed_out: SparseVec<LayedOutTextBlock>,
 
-    menu_stack: Vec<Menu>,
-    menu_resources: MenuResources,
+    menu_stack: MenuStack,
 
     items_mesh: PerItem<ItemMesh>,
 
     chat: GuiChat,
 
     day_night_time: f32,
-    white_pixel: GpuImageArray,
-    stars: Mesh,
+    stars: StarsMesh,
 
     held_item: ItemSlot,
     held_item_state: ItemSlotGuiStateNoninteractive,
@@ -297,94 +298,9 @@ impl Client {
             ctx.game,
         );
 
-        let mut image = RgbaImage::new(1, 1);
-        image[(0, 0)] = [0xff; 4].into();
-        let white_pixel = ctx.renderer.borrow().load_image_array_raw(
-            [1, 1].into(),
-            [DynamicImage::from(image)],
-        );
-
-        let mut rng = ChaCha20Rng::from_seed([0; 32]);
-        let mut stars = MeshData::new();
-        let mut star = MeshData::new();
-        for _ in 0..1500 {
-            let u1: f32 = rng.gen_range(0.0..1.0);
-            let u2: f32 = rng.gen_range(0.0..1.0);
-            let u3: f32 = rng.gen_range(0.0..1.0);
-
-            let w = (1.0 - u1).sqrt() * (2.0 * PI * u2).sin();
-            let x = (1.0 - u1).sqrt() * (2.0 * PI * u2).cos();
-            let y = u1.sqrt() * (2.0 * PI * u3).sin();
-            let z = u1.sqrt() * (2.0 * PI * u3).cos();
-
-            let star_quat = Quaternion { w, x, y, z };
-            let star_size = rng.gen_range(0.5..2.0);
-            let star_light = rng.gen_range(1.0f32..10.0).powf(2.0) / 100.0;
-
-            star.add_quad(&Quad {
-                pos_start: [-star_size / 2.0, -star_size / 2.0, 300.0].into(),
-                pos_ext_1: [0.0, star_size, 0.0].into(),
-                pos_ext_2: [star_size, 0.0, 0.0].into(),
-                tex_start: 0.0.into(),
-                tex_extent: 1.0.into(),
-                vert_colors: [[1.0, 1.0, 1.0, star_light].into(); 4],
-                tex_index: 0,
-            });
-
-            for v in &mut star.vertices {
-                v.pos = star_quat * v.pos;
-            }
-
-            stars.extend(star.vertices.iter().copied(), star.indices.iter().copied());
-            star.clear();
-        }
-        let stars = stars.upload(&*ctx.renderer.borrow());
+        let stars = StarsMesh::new(ctx);        
         
-        let mut items_mesh = PerItem::new_no_default();
-        for iid in ctx.game.items.iter() {
-            items_mesh.set(iid, match &ctx.game.items_mesh_logic[iid] {
-                &ItemMeshLogic::FullCube {
-                    top_tex_index,
-                    left_tex_index,
-                    right_tex_index,
-                } => {
-                    const LEFT_SHADE: f32 = 0x48 as f32 / 0x8f as f32;
-                    const RIGHT_SHADE: f32 = 0x39 as f32 / 0x8f as f32;
-
-                    let mut mesh_buf = MeshData::new();
-                    mesh_buf.add_quad(&Quad {
-                        pos_start: [1.0, 1.0, 0.0].into(),
-                        pos_ext_1: [-1.0, 0.0, 0.0].into(),
-                        pos_ext_2: [0.0, 0.0, 1.0].into(),
-                        tex_start: 0.0.into(),
-                        tex_extent: 1.0.into(),
-                        vert_colors: [Rgba::white(); 4],
-                        tex_index: top_tex_index,
-                    });
-                    mesh_buf.add_quad(&Quad {
-                        pos_start: [0.0, 0.0, 0.0].into(),
-                        pos_ext_1: [0.0, 1.0, 0.0].into(),
-                        pos_ext_2: [1.0, 0.0, 0.0].into(),
-                        tex_start: 0.0.into(),
-                        tex_extent: 1.0.into(),
-                        vert_colors: [[LEFT_SHADE, LEFT_SHADE, LEFT_SHADE, 1.0].into(); 4],
-                        tex_index: left_tex_index,
-                    });
-                    mesh_buf.add_quad(&Quad {
-                        pos_start: [1.0, 0.0, 0.0].into(),
-                        pos_ext_1: [0.0, 1.0, 0.0].into(),
-                        pos_ext_2: [0.0, 0.0, 1.0].into(),
-                        tex_start: 0.0.into(),
-                        tex_extent: 1.0.into(),
-                        vert_colors: [[RIGHT_SHADE, RIGHT_SHADE, RIGHT_SHADE, 1.0].into(); 4],
-                        tex_index: right_tex_index,
-                    });
-                    ItemMesh {
-                        mesh: mesh_buf.upload(&*ctx.renderer.borrow()),
-                    }
-                }
-            });
-        }
+        let items_mesh = items_mesh(ctx);
 
         ctx.capture_mouse();
 
@@ -429,15 +345,13 @@ impl Client {
             client_char_state: SparseVec::new(),
             client_char_name_layed_out: SparseVec::new(),
 
-            menu_stack: Vec::new(),
-            menu_resources: MenuResources::new(ctx),
+            menu_stack: MenuStack::new(ctx),
 
             items_mesh,
 
             chat: GuiChat::new(),
 
             day_night_time: 0.1,
-            white_pixel,
             stars,
 
             held_item: None,
@@ -466,41 +380,32 @@ impl Client {
         &'a mut self,
         ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
-        const MENU_DARKENED_BACKGROUND_ALPHA: f32 = 1.0 - 0x2a as f32 / 0x97 as f32;
-
         let mut chat = Some(&mut self.chat);
 
-        let menu_gui = self.menu_stack.iter_mut().rev().next()
-            .map(|open_menu| layer((
-                if open_menu.has_darkened_background() {
-                    Some(solid([0.0, 0.0, 0.0, MENU_DARKENED_BACKGROUND_ALPHA]))
-                } else { None },
-                open_menu.gui(MenuGuiParams {
-                    resources: &mut self.menu_resources,
-                    chat: &mut chat,
-                    internal_server: &mut self.internal_server,
-                    items_mesh: &self.items_mesh,
-                    connection: &self.connection,
-                    predictions_to_make: &self.predictions_to_make,
-                    held_item: &self.held_item,
-                    held_item_state: &mut self.held_item_state,
-                    inventory_slots: &self.inventory_slots,
-                    inventory_slots_state: &mut self.inventory_slots_state,
-                    inventory_slots_armor: &self.inventory_slots_armor,
-                    inventory_slots_armor_state: &mut self.inventory_slots_armor_state,
-                    inventory_slots_crafting: &self.inventory_slots_crafting,
-                    inventory_slots_crafting_state: &mut self.inventory_slots_crafting_state,
-                    inventory_slot_crafting_output: &self.inventory_slot_crafting_output,
-                    inventory_slot_crafting_output_state: &mut self.inventory_slot_crafting_output_state,
-                    char_mesh: &self.char_mesh,
-                    head_pitch: self.char_state.pitch,
-                    pointing: self.char_state.pointing,
-                    open_menu_msg_idx: self.open_menu_msg_idx,
-                    getter: &self.chunks.getter(),
-                    tile_blocks: &self.tile_blocks,
-                    ctx: ctx,
-                }),
-            )));
+        let menu_gui = self.menu_stack.gui(MenuGuiParams {
+            chat: &mut chat,
+            internal_server: &mut self.internal_server,
+            items_mesh: &self.items_mesh,
+            connection: &self.connection,
+            predictions_to_make: &self.predictions_to_make,
+            held_item: &self.held_item,
+            held_item_state: &mut self.held_item_state,
+            inventory_slots: &self.inventory_slots,
+            inventory_slots_state: &mut self.inventory_slots_state,
+            inventory_slots_armor: &self.inventory_slots_armor,
+            inventory_slots_armor_state: &mut self.inventory_slots_armor_state,
+            inventory_slots_crafting: &self.inventory_slots_crafting,
+            inventory_slots_crafting_state: &mut self.inventory_slots_crafting_state,
+            inventory_slot_crafting_output: &self.inventory_slot_crafting_output,
+            inventory_slot_crafting_output_state: &mut self.inventory_slot_crafting_output_state,
+            char_mesh: &self.char_mesh,
+            head_pitch: self.char_state.pitch,
+            pointing: self.char_state.pointing,
+            open_menu_msg_idx: self.open_menu_msg_idx,
+            getter: &self.chunks.getter(),
+            tile_blocks: &self.tile_blocks,
+            ctx: ctx,
+        });
         layer((
             WorldGuiBlock {
                 pos: self.char_state.pos,
@@ -525,7 +430,6 @@ impl Client {
 
                 day_night_time: self.day_night_time,
                 stars: &self.stars,
-                white_pixel: &self.white_pixel,
             },
             align([0.5, 1.0],
                 logical_size([364.0, 44.0],
@@ -960,72 +864,22 @@ impl GuiStateFrame for Client {
         }
 
         // menu stuff
-        self.menu_resources.process_effect_queue(&mut self.menu_stack);
-
-        if let Some(&mut Menu::ChatInput(ChatInput {
-            ref mut t_preventer,
-            ref mut blinker,
-            ref text,
-            ref mut text_block,
-        })) = self.menu_stack.iter_mut().rev().next() {
-            *t_preventer = false;
-
-            let prev_blinker = *blinker;
-            *blinker = secs_rem(ctx.global().time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
-            if *blinker != prev_blinker {
-                *text_block = make_chat_input_text_block(text, *blinker, ctx.global());
-            }
-        }
+        // TODO: merge process_effect_queue into update
+        self.menu_stack.process_effect_queue();
+        self.menu_stack.update(ctx.global());
 
         // do block updates
         self.do_block_updates(ctx.global());
 
-        const WALK_SPEED: f32 = 4.0;
-        const WALK_ACCEL: f32 = 50.0;
-        const WALK_DECEL: f32 = 30.0;
+        
         const NOCLIP_SPEED: f32 = 7.0;
         const NOCLIP_FAST_MULTIPLIER: f32 = 8.0;
 
         // WASD buttons
-        let mut walking_xz = Vec2::from(0.0);
-        if ctx.global().focus_level == FocusLevel::MouseCaptured {
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::W) {
-                walking_xz.y += 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::S) {
-                walking_xz.y -= 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::D) {
-                walking_xz.x += 1.0;
-            }
-            if ctx.global().pressed_keys_semantic.contains(&VirtualKeyCode::A) {
-                walking_xz.x -= 1.0;
-            }
-        }
-        walking_xz.rotate_z(self.char_state.yaw);
+        let walking_xz = walking_xz(ctx.global(), self.char_state.yaw);
 
         if !self.noclip {
-            // walking
-            walking_xz *= WALK_SPEED;
-
-            // accelerate self.vel xz towards the target value of walking_xz
-            let accel_rate = if walking_xz != Vec2::from(0.0) {
-                WALK_ACCEL
-            } else {
-                WALK_DECEL
-            };
-
-            let mut vel_xz = Vec2::new(self.vel.x, self.vel.z);
-            let vel_xz_deviation = walking_xz - vel_xz;
-            let vel_xz_deviation_magnitude = vel_xz_deviation.magnitude();
-            let max_delta_vel_xz_magnitude = accel_rate * elapsed;
-            if max_delta_vel_xz_magnitude > vel_xz_deviation_magnitude {
-                vel_xz = walking_xz;
-            } else {
-                vel_xz += vel_xz_deviation / vel_xz_deviation_magnitude * max_delta_vel_xz_magnitude;
-            }
-            self.vel.x = vel_xz.x;
-            self.vel.z = vel_xz.y;
+            walking_accel(walking_xz, &mut self.vel, elapsed);
 
             // jumping
             if ctx.global().focus_level == FocusLevel::MouseCaptured
@@ -1118,6 +972,7 @@ impl GuiStateFrame for Client {
         debug_assert!(self.bob_animation >= 0.0);
         debug_assert!(self.bob_animation <= 1.0);
         let mut bob_animation_elapsed = elapsed / BOB_ANIMATION_LOOP_TIME;
+        const WALK_SPEED: f32 = 4.0;
         if ground_speed >= WALK_SPEED / 2.0 {
             self.bob_animation += bob_animation_elapsed;
             self.bob_animation %= 1.0;
@@ -1254,7 +1109,41 @@ impl GuiStateFrame for Client {
     }
 
     fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
-        if self.menu_stack.is_empty() {
+        if let Some(menu) = self.menu_stack.top_mut() {
+            // menu style
+            if key == VirtualKeyCode::Escape
+                || (
+                    key == VirtualKeyCode::E
+                    && menu.exitable_via_inventory_button()
+                )
+            {
+                self.menu_stack.pop().unwrap();
+                self.connection.send(up::CloseGameMenu {});
+                self.open_menu_msg_idx = None;
+                ctx.global().capture_mouse();
+            } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
+                if let Some(&mut Menu::ChatInput(ChatInput {
+                    t_preventer: _,
+                    ref mut text,
+                    ref mut text_block,
+                    blinker,
+                })) = self.menu_stack.top_mut() {
+                    text.push_str(&ctx.global().clipboard.get());
+                    *text_block = make_chat_input_text_block(text, blinker, ctx.global())
+                }
+            } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
+                if let Some(&mut Menu::ChatInput(ChatInput {
+                    ref mut text,
+                    ..
+                })) = self.menu_stack.top_mut() {
+                    self.connection.send(up::Say {
+                        text: take(text),
+                    });
+                    self.menu_stack.pop().unwrap();
+                    ctx.global().capture_mouse();
+                }
+            }
+        } else {
             // game style
             if key == VirtualKeyCode::Escape {
                 ctx.global().uncapture_mouse();
@@ -1290,41 +1179,6 @@ impl GuiStateFrame for Client {
                     self.hotbar_selected = n - 1;
                 }
             }
-        } else {
-            // menu style
-            if key == VirtualKeyCode::Escape
-                || (
-                    key == VirtualKeyCode::E
-                    && self.menu_stack.iter().rev().next().unwrap()
-                        .exitable_via_inventory_button()
-                )
-            {
-                self.menu_stack.pop().unwrap();
-                self.connection.send(up::CloseGameMenu {});
-                self.open_menu_msg_idx = None;
-                ctx.global().capture_mouse();
-            } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
-                if let Some(&mut Menu::ChatInput(ChatInput {
-                    t_preventer: _,
-                    ref mut text,
-                    ref mut text_block,
-                    blinker,
-                })) = self.menu_stack.iter_mut().rev().next() {
-                    text.push_str(&ctx.global().clipboard.get());
-                    *text_block = make_chat_input_text_block(text, blinker, ctx.global())
-                }
-            } else if key == VirtualKeyCode::Return || key == VirtualKeyCode::NumpadEnter {
-                if let Some(&mut Menu::ChatInput(ChatInput {
-                    ref mut text,
-                    ..
-                })) = self.menu_stack.iter_mut().rev().next() {
-                    self.connection.send(up::Say {
-                        text: take(text),
-                    });
-                    self.menu_stack.pop().unwrap();
-                    ctx.global().capture_mouse();
-                }
-            }
         }
     }
 
@@ -1334,7 +1188,7 @@ impl GuiStateFrame for Client {
             ref mut text,
             ref mut text_block,
             blinker,
-        })) = self.menu_stack.iter_mut().rev().next() {
+        })) = self.menu_stack.top_mut() {
             if c.is_control() {
                 if c == '\u{8}' {
                     // backspace

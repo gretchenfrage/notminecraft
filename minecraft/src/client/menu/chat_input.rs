@@ -1,10 +1,14 @@
 
 use crate::{
     gui::prelude::*,
-    client::menu::{
-        MENU_BACKGROUND,
-        MenuGuiParams,
+    client::{
+        menu::{
+            MENU_BACKGROUND,
+            MenuGuiParams,
+        },
+        gui_blocks::chat::make_chat_input_text_block,
     },
+    util::secs_rem::secs_rem,
 };
 
 #[derive(Debug)]
@@ -46,5 +50,15 @@ impl ChatInput {
                 ),
             ))
         )
+    }
+
+    pub fn update(&mut self, ctx: &GuiGlobalContext) {
+        self.t_preventer = false;
+
+        let prev_blinker = self.blinker;
+        self.blinker = secs_rem(ctx.time_since_epoch, 2.0 / 3.0) < 1.0 / 3.0;
+        if self.blinker != prev_blinker {
+            self.text_block = make_chat_input_text_block(&self.text, self.blinker, ctx);
+        }
     }
 }
