@@ -69,7 +69,7 @@ pub mod content_module_prelude {
         util::array::array_default,
         gui::prelude::*,
         client::{
-            gui_blocks::item_grid::prelude::*,
+            item_grid::prelude::*,
             menu::MenuGuiParams,
         },
     };

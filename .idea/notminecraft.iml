@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/binschema/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/chunk_data/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/game_binschema_derive/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/get_assets/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/graphics/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/mesh_data/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/minecraft/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/opentype437/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

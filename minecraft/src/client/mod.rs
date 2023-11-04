@@ -6,23 +6,13 @@ mod meshing;
 pub mod gui_blocks;
 pub mod menu;
 mod movement;
+pub mod item_grid;
 
 
 use self::{
     connection::Connection,
     prediction::PredictionManager,
     gui_blocks::{
-        item_grid::{
-            item_slot_click_logic::{
-                NoninteractiveItemSlotClickLogic,
-            },
-            item_slot_gui_state::{
-                ItemSlotGuiState,
-                ItemSlotGuiStateNoninteractive,
-            },
-            ItemGrid,
-            ItemGridConfig,
-        },
         chat::{
             GuiChat,
             make_chat_input_text_block,
@@ -30,6 +20,17 @@ use self::{
         vignette::Vignette,
         crosshair::Crosshair,
         world::WorldGuiBlock,
+    },
+    item_grid::{
+        item_slot_click_logic::{
+            NoninteractiveItemSlotClickLogic,
+        },
+        item_slot_gui_state::{
+            ItemSlotGuiState,
+            ItemSlotGuiStateNoninteractive,
+        },
+        ItemGrid,
+        ItemGridConfig,
     },
     menu::{
         Menu,

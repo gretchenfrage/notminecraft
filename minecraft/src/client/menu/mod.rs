@@ -3,12 +3,10 @@ use self::chat_input::ChatInput;
 use crate::{
     gui::prelude::*,
     client::{
-        gui_blocks::{
-            item_grid::item_slot_gui_state::{
-                ItemSlotGuiStateNoninteractive,
-                ItemSlotGuiState,
-            },
-            chat::GuiChat,
+        gui_blocks::chat::GuiChat,
+        item_grid::item_slot_gui_state::{
+            ItemSlotGuiStateNoninteractive,
+            ItemSlotGuiState,
         },
         meshing::{
             char_mesh::CharMesh,

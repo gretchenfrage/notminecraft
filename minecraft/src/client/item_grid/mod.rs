@@ -6,7 +6,7 @@ pub mod item_slot_gui_state;
 
 
 pub mod prelude {
-    pub use crate::client::gui_blocks::item_grid::{
+    pub use crate::client::item_grid::{
         item_slot_click_logic::{
             MultiplayerItemSlotClickLogic,
             MultiplayerItemSlotIdxSpace,

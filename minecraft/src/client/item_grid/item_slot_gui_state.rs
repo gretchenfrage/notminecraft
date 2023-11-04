@@ -3,7 +3,7 @@ use crate::{
     gui::prelude::*,
     item::*,
     client::{
-        gui_blocks::item_grid::{
+        item_grid::{
             SLOT_DEFAULT_TEXT_SIZE,
             layout_calcs::ItemSlotLayoutCalcs,
             ItemGridLayoutCalcs,

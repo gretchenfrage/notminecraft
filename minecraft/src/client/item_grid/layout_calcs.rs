@@ -1,6 +1,6 @@
 
 use crate::{
-    client::gui_blocks::item_grid::{
+    client::item_grid::{
         SLOT_DEFAULT_SLOT_SIZE,
         ItemGridConfig,
     },
