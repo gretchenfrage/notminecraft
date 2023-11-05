@@ -167,9 +167,30 @@ where
         ctx.cursor_in_area(0.0, size)
     }
 
+    fn on_cursor_click(self, ctx: GuiSpatialContext, hits: bool, button: MouseButton) {
+        let ItemGridSized { inner, scale } = self;
+
+        // layout calculation
+        let cursor_over = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config).cursor_over;
+
+        // calculate which slot clicked, or return
+        if !hits { return }
+        let xy = match cursor_over {
+            Some(xy) => xy,
+            None => return,
+        };
+
+        // convert to index and get actual slot
+        let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
+        let slot = inner.slots.into_iter().nth(i)
+            .expect("ItemGrid slots produced None when expected Some");
+
+        inner.click_logic.on_click(i, slot, button, ctx.game());
+    }
+
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let ItemGridSized { inner, scale } = self;
-        
+
         // layout calcs
         let layout = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config);
 
@@ -225,26 +246,5 @@ where
                 &layout,
             );
         }
-    }
-
-    fn on_cursor_click(self, ctx: GuiSpatialContext, hits: bool, button: MouseButton) {
-        let ItemGridSized { inner, scale } = self;
-        
-        // layout calculation
-        let cursor_over = ItemGridLayoutCalcs::new(ctx, scale, inner.grid_size, &inner.config).cursor_over;
-
-        // calculate which slot clicked, or return
-        if !hits { return }
-        let xy = match cursor_over {
-            Some(xy) => xy,
-            None => return,
-        };
-
-        // convert to index and get actual slot
-        let i = xy.y as usize * inner.grid_size.w as usize + xy.x as usize;
-        let slot = inner.slots.into_iter().nth(i)
-            .expect("ItemGrid slots produced None when expected Some");
-        
-        inner.click_logic.on_click(i, slot, button, ctx.game());
     }
 }

@@ -11,7 +11,10 @@
       <sourceFolder url="file://$MODULE_DIR$/mesh_data/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/minecraft/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/opentype437/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/handbook/book" />
+      <excludeFolder url="file://$MODULE_DIR$/notminecraft" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/workspace/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
