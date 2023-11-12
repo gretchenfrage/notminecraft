@@ -8,10 +8,10 @@ use get_assets::DataDir;
 use binschema::*;
 use std::sync::Arc;
 use anyhow::*;
-use rocksdb::{
-    DB,
-    Options,
-    WriteBatch,
+use redb::{
+    Database,
+    TableDefinition,
+    ReadableTable,
 };
 
 
@@ -23,6 +23,7 @@ pub use entry::{
 
 
 const SAVES_SUBDIR: &'static str = "saves";
+const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("save");
 
 
 /// Handle to an open save file. Operations are generally blocking.
@@ -41,7 +42,7 @@ pub struct SaveFile {
 // inner shared state
 #[derive(Debug)]
 struct Shared {
-    db: DB,
+    db: Database,
     key_schema: Schema,
     val_schemas: Vec<Schema>,
     game: Arc<GameData>,
@@ -54,15 +55,15 @@ impl SaveFile {
         // TODO: some sort of lease file
         
         // attempt to check whether database already exists
+        let mut name = name.to_owned();
+        name.push_str(".redb");
         let path = data_dir.subdir(SAVES_SUBDIR).join(name);
-        let pre_existent = path.join("IDENTITY").try_exists()?;
+        let pre_existent = path.try_exists()?;
 
         trace!(?pre_existent, "opening database");
 
         // open database, creating if doesn't yet exist
-        let mut options = Options::default();
-        options.create_if_missing(!pre_existent);
-        let db = DB::open(&options, &path)?;
+        let db = Database::create(path)?;
 
         // initialize or validate schema
         let my_schema_definition = entry::key_types(game);
@@ -76,23 +77,25 @@ impl SaveFile {
 
         if pre_existent {
             // read saved schema definition
-            let saved_schema_definition_bytes = db
-                .get_pinned(SCHEMA_DEFINITION_KEY)?
+            let txn = db.begin_read()?;
+            let table = txn.open_table(TABLE)?;
+            let saved_schema_definition_bytes = table
+                .get(SCHEMA_DEFINITION_KEY)?
                 .ok_or_else(|| anyhow!(
                     "pre existent save file database is missing saved schema definition"
                 ))?;
 
             // validate magic bytes
             ensure!(
-                saved_schema_definition_bytes.len() >= 8,
+                saved_schema_definition_bytes.value().len() >= 8,
                 "pre existent save file database saved schema definition shorter than expected number of magic bytes",
             );
             ensure!(
-                &saved_schema_definition_bytes[0..4] == &SAVE_FILE_MAGIC_BYTES,
+                &saved_schema_definition_bytes.value()[0..4] == &SAVE_FILE_MAGIC_BYTES,
                 "pre existent save file database saved schema definition save file magic bytes wrong",
             );
             ensure!(
-                &saved_schema_definition_bytes[4..8] == &Schema::schema_schema_magic_bytes(),
+                &saved_schema_definition_bytes.value()[4..8] == &Schema::schema_schema_magic_bytes(),
                 "pre existent save file database saved schema definition schema schema magic bytes wrong",
             );
 
@@ -101,7 +104,7 @@ impl SaveFile {
             let saved_schema_definition = decode_schema_definition(
                 &mut Decoder::new(
                     &mut coder_state,
-                    &mut &saved_schema_definition_bytes[8..],
+                    &mut &saved_schema_definition_bytes.value()[8..],
                 )
             )
                 .context("pre existent save file database saved schema definition failed to decode")?;
@@ -126,7 +129,11 @@ impl SaveFile {
             encode_schema_definition(&my_schema_definition, &mut Encoder::new(&mut coder_state, &mut buf))?;
 
             // save to database
-            db.put(SCHEMA_DEFINITION_KEY, &buf)?;
+            let txn = db.begin_write()?;
+            let mut table = txn.open_table(TABLE)?;
+            table.insert(SCHEMA_DEFINITION_KEY, &buf.as_slice())?;
+            drop(table);
+            txn.commit()?;
 
             // reset coder state
             debug_assert!(coder_state.is_finished());
@@ -186,7 +193,9 @@ impl SaveFile {
         coder_state.is_finished_or_err()?;
 
         // get from database, short-circuit if None
-        let val_bytes = match self.shared.db.get_pinned(&self.buf1)? {
+        let txn = self.shared.db.begin_read()?;
+        let table = txn.open_table(TABLE)?;
+        let val_bytes = match table.get(&self.buf1.as_slice())? {
             Some(val) => val,
             None => {
                 self.coder_state_alloc = Some(coder_state.into_alloc());
@@ -201,7 +210,7 @@ impl SaveFile {
             None,
         );
         let val = R::decode_val(
-            &mut Decoder::new(&mut coder_state, &mut &*val_bytes),
+            &mut Decoder::new(&mut coder_state, &mut &*val_bytes.value()),
             &self.shared.game,
         )?;
         coder_state.is_finished_or_err()?;
@@ -213,9 +222,11 @@ impl SaveFile {
 
     /// Attempt to atomically make a batch of writes. This is a blocking operation.
     pub fn write(&mut self, writes: impl IntoIterator<Item=WriteEntry>) -> Result<()> {
-        // prepare write batch
+        // write
         let mut coder_state_alloc = self.coder_state_alloc.take().unwrap_or_default();
-        let mut batch = WriteBatch::default();
+        let txn = self.shared.db.begin_write()?;
+        let mut table = txn.open_table(TABLE)?;
+
         for write in writes {
             // encode key into buf1
             self.buf1.clear();
@@ -244,14 +255,15 @@ impl SaveFile {
             coder_state.is_finished_or_err()?;
 
             // write key/value pair to write batch
-            batch.put(&self.buf1, &self.buf2);
+            table.insert(&self.buf1.as_slice(), self.buf2.as_slice())?;
 
             // reset coder state alloc for next loop
             coder_state_alloc = coder_state.into_alloc();
         }
 
-        // write to database
-        self.shared.db.write(batch)?;
+        // commit
+        drop(table);
+        txn.commit()?;
 
         // done
         self.coder_state_alloc = Some(coder_state_alloc);
