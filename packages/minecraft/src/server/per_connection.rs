@@ -70,8 +70,7 @@ macro_rules! connection_states {
             /// This should be followed by corresponding insertion into all
             /// `PerAnyConn` and all `Per`-(start state)-`Conn` structures.
             ///
-            /// Raw key insertions and removals are expected to follow a slab
-            /// pattern.
+            /// Raw key insertions are expected to follow a slab pattern.
             pub fn insert(&mut self, raw_key: usize) -> $start_conn_key {
                 let ctr = self.next_ctr;
                 self.next_ctr = self.next_ctr.wrapping_add(1);
@@ -94,12 +93,9 @@ macro_rules! connection_states {
             /// Remove an existing connection from the data structure, freeing
             /// up its assigned key for later use.
             ///
-            /// This should be followed by corresponding insertion from all
+            /// This should be followed by corresponding removal from all
             /// `PerAnyConn` structures and all `Per`-(current state)-`Conn`
             /// structures.
-            ///
-            /// Raw key insertions and removals are expected to follow a slab
-            /// pattern.
             pub fn remove(&mut self, key: impl Into<AnyConnKey>) {
                 let key = key.into();
                 let state = key.state();

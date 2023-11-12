@@ -21,7 +21,7 @@ think it's fun!
 cargo run
 ```
 
-This still does a lot of optimization, but also leaves debug assertions on. 
+This still does a lot of optimization, but also leaves debug assertions on.
 
 ### Re-compile shaders
 

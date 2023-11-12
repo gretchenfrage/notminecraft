@@ -23,11 +23,12 @@
 # this can be nice if you're doing a lot of changes to the shaders and want a
 # tighter feedback loop.
 
+# cd to repo root
 set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd "${SCRIPT_DIR}/../packages/graphics/src/shaders"
 
-cd "${SCRIPT_DIR}/../workspace/graphics/src/shaders"
-
+# build shaders
 for f in *.vert *.frag
 do
     glslc $f -o "../shaders_spirv/${f}.spv" -I .

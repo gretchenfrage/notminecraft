@@ -3,4 +3,5 @@ target
 log
 framedump.xml
 notminecraft
-
+.idea
+book

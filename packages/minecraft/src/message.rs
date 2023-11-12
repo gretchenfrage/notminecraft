@@ -3,6 +3,7 @@
 use crate::{
     game_binschema::GameBinschema,
     item::*,
+    util::less_than::UsizeLessThan,
 };
 use chunk_data::*;
 use vek::*;
@@ -41,30 +42,6 @@ macro_rules! message_enum {
     };
 }
 
-message_enum!(edit Edit {
-    Tile {
-        ci: usize,
-        lti: u16,
-        edit: TileEdit,
-    }
-    InventorySlot {
-        slot_idx: usize,
-        edit: InventorySlotEdit,
-    }
-});
-
-message_enum!(tile_edit TileEdit {
-    SetTileBlock {
-        bid_meta: ErasedBidMeta,
-    }
-});
-
-message_enum!(inventory_slot_edit InventorySlotEdit {
-    SetInventorySlot {
-        slot_val: ItemSlot,
-    }
-});
-
 message_enum!(up UpMessage {
     LogIn {
         username: String,
@@ -91,6 +68,33 @@ message_enum!(up UpMessage {
         slot: usize,
         open_menu_msg_idx: u64,
         stack: ItemStack,
+    }
+    GameMenuAction {
+
+    }
+});
+
+message_enum!(edit Edit {
+    Tile {
+        ci: usize,
+        lti: u16,
+        edit: TileEdit,
+    }
+    InventorySlot {
+        slot_idx: usize,
+        edit: InventorySlotEdit,
+    }
+});
+
+message_enum!(tile_edit TileEdit {
+    SetTileBlock {
+        bid_meta: ErasedBidMeta,
+    }
+});
+
+message_enum!(inventory_slot_edit InventorySlotEdit {
+    SetInventorySlot {
+        slot_val: ItemSlot,
     }
 });
 
@@ -158,4 +162,30 @@ pub enum GameMenu {
     Chest {
         gtc: Vec3<i64>,
     },
+}
+
+/// Reference to an item slot relative to the game menu a client has open.
+#[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
+pub enum ItemSlotReference {
+    /// The item currently picked up with the cursor in a game menu.
+    Held,
+    /// First 9 are hotbar.
+    Inventory(UsizeLessThan<36>),
+    Armor(UsizeLessThan<4>),
+    /// The small 2x2 crafting square.
+    InventoryCrafting(UsizeLessThan<4>),
+    InventoryCraftingOutput,
+    Chest(UsizeLessThan<27>),
+}
+
+/// Action a player can try to do relative to their currently open game gui.
+pub enum GameGuiAction {
+    /// Attempt to move the given number of items from one slot to another.
+    TransferItems {
+        from: ItemSlotReference,
+        to: ItemSlotReference,
+        amount: u8,
+    },
+    /// Attempt to swap the contents of two item slots.
+    SwapItemSlots([ItemSlotReference; 2]),
 }

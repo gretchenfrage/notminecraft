@@ -2,5 +2,5 @@
 authors = ["Phoenix Kahlo"]
 language = "en"
 multilingual = false
-src = "src"
+src = "handbook"
 title = "Not Minecraft Beta 1.0.2"

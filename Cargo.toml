@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "packages/opentype437",
+    "packages/graphics",
+    "packages/chunk_data",
+    "packages/mesh_data",
+    "packages/get_assets",
+    "packages/minecraft",
+    "packages/binschema",
+    "packages/game_binschema_derive",
+]
+resolver = "2"
+
+[patch.crates-io]
+ab_glyph = { path = "patches/ab_glyph" }
+slab = { path = "patches/slab" }
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+lto = true
+codegen-units = 1
