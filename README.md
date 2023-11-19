@@ -7,23 +7,35 @@ space with many interesting intersecting architectural and algorithmic
 problems, which is why I've been into the idea for quite some time now. I just
 think it's fun!
 
+![screenshot](https://phoenixkahlo.com/images/notminecraftbeta102.png)
+
 ## Links
 
 - [Home page](https://phoenixkahlo.com/hubs/notminecraftbeta102)
 - [GitLab repo](https://gitlab.com/gretchenfrage/notminecraft)
 - [GitHub repo (updated infrequently)](https://github.com/gretchenfrage/notminecraft)
 
-## Basic instructions
+## Handbook
 
-### Compile and run
+```sh
+mdbook build
+```
+
+Then open `book/index.html`. This builds the "handbook" containing various
+architecture explanations. Or you can just read the raw markdown files in
+`handbook`.
+
+
+## Compile and run
 
 ```sh
 cargo run
 ```
 
-This still does a lot of optimization, but also leaves debug assertions on. 
+This still does a lot of optimization, but also leaves debug assertions on. A
+full release build can be done with `cargo run --release`.
 
-### Re-compile shaders
+## Re-compile shaders
 
 ```sh
 scripts/shaderc.sh
@@ -31,20 +43,10 @@ scripts/shaderc.sh
 
 Since shaders rarely change, the compiled spirv bytecode is just committed to
 git. That spirv gets baked into the binary when built, so the shaders must be
-re-built if they are changed.
+re-built if they are changed. Or you can build with `--features shaderc` which
+bakes shaderc into the binary.
 
-### Build handbook
-
-```sh
-mdbook build
-```
-
-This build the mdbook at `./handbook` to `./book` in HTML form. It explains
-various architectural things about the project. Consider alternatively
-`mdbook serve` or `mdbook serve --open`. Or you can just read the raw markdown
-files.
-
-### Build API docs
+## Build API docs
 
 ```sh
 cargo doc

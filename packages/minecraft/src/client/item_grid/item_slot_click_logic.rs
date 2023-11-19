@@ -70,6 +70,7 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
         button: MouseButton,
         game: &Arc<GameData>,
     ) {
+        /*
         if button == MouseButton::Middle {
             let slot_idx = slot_idx + self.slot_offset;
             let stack = ItemStack::new(game.content.stone.iid_stone, ());
@@ -107,6 +108,7 @@ impl<'a> ItemSlotClickLogic for MultiplayerItemSlotClickLogic<'a> {
                 up_msg_idx: self.connection.up_msg_idx(),
             });
         }
+        */
     }
 }
 

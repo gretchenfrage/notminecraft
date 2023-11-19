@@ -64,13 +64,8 @@ message_enum!(up UpMessage {
         menu: GameMenu,
     }
     CloseGameMenu {}
-    ItemSlotAdd {
-        slot: usize,
-        open_menu_msg_idx: u64,
-        stack: ItemStack,
-    }
     GameMenuAction {
-
+        action: super::GameMenuAction,
     }
 });
 
@@ -179,7 +174,8 @@ pub enum ItemSlotReference {
 }
 
 /// Action a player can try to do relative to their currently open game gui.
-pub enum GameGuiAction {
+#[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
+pub enum GameMenuAction {
     /// Attempt to move the given number of items from one slot to another.
     TransferItems {
         from: ItemSlotReference,

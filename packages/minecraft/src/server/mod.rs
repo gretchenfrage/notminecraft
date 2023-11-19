@@ -527,7 +527,7 @@ impl Server {
             SetCharState on_received_set_char_state,
             OpenGameMenu on_received_open_game_menu,
             CloseGameMenu on_received_close_game_menu,
-            ItemSlotAdd on_received_item_slot_add,
+//            ItemSlotAdd on_received_item_slot_add,
         );
 
         Ok(())
@@ -813,7 +813,7 @@ impl Server {
 
         Ok(())
     }
-
+    /*
     fn on_received_item_slot_add(&mut self, msg: up::ItemSlotAdd, ck: ClientConnKey) -> Result<()> {
         let up::ItemSlotAdd { slot, open_menu_msg_idx, stack } = msg;
 
@@ -902,7 +902,7 @@ impl Server {
 
         Ok(())
     }
-
+    */
     /// Called after processing at least one network event and then processing
     /// all subsequent network events that were immediately available without
     /// additional blocking.
