@@ -4,6 +4,14 @@ pub mod connection;
 mod chunk_loader;
 mod chunk_manager;
 mod per_connection;
+mod on_received_accept_more_chunks;
+mod on_received_game_menu;
+mod on_received_join_game;
+mod on_received_log_in;
+mod on_received_say;
+mod on_received_set_char_state;
+mod on_received_set_tile_block;
+mod util_load_range;
 
 
 use self::{
@@ -27,6 +35,12 @@ use self::{
         control::ControlEvent,
     },
     per_connection::*,
+    util_load_range::{
+        char_load_range,
+        LOAD_Y_START,
+        LOAD_Y_END,
+        INITIAL_LOAD_DISTANCE,
+    },
 };
 use crate::{
     game_data::GameData,
@@ -70,10 +84,6 @@ pub use self::connection::NetworkBindGuard;
 
 const TICK: Duration = Duration::from_millis(50);
 const TICKS_BETWEEN_SAVES: u64 = 10 * 20;
-
-const LOAD_Y_START: i64 = 0;
-const LOAD_Y_END: i64 = 2;
-const INITIAL_LOAD_DISTANCE: i64 = 8;
 
 
 /// Handle to a running server thread.
@@ -211,6 +221,12 @@ const CLOSING: IsClosing = std::result::Result::Err(IsClosingErr);
 
 const NOT_CLOSING: IsClosing = std::result::Result::Ok(());
 
+
+trait OnReceived<M> {
+    type Ck;
+
+    fn on_received(&mut self, msg: M, ck: Self::Ck) -> Result<()>;
+}
 
 impl Server {
     /// Construct. This is expected to be immediately followed by `run`.
@@ -502,7 +518,7 @@ impl Server {
         }
 
         macro_rules! delegate {
-            ($self:ident, $msg:ident, $( $variant:ident $method:ident, )*)=>{
+            ($self:ident, $msg:ident, $( $variant:ident, )*)=>{
                 match $msg {$(
                     UpMessage::$variant(msg) => {
                         let ck = ck.try_into()
@@ -510,7 +526,7 @@ impl Server {
                                 concat!("received ", stringify!($variant), " from {:?} connection"),
                                 actual,
                             ))?;
-                        self.$method(msg, ck)?;
+                        <Server as OnReceived<_>>::on_received(self, msg, ck)?;
                     }
                 )*}
             };
@@ -519,230 +535,16 @@ impl Server {
         delegate!(
             self, msg,
 
-            LogIn on_received_log_in,
-            JoinGame on_received_join_game,
-            AcceptMoreChunks on_received_accept_more_chunks,
-            SetTileBlock on_received_set_tile_block,
-            Say on_received_say,
-            SetCharState on_received_set_char_state,
-            OpenGameMenu on_received_open_game_menu,
-            CloseGameMenu on_received_close_game_menu,
-//            ItemSlotAdd on_received_item_slot_add,
+            LogIn,
+            JoinGame,
+            AcceptMoreChunks,
+            SetTileBlock,
+            Say,
+            SetCharState,
+            OpenGameMenu,
+            CloseGameMenu,
+            GameMenuAction,
         );
-
-        Ok(())
-    }
-
-    fn on_received_log_in(&mut self, msg: up::LogIn, ck: UninitConnKey) -> Result<()> {
-        let up::LogIn { mut username } = msg;
-
-        // "validate"
-        /*
-        if username_client.contains_key(&username) {
-            uninit_connections[uninit_conn_key]
-                .send(DownMessage::RejectLogIn(down::RejectLogIn {
-                    message: "client already logged in with same username".into(),
-                }));
-            return;
-        }
-        */
-
-        // uniqueify username
-        if self.username_clients.contains_key(&username) {
-            let mut i = 2;
-            let mut username2;
-            while {
-                username2 = format!("{}{}", username, i);
-                self.username_clients.contains_key(&username2)
-            } { i += 1 }
-            username = username2;
-        }
-
-        // look up in save file to decide its initial state
-        // TODO: do this asynchronously
-        let (
-            pos,
-            inventory_slots,
-        ) = self.save.read(read_key::Player(username.clone()))?
-            .map(|player_data| (
-                player_data.pos,
-                player_data.inventory_slots,
-            ))
-            .unwrap_or_else(|| (
-                [0.0, 80.0, 0.0].into(),
-                array_from_fn(|_| None),
-            ));
-        let char_state = CharState {
-            pos,
-            pitch: f32::to_radians(-30.0),
-            yaw: f32::to_radians(0.0),
-            pointing: false,
-            load_dist: 6,
-        };
-
-        // accept login
-        self.connections[ck].send(down::AcceptLogin {
-            inventory_slots: inventory_slots.clone(),
-        });
-
-        // transition connection state
-        let ck = self.conn_states.transition_to_client(ck);
-
-        // insert into data structures
-        self.in_game.insert(ck, false);
-        self.player_saved.insert(ck, false);
-        self.char_states.insert(ck, char_state);
-        self.inventory_slots.insert(ck, inventory_slots);
-        self.open_game_menu.insert(ck, None);
-
-        self.clientside_client_keys.insert(ck, Slab::new());
-        self.client_clientside_keys.insert(ck, self.conn_states.new_mapped_per_client(|_| None));
-        for ck2 in self.conn_states.iter_client() {
-            if ck2 == ck { continue }
-            self.client_clientside_keys[ck2].insert(ck, None);
-        }
-
-        self.usernames.insert(ck, username.clone());
-        self.username_clients.insert(username, ck);
-
-        self.chunk_mgr.add_client(ck);
-
-        // tell it about every client which has joined the game
-        // (which necessarily excludes itself)
-        for ck2 in self.conn_states.iter_client() {
-            if !self.in_game[ck2] { continue }
-            
-            let clientside_client_key = self.clientside_client_keys[ck].insert(ck2);
-            self.client_clientside_keys[ck][ck2] = Some(clientside_client_key);
-
-            self.connections[ck].send(down::AddClient {
-                client_key: clientside_client_key,
-                username: self.usernames[ck2].clone(),
-                char_state: self.char_states[ck2],
-            });
-        }
-
-        // tell it about itself
-        let own_clientside_client_key = self.clientside_client_keys[ck].insert(ck);
-        self.client_clientside_keys[ck][ck] = Some(own_clientside_client_key);
-
-        self.connections[ck].send(down::AddClient {
-            client_key: own_clientside_client_key,
-            username: self.usernames[ck].clone(),
-            char_state: self.char_states[ck],
-        });
-
-        // tell chunk manager about it's chunk interests
-        // (triggering it to send chunks to the client)
-        for cc in dist_sorted_ccs(char_load_range(char_state).iter(), char_state.pos) {
-            self.chunk_mgr.add_chunk_client_interest(ck, cc, &self.conn_states);
-            self.process_chunk_mgr_effects();
-        }
-
-        // tell it to join the game, once it finishes receiving prior messages
-        self.connections[ck].send(down::ShouldJoinGame {
-            own_client_key: own_clientside_client_key,
-        });
-
-        // debugging
-        self.connections[ck].send(down::ApplyEdit {
-            ack: None,
-            edit: edit::InventorySlot {
-                slot_idx: 2,
-                edit: inventory_slot_edit::SetInventorySlot {
-                    slot_val: Some(ItemStack::new(
-                        self.game.content.stone.iid_stone,
-                        (),
-                    )),
-                }.into(),
-            }.into(),
-        });
-
-        Ok(())
-    }
-
-    fn on_received_join_game(&mut self, msg: up::JoinGame, ck: ClientConnKey) -> Result<()> {
-        // validate
-        let up::JoinGame {} = msg;
-        ensure!(
-            !self.in_game[ck],
-            "client tried to join game redundantly",
-        );
-
-        // it's now in the game
-        self.in_game[ck] = true;
-
-        // tell every other client about it, not including itself
-        for ck2 in self.conn_states.iter_client() {
-            if ck2 == ck { continue }
-
-            let clientside_client_key = self.clientside_client_keys[ck2].insert(ck);
-            self.client_clientside_keys[ck2][ck] = Some(clientside_client_key);
-
-            self.connections[ck2].send(down::AddClient {
-                client_key: clientside_client_key,
-                username: self.usernames[ck].clone(),
-                char_state: self.char_states[ck],
-            });
-        }
-
-        // announce
-        self.broadcast_chat_line(&format!("{} joined the game", &self.usernames[ck]));
-
-        Ok(())
-    }
-
-    fn on_received_accept_more_chunks(&mut self, msg: up::AcceptMoreChunks, ck: ClientConnKey) -> Result<()> {
-        let up::AcceptMoreChunks { number } = msg;
-        self.chunk_mgr.increase_client_add_chunk_budget(ck, number);
-        self.process_chunk_mgr_effects();
-        Ok(())
-    }
-
-    fn on_received_set_tile_block(&mut self, msg: up::SetTileBlock, _: ClientConnKey) -> Result<()> {
-        let up::SetTileBlock { gtc, bid_meta } = msg;
-
-        // lookup tile
-        let tile = match self.chunk_mgr.getter().gtc_get(gtc) {
-            Some(tile) => tile,
-            None => bail!("client tried SetTileBlock on non-present gtc"),
-        };
-
-        // send update to all clients with that chunk loaded
-        for ck2 in self.conn_states.iter_client() {
-            if let Some(clientside_ci) = self.chunk_mgr.clientside_ci(tile.cc, tile.ci, ck2) {
-                let ack = if self.last_processed[ck2].increased {
-                    self.last_processed[ck2].increased = false;
-                    Some(self.last_processed[ck2].num)
-                } else {
-                    None
-                };
-                self.connections[ck2].send(down::ApplyEdit {
-                    ack,
-                    edit: edit::Tile {
-                        ci: clientside_ci,
-                        lti: tile.lti,
-                        edit: tile_edit::SetTileBlock {
-                            bid_meta: self.game.clone_erased_tile_block(&bid_meta),
-                        }.into(),
-                    }.into(),
-                });
-            }
-        }
-
-        // set tile block
-        tile.get(&mut self.tile_blocks).erased_set(bid_meta);
-
-        // mark chunk as unsaved    
-        self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);
-
-        Ok(())
-    }
-
-    fn on_received_say(&mut self, msg: up::Say, ck: ClientConnKey) -> Result<()> {
-        let up::Say { text } = msg;
-
-        self.broadcast_chat_line(format!("<{}> {}", &self.usernames[ck], text));
 
         Ok(())
     }
@@ -755,154 +557,6 @@ impl Server {
         }
     }
 
-    fn on_received_set_char_state(&mut self, msg: up::SetCharState, ck: ClientConnKey) -> Result<()> {
-        let up::SetCharState { char_state } = msg;
-
-        // update
-        let old_char_state = replace(&mut self.char_states[ck], char_state);
-        
-        // broadcast
-        for ck2 in self.conn_states.iter_client() {
-            if let Some(clientside_client_key) = self.client_clientside_keys[ck2][ck] {
-                self.connections[ck2].send(down::SetCharState {
-                    client_key: clientside_client_key,
-                    char_state,
-                });
-            }
-        }
-
-        // update chunk interests
-        let old_char_load_range = char_load_range(old_char_state);
-        let new_char_load_range = char_load_range(char_state);
-        for cc in old_char_load_range.iter_diff(new_char_load_range) {
-            self.chunk_mgr.remove_chunk_client_interest(ck, cc, &self.conn_states);
-            self.process_chunk_mgr_effects();
-        }
-        for cc in dist_sorted_ccs(new_char_load_range.iter_diff(old_char_load_range), char_state.pos) {
-            self.chunk_mgr.add_chunk_client_interest(ck, cc, &self.conn_states);
-            self.process_chunk_mgr_effects();
-        }
-
-        Ok(())
-    }
-
-    fn on_received_open_game_menu(&mut self, msg: up::OpenGameMenu, ck: ClientConnKey) -> Result<()> {
-        let up::OpenGameMenu { menu } = msg;
-        
-        let valid = match &menu {
-            &GameMenu::Inventory => true,
-            &GameMenu::Chest { gtc: _ } => true, // TODO validation logic
-        };
-        let open_menu_msg_idx = self.last_processed[ck].num;
-        if !valid {
-            self.connections[ck].send(down::CloseGameMenu { open_menu_msg_idx });
-        }
-        self.open_game_menu[ck] = Some(OpenGameMenu {
-            menu,
-            open_menu_msg_idx,
-            valid,
-        });
-
-        Ok(())
-    }
-
-    fn on_received_close_game_menu(&mut self, msg: up::CloseGameMenu, ck: ClientConnKey) -> Result<()> {
-        let up::CloseGameMenu {} = msg;
-
-        self.open_game_menu[ck] = None;
-
-        Ok(())
-    }
-    /*
-    fn on_received_item_slot_add(&mut self, msg: up::ItemSlotAdd, ck: ClientConnKey) -> Result<()> {
-        let up::ItemSlotAdd { slot, open_menu_msg_idx, stack } = msg;
-
-        if let Some(menu) = self.open_game_menu[ck]
-            .filter(|open_menu| open_menu.valid && open_menu.open_menu_msg_idx == open_menu_msg_idx)
-            .map(|open_menu| open_menu.menu)
-        {
-            match menu {
-                GameMenu::Inventory => {
-                    ensure!(slot < 36, "invalid inventory slot number");
-                    self.inventory_slots[ck][slot] = Some(stack.clone());
-                    self.player_saved[ck] = false;
-                    let ack = if self.last_processed[ck].increased {
-                        self.last_processed[ck].increased = false;
-                        Some(self.last_processed[ck].num)
-                    } else {
-                        None
-                    };
-                    self.connections[ck].send(down::ApplyEdit {
-                        ack,
-                        edit: edit::InventorySlot {
-                            slot_idx: slot,
-                            edit: inventory_slot_edit::SetInventorySlot {
-                                slot_val: Some(stack),
-                            }.into(),
-                        }.into(),
-                    });
-                }
-                GameMenu::Chest { gtc } => {
-                    ensure!(slot < 63, "invalid chest slot number");
-                    if slot < 36 {
-                        self.inventory_slots[ck][slot] = Some(stack.clone());
-                        self.player_saved[ck] = false;
-                        let ack = if self.last_processed[ck].increased {
-                            self.last_processed[ck].increased = false;
-                            Some(self.last_processed[ck].num)
-                        } else {
-                            None
-                        };
-                        self.connections[ck].send(down::ApplyEdit {
-                            ack,
-                            edit: edit::InventorySlot {
-                                slot_idx: slot,
-                                edit: inventory_slot_edit::SetInventorySlot {
-                                    slot_val: Some(stack),
-                                }.into(),
-                            }.into(),
-                        });
-                    } else {
-                        // TODO: don't panic
-                        let tile = self.chunk_mgr.getter().gtc_get(gtc).unwrap();
-                        let meta = tile
-                            .get(&mut self.tile_blocks)
-                            .try_meta(self.game.content.chest.bid_chest).unwrap();
-                        meta.slots[slot - 36] = Some(stack.clone());
-
-                        for ck2 in self.conn_states.iter_client() {
-                            if let Some(clientside_ci) = self.chunk_mgr.clientside_ci(tile.cc, tile.ci, ck2) {
-                                let ack = if self.last_processed[ck2].increased {
-                                    self.last_processed[ck2].increased = false;
-                                    Some(self.last_processed[ck2].num)
-                                } else {
-                                    None
-                                };
-                                self.connections[ck2].send(down::ApplyEdit {
-                                    ack,
-                                    edit: edit::Tile {
-                                        ci: clientside_ci,
-                                        lti: tile.lti,
-                                        edit: tile_edit::SetTileBlock {
-                                            bid_meta: ErasedBidMeta::new(
-                                                self.game.content.chest.bid_chest,
-                                                meta.clone(),
-                                            ),
-                                        }.into(),
-                                    }.into(),
-                                });
-                            }
-                        }
-
-                        self.chunk_mgr.mark_unsaved(tile.cc, tile.ci);
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-    */
     /// Called after processing at least one network event and then processing
     /// all subsequent network events that were immediately available without
     /// additional blocking.
@@ -939,36 +593,4 @@ impl Server {
             self.chunk_mgr.incr_load_request_count(cc, &self.conn_states);
         }
     }
-}
-
-fn char_load_range(char_state: CharState) -> ChunkRange {
-    let char_cc = (char_state.pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
-    let load_distance = char_state.load_dist as i64;
-    ChunkRange {
-        start: Vec3 {
-            x: char_cc.x - load_distance,
-            y: LOAD_Y_START,
-            z: char_cc.z - load_distance,
-        },
-        end: Vec3 {
-            x: char_cc.x + load_distance + 1,
-            y: LOAD_Y_END,
-            z: char_cc.z + load_distance + 1,
-        },
-    }
-}
-
-fn dist_sorted_ccs(ccs: impl IntoIterator<Item=Vec3<i64>>, pos: Vec3<f32>) -> Vec<Vec3<i64>> {
-    let mut ccs = ccs.into_iter().collect::<Vec<_>>();
-    fn square_dist(a: Vec3<f32>, b: Vec3<f32>) -> f32 {
-        (a - b).map(|n| n * n).sum()
-    }
-    fn cc_square_dist(cc: Vec3<i64>, pos: Vec3<f32>) -> f32 {
-        square_dist(
-            (cc.map(|n| n as f32) + 0.5) * CHUNK_EXTENT.map(|n| n as f32),
-            pos,
-        )
-    }
-    ccs.sort_by(|&cc1, &cc2| cc_square_dist(cc1, pos).total_cmp(&cc_square_dist(cc2, pos)));
-    ccs
 }
