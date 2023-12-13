@@ -160,7 +160,6 @@ impl Drop for ServerHandle {
     }
 }
 
-
 struct Server {
     game: Arc<GameData>,
     recv_event: EventReceiver,
@@ -182,11 +181,13 @@ struct Server {
     connections: PerAnyConn<Connection>,
     last_processed: PerAnyConn<LastProcessed>,
 
+    // client state
     in_game: PerClientConn<bool>,
     player_saved: PerClientConn<bool>,
     char_states: PerClientConn<CharState>,
     inventory_slots: PerClientConn<[ItemSlot; 36]>,
     open_game_menu: PerClientConn<Option<OpenGameMenu>>,
+    held: PerClientConn<ItemSlot>,
 
     // client A -> A's clientside client key for B, if exists -> client B
     clientside_client_keys: PerClientConn<Slab<ClientConnKey>>,
@@ -259,6 +260,7 @@ impl Server {
             char_states: PerClientConn::new(),
             inventory_slots: PerClientConn::new(),
             open_game_menu: PerClientConn::new(),
+            held: PerClientConn::new(),
 
             clientside_client_keys: PerClientConn::new(),
             client_clientside_keys: PerClientConn::new(),
@@ -459,6 +461,7 @@ impl Server {
         let char_state = self.char_states.remove(ck);
         self.inventory_slots.remove(ck);
         self.open_game_menu.remove(ck);
+        self.held.remove(ck);
         
         self.clientside_client_keys.remove(ck);
         self.client_clientside_keys.remove(ck);

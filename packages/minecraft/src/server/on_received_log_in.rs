@@ -76,12 +76,13 @@ impl OnReceived<up::LogIn> for Server {
         // transition connection state
         let ck = self.conn_states.transition_to_client(ck);
 
-        // insert into data structures
+        // insert into data structures TODO factor this elsewhere
         self.in_game.insert(ck, false);
         self.player_saved.insert(ck, false);
         self.char_states.insert(ck, char_state);
         self.inventory_slots.insert(ck, inventory_slots);
         self.open_game_menu.insert(ck, None);
+        self.held.insert(ck, None);
 
         self.clientside_client_keys.insert(ck, Slab::new());
         self.client_clientside_keys.insert(ck, self.conn_states.new_mapped_per_client(|_| None));

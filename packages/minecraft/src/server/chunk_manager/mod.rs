@@ -97,7 +97,6 @@ pub struct ChunkManager {
     // set of chunks for which their loading was requested from chunk loader.
     // notable invariants:
     // - disjoint with chunks
-    // TODO: could be replaced with HashMap where the val is a new struct
     loading_chunks: HashMap<Vec3<i64>, LoadingChunk>,
 }
 
@@ -338,7 +337,11 @@ impl ChunkManager {
         }
 
         // tell the user to add the chunk
-        self.effects.push_back(Effect::AddChunk { // TODO: could simplify this
+        self.effects.push_back(Effect::AddChunk {
+            // since AddChunk is only produced by on_ready_chunk, and is always
+            // produced exactly once by on_ready_chunk, we could just make
+            // on_ready_chunk return this value directly. however, using the
+            // queue system makes the API more consistent.
             ready_chunk,
             ci,
         });
@@ -406,7 +409,8 @@ impl ChunkManager {
 
     // internal method to remove a chunk client interest that lets the caller
     // specify whether to bother updating the state of the client (as opposed
-    // to just the state of the chunk).
+    // to just the state of the chunk). update_client is passed as false when
+    // this is triggered by that client disconnecting.
     fn internal_remove_chunk_client_interest(
         &mut self,
         ck: ClientConnKey,
