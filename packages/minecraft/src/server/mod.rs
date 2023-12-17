@@ -1,5 +1,18 @@
 //! The server.
 
+pub mod tick_mgr;
+pub mod chunk_mgr;
+pub mod save_mgr;
+pub mod conn_mgr;
+pub mod per_player;
+
+use self::{
+    tick_mgr::TickMgr,
+    chunk_mgr::ChunkMgr,
+    save_mgr::SaveMgr,
+    per_player::*,
+};
+
 
 /// Raw server state.
 ///
@@ -17,16 +30,16 @@ pub struct Server {
 /// State which game logic gets `&mut` access to. Often this means state which is only represented
 /// in server memory and thus game logic can mutate it without worrying about synchronization.
 pub struct ServerOnlyState {
-    pub open_game_menu: PerClientConn<Option<OpenGameMenu>>,
-    pub char_states: PerClientConn<CharState>,
+    pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
+    pub char_states: PerPlayer<CharState>,
 }
 
 /// State for which `&mut` references get wrapped in auto-syncing wrappers before game logic gets
 /// access to them. Generally this means state which is replicated between the server and client,
 /// and/or save file.
 pub struct ServerSyncState {
-    pub tile_blocks: sync_state_tile_blocks::ServerStorage,
-    pub inventory_slots: sync_state_inventory_slots::ServerStorage,
+    pub tile_blocks: sync_state_tile_blocks::ServerState,
+    pub inventory_slots: sync_state_inventory_slots::ServerState,
 }
 
 /// State which game logic gets only shared references to. Often this is because the state is
@@ -48,11 +61,13 @@ pub struct ServerSyncCtx {
 /// Projection of `&mut Server` that game logic gets access to. Designed to automatically keep
 /// clients and save file synchronized with the server when mutating synchronized state.
 pub struct SyncWorld<'a> {
-    /// See type docs.
+    /// State game logic gets mut reference to. See type docs.
     pub server_only: &'a mut ServerOnlyState,
-    /// See type docs.
+    /// State game logic gets shared reference to. See type docs.
     pub sync_ctx: &'a ServerSyncCtx,
-
+    // ==== sync writers ====
+    pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
+    pub inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
 }
 
 

@@ -20,6 +20,7 @@ pub mod settings;
 pub mod client;
 pub mod server;
 pub mod message;
+pub mod util_per_thing;
 
 
 use crate::{
