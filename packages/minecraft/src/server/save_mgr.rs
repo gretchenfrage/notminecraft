@@ -1,14 +1,33 @@
 //! See `SaveMgr`.
 
-use super::chunk_mgr;
+use crate::{
+    server::{
+        per_player::*,
+        save_content::*,
+        save_db::SaveDb,
+        channel::ServerSender,
+        chunk_mgr,
+    },
+    thread_pool::ThreadPool,
+};
+use chunk_data::*;
 use std::cell::Cell;
 
 
 /// Manages the saving of world data.
 pub struct SaveMgr {
-    save: SaveFile,
+    // sender handle to the server event channel
+    server_send: ServerSender,
+    // handle to the save database
+    save_db: SaveDb,
+    // handle to the thread pool
+    thread_pool: ThreadPool,
+
+    // last tick that a save operation was completed
     last_tick_saved: u64,
     
+    // what follows is for tracking 
+
     chunk_saved: PerChunk<Cell<bool>>,
     unsaved_chunks: Vec<(Vec3<i64>, usize)>,
 
@@ -16,9 +35,35 @@ pub struct SaveMgr {
     unsaved_players: Vec<ClientConnKey>,
 }
 
+/// An in-progress operation of saving the world. See `SaveMgr.maybe_save`.
+pub struct SaveOp<'a> {
+    /// Entries that must be saved. Should be drained and each element interpreted as an
+    /// instruction to add a corresponding element to `entries`.
+    pub must_save: Vec<MustSave>,
+    /// Entries that will be saved when submitted.
+    pub entries: Vec<SaveEntry>,
+    mgr: &'a mut SaveMgr,
+    tick: u64,
+    submitted: bool,
+}
+
+/// An element of the world that needs saving. See `SaveOp`.
+pub enum MustSave {
+    /// A chunk. Corresponds to `SaveEntry::Chunk`.
+    Chunk {
+        cc: Vec3<i64>,
+        ci: usize,
+    },
+    /// A joined player. Corresponds to `SaveEntry::Player`.
+    Player {
+        username: String,
+        pk: JoinedPlayerKey,
+    },
+}
+
 impl SaveMgr {
     /// Construct around a save file.
-    pub fn new(save: SaveFile) -> SaveMgr {
+    pub fn new(save: SaveDb) -> SaveMgr {
         SaveMgr {
             save,
             last_tick_saved: 0,
@@ -82,7 +127,39 @@ impl SaveMgr {
         self.player_saved.remove(ck);
     }
 
-    pub fn maybe_save()
+    /// Determine whether the world should be saved now, and if so, return a `SaveOp` to do so.
+    ///
+    /// If a save op is returned, the caller should drain the `SaveOp.must_save` vector, and for
+    /// each element, add a corresponding entry to be saved to `SaveOp.entries` containing all the
+    /// data to be saved for that element of the world. Then the caller should call `SaveOp.submit`
+    /// to finalize the save.
+    #[must_use]
+    pub fn maybe_save(
+        &mut self,
+        tick: u64,
+        chunks: &LoadedChunks,
+        players: &PlayerKeySpace,
+    ) -> Option<SaveOp> {
+
+    }
+}
+
+impl<'a> SaveOp<'a> {
+    /// Finalize the save operation.
+    pub fn submit(self) {
+        debug_assert!(self.must_save.is_empty(), "save op submitted without draining must_save");
+        self.submitted = true;
+        self.mgr.last_tick_saved = self.tick;
+
+    }
+}
+
+impl<'a> Drop for SaveOp<'a> {
+    fn drop(&mut self) {
+        if !self.submitted {
+            error!("save op dropped without being submitted");
+        }
+    }
 }
 
 impl chunk_mgr::IsChunkSaved for SaveMgr {

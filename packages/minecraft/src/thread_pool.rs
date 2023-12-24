@@ -1,300 +1,150 @@
-// TODO: this no is efficient in terms of concurrency stuff
-//       I do hope it's overshadowed by the cost of the tasks themselves, but
-//       if not, I may want to optimize this itself more
 
-use crate::util::array::ArrayBuilder;
+use crate::util_abort_handle::AbortHandle;
+use crossbeam::{
+    queue::SegQueue,
+    sync::Parker,
+};
 use std::{
-    any::Any,
-    sync::Arc,
-    marker::PhantomData,
-    thread::spawn,
-};
-use parking_lot::Mutex;
-use slab::Slab;
-use crossbeam_channel::{
-    Sender,
-    Receiver,
-    unbounded,
-    bounded,
+    thread,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU32,
+            Ordering,
+        },
+    },
 };
 
-pub const PRIORITY_LEVELS: usize = 2;
 
-/// Pool of threads for processing moderately heavy-weight jobs.
-#[derive(Debug, Clone)]
-pub struct ThreadPool {
-    state: Arc<ThreadPoolState>,
+/// Priority level. Variants decrease in priority.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(usize)]
+pub enum WorkPriority {
+    /// Work for client.
+    Client = 0,
+    /// Work for server.
+    Server = 1,
 }
 
-#[derive(Debug)]
-struct ThreadPoolState {
-    index_state: Mutex<DomainIndexState>,
+// number of priority levels
+const LEVELS: usize = 2;
 
-    // queue of jobs for each priority level
-    send_jobs: [Sender<Job>; PRIORITY_LEVELS],
-    // thing in state for each worker
-    workers: Vec<WorkerSenders>,
+
+/// Work stealing thread pool with priority levels.
+pub struct ThreadPool(Arc<State>);
+
+// shared state
+struct State {
+    // per thread, per priority level, job queue
+    thread_queues: Vec<[SegQueue<Job>; LEVELS]>,
+    // for worker threads to sleep when there's no more work
+    parker: Parker,
+    // rotating index for which thread to submit work to
+    insert_to: AtomicU32,
+    // counter of how may ThreadPool handles remain. worker threads shut down once all work is
+    // completed and this is 0, thus implying there will be no more work.
+    alive: AtomicU32,
 }
 
-#[derive(Debug)]
-struct DomainIndexState {
-    assigner: Slab<u128>,
-    counter: u128,
-}
-
-#[derive(Debug)]
-struct WorkerSenders {
-    // when a job is submitted, it's sent into the job queue for its priority
-    // level, and then a token is sent to all workers.
-    //
-    // when a domain is added or removed, the appropriate Reconfigure message
-    // is sent to all workers, and then a token is sent to all works.
-    send_token: Sender<()>,
-    send_reconfigure: Sender<Reconfigure>,
-}
-
-/// Instruction to the worker to reconfigure itself.
-enum Reconfigure {
-    AddDomain {
-        domain_idx: usize,
-        domain_ctr: u128,
-        state: Box<dyn Any + Send>,
-    },
-    RemoveDomain {
-        domain_idx: usize,
-        domain_ctr: u128,
-        send_dropped: Sender<()>,
-    },
-}
-
-/// A job to be done.
+// job sent to worker thread
 struct Job {
-    domain_idx: usize,
-    domain_ctr: u128,
-    job: Box<dyn FnOnce(&mut dyn Any) + Send>,
+    aborted: AbortHandle,
+    work: Box<dyn FnOnce(AbortHandle) + Send + 'static>,
 }
-
-/// See `ThreadPool.create_domain`.
-#[derive(Debug, Clone)]
-pub struct ThreadPoolDomain<T> {
-    state: Arc<ThreadPoolState>,
-    domain_idx: usize,
-    domain_ctr: u128,
-    _p: PhantomData<T>,
-}
-
-
-// body of a worker thread
-fn worker_thread(
-    recv_jobs: [Receiver<Job>; PRIORITY_LEVELS],
-    recv_token: Receiver<()>,
-    recv_reconfigure: Receiver<Reconfigure>,
-) {
-    // domain state and counter
-    let mut domains = Slab::new();
-    // max domain_ctr we've ever added, even if we've removed it
-    let mut max_domain_ctr = 0;
-    // jobs for which we haven't yet initialized their necessary domain
-    let mut delayed: Vec<Option<Job>> = Vec::new();
-
-    while recv_token.recv().is_ok() {
-        if let Ok(reconfigure) = recv_reconfigure.try_recv() {
-            // attribute token to reconfigure message
-            //
-            // it's intentional that we process all reconfigures before
-            // processing jobs even if we're essentially reordering out
-            // attribution of what triggered these tokens.
-            //
-            // as for changes to domain idx and domain ctr, these should be
-            // nicely serialized by the domain index state mutex.
-            match reconfigure {
-                Reconfigure::AddDomain { domain_idx, domain_ctr, state } => {
-                    // add domain
-                    let domain_idx2 = domains.insert((state, domain_ctr));
-                    debug_assert_eq!(domain_idx, domain_idx2);
-                    // it's ok that this starts as 0 because idk magic
-                    // I don't think the race condition can occur in that case
-                    debug_assert!(max_domain_ctr == 0 || domain_ctr == max_domain_ctr + 1);
-                    max_domain_ctr = domain_ctr;
-
-                    // then see if that allows us to now run any delayed jobs
-                    delayed.retain_mut(|job|
-                        if job.as_ref().unwrap().domain_ctr > max_domain_ctr {
-                            // still can't run it, so retain it
-                            true
-                        } else {
-                            // try and run it now, then discard it
-                            run_job_unless_stale(job.take().unwrap(), &mut domains);
-                            false
-                        }
-                    );
-                }
-                Reconfigure::RemoveDomain { domain_idx, domain_ctr, send_dropped } => {
-                    // remove domain
-                    let (state, domain_ctr2) = domains.remove(domain_idx);
-                    debug_assert_eq!(domain_ctr, domain_ctr2);
-
-                    // drop state then let the other half know we've done so
-                    drop(state);
-                    let _ = send_dropped.send(());
-                }
-            }
-        } else {
-            // attribute token to job entering some priority queue
-            // attempt to pull the highest priority job
-            if let Some(job) = recv_jobs.iter()
-                .rev()
-                .find_map(|recv_any| recv_any.try_recv().ok())
-            {
-                if job.domain_ctr > max_domain_ctr {
-                    // there's possible race conditions here where we receive a
-                    // job before we receive the AddDomain it needs to run, so
-                    // we buffer it for once we can run it
-                    delayed.push(Some(job));
-                } else {
-                    // but otherwise, try and run it now!
-                    run_job_unless_stale(job, &mut domains);
-                }
-            }
-            // if we didn't find any we just assume other workers snatched up
-            // all the jobs those tokens were about, which is fine
-        }
-    }
-}
-
-fn run_job_unless_stale(job: Job, domains: &mut Slab<(Box<dyn Any + Send>, u128)>) {
-    // if the domain ctr doesn't match, assume that this is a
-    // stale job for a removed domain, and just discard it
-    if let Some((ref mut state, _)) = domains
-        .get_mut(job.domain_idx)
-        .filter(|&&mut (_, domain_ctr)| domain_ctr == job.domain_ctr)
-    {
-        // but if we can run the job now, run it!
-        (job.job)(&mut **state);
-    }
-}
-
 
 impl ThreadPool {
-    /// Spawn a new thread pool with as many threads as there are CPUs.
+    /// Construct, spawning threads.
     pub fn new() -> Self {
-        let mut send_jobs = ArrayBuilder::new();
-        let mut recv_jobs = ArrayBuilder::new();
-        for _ in 0..PRIORITY_LEVELS {
-            let (send_job, recv_job) = unbounded();
-            send_jobs.push(send_job);
-            recv_jobs.push(recv_job);
+        let cpus = num_cpus::get();
+        let state = Arc::new(State {
+            thread_queues: vec![Default::default(); cpus],
+            parker: Parker::new(),
+            insert_to: AtomicU32::new(0),
+            alive: AtomicU32::new(1),
+        });
+        for q in 0..cpus {
+            let state = Arc::clone(&state);
+            thread::spawn(move || thread_body(q, state));
         }
-        let send_jobs = send_jobs.build();
-        let recv_jobs = recv_jobs.build();
-
-        let workers = (0..num_cpus::get())
-            .map(|_| {
-                let recv_jobs = recv_jobs.clone();
-                let (send_token, recv_token) = unbounded();
-                let (send_reconfigure, recv_reconfigure) = unbounded();
-                spawn(move || worker_thread(recv_jobs, recv_token, recv_reconfigure));
-                WorkerSenders {
-                    send_token,
-                    send_reconfigure,
-                }
-            })
-            .collect();
-
-        ThreadPool {
-            state: Arc::new(ThreadPoolState {
-                index_state: Mutex::new(DomainIndexState {
-                    assigner: Slab::new(),
-                    counter: 0,
-                }),
-                send_jobs,
-                workers,
-            }),
-        }
+        ThreadPool(state)
     }
 
-    /// Create a new "domain" in this thread pool. Jobs are not submitted to
-    /// the thread pool directly but rather to a domain. The given state will
-    /// be cloned and sent to each thread, and tasks submitted to the domain
-    /// then have the ability to access that state when being processed. If the
-    /// domain is dropped, then the corresponding pieces of state on the thread
-    /// will be dropped and pending tasks submitted on that domain may be
-    /// dropped without being ran (which is only for performance, as relying on
-    /// that for behavior is probably impossible without race conditions).
-    pub fn create_domain<F, T>(&self, mut create_state: F) -> ThreadPoolDomain<T>
+    /// Submit a job to be done, with the given priority level and abort handle.
+    ///
+    /// Higher priority jobs are executed before lower priority jobs. The abort handle is checked
+    /// before executing and if aborted the job is discarded. If the work is done, it gets passed
+    /// the provided abort handle.
+    pub fn submit<F>(&self, priority: WorkPriority, aborted: AbortHandle, work: F)
     where
-        F: FnMut() -> T,
-        T: Send + 'static
+        F: FnOnce(AbortHandle) + Send + 'static,
     {
-        let mut guard = self.state.index_state.lock();
-
-        let domain_ctr = guard.counter;
-        guard.counter = guard.counter.checked_add(1).unwrap();
-
-        let domain_idx = guard.assigner.insert(domain_ctr);
-
-        for worker in &self.state.workers {
-            worker.send_reconfigure.send(Reconfigure::AddDomain {
-                domain_idx,
-                domain_ctr,
-                state: Box::new(create_state()),
-            }).unwrap();
-            worker.send_token.send(()).unwrap();
-        }
-
-        drop(guard);
-
-        ThreadPoolDomain {
-            state: self.state.clone(),
-            domain_idx,
-            domain_ctr,
-            _p: PhantomData,
-        }
+        let q = self.0.insert_to.fetch_add(1, Ordering::Relaxed);
+        let q = q as usize % self.thread_queues.0.len();
+        self.0.thread_queues[q][priority as usize].push(Job {
+            aborted,
+            work: Box::new(work) as _,
+        });
+        self.0.unparker().unpark();
     }
 }
 
-impl<T: 'static> ThreadPoolDomain<T> {
-    /// Submit a task to be run on some thread. Please consider catching
-    /// panics.
-    pub fn submit<F: FnOnce(&mut T) + Send + 'static>(&self, job: F, priority: usize) {
-        self.state.send_jobs[priority].send(Job {
-            domain_idx: self.domain_idx,
-            domain_ctr: self.domain_ctr,
-            job: Box::new(move |state| {
-                job(state.downcast_mut().unwrap());
-            }),
-        }).unwrap();
-
-        for worker in &self.state.workers {
-            worker.send_token.send(()).unwrap();
+fn thread_body(q: usize, state: Arc<State>) {
+    let my_queues = &state.thread_queues[q];
+    'outer: loop {
+        // loop for trying to process work for our own queue
+        'my_queues: loop {
+            // do whatever job can be found at the best priority
+            for queue in my_queues {
+                if let Some(job) = state.thread_queues[q][p].pop() {
+                    do_job(job);
+                    continue 'my_queues;
+                }
+            }
+            // if now jobs can be found in our own queues, break the loop
+            break 'my_queues;
         }
+        // loop for trying to process work from neighbors queues
+        for offset in 1..state.thread_queues.len() {
+            // look through neighbors increasingly "to the right" (wrapping)
+            let q2 = (q + offset) % state.thread_queues.len()
+            // and try to find a job at the best priority
+            for queue in &state.thread_queues[q2] {
+                if let Some(job) = state.thread_queues[q][p].pop() {
+                    do_job(job);
+                    continue 'outer;
+                }
+            }
+        }
+        // and if none can be found anywhere, see if the pool is just dead
+        if state.alive.load(Ordering::SeqCst) == 0 {
+            // if it is, die, but make sure to maintain a chain reaction of sleeping threads waking
+            // each other up so they all notice the pool is dead and shut off
+            self.0.parker.unparker().unpark();
+            return;
+        }
+        // elsewise, we're probably just empty, so park until waken up
+        state.parker.park();
     }
 }
 
-/// This not only triggers the threads to drop their state for this domain, it
-/// actually blocks until they've all done so.
-impl<T> Drop for ThreadPoolDomain<T> {
+fn do_job(job: Job) {
+    if !job.aborted.is_aborted() {
+        (job.work)(job.aborted());
+    }
+}
+
+impl Clone for ThreadPool {
+    fn clone(&self) -> Self {
+        self.0.alive.fetch_add(1, Ordering::SeqCst);
+        ThreadPool(Arc::clone(&self.0))
+    }
+}
+
+impl Drop for ThreadPool {
     fn drop(&mut self) {
-        let (send_dropped, recv_dropped) = bounded(self.state.workers.len());
-
-        let mut guard = self.state.index_state.lock();
-
-        let domain_ctr2 = guard.assigner.remove(self.domain_idx);
-        debug_assert_eq!(self.domain_ctr, domain_ctr2);
-
-        for worker in &self.state.workers {
-            worker.send_reconfigure.send(Reconfigure::RemoveDomain {
-                domain_idx: self.domain_idx,
-                domain_ctr: self.domain_ctr,
-                send_dropped: send_dropped.clone(),
-            }).unwrap();
-            worker.send_token.send(()).unwrap();
-        }
-
-        drop(guard);
-        
-        for _ in 0..self.state.workers.len() {
-            recv_dropped.recv().unwrap();
+        let alive = self.0.alive.fetch_sub(1, Ordering::SeqCst);
+        if alive == 1 {
+            self.0.parker.unparker().unpark();
         }
     }
 }

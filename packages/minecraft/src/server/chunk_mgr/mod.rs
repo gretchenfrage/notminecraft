@@ -64,7 +64,7 @@ use slab::Slab;
 /// processed until exhausted, unless the specific method specifies that this
 /// is not necessary.
 pub struct ChunkMgr {
-    pub effects: VecDeque<Effect>,
+    pub effects: VecDeque<ChunkMgrEffect>,
 
     // responsible for asynchronously servicing requests to read a chunk from
     // the save file or generate it if it was never saved.
@@ -111,7 +111,7 @@ struct LoadingChunk {
 
 /// See `ChunkMgr`.
 #[derive(Debug)]
-pub enum Effect {
+pub enum ChunkMgrEffect {
     /// Chunk has entered the loaded state and been assigned a ci. Initialize
     /// it in other data structures.
     AddChunk {

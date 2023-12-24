@@ -1,18 +1,47 @@
 //! The server.
+//!
+//! This top-level server module mostly contains:
+//!
+//! - The server state top-level struct.
+//! - The "sync world" top-level struct.
+//! - The server event top-level enum.
+//! - Submodules with utilities that are used in the server and not the client.
+//! - Submodules with managers to abstract subclusters of server logic.
+//! - Other submodules to encapsulate subclusters of server-only logic.
 
+pub mod per_player;
+pub mod channel;
+pub mod generate_chunk;
+pub mod save_content;
+pub mod chunk_loader;
+pub mod save_db;
 pub mod tick_mgr;
 pub mod chunk_mgr;
 pub mod save_mgr;
 pub mod conn_mgr;
-pub mod per_player;
 
 use self::{
+    per_player::*,
+    save_db: SaveDb,
+    channel::{ServerSender, ServerReceiver},
     tick_mgr::TickMgr,
     chunk_mgr::ChunkMgr,
     save_mgr::SaveMgr,
-    per_player::*,
 };
+use crate::thread_pool::ThreadPool;
 
+
+/// Event sent to the core server loop from some other thread. See the `channel` module.
+pub enum ServerEvent {
+    /// Shut down the server.
+    Stop,
+    /// See inner type docs.
+    Network(NetworkEvent),
+    /// Loopback event for `ConnMgr`.
+    PlayerSaveStateLoaded(PlayerSaveStateLoaded),
+    /// Loopback event for `SaveMgr`.
+    SaveOpComplete,
+}
 
 /// Raw server state.
 ///
@@ -30,8 +59,15 @@ pub struct Server {
 /// State which game logic gets `&mut` access to. Often this means state which is only represented
 /// in server memory and thus game logic can mutate it without worrying about synchronization.
 pub struct ServerOnlyState {
-    pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
-    pub char_states: PerPlayer<CharState>,
+    /// A sender handle to the server event channel.
+    pub server_send: ServerSend,
+    /// A receiver handle to the server event channel.
+    pub server_recv: ServerRecv,
+    /// Handle to the thread pool
+    pub thread_pool: ThreadPool,
+
+    //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
+    //pub char_states: PerPlayer<CharState>,
 }
 
 /// State for which `&mut` references get wrapped in auto-syncing wrappers before game logic gets

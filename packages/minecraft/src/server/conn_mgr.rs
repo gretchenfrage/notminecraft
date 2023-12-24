@@ -1,11 +1,38 @@
 //! See `ConnMgr`.
 
-use crate::server::per_player::*;
-use std::collection::HashMap;
+use crate::{
+    server::{
+        per_player::*,
+        channel::{
+            ServerSender,
+            EventPriority,
+        },
+        save_content::{
+            PlayerKey,
+            PlayerVal,
+        },
+        save_db::SaveDb,
+        ServerEvent,
+    },
+    util_abort_handle::AbortGuard,
+    thread_pool::{
+        ThreadPool,
+        WorkPriority,
+    },
+};
+use std::collection::{
+    HashMap,
+    VecDeque,
+};
+use slab::Slab;
 use anyhow::*;
 
 
 /// Manages clients and their joining and leaving.
+///
+/// After calling any methods on `ConnMgr` that takes `&mut self`, events should be taken from
+/// `ConnMgr.effects` and processed until exhausted, unless the specific method specifies that this
+/// is not necessary.
 ///
 /// Bridges from the "connection" layer of abstraction to the "player" layer of abstraction.
 ///
@@ -37,9 +64,54 @@ use anyhow::*;
 ///    state and affect the world state by sending actions, has a body in the world which is
 ///    simulated, and is known to other players.
 ///
-/// This manager guarantees that client A will be aware of client B iff client B has joined the
-/// game or client B is client A. 
+/// See the `per_player` module for data structures to keep track of these sets of players and
+/// their associated state.
+///
+/// In terms of how this interacts with clients, the key points are:
+///
+/// - Clients only have a concept of players which have joined the game. Thus, only joined players
+///   may be loaded onto clients.
+/// - This manager guarantees that all joined players will be loaded for all players of any state.
+/// - Therefore, player A has player B loaded iff player B has joined the game.
+///
+/// ---
+///
+/// The sequence of events for a client logging in and joining the game, which this manager
+/// implements most of, is as such:
+///
+/// 1. A network connection is created. It gets a connection index within this manager, but the
+///    rest of the server doesn't learn about it.
+/// 2. LogIn is received from client.
+///
+///    - Player is created. Rest of the server must update.
+///    - AcceptLogIn is sent to client.
+///    - All joined players are loaded into client.
+///    - Chunks begin being loaded into client.
+///    - Request is submitted to save file to read player's saved state.
+///
+/// 3. Saved player state arrives from save file. It is stored for later.
+/// 4. Server reaches necessary conditions for allowing player to join. ShouldJoinGame is sent to
+///    client.
+/// 5. JoinGame is received from client.
+///
+///    - Player is joined. Rest of the server must update.
+///    - Player is loaded into all clients.
+///    - Save file player state taken from where it was stashed and gets used and consumed.
+///    - Body within the world starts being simulated.
+///    - FinalizeJoinGame is sent to client, including which player is them and any state about
+///      themself that only gets loaded for them eg their inventory.
+///
+/// Side effects that the rest of the server should process are added to an internal effects queue.
 pub struct ConnMgr {
+    pub effects: EffectDeque<ConnMgrEffect>,
+
+    // sender handle to the server event channel
+    server_send: ServerSender,
+    // handle to the save database
+    save_db: SaveDb,
+    // handle to the thread pool
+    thread_pool: ThreadPool,
+
     // state for each network connection
     connections: Slab<ConnectionState>
     // allocates player keys. players are subset of connections.
@@ -50,14 +122,14 @@ pub struct ConnMgr {
     player_username: PerPlayer<String>,
     // inverse of player_username
     username_player: HashMap<String, PlayerKey>,
-    // for each player, whether they have joined the game
-    player_joined_game: PerPlayer<bool>,
+    // for each player, its state in terms of loading its save state from the save file
+    player_load_save_state_state: PerPlayer<PlayerLoadSaveStateState>,
     // for each player, their clientside space of players.
-    // player A -> A's clientside player idx for B, if exists -> player B
-    player_clientside_players: PerPlayer<Slab<PlayerKey>>,
+    // player A -> A's clientside player idx for B, if exists (ie. if B joined) -> player B
+    player_clientside_players: PerPlayer<Slab<JoinedPlayerKey>>,
     // some sort of inverse-like thing of player_clientside_players.
-    // player A -> player B -> A's clientside player idx for B, if exists.
-    player_player_clientside_player_idx: PerPlayer<PerPlayer<Option<usize>>>,
+    // player A -> player B -> A's clientside player idx for B, if exists (ie. if B joined).
+    player_player_clientside_player_idx: PerPlayer<PerJoinedPlayer<usize>>,
 }
 
 // state for each network connection
@@ -73,24 +145,86 @@ struct ConnectionState {
     // whether this connection previously logged in but then was killed. prevents subsequent log in
     // attempts. is mutually exclusive with pk.
     killed: bool,
+    // whether a ShouldJoinGame message has been sent to the client and a JoinGame message has not
+    // yet been received back from it. this should necessarily imply:
+    // - pk is Some
+    // - player_load_save_state_state is Stashed
+    should_join_game: bool,
 }
 
-/// Instruction flowing from the `ConnMgr` to the rest of the server.
-#[must_use]
+// state for a player in terms of loading its save state from the save file
+enum PlayerLoadSaveStateState {
+    // request to load from the save file is pending
+    Loading(AbortGuard),
+    // is loaded from the save file and ready for when the player joins
+    Stashed(Option<PlayerVal>),
+    // player has joined and thus ownership of the state has been taken
+    Taken,
+}
+
+/// Effect flowing from the `ConnMgr` to the rest of the server.
+#[derive(Debug)]
 pub enum ConnMgrEffect {
-    /// Add a new player.
+    /// A new player was connected. Initialize it in `PerPlayer` structures.
     AddPlayer(PlayerKey),
-    /// Process a message from a currently existing player which has joined the game.
-    PlayerMsg(PlayerKey, PlayerMsg),
-    /// Remove an existing player.
-    RemovePlayer(PlayerKey),
+    /// A previously added player is now joining the game. Initialize it in `PerJoinedPlayer`
+    /// structures.
+    ///
+    /// Do not yet send clients messages about this player, because player cross-linking has not
+    /// yet been done. This effect will be immediately followed by the necessary sequence of
+    /// AddPlayerToClient effects to do that cross-linking, and then by a `FinalizeJoinPlayer` to
+    /// complete the process.
+    BeginJoinPlayer {
+        /// The newly upgraded key for the joined player.
+        pk: JoinedPlayerKey,
+        /// The saved player state from the save file, or `None` if the save file did not contain
+        /// an entry for this player's identity.
+        save_state: Option<PlayerVal>,
+    },
+    /// See `BeginJoinPlayer`. Send the player a `FinalizeJoinGame` message. It is now safe to send
+    /// clients messages about this player.
+    FinalizeJoinPlayer {
+        /// The player in question.
+        pk: JoinedPlayerKey,
+        /// The client's clientside player index for itself.
+        self_clientside_player_idx: usize,
+    },
+    /// A player has been added to another player (in terms of cross-linking them) and been
+    /// assigned for that client a clientside player idx. Tell the client to add the player.
+    AddPlayerToClient {
+        /// Client to add the joined player to.
+        add_to: PlayerKey,
+        /// The joined player to add to the client.
+        to_add: JoinedPlayerKey,
+        /// The client's newly allocated clientside player index for to_add.
+        clientside_player_idx: usize,
+    },
+    /// Process a message from an existing joined player.
+    PlayerMsg(JoinedPlayerKey, PlayerMsg),
+    /// Remove an existing player, which may or may not have joined.
+    RemovePlayer(PlayerKey, Option<JoinedPlayerKey>),
+}
+
+/// Event for when a player's save state is finished being loaded from the save file.
+pub struct PlayerSaveStateLoaded {
+    pub pk: PlayerKey,
+    pub save_state: Option<PlayerVal>,
 }
 
 impl ConnMgr {
-    /// Construct with defaults.
-    pub fn new() -> Self {
+    /// Construct.
+    pub fn new(server_send: ServerSender, save_db: SaveDb, thread_pool: ThreadPool) -> Self {
         ConnMgr {
-            players: PlayerKeySpace::default(),
+            server_send,
+            save_db,
+            thread_pool,
+            connections: Slab::new(),
+            players: PlayerKeySpace::new(),
+            player_conn_idx: PerPlayer::new(),
+            username_player: HashMap::new(),
+            player_load_save_state_state: PerPlayer::new(),
+            player_clientside_players: PerPlayer::new(),
+            player_player_clientside_player_idx: PerPlayer::new(),
         }
     }
 
@@ -99,8 +233,23 @@ impl ConnMgr {
         &self.players
     }
 
+    /// Get the given player's username.
+    pub fn player_username<K: Into<PlayerKey>>(&self, pk: K) -> &str {
+        &self.player_username[pk.into()]
+    }
+
+    /// Try to look up a player by username.
+    pub fn username_player(&self, username: &str) -> PlayerKey {
+        self.username_player.get(username)
+    }
+
+    /// Get the clientside player idx by which `subject` refers to `object`.
+    pub fn player_to_clientside(&self, object: JoinedPlayerKey, subject: PlayerKey) -> usize {
+        self.player_player_clientside_player_idx[subject][object]
+    }
+
     /// Process a received network event and optionally return an effect for the caller to process.
-    pub fn handle_network_event(&mut self, network_event: NetworkEvent) -> Option<ConnMgrEffect> {
+    pub fn handle_network_event(&mut self, network_event: NetworkEvent) {
         match network_event {
             NetworkEvent::AddConnection(conn_idx, connection) => {
                 // connection created, add it
@@ -112,17 +261,16 @@ impl ConnMgr {
                     killed: false,
                 });
                 debug_assert_eq!(conn_idx, conn_idx2, "NetworkEvent::AddConnection idx mismatch");
-                None
             }
             NetworkEvent::Message(conn_idx, msg) => {
                 // received message
                 // try process
-                try_handle_msg(conn_idx, msg)
-                    .unwrap_or_else(|e| {
-                        // on error, kill connection
-                        warn!(%e, "client protocol error, closing connection");
-                        self.kill_connection_conn_idx(conn_idx)
-                    })
+                let result = self.try_handle_msg(conn_idx, msg);
+                if let Err(e) = result {
+                    // on error, kill connection
+                    warn!(%e, "client protocol error, closing connection");
+                    self.kill_connection_conn_idx(conn_idx);
+                }
             }
             NetworkEvent::RemoveConnection(conn_idx) => {
                 // connection stopped, remove it
@@ -130,9 +278,7 @@ impl ConnMgr {
                 if let Some(pk) = pk {
                     // remove associated player
                     self.remove_player(pk);
-                    Some(ConnMgrEffect::RemovePlayer(pk))
-                } else {
-                    None
+                    self.effects.push_back(ConnMgrEffect::RemovePlayer(pk));
                 }
             }
         }
@@ -140,15 +286,20 @@ impl ConnMgr {
 
     // internal method to try to process a message from a network connection. error indicates that
     // the network connection should be terminated.
-    fn try_handle_msg(&mut self, conn_idx: usize, msg: UpMsg) -> Result<Option<ConnMgrEffect>> {
+    fn try_handle_msg(&mut self, conn_idx: usize, msg: UpMsg) -> Result<()> {
         if self.connections[conn_idx].killed {
             // this is likely superfluous, but possibly a good idea for defensiveness.
-            return Ok(None);
+            return Ok(());
         }
         match msg {
             UpMsg::LogIn(UpMsgLogIn { username }) => {
-                self.try_handle_log_in(conn_idx, msg)?;
-                Ok(None)
+                self.try_handle_log_in(conn_idx, msg)
+            }
+            UpMsg::JoinGame => {
+                self.try_handle_join_game(conn_idx)
+            }
+            UpMsg::PlayerMsg(msg) => {
+                self.try_handle_player_msg(conn_idx, msg)
             }
         }
     }
@@ -162,11 +313,143 @@ impl ConnMgr {
 
         // uniqueify username
         let username = uniqueify_username(username, &self.username_player);
+
+        // transmit AcceptLogIn to client
+        self.connections[conn_idx].connection.send(DownMsg::AcceptLogIn);
+        
+        // create the player
+        let pk = self.players.add();
+        self.connections[conn_idx].pk = Some(pk);
+        self.player_conn_idx.insert(pk, conn_idx);
+        self.effects.push(ConnMgrEffect::AddPlayer(pk));
+
+        // initialize in username tracking structures
+        self.player_username.insert(pk, username.clone());
+        self.username_player.insert(username, pk);
+
+        // set in motion the loading of the player state from the save file
+        let aborted = self.trigger_load_player_save_state(pk, username.clone();)
+        self.player_load_save_state_state.insert(pk, PlayerLoadSaveStateState::Loading(aborted));
+
+        // load all joined players into the new player
+        let mut clientside_players = Slab::new();
+        let mut player_clientside_player_idx =
+            self.players.new_per_joined_player(|b_pk| {
+                let b_clientside_player_idx = clientside_players.insert(b_pk);
+                self.effects.push_back(ConnMgrEffect::AddPlayerToClient {
+                    add_to: pk,
+                    to_add: b_pk,
+                    clientside_player_idx: b_clientside_player_idx,
+                });
+                b_clientside_player_idx
+            });
+        self.player_clientside_players.insert(pk, clientside_players);
+        self.player_player_clientside_player_idx.insert(pk, player_clientside_player_idx);
+
+        Ok(())
+    }
+
+    // internal method to trigger the asynchronous reading of a player's save state and have the
+    // result sent back to self as a PlayerSaveStateLoaded event when ready.
+    fn trigger_load_player_save_state(&self, pk: PlayerKey, username: String) -> AbortGuard {
+        let aborted = AbortGuard::new();
+        let server_send = self.server_send.clone();
+        let mut save_db = self.save_db.clone();
+        let username = username.clone();
+        self.thread_pool.submit(WorkPriority::Server, aborted.new_handle(), move |aborted|
+            let result = save_db.read(PlayerKey { username });
+            match result {
+                Ok(save_state) => {
+                    // it went well, send back to the server
+                    server_send.send(
+                        ServerEvent::PlayerSaveStateLoaded(PlayerSaveStateLoaded { pk, save_state }),
+                        EventPriority::Other,
+                        Some(aborted),
+                        None,
+                    );
+                }
+                Err(e) => {
+                    // it failed, just log error for now
+                    error!(%e, "error reading player from save file (server will hang)");
+                }
+            }
+        });
+        aborted
+    }
+
+    /// Call upon receiving a `PlayerSaveStateLoaded` event.
+    pub fn on_player_save_state_loaded(&mut self, event: PlayerSaveStateLoaded) {
+        // store
+        let PlayerSaveStateLoaded { pk, save_state } = event;
+        self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_state);
+
+        // TODO
+        //
+        // in the future we'd like to also make it so that we wait for the chunk manager to be
+        // satisfied with a sufficient amount of chunks being loaded into the client before sending
+        // it this. but for now, we'll just tell the player to join as soon as their player save
+        // state is retrieved.
+        self.connections[self.player_conn_idx[pk]].connection.send(DownMsg::ShouldJoinGame);
+        self.connections[self.player_conn_idx[pk]].should_join_game = true;
+    }
+
+    // internal method to try to process a join game message from a non-killed connection. error
+    // indicates that the network connection should be terminated.
+    fn try_handle_join_game(&mut self, conn_idx: usize) -> Result<()> {
+        // prepare and validate
+        ensure!(self.connections[conn_idx].should_join_game, "wrong time to send join game");
+        self.connections[conn_idx].should_join_game = false;
+        let pk = self.connections[conn_idx].pk.unwrap();
+        let pls3 = replace(
+            &mut self.player_load_save_state_state[pk],
+            PlayerLoadSaveStateState::Taken,
+        );
+        let save_state = match pls3 {
+            PlayerLoadSaveStateState::Stashed(save_state) => save_state,
+            _ => unreachable!(),
+        };
+
+        // begin joining the player
+        let pk = self.players.join(pk);
+        self.effects.push_back(ConnMgrEffect::BeginJoinPlayer { pk, save_state });
+
+        // add the player to all clients, including itself
+        for pk2 in self.players.iter() {
+            let clientside_player_idx = self.player_clientside_players[pk2].insert(pk);
+            self.player_player_clientside_player_idx[pk2].insert(pk, clientside_player_idx);
+            self.effects.push_back(ConnMgrEffect::AddPlayerToClient {
+                add_to: pk2,
+                to_add: pk,
+                clientside_player_idx,
+            });
+        }
+
+        // finish joining the player
+        self.effects.push_back(ConnMgrEffect::FinalizeJoinPlayer {
+            pk,
+            self_clientside_player_idx: self.player_player_clientside_player_idx[pk][pk],
+        });
+
+        Ok(())
+    }
+
+    // internal method to try to process a player message from a non-killed connection. error
+    // indicates that the network connection should be terminated.
+    fn try_handle_player_msg(&mut self, conn_idx: usize, msg: PlayerMsg) -> Result<()> {
+        // prepare and validate
+        let pk = self.connections[conn_idx].pk
+            .and_then(|pk| self.players.to_jpk(pk))
+            .ok_or_else(|| anyhow!("wrong time to send player msg"))?;
+
+        // tell caller to process msg
+        self.effects.push_back(ConnMgrEffect::PlayerMsg(pk, msg));
+
+        Ok(())
     }
 
     // internal method to actively terminate a connection and remove the associated player if there
     // is one.
-    fn kill_connection(&mut self, conn_idx: usize) -> Option<ConnMgrEffect> {
+    fn kill_connection(&mut self, conn_idx: usize) {
         // tell the network connection to die. this will abandon allocation of resources to it and
         // will trigger a corresponding `NetworkEvent::RemoveConnection` to happen soon. 
         self.connections[conn_idx].kill();
@@ -176,9 +459,11 @@ impl ConnMgr {
         let pk = self.connections[conn_idx].pk.take();
         if let Some(pk) = pk {
             self.remove_player(pk);
-            Some(ConnMgrEffect::RemovePlayer(pk))
-        } else {
-            None
+            let jpk = self.players.to_jpk(pk);
+            if let Some(jpk) = jpk {
+                self.remove_joined_player(jpk);
+            }
+            self.effects.push_back(ConnMgrEffect::RemovePlayer(pk, jpk));
         }
     }
 
@@ -189,20 +474,19 @@ impl ConnMgr {
         self.player_conn_idx.remove(pk);
         let username = self.player_username.remove(pk);
         self.username_player.remove(&username).unwrap();
-        self.player_joined_game.remove(pk);
         self.player_clientside_players.remove(pk);
-        self.player_player_clientside_player_idx.remove(pk); 
-        
+        self.player_player_clientside_player_idx.remove(pk);
+    }
+
+    // internal method to clean up internally when a joined player is removed
+    fn remove_joined_player(&mut self, pk: JoinedPlayerKey) {
         // unlink from other clients
-        for pk2 in in self.players.iter() {
+        for pk2 in self.players.iter() {
             let clientside_player_idx = self.player_player_clientside_player_idx[pk2].remove(pk);
-            if let Some(clientside_player_idx) = clientside_player_idx {
-                self.player_clientside_players[ck2].remove(clientside_player_idx);
-                // including telling those other clients to remove it clientside
-                self.connections[self.player_conn_idx[pk2]].connection.send(down::RemovePlayer {
-                    player_idx: clientside_player_idx,
-                });
-            }
+            self.player_clientside_players[ck2].remove(clientside_player_idx);
+            self.connections[self.player_conn_idx[pk2]].connection.send(DownMsg::RemovePlayer {
+                player_idx: clientside_player_idx,
+            });
         }
     }
 }
