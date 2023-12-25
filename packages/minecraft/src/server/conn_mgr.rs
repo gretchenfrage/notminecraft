@@ -102,16 +102,9 @@ use anyhow::*;
 ///      themself that only gets loaded for them eg their inventory.
 ///
 /// Side effects that the rest of the server should process are added to an internal effects queue.
+#[derive(Default)]
 pub struct ConnMgr {
     pub effects: EffectDeque<ConnMgrEffect>,
-
-    // sender handle to the server event channel
-    server_send: ServerSender,
-    // handle to the save database
-    save_db: SaveDb,
-    // handle to the thread pool
-    thread_pool: ThreadPool,
-
     // state for each network connection
     connections: Slab<ConnectionState>
     // allocates player keys. players are subset of connections.
@@ -157,7 +150,7 @@ enum PlayerLoadSaveStateState {
     // request to load from the save file is pending
     Loading(AbortGuard),
     // is loaded from the save file and ready for when the player joins
-    Stashed(Option<PlayerVal>),
+    Stashed(Option<PlayerSaveVal>),
     // player has joined and thus ownership of the state has been taken
     Taken,
 }
@@ -165,8 +158,14 @@ enum PlayerLoadSaveStateState {
 /// Effect flowing from the `ConnMgr` to the rest of the server.
 #[derive(Debug)]
 pub enum ConnMgrEffect {
-    /// A new player was connected. Initialize it in `PerPlayer` structures.
-    AddPlayer(PlayerKey),
+    /// A new player was connected. Initialize it in `PerPlayer` structures. Also, set in motion
+    /// the process of loading the player's save state, so that `on_player_save_state_ready` is
+    /// called in the future, unless aborted.
+    AddPlayerRequestLoad {
+        pk: PlayerKey,
+        save_key: PlayerSaveKey,
+        aborted: AbortHandle,
+    },
     /// A previously added player is now joining the game. Initialize it in `PerJoinedPlayer`
     /// structures.
     ///
@@ -213,19 +212,8 @@ pub struct PlayerSaveStateLoaded {
 
 impl ConnMgr {
     /// Construct.
-    pub fn new(server_send: ServerSender, save_db: SaveDb, thread_pool: ThreadPool) -> Self {
-        ConnMgr {
-            server_send,
-            save_db,
-            thread_pool,
-            connections: Slab::new(),
-            players: PlayerKeySpace::new(),
-            player_conn_idx: PerPlayer::new(),
-            username_player: HashMap::new(),
-            player_load_save_state_state: PerPlayer::new(),
-            player_clientside_players: PerPlayer::new(),
-            player_player_clientside_player_idx: PerPlayer::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get the player key space.
@@ -317,19 +305,26 @@ impl ConnMgr {
         // transmit AcceptLogIn to client
         self.connections[conn_idx].connection.send(DownMsg::AcceptLogIn);
         
-        // create the player
+        // initialize player key
         let pk = self.players.add();
         self.connections[conn_idx].pk = Some(pk);
         self.player_conn_idx.insert(pk, conn_idx);
-        self.effects.push(ConnMgrEffect::AddPlayer(pk));
 
         // initialize in username tracking structures
         self.player_username.insert(pk, username.clone());
         self.username_player.insert(username, pk);
 
-        // set in motion the loading of the player state from the save file
-        let aborted = self.trigger_load_player_save_state(pk, username.clone();)
-        self.player_load_save_state_state.insert(pk, PlayerLoadSaveStateState::Loading(aborted));
+        // initialize in structure for tracking the loading of its save state
+        let aborted_1 = AbortGuard::new();
+        let aborted_2 = aborted.handle();
+        self.player_load_save_state_state.insert(pk, PlayerLoadSaveStaetState::Loading(aborted_1));
+
+        // add the player to the rest of the server and trigger its loading from the save file
+        self.effects.push(ConnMgrEffect::AddPlayerStartLoading {
+            pk,
+            save_key: PlayerSaveKey { username: username.clone() },
+            aborted: aborted_2,
+        });
 
         // load all joined players into the new player
         let mut clientside_players = Slab::new();
@@ -349,39 +344,11 @@ impl ConnMgr {
         Ok(())
     }
 
-    // internal method to trigger the asynchronous reading of a player's save state and have the
-    // result sent back to self as a PlayerSaveStateLoaded event when ready.
-    fn trigger_load_player_save_state(&self, pk: PlayerKey, username: String) -> AbortGuard {
-        let aborted = AbortGuard::new();
-        let server_send = self.server_send.clone();
-        let mut save_db = self.save_db.clone();
-        let username = username.clone();
-        self.thread_pool.submit(WorkPriority::Server, aborted.new_handle(), move |aborted|
-            let result = save_db.read(PlayerKey { username });
-            match result {
-                Ok(save_state) => {
-                    // it went well, send back to the server
-                    server_send.send(
-                        ServerEvent::PlayerSaveStateLoaded(PlayerSaveStateLoaded { pk, save_state }),
-                        EventPriority::Other,
-                        Some(aborted),
-                        None,
-                    );
-                }
-                Err(e) => {
-                    // it failed, just log error for now
-                    error!(%e, "error reading player from save file (server will hang)");
-                }
-            }
-        });
-        aborted
-    }
-
-    /// Call upon receiving a `PlayerSaveStateLoaded` event.
-    pub fn on_player_save_state_loaded(&mut self, event: PlayerSaveStateLoaded) {
+    /// Call upon the result of a previously triggered player save state loading operation being
+    /// ready, unless aborted.
+    pub fn on_player_save_state_ready(&mut self, pk: PlayerKey, save_val: Option<PlayerSaveVal>) {
         // store
-        let PlayerSaveStateLoaded { pk, save_state } = event;
-        self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_state);
+        self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_val);
 
         // TODO
         //

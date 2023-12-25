@@ -54,7 +54,7 @@ impl TickMgr {
                 _ => behind_nanos / TICK.as_nanos() + 1,
             };
             let behind_ticks = u32::try_from(behind_ticks).expect("time broke");
-            warn!("running too slow, skipping {behind_ticks} ticks");
+            warn!("running too slow, skipping {} ticks", behind_ticks);
             self.next_tick += TICK * behind_ticks;
         }
     }

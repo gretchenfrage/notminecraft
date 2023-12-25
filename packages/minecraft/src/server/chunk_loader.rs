@@ -47,24 +47,23 @@ impl ChunkLoader {
 
     /// Submit a job to the thread pool to read this chunk from the save file, or generate it new
     /// if it has never been saved, and then send it back to the server loop as a `ChunkReady`
-    /// event.
-    pub fn trigger_load(&self, chunk_key: ChunkKey) -> AbortGuard {
+    /// event, with the given abort handle.
+    pub fn trigger_load(&self, save_key: ChunkSaveKey, aborted: AbortHandle) {
         let ctx = Arc::clone(&self.job_ctx);
-        let aborted = AbortGuard::new();
         // submit task
-        self.thread_pool.submit(WorkPriority::Server, aborted.handle(), move |aborted| {
+        self.thread_pool.submit(WorkPriority::Server, aborted, move |aborted| {
             // attempt read
-            let result = ctx.save_db.read(chunk_key);
+            let result = ctx.save_db.read(save_key);
             match result {
-                Ok(Some(chunk_val)) => {
+                Ok(Some(save_val)) => {
                     // loaded
-                    let event = ServerEvent::ChunkReady { chunk_key, chunk_val, saved: true };
+                    let event = ServerEvent::ChunkReady { save_key, save_val, saved: true };
                     ctx.server_send.send(event);
                 }
                 Ok(None) => {
                     // must generate
-                    let chunk_val = generate_chunk(&ctx.game);
-                    let event = ServerEvent::ChunkReady { chunk_key, chunk_val, saved: false };
+                    let save_val = generate_chunk(&ctx.game);
+                    let event = ServerEvent::ChunkReady { save_key, save_val, saved: false };
                     ctx.server_send.send(event);
                 }
                 Err(e) => {
@@ -73,6 +72,5 @@ impl ChunkLoader {
                 }
             }
         });
-        aborted
     }
 }

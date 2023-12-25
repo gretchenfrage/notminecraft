@@ -43,13 +43,13 @@ pub enum ServerEvent {
         /// The player.
         pk: PlayerKey,
         /// The loaded save file value.
-        player_val: Option<PlayerVal>,
+        save_val: Option<PlayerSaveVal>,
     },
     /// A job triggered by the chunk mgr to load a chunk from the save file or generate it for the
     /// first time and should be routed back to the chunk mgr. 
     ChunkReady {
-        chunk_key: ChunkKey,
-        chunk_val: ChunkVal,
+        save_key: ChunkKey,
+        save_val: ChunkVal,
         saved: bool,
     },
     /// A job triggered by the save mgr to save the world to the save file is done and should be
