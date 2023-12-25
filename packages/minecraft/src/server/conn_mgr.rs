@@ -204,12 +204,6 @@ pub enum ConnMgrEffect {
     RemovePlayer(PlayerKey, Option<JoinedPlayerKey>),
 }
 
-/// Event for when a player's save state is finished being loaded from the save file.
-pub struct PlayerSaveStateLoaded {
-    pub pk: PlayerKey,
-    pub save_state: Option<PlayerVal>,
-}
-
 impl ConnMgr {
     /// Construct.
     pub fn new() -> Self {
