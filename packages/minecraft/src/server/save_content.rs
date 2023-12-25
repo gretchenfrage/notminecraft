@@ -17,31 +17,31 @@ use std::sync::Arc;
 /// key type, val type.
 macro_rules! save_schema {
     ()=>{
-        (0, Chunk, ChunkKey, ChunkVal)
-        (1, Player, PlayerKey, PlayerVal)
+        (0, Chunk, ChunkSaveKey, ChunkSaveVal)
+        (1, Player, PlayerSaveKey, PlayerSaveVal)
     };
 }
 
 /// Save file key schema for chunks.
 #[derive(Debug, GameBinschema, Copy, Clone)]
-pub struct ChunkKey {
+pub struct ChunkSaveKey {
     pub cc: Vec3<i64>,
 }
 
 /// Save file val schema for chunks.
 #[derive(Debug, GameBinschema)]
-pub struct ChunkVal {
+pub struct ChunkSaveVal {
     pub chunk_tile_blocks: ChunkBlocks,
 }
 
 /// Save file key schema for players.
 #[derive(Debug, GameBinschema, Clone)]
-pub struct PlayerKey {
+pub struct PlayerSaveKey {
     pub username: String,
 }
 
 /// Save file val schema for players.
-pub struct PlayerVal {
+pub struct PlayerSaveVal {
     pub pos: Vec3<f32>,
     pub inventory_slots: [ItemSlot; 36],
 }

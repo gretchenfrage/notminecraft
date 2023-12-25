@@ -32,6 +32,7 @@ impl AbortHandle {
 
 /// Wrapper around `AbortHandle` which aborts when dropped.
 #[derive(Default, Debug)]
+#[must_use]
 pub struct AbortGuard(AbortHandle);
 
 impl AbortGuard {

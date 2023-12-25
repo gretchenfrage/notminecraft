@@ -245,6 +245,11 @@ impl SaveMgr {
             None
         }
     }
+
+    /// Call upon receiving a save op done event.
+    pub fn on_save_op_done(&mut self, tick: u64) {
+        self.last_saved = LastSaved::AtTick(tick);
+    }
 }
 
 impl<'a> SaveOp<'a> {

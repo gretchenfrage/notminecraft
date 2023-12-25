@@ -21,9 +21,9 @@ pub mod save_mgr;
 pub mod conn_mgr;
 
 use self::{
+    channel::*,1
     per_player::*,
-    save_db: SaveDb,
-    channel::{ServerSender, ServerReceiver},
+    save_content::*,
     tick_mgr::TickMgr,
     chunk_mgr::ChunkMgr,
     save_mgr::SaveMgr,
@@ -37,10 +37,24 @@ pub enum ServerEvent {
     Stop,
     /// See inner type docs.
     Network(NetworkEvent),
-    /// Loopback event for `ConnMgr`.
-    PlayerSaveStateLoaded(PlayerSaveStateLoaded),
-    /// Loopback event for `SaveMgr`.
-    SaveOpComplete,
+    /// A job triggered by the conn mgr to load a player's save state from the save file is done
+    /// and should be routed back to the conn mgr.
+    PlayerSaveStateReady {
+        /// The player.
+        pk: PlayerKey,
+        /// The loaded save file value.
+        player_val: Option<PlayerVal>,
+    },
+    /// A job triggered by the chunk mgr to load a chunk from the save file or generate it for the
+    /// first time and should be routed back to the chunk mgr. 
+    ChunkReady {
+        chunk_key: ChunkKey,
+        chunk_val: ChunkVal,
+        saved: bool,
+    },
+    /// A job triggered by the save mgr to save the world to the save file is done and should be
+    /// routed back to the save mgr.
+    SaveOpDone,
 }
 
 /// Raw server state.
