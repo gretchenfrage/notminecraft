@@ -20,6 +20,7 @@ use anyhow::*;
 
 /// Enforces send buffer policies for a single connection. Should be shared between the sending and
 /// receiving half.
+#[derive(Default)]
 pub(super) struct SendBufferPolicyEnforcer {
     accept_more_chunks_budget: AtomicU64,
 }
@@ -27,9 +28,7 @@ pub(super) struct SendBufferPolicyEnforcer {
 impl SendBufferPolicyEnforcer {
     /// Construct new.
     pub(super) fn new() -> Self {
-        SendBufferPolicyEnforcer {
-            accept_more_chunks_budget: AtomicU64::new(0),
-        }
+        Self::default()
     }
 
     /// Called right before the message is transmitted.

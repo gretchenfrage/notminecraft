@@ -58,7 +58,7 @@ struct NetworkServerLockableState {
 // as a whole has been shut down.
 enum SlabEntry {
     Ws(ws::SlabEntry),
-    InMem,
+    InMem(in_mem::SlabEntry),
 }
 
 /// Handle to the network IO connection with a single client.
@@ -110,14 +110,14 @@ impl NetworkServer {
     where
         B: ToSocketAddrs + Send + Sync + 'static,
     {
-
+        ws::bind(self, bind_to, rt, game);
     }
 
     /// Construct a new in-memory client. See `InMemClient`. This directly causes a single add
     /// connection network event, with the given connection object being the server-side half of
     /// this in-mem client.
     pub fn in_mem_client(&mut self) -> InMemClient {
-
+        in_mem::create(self)
     }
 }
 
@@ -164,7 +164,7 @@ impl Drop for NetworkServer {
         for entry in &lock.slab {
             match entry {
                 &SlabEntry::Ws(ref inner) => inner.shutdown(),
-                &SlabEntry::InMem => (),
+                &SlabEntry::InMem(ref inner) => inner.shutdown(),
             }
         }
         drop(lock);

@@ -104,6 +104,21 @@ impl Error {
     }
 }
 
+impl ErrorKind {
+    pub fn is_programmer_fault(self) -> bool {
+        match self {
+            ErrorKind::Io
+            | ErrorKind::MalformedData
+            | ErrorKind::PlatformLimits
+            | ErrorKind::Other => false,
+            
+            ErrorKind::SchemaNonConformance
+            | ErrorKind::IllegalSchema
+            | ErrorKind::ApiUsage => true,
+        }
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
         Self::new(ErrorKind::Io, error, None)

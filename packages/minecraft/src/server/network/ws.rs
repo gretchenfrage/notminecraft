@@ -90,12 +90,15 @@ use tokio_tungstenite::{
 };
 use futures::{
     stream::{Stream, StreamExt},
-    sink::Sink,
+    sink::{Sink, SinkExt},
     future::pending,
     select,
     select_biased,
 };
 use anyhow::{Error, bail};
+
+
+// ==== constants ====
 
 
 // should be changed if meta-level things about how ws-binschema integration works changes  
@@ -125,16 +128,12 @@ const SEND_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 const PING_PONG_BUFFER_LIMIT: usize = 10;
 
 
+// ==== types ====
+
+
 // slab entry inner type for websocket connections.
 pub(super) struct SlabEntry {
     conn_shared: Arc<WsConnShared>,
-}
-
-impl SlabEntry {
-    // called upon network shutdown
-    pub(super) fn shutdown(&self) {
-        self.conn_shared.shutdown_recv.notify_one();
-    }
 }
 
 // connection inner type for websocket connections
@@ -163,15 +162,28 @@ struct WsShared {
     game: Arc<GameData>,
 }
 
-// shared state for a single ws connection
+// arbitrarily shared state for a single ws connection
+#[derive(Default)]
 struct WsConnShared {
     // tell the receive task to cleanly close the connection. can be called from anywhere.
     shutdown_recv: Notify,
     // tell the send task to send a close message if it can, then terminate. only called from the
     // receive task.
     shutdown_send: Notify,
+    // enforces send buffer policies
+    sbpe: SendBufferPolicyEnforcer,
 }
 
+
+// ==== API ====
+
+
+impl SlabEntry {
+    // called upon network shutdown
+    pub(super) fn shutdown(&self) {
+        self.conn_shared.shutdown_recv.notify_one();
+    }
+}
 
 impl Connection {
     // see outer type
@@ -184,6 +196,10 @@ impl Connection {
         self.conn_shared.shutdown_recv.notify_one();
     }
 }
+
+
+// ==== binding and accepting ====
+
 
 // bind to port and start accepting connections on it
 pub(super) fn bind<B>(server: &mut NetworkServer, bind_to: B, rt: &Handle, game: &Arc<GameData>)
@@ -251,6 +267,260 @@ async fn accept_task<B: ToSocketAddrs>(
     }
 }
 
+// inner part of the accept task which gets retried if fails
+async fn try_accept_task_inner<B: ToSocketAddrs>(
+    ws_shared: &Arc<WsShared>,
+    bind_to: &B,
+) -> Result<Infallible, Error> {
+    // TCP bind
+    let listener = TcpListener::bind(bind_to).await?;
+
+    // accept connections
+    loop {
+        // spawn the receive task for each
+        let (tcp, _) = listener.accept().await?;
+        rt.spawn(recv_task(Arc::clone(ws_shared), tcp));
+    }
+}
+
+
+// ==== receiving ====
+
+
+// body of the receive task for a connection
+//
+// 1. does the ws + ws-binschema handshake
+// 2. creates the connection and spawns the send task
+// 3. enters the receive loop until something triggers a shutdown
+// 4. destroys the connection and tells the send task to shut down
+async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
+    // attempt to disable nagling
+    try_denagle(&tcp);
+
+    // attempt to do the ws and ws-binschema handshakes (with timeout)
+    let ws = try_handshake_handle_err(tcp, &ws_shared).await;
+    let ws = match ws {
+        Some(ws) => ws,
+        // if handshake failed, the task can just stop here
+        None => return,
+    };
+    let (ws_send, mut ws_recv) = ws.split();
+
+    // allocate connection shared state
+    let conn_shared = Arc::new(WsConnShared::default());
+    let (send_pong, recv_pong) = channel(PING_PONG_BUFFER_LIMIT);
+    let (send_send, recv_send) = unbounded_channel();
+
+    // create connection
+    let slab_entry = super::SlabEntry::Ws(SlabEntry { conn_shared: Arc::clone(&conn_shared) });
+    let connection = super::Connection(ConnectionInner::Ws(Connection {
+        conn_shared: Arc::clone(&conn_shared),
+        send_send,
+    }));
+    let conn_idx = create_conn(&ws_shared.ns_shared, slab_entry, connection);
+    let conn_idx = match conn_idx {
+        Some(conn_idx) => conn_idx,
+        // this case happens if the whole network server is being dropped
+        None => return,
+    }
+
+    // spawn send task
+    ws_shared.rt.spawn(send_task(
+        Arc::clone(&ws_shared),
+        Arc::Clone(&conn_shared),
+        ws_send,
+        recv_pong,
+        recv_send,
+    ));
+
+    // do loop until loop errors or told to shut down
+    let recv_loop = recv_loop(&ws_shared, &conn_shared, ws_recv, seng_pong, conn_idx);
+    select_biased! {
+        _ = conn_shared.shutdown_recv.notified() => {
+            trace!("receive task shutting down because shut down requested");
+        }
+        result = recv_loop => {
+            let Err(e) = result;
+            trace!(%e, "receive task errored (closing connection)");
+        }
+    }
+
+    // shut down
+    conn_shared.shutdown_send.notify_one();
+    destroy_conn(&ws_shared.ns_shared, conn_idx);
+}
+
+// message receiving loop for the portion of a receive task where the connection is alive.
+async fn recv_loop<W: Stream<Item=Result<Message, Error>>>(
+    ws_shared: &WsShared,
+    conn_shared: &WsConnShared,
+    ws_recv: mut W,
+    send_pong: Sender<Vec<u8>>,
+    conn_idx: usize,
+) -> Result<Infallible, Error> {
+    // allocate state
+    let mut coder_state_alloc = CoderStateAlloc::new();
+    let backpressure_semaphore = Arc::new(Semaphore::new(RECEIVE_BUFFER_LIMIT));
+
+    // enter loop
+    loop {
+        let msg = ws_recv.next().await?;
+
+        // extract binary message or early escape this loop iteration
+        let msg = match msg {
+            Message::Binary(msg) => msg,
+            Message::Ping(msg) => {
+                // tell send task to send pong (ping pong buffer may have backpressure)
+                let _ = send_pong.send(msg).await;
+                continue;
+            }
+            Message::Close(_) => bail!("received close ws msg"),
+            _ => bail!("received invalid ws msg type"),
+        };
+        let msg_size = msg.len();
+
+        // decode
+        let mut coder_state = CoderState::new(&ws_shared.up_schema, coder_state_alloc, None);
+        let result =
+            UpMsg::decode(
+                &mut Decoder::new(&mut coder_state, &mut msg.as_slice()), &ws_shared.game,
+            )
+            .and_then(|msg| coder_state
+                .is_finished_or_err()
+                .map(move |()| msg));
+        if let &Err(e) = result {
+            if e.kind().is_programmer_fault() {
+                error!(%e, "decoding error detected as being programmer's fault");
+            }
+        }
+        let msg = result?;
+        coder_state.is_finished_or_err()?;
+        coder_state_alloc = coder_state.into_alloc();
+
+        // send buffer policies
+        conn_shared.sbpe.post_receive(&msg)?;
+
+        // receive backpressure
+        // unwrap safety: we never close the semaphore
+        backpressure_semaphore.acquire_many_owned(msg_size).await.unwrap();
+
+        // send received message to server
+        ws_shared.ns_shared.server_send.send(
+            ServerEvent::Network(NetworkEvent::Message(conn_idx, msg)),
+            EventPriority::Network,
+            None,
+            Some(permit),
+        );
+    }
+}
+
+
+// ==== sending ====
+
+
+// body of the send task for a connection
+async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
+    ws_shared: Arc<WsShared>,
+    conn_shared: Arc<WsConnShared>,
+    mut ws_send: W,
+    recv_pong: Receiver<Vec<u8>>,
+    recv_send: UnboundedReceiver<DownMsg>,
+) {
+    // do loop until loop errors or told to shut down
+    let send_loop = send_loop(ws_shared, conn_shared, &mut ws_send, recv_pong, recv_send);
+    let should_send_close = select_biased! {
+        _ = conn_shared.shutdown_send.notified() => {
+            trace!("send task shutting down because shut down requested");
+            true
+        }
+        result = send_loop => {
+            let Err(e) = result;
+            let should_send_close = match e {
+                SendLoopError::Ws(e) => {
+                    trace!(%e, "send task error (closing connection)");
+                    false
+                }
+                SendLoopError::WsBinschema(e) => {
+                    trace!(%e, "send task error (closing connection)");
+                    true
+                }
+            };
+            // if the send task is triggering the shutdown, tell the receive task to shut down
+            conn_shared.shutdown_recv.notify_one();
+            should_send_close
+        }
+    };
+
+    // close if applicable
+    if should_send_close {
+        try_close(ws_send, None).await;
+    }
+}
+
+// message sending loop for the portion of a send task where the connection is alive
+async fn send_loop<W: Sink<Message, Error=TungsteniteError> + Unpin>(
+    ws_shared: Arc<WsShared>,
+    conn_shared: Arc<WsConnShared>,
+    ws_send: &mut W,
+    recv_pong: Receiver<Vec<u8>>,
+    recv_send: UnboundedReceiver<DownMsg>,
+) -> Result<Infallible, SendLoopError> {
+    // allocate state
+    let mut coder_state_alloc = CoderStateAlloc::new();
+
+    // enter loop
+    loop {
+        // take down message to send or early escape this loop iteration
+        let msg: DownMsg = select_biased! {
+            // ping pong
+            msg = some_or_pending(recv_pong.recv()) => {
+                ws_send.send(Message::Pong(msg)).await.map_err(SendLoopError::Ws)?;
+                continue;
+            }
+            // actual message to send
+            msg = some_or_pending(recv_pong.recv()) => msg,
+        };
+
+        // encode
+        let mut buf = Vec::new();
+        let mut coder_state = CoderState::new(&ws_shared.down_schema, coder_state_alloc, None);
+        let result = msg
+            .encode(&mut Encoder::new(&mut coder_state, &mut buf), &ws_shared.game)
+            .and_then(|()| coder_state.is_finished_or_err());
+        if let &Err(e) = result {
+            error!(%e, "encoding error");
+        }
+        result.map_err(SendLoopError::Ws)?;
+
+        // sbpe
+        conn_shared.send_buffer_policy_enforcer.pre_transmit(&msg);
+
+        // send and flush
+        ws_send.send(Message::Binary(buf)).await.map_err(SendLoopError::Ws)?;
+        ws_send.flush().await.map_err(SendLoopError::Ws)?;
+    }
+}
+
+// specific error type for send loop
+enum SendLoopError {
+    // error in the underlying websocket transport. just drop the connection.
+    Ws(TungsteniteError),
+    // higher level error. try to properly close the connection.
+    WsBinschema(Error),
+}
+
+// wrapper around a future option that resolves to the some value or pends forever
+async fn some_or_pending<T, F: Future<Output=Option<T>>>(option: T) -> T {
+    match option.await {
+        Some(t) => t,
+        None => pending().await,
+    }
+}
+
+
+// ==== handshake ====
+
+
 // form a ws-binschema handshake message that should be sent by the side transmitting send_schema
 fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -269,249 +539,6 @@ fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
         coder_state_alloc = coder_state.into_alloc();
     }
     buf
-}
-
-// inner part of the accept task which gets retried if fails
-async fn try_accept_task_inner<B: ToSocketAddrs>(
-    ws_shared: &Arc<WsShared>,
-    bind_to: &B,
-) -> Result<Infallible, Error> {
-    // TCP bind
-    let listener = TcpListener::bind(bind_to).await?;
-
-    // accept connections
-    loop {
-        // spawn the receive task for each
-        let (tcp, _) = listener.accept().await?;
-        rt.spawn(recv_task(Arc::clone(ws_shared), tcp));
-    }
-}
-
-// body of the receive task for a connection
-//
-// 1. does the ws + ws-binschema handshake
-// 2. spawns the corresponding send task
-// 3. switches to itself doing the receive loop
-async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
-    // attempt to disable nagling
-    try_denagle(&tcp);
-
-    // attempt to do the ws and ws-binschema handshakes (with timeout)
-    let ws = try_handshake_handle_err(tcp, &ws_shared).await;
-    let ws = match ws {
-        Some(ws) => ws,
-        // if handshake failed, the task can just stop here
-        None => return,
-    };
-
-    // split this beast in twain and in twixt
-    let (ws_send, mut ws_recv) = ws.split();
-
-    // construct connection shared state
-    let conn_shared = Arc::new(WsConnShared {
-        shutdown_recv: Notify::new(),
-        shutdown_send: Notify::new(),
-    });
-    // (send/recv)_pong tells the send task to send a pong message
-    let (send_pong, recv_pong) = channel(PING_PONG_BUFFER_LIMIT);
-    // (send/recv)_send tells the send task to send an application message
-    let (send_send, recv_send) = unbounded_channel();
-
-    // create the connection
-    let conn_idx = create_conn(
-        &ws_shared.ns_shared,
-        super::SlabEntry::Ws(SlabEntry { conn_shared: Arc::clone(&conn_shared) }),
-        super::Connection(ConnectionInner::Ws(Connection {
-            conn_shared: conn_shared: Arc::clone(&conn_shared),
-            send_send,
-        })),
-    );
-    let conn_idx = match conn_idx {
-        Some(conn_idx) => conn_idx,
-        // this case happens if the whole network server is shutting down. just drop everything.
-        None => return,
-    };
-
-    // spawn the send task
-    let task = send_task(
-        Arc::clone(&ws_shared),
-        conn_shared: Arc::clone(&conn_shared)
-        ws_send,
-        recv_pong,
-        recv_send,
-    );
-    ws_shared.rt.spawn(task);
-
-    // allocate other recv task state
-    let coder_state_alloc = CoderStateAlloc::new();
-    let backpressure_semaphore = Arc::new(Semaphore::new(RECEIVE_BUFFER_LIMIT));
-
-    // enter receive task event loop, break loop when connection should be shut down
-    loop {
-        // try to receive a message, break loop if told to shut down
-        let result = select_biased! {
-            _ = conn_shared.shutdown_recv.notified() => break,
-            result = ws_recv.next() => result,
-        };
-
-        // try to extract ok result, log and break loop on error
-        let msg: Message = match result {
-            Ok(msg) => msg,
-            Err(e) => {
-                trace!(%e, "ws error receiving message (killing connection)");
-                break;
-            }
-        };
-
-        // try to extract application message
-        let msg: Vec<u8> = match msg {
-            Message::Binary(msg) => msg,
-            Message::Ping(msg) => {
-                // in the event of a ping, try to tell the send task to send a pong
-                select! {
-                    _ = send_pong.send(msg) => (),
-                    // but if gets blocked on ping-pong buffer backpressure, and then told to shut
-                    // down while still blocking on that, break loop
-                    _ = conn_shared.shutdown_recv.notified() => break,
-                };
-
-                // upon successfully forwarding ping pong, continue loop
-                continue;
-            }
-            // if connection closed on ws level, break loop
-            Message::Close(_) => break,
-            // if any other type of message received, break loop
-            _ => {
-                trace!("invalid ws msg type received (killing connection)");
-                break;
-            }
-        };
-
-        // store this for backpressure
-        let msg_size = msg.len();
-
-        // try to decode up msg
-        let mut coder_state = CoderState::new(&ws_shared.up_schema, coder_state_alloc, None);
-        let result =
-            UpMsg::decode(
-                &mut Decoder::new(&mut coder_state, &mut msg.as_slice()), &ws_shared.game,
-            )
-            .and_then(|msg| coder_state
-                .is_finished_or_err()
-                .map(move |()| msg));
-        coder_state_alloc = coder_state.into_alloc();
-
-        // on decoding error, log and break loop
-        let msg: UpMsg = match result {
-            Ok(msg) => msg,
-            Err(e) => {
-                trace!(%e, "error decoding ws-binschema msg (killing connection)");
-                break;
-            }
-        };
-
-        // try to wait for receive backpressure to allow the delivery of this message to the server
-        let permit = select! {
-            // we shouldn't ever close the semaphore
-            result = backpressure_semaphore.acquire_many_owned(msg_size) => result.unwrap(),
-            // but if gets blocked on backpressure, and then is told to shut down, break loop
-            _ => conn_shared.shutdown_recv.notified() => break,
-        };
-
-        // finally, we can send the received message to the server loop
-        ws_shared.ns_shared.server_send.send(
-            ServerEvent::Network(NetworkEvent::Message(conn_idx, msg)),
-            EventPriority::Network,
-            None,
-            Some(permit),
-        );
-    }
-
-    // loop is broken, so shut down connection
-    drop(ws_recv);
-    conn_shared.shutdown_send.notify_one();
-    destroy_conn(&ws_shared.ns_shared, conn_idx);
-}
-
-// body of the send task for a connection
-async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
-    ws_shared: Arc<WsShared>,
-    conn_shared: Arc<WsConnShared>,
-    mut ws_send: W,
-    recv_pong: Receiver<Vec<u8>>,
-    recv_send: UnboundedReceiver<DownMsg>,
-) {
-    // allocate send task reusable allocations
-    let mut coder_state_alloc = CoderStateAlloc::new();
-
-    // enter send task event loop
-    loop {
-        // determine what message we should send, or early return
-        let msg: Message = select_biased! {
-            // send task was told to shut down by recv task
-            _ = conn_shared.shutdown_send.notified() => {
-                drop(recv_send);
-                try_close(ws_send, None).await;
-                return;
-            },
-            // respond to a ping with a pong
-            msg = some_or_pending(recv_pong.recv()) => Message::Pong(msg),
-            // encode down msg to be sent
-            msg = some_or_pending(recv_send.recv()) => {
-                let msg: DownMsg = msg;
-                let mut buf = Vec::new();
-                let mut coder_state =
-                    CoderState::new(&ws_shared.down_schema, coder_state_alloc, None);
-                let result = msg
-                    .encode(&mut Encoder::new(&mut coder_state, &mut buf), &ws_shared.game)
-                    .and_then(|()| coder_state.is_finished_or_err())
-                coder_state_alloc = coder_state.into_alloc();
-                
-                if let Err(e) = result {
-                    // if encounter error encoding it, kill connection.
-                    //
-                    // log this extra bad because this actually does indicate a server programmer
-                    // error.
-                    drop(recv_send);
-                    error!(%e, "error encoding down message (killing connection)");    
-                    conn_shared.shutdown_recv.notify_one();
-                    drop(ws_send);
-                    return;
-                }
-                
-                Message::Binary(message)
-            }
-        };
-
-        // try to send the message
-        select! {
-            result = ws_send.send(msg) => {
-                if let Err(e) = result {
-                    // if encounter error sending it, kill the connection
-                    drop(recv_send);
-                    trace!(%e, "ws error sending message (killing connection)");
-                    conn_shared.shutdown_recv.notify_one();
-                    drop(ws_send);
-                    return;
-                }
-            }
-            // if send task told to shut down by recv task while waiting for message to send, then
-            // shut down.
-            _ = conn_shared.shutdown_send.notified() => {
-                drop(recv_send);
-                try_close(ws_send, None).await;
-                return;
-            }
-        }
-    }
-}
-
-// wrapper around a future option that resolves to the some value or pends forever
-async fn some_or_pending<T, F: Future<Output=Option<T>>>(option: T) -> T {
-    match option.await {
-        Some(t) => t,
-        None => pending().await,
-    }
 }
 
 // attempt to disable nagling, log error on failure
