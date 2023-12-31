@@ -21,7 +21,7 @@ pub mod save_mgr;
 pub mod conn_mgr;
 
 use self::{
-    channel::*,1
+    channel::*,
     per_player::*,
     save_content::*,
     tick_mgr::TickMgr,

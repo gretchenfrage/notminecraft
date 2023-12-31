@@ -46,6 +46,8 @@ const LEVELS: usize = 3;
 /// - The ability to associate with a sent event a receipt notification handle such that the handle
 ///   is notified when the event is taken by the receiver, thus allowing event source-specific
 ///   backpressure.
+///
+/// Within a priority levels, event delivery is FIFO.
 pub fn channel() -> (ServerSender, ServerReceiver) {
     let state_0 = Arc::new(State::default());
     let state_1 = Arc::clone(&state_0);

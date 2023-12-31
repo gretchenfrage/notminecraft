@@ -129,7 +129,8 @@ pub struct ConnMgr {
 struct ConnectionState {
     // handle to the actual connection
     connection: Connection,
-    // message index from the client the server has processed up to and including
+    // message index from the client the server has processed up to and including.
+    // although this is inclusive, message indexes start at 1, so 0 still represents none.
     last_processed: u64,
     // whether the current value of last_processed has been acked to the client
     last_processed_acked: bool,
@@ -266,6 +267,20 @@ impl ConnMgr {
         }
     }
 
+    /// If additional messages from the client were processed since processed messages were last
+    /// marked as acked, return the current last_processed value and mark it as acked.
+    ///
+    /// Does not itself actually transmit the ack to the client, as the desired way to do that is
+    /// situational. Rather, if returns some, the caller should somehow transmit the returned value
+    /// to the client as an ack.
+    #[must_use]
+    pub fn ack_last_processed(&mut self, pk: PlayerKey) -> Option<u64> {
+        if !self.connections[self.player_conn_idx[pk]].last_processed_acked {
+            self.connections[self.player_conn_idx[pk]].last_processed_acked = true;
+            Some(self.connections[self.player_conn_idx[pk]].last_processed)
+        }
+    }
+
     // internal method to try to process a message from a network connection. error indicates that
     // the network connection should be terminated.
     fn try_handle_msg(&mut self, conn_idx: usize, msg: UpMsg) -> Result<()> {
@@ -273,6 +288,10 @@ impl ConnMgr {
             // this is likely superfluous, but possibly a good idea for defensiveness.
             return Ok(());
         }
+        // increment last processed and mark as not acked
+        self.connections[conn_idx].last_processed += 1;
+        self.connections[conn_idx].last_processed_acked = false;
+        // delegate for further processing
         match msg {
             UpMsg::LogIn(UpMsgLogIn { username }) => {
                 self.try_handle_log_in(conn_idx, msg)
