@@ -48,8 +48,8 @@ pub enum ServerEvent {
     /// A job triggered by the chunk mgr to load a chunk from the save file or generate it for the
     /// first time and should be routed back to the chunk mgr. 
     ChunkReady {
-        save_key: ChunkKey,
-        save_val: ChunkVal,
+        save_key: ChunkSaveKey,
+        save_val: ChunkSaveVal,
         saved: bool,
     },
     /// A job triggered by the save mgr to save the world to the save file is done and should be

@@ -100,8 +100,6 @@ use anyhow::*;
 ///    - Body within the world starts being simulated.
 ///    - FinalizeJoinGame is sent to client, including which player is them and any state about
 ///      themself that only gets loaded for them eg their inventory.
-///
-/// Side effects that the rest of the server should process are added to an internal effects queue.
 #[derive(Default)]
 pub struct ConnMgr {
     pub effects: EffectDeque<ConnMgrEffect>,
