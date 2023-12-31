@@ -127,23 +127,22 @@ const PING_PONG_BUFFER_LIMIT: usize = 10;
 
 // slab entry inner type for websocket connections.
 pub(super) struct SlabEntry {
-    // notify to put the recv task into the shutdown state
-    send_shutdown_recv: Arc<Notify>,
+    conn_shared: Arc<WsConnShared>,
 }
 
 impl SlabEntry {
     // called upon network shutdown
     pub(super) fn shutdown(&self) {
-        self.send_shutdown_recv.notify_one();
+        self.conn_shared.shutdown_recv.notify_one();
     }
 }
 
 // connection inner type for websocket connections
 pub(super) struct Connection {
+    // general connection-level shared state
+    conn_shared: Arc<WsConnShared>,
     // sender for queue of messages to send
     send_send: UnboundedSender<DownMsg>,
-    // notify to put the recv task into the shutdown state
-    send_shutdown_recv: Arc<Notify>,
 }
 
 // general module-level shared context
@@ -182,7 +181,7 @@ impl Connection {
 
     // see outer type
     pub(super) fn kill(&self) {
-        self.send_shutdown_recv.notify_one();
+        self.conn_shared.shutdown_recv.notify_one();
     }
 }
 
@@ -308,16 +307,11 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     // split this beast in twain and in twixt
     let (ws_send, mut ws_recv) = ws.split();
 
-    // construct channels for communicating with tasks
-
-    // (send/recv)_shutdown_recv tells the recv task to shut down
-    let send_shutdown_recv_1 = Arc::new(Notify::new());
-    let send_shutdown_recv_2 = Arc::clone(&send_shutdown_recv_1);
-    let send_shutdown_recv_3 = Arc::clone(&send_shutdown_recv_1);
-    let recv_shutdown_recv = Arc::new(Notify::new());
-    // (send/recv)_shutdown_send tells the send task to shut down
-    let send_shutdown_send = Arc::new(Notify::new());
-    let recv_shutdown_send = Arc::new(Notify::new());
+    // construct connection shared state
+    let conn_shared = Arc::new(WsConnShared {
+        shutdown_recv: Notify::new(),
+        shutdown_send: Notify::new(),
+    });
     // (send/recv)_pong tells the send task to send a pong message
     let (send_pong, recv_pong) = channel(PING_PONG_BUFFER_LIMIT);
     // (send/recv)_send tells the send task to send an application message
@@ -326,10 +320,10 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     // create the connection
     let conn_idx = create_conn(
         &ws_shared.ns_shared,
-        super::SlabEntry::Ws(SlabEntry { send_shutdown_recv: send_shutdown_recv_1 }),
+        super::SlabEntry::Ws(SlabEntry { conn_shared: Arc::clone(&conn_shared) }),
         super::Connection(ConnectionInner::Ws(Connection {
+            conn_shared: conn_shared: Arc::clone(&conn_shared),
             send_send,
-            send_shutdown_recv: send_shutdown_recv_2,
         })),
     );
     let conn_idx = match conn_idx {
@@ -341,9 +335,8 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     // spawn the send task
     let task = send_task(
         Arc::clone(&ws_shared),
+        conn_shared: Arc::clone(&conn_shared)
         ws_send,
-        send_shutdown_recv_3,
-        recv_shutdown_send,
         recv_pong,
         recv_send,
     );
@@ -357,7 +350,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     loop {
         // try to receive a message, break loop if told to shut down
         let result = select_biased! {
-            _ = recv_shutdown_recv.notified() => break,
+            _ = conn_shared.shutdown_recv.notified() => break,
             result = ws_recv.next() => result,
         };
 
@@ -379,7 +372,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
                     _ = send_pong.send(msg) => (),
                     // but if gets blocked on ping-pong buffer backpressure, and then told to shut
                     // down while still blocking on that, break loop
-                    _ = recv_shutdown_recv.notified() => break,
+                    _ = conn_shared.shutdown_recv.notified() => break,
                 };
 
                 // upon successfully forwarding ping pong, continue loop
@@ -422,7 +415,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
             // we shouldn't ever close the semaphore
             result = backpressure_semaphore.acquire_many_owned(msg_size) => result.unwrap(),
             // but if gets blocked on backpressure, and then is told to shut down, break loop
-            _ => recv_shutdown_recv.notified() => break,
+            _ => conn_shared.shutdown_recv.notified() => break,
         };
 
         // finally, we can send the received message to the server loop
@@ -436,16 +429,15 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
 
     // loop is broken, so shut down connection
     drop(ws_recv);
-    send_shutdown_send.notify_one();
+    conn_shared.shutdown_send.notify_one();
     destroy_conn(&ws_shared.ns_shared, conn_idx);
 }
 
 // body of the send task for a connection
 async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
     ws_shared: Arc<WsShared>,
+    conn_shared: Arc<WsConnShared>,
     mut ws_send: W,
-    send_shutdown_recv: Arc<Notify>,
-    recv_shutdown_send: Arc<Notify>,
     recv_pong: Receiver<Vec<u8>>,
     recv_send: UnboundedReceiver<DownMsg>,
 ) {
@@ -457,7 +449,7 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
         // determine what message we should send, or early return
         let msg: Message = select_biased! {
             // send task was told to shut down by recv task
-            _ = shutdown_send.notified() => {
+            _ = conn_shared.shutdown_send.notified() => {
                 drop(recv_send);
                 try_close(ws_send, None).await;
                 return;
@@ -482,7 +474,7 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
                     // error.
                     drop(recv_send);
                     error!(%e, "error encoding down message (killing connection)");    
-                    send_shutdown_recv.notify_one();
+                    conn_shared.shutdown_recv.notify_one();
                     drop(ws_send);
                     return;
                 }
@@ -498,14 +490,14 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
                     // if encounter error sending it, kill the connection
                     drop(recv_send);
                     trace!(%e, "ws error sending message (killing connection)");
-                    send_shutdown_recv.notify_one();
+                    conn_shared.shutdown_recv.notify_one();
                     drop(ws_send);
                     return;
                 }
             }
             // if send task told to shut down by recv task while waiting for message to send, then
             // shut down.
-            _ = shutdown_send.notified() => {
+            _ = conn_shared.shutdown_send.notified() => {
                 drop(recv_send);
                 try_close(ws_send, None).await;
                 return;
