@@ -43,7 +43,9 @@ pub struct PlayerSaveKey {
 /// Save file val schema for players.
 pub struct PlayerSaveVal {
     pub pos: Vec3<f32>,
-    pub inventory_slots: [ItemSlot; 36],
+    pub yaw: f32,
+    pub pitch: f32,
+    //pub inventory_slots: [ItemSlot; 36],
 }
 
 

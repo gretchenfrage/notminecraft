@@ -72,6 +72,8 @@ pub enum DownMsg {
     /// Acknowledge having fully processed messages from client up to and including message number
     /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
     Ack { last_processed: u64 },
+    /// Apply an edit to a loaded part of the world.
+    ApplyEdit(Edit),
 }
 
 /// Part of connection initialization flow.

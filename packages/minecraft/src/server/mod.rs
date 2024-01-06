@@ -9,21 +9,26 @@
 //! - Submodules with managers to abstract subclusters of server logic.
 //! - Other submodules to encapsulate subclusters of server-only logic.
 
+pub mod network;
 pub mod per_player;
 pub mod channel;
 pub mod generate_chunk;
 pub mod save_content;
 pub mod chunk_loader;
+pub mod player_save_state_loader;
 pub mod save_db;
 pub mod tick_mgr;
 pub mod chunk_mgr;
 pub mod save_mgr;
 pub mod conn_mgr;
+pub mod runner;
 
 use self::{
     channel::*,
     per_player::*,
     save_content::*,
+    chunk_loader::ChunkLoader,
+    player_save_state_loader::PlayerSaveStateLoader,
     tick_mgr::TickMgr,
     chunk_mgr::ChunkMgr,
     save_mgr::SaveMgr,
@@ -79,6 +84,14 @@ pub struct ServerOnlyState {
     pub server_recv: ServerRecv,
     /// Handle to the thread pool
     pub thread_pool: ThreadPool,
+    /// Services requests to load chunks.
+    pub chunk_loader: ChunkLoader,
+    /// Services requests to load player save state.
+    pub player_save_state_loader: PlayerSaveStateLoader,
+
+    pub player_pos: PerPlayer<Vec3<f32>>,
+    pub player_yaw: PerPlayer<f32>,
+    pub player_pitch: PerPlayer<f32>,
 
     //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
     //pub char_states: PerPlayer<CharState>,
@@ -88,8 +101,8 @@ pub struct ServerOnlyState {
 /// access to them. Generally this means state which is replicated between the server and client,
 /// and/or save file.
 pub struct ServerSyncState {
-    pub tile_blocks: sync_state_tile_blocks::ServerState,
-    pub inventory_slots: sync_state_inventory_slots::ServerState,
+    pub tile_blocks: PerChunk<ChunkBlocks>,
+    //pub inventory_slots: sync_state_inventory_slots::ServerState,
 }
 
 /// State which game logic gets only shared references to. Often this is because the state is
@@ -117,7 +130,7 @@ pub struct SyncWorld<'a> {
     pub sync_ctx: &'a ServerSyncCtx,
     // ==== sync writers ====
     pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
-    pub inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
+    //pub inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
 }
 
 
@@ -136,13 +149,13 @@ impl SyncWorld<'a> {
         sync_state: &'a mut ServerSyncState,
     ) -> Self {
         let &mut ServerSyncState {
-
+            ref mut tile_blocks,
         } = sync_state;
         SyncWorld {
             server_only,
             sync_ctx,
 
-
+            tile_blocks: sync_state_tile_blocks::SyncWrite::new_manual(sync_ctx, tile_blocks),
         }
     }
 }

@@ -59,3 +59,9 @@ impl TickMgr {
         }
     }
 }
+
+impl Default for TickMgr {
+    fn default() -> Self {
+        Self::new()
+    }
+}

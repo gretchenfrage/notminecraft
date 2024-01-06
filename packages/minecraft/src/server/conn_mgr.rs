@@ -214,6 +214,18 @@ impl ConnMgr {
         &self.players
     }
 
+    /// Enqueue message to be transmitted to player client.
+    ///
+    /// Never blocks or errors. See `Connection::send` for details.
+    pub fn send<K: Into<PlayerKey>, M: Into<DownMsg>>(&self, pk: K, msg: M) {
+        self.connections[self.player_conn_idx[pk.into()]].connection.send(msg.into());
+    }
+
+    /// Close the player client connection and remove the player.
+    pub fn kick<K: Into<PlayerKey>>(&mut self, pk: K) {
+        self.kill_connection(self.player_conn_idx[pk.into()]);
+    }
+
     /// Get the given player's username.
     pub fn player_username<K: Into<PlayerKey>>(&self, pk: K) -> &str {
         &self.player_username[pk.into()]
@@ -357,6 +369,8 @@ impl ConnMgr {
 
     /// Call upon the result of a previously triggered player save state loading operation being
     /// ready, unless aborted.
+    ///
+    /// This does _not_ require draining the effect queue.
     pub fn on_player_save_state_ready(&mut self, pk: PlayerKey, save_val: Option<PlayerSaveVal>) {
         // store
         self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_val);

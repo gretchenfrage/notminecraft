@@ -1,10 +1,16 @@
 //! Module in the sync state pattern for the block ID and metadata at each tile.
 
-use crate::server::ServerSyncCtx;
+use crate::{
+    server::{
+        ServerSyncCtx,
+        per_player::*,
+    },
+    message::*,
+};
 use chunk_data::*;
 
 
-/// Auto-syncing writer for this sync state around. Analogous to `&mut PerChunk<ChunkBlocks>`.
+/// Auto-syncing writer for this sync state. Analogous to `&mut PerChunk<ChunkBlocks>`.
 pub struct SyncWrite<'a> {
     ctx: &'a ServerSyncCtx,
     state: &'a mut PerChunk<ChunkBlocks>,
@@ -95,10 +101,28 @@ impl<'a> SyncWriteTile<'a> {
     }
 
     pub fn erased_set(&mut self, bid_meta: ErasedBidMeta) {
+        // send update to all clients with the chunk loaded
+        for (pk, clientside_ci) = self.iter_clients() {
+            self.inner.ctx.conn_mgr
+                .send(pk, DownMsg::ApplyEdit(Edit::SetTileBlock {
+                    chunk_idx: clientside_ci,
+                    lti: self.lti,
+                    bid_meta: self.inner.ctx.game.clone_erased_tile_block(&bid_meta),
+                }));
+        }
+
+        // mark chunk as unsaved
+        self.inner.ctx.save_mgr.mark_chunk_unsaved(self.inner.cc, self.inner.ci);
+
         // edit server's in-memory representation
         self.inner.state.erased_set(self.lti, bid_meta);
-
-        // send update to all clients with the chunk loaded
-        self.inner.ctx.conn_states
+    }
+    
+    // iterate through all players with the chunk loaded and their clientside ci for the chunk
+    fn iter_clients<'a>(&'a self) -> impl Iterator<Item=(PlayerKey, DownChunkIdx)> + 'a {
+        self.inner.ctx.conn_mgr.players().iter()
+            .filter_map(move |pk| self.inner.ctx.chunk_mgr
+                .chunk_to_clientside(self.inner.cc, self.inner.ci, pk)
+                .map(move |clientside_ci| (pk, DownChunkIdx(clientside_ci))))
     }
 }
