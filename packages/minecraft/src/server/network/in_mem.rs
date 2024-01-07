@@ -41,7 +41,7 @@ pub struct InMemClient {
 #[derive(Default)]
 struct InMemShared {
     // lockable alive state, if alive. mutex serializes connection index life cycle.
-    alive_state: Mutex<Option<usize>>,
+    alive_state: Mutex<Option<AliveState>>,
     // sender for down messages
     down_queue: SegQueue<DownMsg>,
     // whether connection has been killed. lags behind the alive mutex in an eventually consistent

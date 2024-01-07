@@ -34,9 +34,9 @@ pub struct SaveMgr {
     // refcell-guarded state for tracking which things are saved
     tracking: RefCell<TrackingState>,
     // chunks which were loaded, then unloaded, but not yet saved
-    unflushed_chunks: HashMap<ChunkKey, ChunkVal>,
+    unflushed_chunks: HashMap<ChunkSaveKey, ChunkSaveVal>,
     // players which were loaded, then unloaded, but not yet saved
-    unflushed_players: HashMap<PlayerKey, PlayerVal>,
+    unflushed_players: HashMap<PlayerSaveKey, PlayerSaveVal>,
 }
 
 // shared state needed to complete a save operation threadpool job
@@ -118,14 +118,14 @@ impl SaveMgr {
     /// Attempt to take a chunk entry from the "unflushed" cache.
     ///
     /// This should be tried before actually querying the save file database.
-    pub fn take_unflushed_chunk(&mut self, key: &ChunkKey) -> Option<ChunkVal> {
+    pub fn take_unflushed_chunk(&mut self, key: &ChunkSaveKey) -> Option<ChunkSaveVal> {
         self.unflushed_chunks.remove(key)
     }
 
     /// Attempt to take a player entry from the "unflushed" cache.
     ///
     /// This should be tried before actually querying the save file database.
-    pub fn take_unflushed_player(&mut self, key: &PlayerKey) -> Option<PlayerVal> {
+    pub fn take_unflushed_player(&mut self, key: &PlayerSaveKey) -> Option<PlayerSaveVal> {
         self.unflushed_players.remove(key)
     }
 
@@ -141,8 +141,8 @@ impl SaveMgr {
         tracking.chunk_unsaved_idx.insert(cc, ci, unsaved_idx);
     }
 
-    /// Call upon a player being added to the world.
-    pub fn add_player(&self, pk: JoinedPlayerKey, saved: bool) {
+    /// Call upon a player joining the the world.
+    pub fn join_player(&self, pk: JoinedPlayerKey, saved: bool) {
         let mut tracking = self.tracking.borrow_mut();
         let unsaved_idx =
             if saved {
@@ -179,8 +179,8 @@ impl SaveMgr {
         &mut self,
         cc: Vec3<i64>,
         ci: usize,
-        save_key: ChunkKey,
-        save_val: ChunkVal,
+        save_key: ChunkSaveKey,
+        save_val: ChunkSaveVal,
     ) {
         let unsaved_idx = self.tracking.get_mut().chunk_unsaved_idx.remove(cc, ci);
         if let Some(unsaved_idx) = unsaved_idx {
@@ -189,15 +189,15 @@ impl SaveMgr {
         }
     }
 
-    /// Call upon the given player being removed from the world.
+    /// Call upon the given joined player being removed from the world.
     ///
     /// If the player is currently unsaved, the provided save file player key/val gets put in the
     /// unflushed cache, and will be saved in the next save operation unless removed before that.
     pub fn remove_player(
         &mut self,
         pk: JoinedPlayerKey,
-        save_key: PlayerKey,
-        save_val: PlayerVal,
+        save_key: PlayerSaveKey,
+        save_val: PlayerSaveVal,
     ) {
         let unsaved_idx = self.tracking.get_mut().player_unsaved_idx.remove(pk);
         if let Some(unsaved_idx) = unsaved_idx {

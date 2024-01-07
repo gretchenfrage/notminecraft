@@ -103,7 +103,7 @@ pub enum ChunkMgrEffect {
     RemoveChunkFromClient {
         cc: Vec3<i64>,
         ci: usize,
-        pk: PlayerKey: ClientConnKey,
+        pk: PlayerKey,
         clientside_ci: usize,
     },
 }

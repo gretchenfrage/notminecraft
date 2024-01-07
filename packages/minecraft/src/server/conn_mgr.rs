@@ -200,7 +200,14 @@ pub enum ConnMgrEffect {
     /// Process a message from an existing joined player.
     PlayerMsg(JoinedPlayerKey, PlayerMsg),
     /// Remove an existing player, which may or may not have joined.
-    RemovePlayer(PlayerKey, Option<JoinedPlayerKey>),
+    RemovePlayer {
+        /// Player key being removed.
+        pk: PlayerKey,
+        /// Corresponding joined player key, if player joined.
+        jpk: Option<JoinedPlayerKey>,
+        /// Corresponding username.
+        username: String,
+    ),
 }
 
 impl ConnMgr {
@@ -262,7 +269,7 @@ impl ConnMgr {
                 if let Err(e) = result {
                     // on error, kill connection
                     warn!(%e, "client protocol error, closing connection");
-                    self.kill_connection_conn_idx(conn_idx);
+                    self.kill_connection(conn_idx);
                 }
             }
             NetworkEvent::RemoveConnection(conn_idx) => {
@@ -271,7 +278,6 @@ impl ConnMgr {
                 if let Some(pk) = pk {
                     // remove associated player
                     self.remove_player(pk);
-                    self.effects.push_back(ConnMgrEffect::RemovePlayer(pk));
                 }
             }
         }
@@ -288,6 +294,8 @@ impl ConnMgr {
         if !self.connections[self.player_conn_idx[pk]].last_processed_acked {
             self.connections[self.player_conn_idx[pk]].last_processed_acked = true;
             Some(self.connections[self.player_conn_idx[pk]].last_processed)
+        } else {
+            None
         }
     }
 
@@ -451,16 +459,23 @@ impl ConnMgr {
         let pk = self.connections[conn_idx].pk.take();
         if let Some(pk) = pk {
             self.remove_player(pk);
-            let jpk = self.players.to_jpk(pk);
-            if let Some(jpk) = jpk {
-                self.remove_joined_player(jpk);
-            }
-            self.effects.push_back(ConnMgrEffect::RemovePlayer(pk, jpk));
         }
     }
 
-    // internal method to clean up internally when a player is removed.
+    // internal method to fully remove and deinitialize a possibly joined player and enqueue a
+    // remove player effect for it, other than changing self.connections in an appropriate way,
+    // which is dependent on the situation in which this was called.
     fn remove_player(&mut self, pk: PlayerKey) {
+        let jpk = self.players.to_jpk(pk);
+        let username self.deinit_player(pk);
+        if let Some(jpk) = jpk {
+            self.deinit_joined_player(jpk);
+        }
+        self.effects.push_back(ConnMgrEffect::RemovePlayer { pk, jpk, username });
+    }
+
+    // internal method to clean up internally when a player is removed. returns its username.
+    fn deinit_player(&mut self, pk: PlayerKey) -> String {
         // remove from internal data structures
         self.players.remove(pk);
         self.player_conn_idx.remove(pk);
@@ -468,10 +483,11 @@ impl ConnMgr {
         self.username_player.remove(&username).unwrap();
         self.player_clientside_players.remove(pk);
         self.player_player_clientside_player_idx.remove(pk);
+        username
     }
 
     // internal method to clean up internally when a joined player is removed
-    fn remove_joined_player(&mut self, pk: JoinedPlayerKey) {
+    fn deinit_joined_player(&mut self, pk: JoinedPlayerKey) {
         // unlink from other clients
         for pk2 in self.players.iter() {
             let clientside_player_idx = self.player_player_clientside_player_idx[pk2].remove(pk);

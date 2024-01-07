@@ -39,7 +39,25 @@ pub struct UpMsgLogIn {
 /// "Game logic" message from a joined player to the server.
 #[derive(Debug, GameBinschema)]
 pub enum PlayerMsg {
+    /// Set own position and direction.
+    SetCharState(PlayerMsgSetCharState),
+    /// Set block at tile.
+    SetTileBlock(PlayerMsgSetTileBlock),
+}
 
+/// Set own position and direction.
+#[derive(Debug, GameBinschema)]
+pub struct PlayerMsgSetCharState {
+    pub pos: Vec3<f32>,
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+/// Set block at tile.
+#[derive(Debug, GameBinschema)]
+pub struct PlayerMsgSetTileBlock {
+    pub gtc: Vec3<i64>,
+    pub bid_meta: ErasedBlockMeta,
 }
 
 /// Message sent from server to client.
@@ -93,6 +111,9 @@ pub struct DownMsgAddPlayer {
     /// Follows a slab pattern.
     pub player_idx: DownPlayerIdx,
     pub username: String,
+    pub pos: Vec3<f32>,
+    pub pitch: f32,
+    pub yaw: f32,
 }
 
 /// Remove a loaded player from the client.
@@ -127,6 +148,12 @@ pub enum Edit {
         chunk_idx: DownChunkIdx,
         lti: u16,
         bid_meta: ErasedBidMeta,
+    }
+    SetPlayerCharState {
+        player_idx: DownPlayerIdx,
+        pos: Vec3<f32>,
+        yaw: f32,
+        pitch: f32,
     }
 }
 

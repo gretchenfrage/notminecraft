@@ -21,6 +21,7 @@ pub mod tick_mgr;
 pub mod chunk_mgr;
 pub mod save_mgr;
 pub mod conn_mgr;
+pub mod player_msg_processor;
 pub mod runner;
 
 use self::{
@@ -89,9 +90,9 @@ pub struct ServerOnlyState {
     /// Services requests to load player save state.
     pub player_save_state_loader: PlayerSaveStateLoader,
 
-    pub player_pos: PerPlayer<Vec3<f32>>,
-    pub player_yaw: PerPlayer<f32>,
-    pub player_pitch: PerPlayer<f32>,
+    pub player_pos: PerJoinedPlayer<Vec3<f32>>,
+    pub player_yaw: PerJoinedPlayer<f32>,
+    pub player_pitch: PerJoinedPlayer<f32>,
 
     //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
     //pub char_states: PerPlayer<CharState>,
@@ -128,7 +129,12 @@ pub struct SyncWorld<'a> {
     pub server_only: &'a mut ServerOnlyState,
     /// State game logic gets shared reference to. See type docs.
     pub sync_ctx: &'a ServerSyncCtx,
+
+    /// Chunk space getter handle.
+    pub getter: Getter<'a>,
+
     // ==== sync writers ====
+
     pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
     //pub inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
 }
@@ -154,6 +160,8 @@ impl SyncWorld<'a> {
         SyncWorld {
             server_only,
             sync_ctx,
+
+            getter: sync_ctx.chunk_mgr.chunks().getter(),
 
             tile_blocks: sync_state_tile_blocks::SyncWrite::new_manual(sync_ctx, tile_blocks),
         }

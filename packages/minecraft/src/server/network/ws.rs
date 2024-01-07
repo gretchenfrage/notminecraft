@@ -243,9 +243,9 @@ async fn accept_task<B: ToSocketAddrs>(
 
     // keep trying the inner part
     let mut backoff = BIND_BACKOFF_MIN;
-    let mut attempt_start = Instant::now();
     loop {
         // try until error
+        let attempt_start = Instant::now();
         let result = try_accept_task_inner(&ws_shared, &bind_to);
         let attempt_end = Instant::now();
 
