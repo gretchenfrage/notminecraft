@@ -15,6 +15,7 @@ use crate::{
 pub fn process_player_msg(world: &mut SyncWorld, pk: JoinedPlayerKey, msg: PlayerMsg) {
     match msg {
         PlayerMsg::SetCharState(inner) => inner.process(world, pk),
+        PlayerMsg::SetTileBlock(inner) => inner.process(world, pk),
     }
 }
 
@@ -24,7 +25,9 @@ trait Process {
 }
 
 impl Process for PlayerMsgSetCharState {
+    // set char state
     fn process(self, world: &mut SyncWorld, pk: JoinedPlayerKey) {
+        // as a temporary situation we kind of handle this manually
         let PlayerMsgSetCharState { pos, yaw, pitch } = self;
 
         world.server_only.player_pos[pk] = pos;
@@ -45,6 +48,7 @@ impl Process for PlayerMsgSetCharState {
 }
 
 impl Process for PlayerMsgSetTileBlock {
+    // set tile block
     fn process(self, world: &mut SyncWorld, pk: JoinedPlayerKey) {
         let PlayerMsgSetTileBlock { gtc, bid_meta } = self;
 
