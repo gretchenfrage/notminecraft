@@ -202,20 +202,32 @@ impl Connection {
 
 
 // bind to port and start accepting connections on it
-pub(super) fn bind<B>(server: &mut NetworkServer, bind_to: B, rt: &Handle, game: &Arc<GameData>)
+pub(super) fn bind<B>(
+    ns_shared: &Arc<NetworkServerSharedState>,
+    bind_to: B,
+    rt: &Handle,
+    game: &Arc<GameData>,
+)
 where
     B: ToSocketAddrs + Send + Sync + 'static,
 {
+    // lock and deal with edge case
+    let mut lock = ns_shared.lockable.lock();
+    if lock.shut_down {
+        trace!("not binding network ws transport because network server shut down");
+        return;
+    }
+
     // spawn the accept task
     let join_accept = rt.spawn(accept_task(
-        Arc::clone(&server.shared),
+        Arc::clone(&ns_shared),
         bind_to,
         rt.clone(),
         Arc::clone(game),
     ));
 
     // store its abort handle for when the network server closes
-    server.bind_abort_handles.push(join_accept.abort_handle());
+    lock.bind_abort_handles.push(join_accept.abort_handle());
 }
 
 // body of the task to bind to the TCP port and start accepting new connections
@@ -322,7 +334,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
         Some(conn_idx) => conn_idx,
         // this case happens if the whole network server is being dropped
         None => return,
-    }
+    };
 
     // spawn send task
     ws_shared.rt.spawn(send_task(

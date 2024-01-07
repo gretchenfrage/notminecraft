@@ -58,19 +58,24 @@ struct AliveState {
 }
 
 // create an in-mem client for the server
-pub(super) fn create(server: &mut NetworkServer) -> InMemClient {
+pub(super) fn create(ns_shared: &Arc<NetworkServerSharedState>) -> InMemClient {
     let shared = Arc::new(InMemShared::default());
     let slab_entry = super::SlabEntry::InMem(SlabEntry(Arc::clone(&shared)));
     let connection = super::Connection(ConnectionInner::InMem(Connection(Arc::clone(&shared))));
-    // unwrap safety: we have &mut server -> server isn't dropped -> should return some
-    let conn_idx = create_conn(&server.shared, slab_entry, connection).unwrap();
+    let conn_idx = create_conn(ns_shared, slab_entry, connection);
 
-    let mut alive_lock = shared.alive_state.lock();
-    *alive_lock = Some(AliveState {
-        ns_shared: Arc::clone(&server.shared),
-        conn_idx,
-    });
-    drop(alive_lock);
+    if let Some(conn_idx) = conn_idx {
+        // normal case
+        let mut alive_lock = shared.alive_state.lock();
+        *alive_lock = Some(AliveState {
+            ns_shared: Arc::clone(ns_shared),
+            conn_idx,
+        });
+        drop(alive_lock);
+    } else {
+        // this case happens if the whole network server has been dropped
+        shared.killed.store(true, Ordering::Relaxed);
+    }
 
     InMemClient {
         shared,

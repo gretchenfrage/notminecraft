@@ -28,6 +28,7 @@ use self::{
     channel::*,
     per_player::*,
     save_content::*,
+    network_server::{NetworkServer, NetworkEvent},
     chunk_loader::ChunkLoader,
     player_save_state_loader::PlayerSaveStateLoader,
     tick_mgr::TickMgr,
@@ -83,8 +84,10 @@ pub struct ServerOnlyState {
     pub server_send: ServerSend,
     /// A receiver handle to the server event channel.
     pub server_recv: ServerRecv,
-    /// Handle to the thread pool
+    /// Handle to the thread pool.
     pub thread_pool: ThreadPool,
+    /// Handle to the network server.
+    pub network_server: NetworkServer,
     /// Services requests to load chunks.
     pub chunk_loader: ChunkLoader,
     /// Services requests to load player save state.

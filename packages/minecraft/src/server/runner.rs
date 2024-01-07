@@ -6,12 +6,12 @@ use crate::{
     game_content::*,
     server::{
         channel::*,
+        network::*,
         save_content::*,
         save_db::SaveDb,
         save_mgr::{SaveMgr, ShouldSave},
         conn_mgr::ConnMgrEffect,
         chunk_mgr::ChunkMgrEffect,
-        network::NetworkEvent,
         process_player_msg::process_player_msg,
         *,
     },
@@ -27,24 +27,45 @@ use vek::*;
 
 /// Owned handle to a running server thread. Stops server when dropped.
 pub struct ServerThread {
+    // for sending events to the server loop
     server_send: ServerSender,
-    network_server: NetworkServer,
+    // handle to the network server
+    network_handle: NetworkServerHandle,
 }
 
 impl ServerThread {
     /// Start a server in a new thread. Does _not_ bind.
     pub fn start(thread_pool: ThreadPool, save_db: SaveDb, game: Arc<GameData>) -> Self {
         let (server_send, server_recv) = channel();
+        let network_server = NetworkServer::new(server_send.clone());
+        let network_handle = network_server.handle().clone();
+        thread::spawn({
+            let server_send = server_send.clone();
+            let server_recv = server_recv.clone();
+            move || run(server_send, server_recv, thread_pool, network_server, save_db, game)
+        });
+        ServerThread { server_send, network_handle }
+    }
 
+    /// Get the network server handle, which can be used to bind.
+    pub fn network_handle(&self) -> &NetworkServerHandle {
+        &self.network_handle
+    }
+}
+
+impl Drop for ServerThread {
+    fn drop(&mut self) {
+        self.server_send.send(ServerEvent::Stop, EventPriority::Control, None, None);
     }
 }
 
 
-/// Run the server in this thread until it exits. Does _not_ run the network server.
+/// Run the server in this thread until it exits. Does _not_ bind.
 pub fn run(
     server_send: ServerSender,
     server_recv: ServerReceiver,
     thread_pool: ThreadPool,
+    network_server: NetworkServer,
     save_db: SaveDb,
     game: Arc<GameData>,
 ) {
@@ -54,6 +75,7 @@ pub fn run(
             server_send: server_send.clone(),
             server_recv,
             thread_pool: thread_pool.clone(),
+            network_server,
             chunk_loader: ChunkLoader::new(
                 Arc::clone(&game),
                 server_send.clone(),

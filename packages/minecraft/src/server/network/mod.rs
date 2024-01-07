@@ -23,18 +23,19 @@ pub use self::in_mem::InMemClient;
 pub use tokio::net::ToSocketAddrs;
 
 
-/// Handle to the tokio system for handling network IO with clients.
+/// Main handle to the tokio system for handling network IO with clients.
 ///
 /// Sends network events to the server loop. Serializes changes to the space of network
 /// connections. Shuts down all network tasks when dropped, although won't necessarily send
 /// `RemoveConnection` events in that case, because it's assumed the whole server is dropping too.
-pub struct NetworkServer {
-    // shared state
-    shared: Arc<NetworkServerSharedState>,
-    // handles to abort tasks which accept new connections, so as to stop them if the network
-    // server as a whole is shut down
-    bind_abort_handles: Vec<AbortHandle>,
-}
+pub struct NetworkServer(NetworkServerHandle);
+
+/// Secondary handle to the tokio system for handling network IO with clients.
+///
+/// Does not keep network server alive nor shut it down when dropped--see `NetworkServer` for
+/// that. Can be used to open the server to new connections.
+#[derive(Clone)]
+pub struct NetworkServerHandle(Arc<NetworkServerSharedState);
 
 // network server state shared between main handle and other tasks
 struct NetworkServerSharedState {
@@ -52,6 +53,9 @@ struct NetworkServerLockableState {
     // slab that allocates connection indices and tracks handles for shutting down all connections
     // if the network server as a whole is shut down.
     slab: Slab<SlabEntry>,
+    // handles to abort tasks which accept new connections, so as to stop them if the network
+    // server as a whole is shut down
+    bind_abort_handles: Vec<AbortHandle>,
 }
 
 // entry within the connection slab. handles for shutting down the connection if the network server
@@ -93,31 +97,36 @@ pub enum NetworkEvent {
 impl NetworkServer {
     /// Construct. Doesn't yet bind.
     pub fn new(server_send: ServerSender) -> Self {
-        NetworkServer {
-            shared: Arc::new(NetworkServerSharedState {
-                server_send,
-                lockable: Mutex::new(NetworkServerLockableState {
-                    shut_down: false,
-                    slab: Default::default(),
-                })
+        NetworkServer(NetworkServerHandle(Arc::new(NetworkServerSharedState {
+            server_send,
+            lockable: Mutex::new(NetworkServerLockableState {
+                shut_down: false,
+                slab: Default::default(),
+                bind_abort_handles: Default::default(),
             }),
-            bind_abort_handles: Default::default(),
         }
     }
 
+    /// Get a handle, which can be used directly to bind, or cloned for use elsewhere.
+    pub fn handle(&self) -> &NetworkServerHandle {
+        &self.0
+    }
+}
+
+impl NetworkServerHandle {
     /// Bind to a port and open the network server to connections on that port.
-    pub fn bind<B>(&mut self, bind_to: B, rt: &Handle, game: &Arc<GameData>)
+    pub fn bind<B>(&self, bind_to: B, rt: &Handle, game: &Arc<GameData>)
     where
         B: ToSocketAddrs + Send + Sync + 'static,
     {
-        ws::bind(self, bind_to, rt, game);
+        ws::bind(&self.0, bind_to, rt, game);
     }
 
     /// Construct a new in-memory client. See `InMemClient`. This directly causes a single add
     /// connection network event, with the given connection object being the server-side half of
     /// this in-mem client.
-    pub fn in_mem_client(&mut self) -> InMemClient {
-        in_mem::create(self)
+    pub fn in_mem_client(&self) -> InMemClient {
+        in_mem::create(&self.0)
     }
 }
 
@@ -156,10 +165,10 @@ impl Connection {
 impl Drop for NetworkServer {
     fn drop(&mut self) {
         // shut down everything upon the main handle being dropped
-        for abort_handle in &self.bind_abort_handles {
+        let mut lock = self.shared.lockable.lock();
+        for abort_handle in &lock.bind_abort_handles {
             abort_handle.abort();
         }
-        let mut lock = self.shared.lockable.lock();
         lock.shut_down = true;
         for entry in &lock.slab {
             match entry {
