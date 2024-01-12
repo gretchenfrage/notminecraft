@@ -1,7 +1,6 @@
 //! Definition of the key/value schema of the save file and types to transcode keys and vals.
 
 use crate::{
-    save_file::content::*,
     game_data::GameData,
     game_binschema::GameBinschema,
 };
@@ -13,17 +12,19 @@ use std::sync::Arc;
 
 // ==== schema definition ====
 
-/// Define the save file key/value schema by expanding to tuples of key type index, key type name,
-/// key type, val type.
+/// Define the save file key/value schema by applying to the provided macro name tuples of key type
+/// index, key type name, key type, val type.
 macro_rules! save_schema {
-    ()=>{
-        (0, Chunk, ChunkSaveKey, ChunkSaveVal)
-        (1, Player, PlayerSaveKey, PlayerSaveVal)
+    ($macro:ident)=>{
+        $macro! {
+            (0, Chunk, ChunkSaveKey, ChunkSaveVal)
+            (1, Player, PlayerSaveKey, PlayerSaveVal)
+        }
     };
 }
 
 /// Save file key schema for chunks.
-#[derive(Debug, GameBinschema, Copy, Clone)]
+#[derive(Debug, GameBinschema, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ChunkSaveKey {
     pub cc: Vec3<i64>,
 }
@@ -35,12 +36,13 @@ pub struct ChunkSaveVal {
 }
 
 /// Save file key schema for players.
-#[derive(Debug, GameBinschema, Clone)]
+#[derive(Debug, GameBinschema, Clone, Eq, PartialEq, Hash)]
 pub struct PlayerSaveKey {
     pub username: String,
 }
 
 /// Save file val schema for players.
+#[derive(Debug, GameBinschema)]
 pub struct PlayerSaveVal {
     pub pos: Vec3<f32>,
     pub yaw: f32,
@@ -77,7 +79,7 @@ macro_rules! impl_save_keys {
     )*};
 }
 
-impl_save_keys!(save_schema!());
+save_schema!(impl_save_keys);
 
 // generate the SaveEntry enum
 
@@ -93,14 +95,14 @@ macro_rules! declare_save_entry {
             /// Get key type index of this entry's key, starting at 0.
             pub fn key_type_idx(&self) -> usize {
                 match self {$(
-                    &$name(_, _) => $idx,
+                    &SaveEntry::$name(_, _) => $idx,
                 )*}
             }
 
             /// Get stringified key type name of this entry's key.
             pub fn key_type_name(&self) -> &'static str {
                 match self {$(
-                    &$name(_, _) => stringify!($name),
+                    &SaveEntry::$name(_, _) => stringify!($name),
                 )*}
             }
 
@@ -111,7 +113,7 @@ macro_rules! declare_save_entry {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &$name(ref key, _) => key.encode(encoder, game),
+                    &SaveEntry::$name(ref key, _) => key.encode(encoder, game),
                 )*}
             }
 
@@ -122,14 +124,14 @@ macro_rules! declare_save_entry {
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
-                    &$name(_, ref val) => val.encode(encoder, game),
+                    &SaveEntry::$name(_, ref val) => val.encode(encoder, game),
                 )*}
             }
         }
     };
 }
 
-declare_save_entry!(save_schema!());
+save_schema!(declare_save_entry);
 
 // define the current_save_schema function
 
@@ -139,8 +141,10 @@ macro_rules! define_current_save_schema {
         /// program as a vector of (key type name, key schema, val schema) tuples.
         pub fn current_save_schema(game: &Arc<GameData>) -> Vec<(String, Schema, Schema)> {
             vec![$(
-                (stringify!($name), $key::schema(game), $val::schema(game)),
+                (stringify!($name).to_owned(), $key::schema(game), $val::schema(game)),
             )*]
         }
     }
 }
+
+save_schema!(define_current_save_schema);

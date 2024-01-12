@@ -4,7 +4,10 @@ use crate::{
     util_abort_handle::AbortHandle,
     server::ServerEvent,
 };
-use std::time::Instant;
+use std::{
+    time::Instant,
+    sync::Arc,
+};
 use parking_lot::{Mutex, Condvar};
 use tokio::sync::OwnedSemaphorePermit;
 use crossbeam::queue::SegQueue;
@@ -95,9 +98,9 @@ impl ServerSender {
         aborted: Option<AbortHandle>,
         permit: Option<OwnedSemaphorePermit>,
     ) {
-        self.queues[priority as usize].push(InnerMsg { event, aborted, permit });
-        self.sizes.lock()[priority as usize] += 1;
-        self.sizes_cvar.notify_one();
+        self.0.queues[priority as usize].push(InnerMsg { event, aborted, permit });
+        self.0.sizes.lock()[priority as usize] += 1;
+        self.0.sizes_cvar.notify_one();
     }
 }
 
@@ -118,13 +121,13 @@ impl ServerReceiver {
         priority_lteq: Option<EventPriority>,
     ) -> Option<ServerEvent> {
         loop {
-            let mut sizes = self.sizes.lock();
+            let mut sizes = self.0.sizes.lock();
             let found = loop {
                 let bound = priority_lteq.map(|p| p as usize + 1).unwrap_or(LEVELS);
-                if let Some(found) = (0..bound).find(|i| sizes[i] > 0) {
+                if let Some(found) = (0..bound).find(|&i| sizes[i] > 0) {
                     break found;
                 } else if let Some(deadline) = block_until {
-                    let result = self.sizes_cvar.wait_until(&mut sizes, deadline);
+                    let result = self.0.sizes_cvar.wait_until(&mut sizes, deadline);
                     if result.timed_out() {
                         return None;
                     }
@@ -135,9 +138,9 @@ impl ServerReceiver {
             sizes[found] -= 1;
             drop(sizes);
 
-            let InnerMsg { event, aborted, permit } = self.queues[found].pop().unwrap();
+            let InnerMsg { event, aborted, permit } = self.0.queues[found].pop().unwrap();
             drop(permit);
-            if !aborted.is_aborted() {
+            if aborted.map(|aborted| !aborted.is_aborted()).unwrap_or(true) {
                 return Some(event)
             }
         }

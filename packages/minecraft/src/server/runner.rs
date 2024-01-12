@@ -3,7 +3,7 @@
 //! This is the top-level integration layer betweens server modules.
 
 use crate::{
-    game_content::*,
+    game_data::*,
     server::{
         channel::*,
         network::*,
@@ -199,7 +199,7 @@ fn maybe_save(server: &mut Server) {
             ),
             ShouldSave::Player { pk } => SaveEntry::Player(
                 PlayerSaveKey {
-                    username: server.sync_ctx.conn_mgr.player_username(pk).clone(),
+                    username: server.sync_ctx.conn_mgr.player_username(pk).into(),
                 },
                 PlayerSaveVal {
                     pos: server.server_only.player_pos[pk],
@@ -223,15 +223,15 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 // add player
                 server.sync_ctx.chunk_mgr.add_player(pk);
                 for cc in spawn_chunks() {
-                    server.sync_ctx.chunk_mgr.add_chunk_chunk_client_interest(
+                    server.sync_ctx.chunk_mgr.add_chunk_client_interest(
                         pk, cc, server.sync_ctx.conn_mgr.players()
                     );
                     process_chunk_mgr_effects(server);
                 }
 
                 // request load
-                if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_player(save_key) {
-                    server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, save_val);
+                if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_player(&save_key) {
+                    server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, Some(save_val));
                 } else {
                     server.server_only.player_save_state_loader.trigger_load(pk, save_key, aborted);
                 }
@@ -252,24 +252,22 @@ fn process_conn_mgr_effects(server: &mut Server) {
             ConnMgrEffect::FinalizeJoinPlayer { pk, self_clientside_player_idx } => {
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::FinalizeJoinGame(DownMsgFinalizeJoinGame {
                     self_player_idx: DownPlayerIdx(self_clientside_player_idx),
-                    pos: server.server_only.player_pos[pk],
-                    yaw: server.server_only.player_yaw[pk],
-                    pitch: server.server_only.player_pitch[pk],
                 }));
             }
             // add fully joined player to client
             ConnMgrEffect::AddPlayerToClient { add_to, to_add, clientside_player_idx } => {
                 server.sync_ctx.conn_mgr.send(add_to, DownMsg::AddPlayer(DownMsgAddPlayer {
                     player_idx: DownPlayerIdx(clientside_player_idx),
-                    pos: server.server_only.player_pos[pk],
-                    yaw: server.server_only.player_yaw[pk],
-                    pitch: server.server_only.player_pitch[pk],
+                    username: server.sync_ctx.conn_mgr.player_username(to_add).into(),
+                    pos: server.server_only.player_pos[to_add],
+                    yaw: server.server_only.player_yaw[to_add],
+                    pitch: server.server_only.player_pitch[to_add],
                 }));
             }
             // message from player
             ConnMgrEffect::PlayerMsg(pk, msg) => {
                 // process
-                process_player_msg(server.as_sync_world(), pk, msg);
+                process_player_msg(&mut server.as_sync_world(), pk, msg);
 
                 // ack
                 if let Some(last_processed) = server.sync_ctx.conn_mgr.ack_last_processed(pk) {
@@ -279,11 +277,11 @@ fn process_conn_mgr_effects(server: &mut Server) {
             // remove player
             ConnMgrEffect::RemovePlayer { pk, jpk, username } => {
                 server.sync_ctx.chunk_mgr.remove_player(
-                    pk, spawn_chunks(), server.sync_ctx.conn_mgr.connections(),
+                    pk, spawn_chunks(), server.sync_ctx.conn_mgr.players(),
                 );
                 if let Some(jpk) = jpk {
                     server.sync_ctx.save_mgr.remove_player(
-                        pk,
+                        jpk,
                         PlayerSaveKey { username },
                         PlayerSaveVal {
                             pos: server.server_only.player_pos[jpk],
@@ -307,7 +305,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
         match effect {
             // begin loading / generating save state
             ChunkMgrEffect::RequestLoad { save_key, aborted } => {
-                if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_chunk(save_key) {
+                if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_chunk(&save_key) {
                     server.sync_ctx.chunk_mgr.on_chunk_ready(
                         save_key, save_val, false, server.sync_ctx.conn_mgr.players(),
                     );
@@ -318,7 +316,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             // install loaded chunk into world
             ChunkMgrEffect::AddChunk { cc, ci, save_val, saved } => {
                 server.sync_ctx.save_mgr.add_chunk(cc, ci, saved);
-                server.sync_state.tile_blocks.insert(cc, ci, save_val.chunk_tile_blocks);
+                server.sync_state.tile_blocks.add(cc, ci, save_val.chunk_tile_blocks);
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {

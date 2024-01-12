@@ -2,27 +2,26 @@
 
 use crate::{
     server::{
-        per_player::*,
-        channel::{
-            ServerSender,
-            EventPriority,
-        },
-        save_content::{
-            PlayerKey,
-            PlayerVal,
-        },
-        save_db::SaveDb,
         ServerEvent,
+        per_player::*,
+        channel::*,
+        network::*,
+        save_content::*,
+        save_db::SaveDb,
     },
-    util_abort_handle::AbortGuard,
     thread_pool::{
         ThreadPool,
         WorkPriority,
     },
+    util_abort_handle::*,
+    message::*,
 };
-use std::collection::{
-    HashMap,
-    VecDeque,
+use std::{
+    collections::{
+        HashMap,
+        VecDeque,
+    },
+    mem::replace,
 };
 use slab::Slab;
 use anyhow::*;
@@ -102,9 +101,9 @@ use anyhow::*;
 ///      themself that only gets loaded for them eg their inventory.
 #[derive(Default)]
 pub struct ConnMgr {
-    pub effects: EffectDeque<ConnMgrEffect>,
+    pub effects: VecDeque<ConnMgrEffect>,
     // state for each network connection
-    connections: Slab<ConnectionState>
+    connections: Slab<ConnectionState>,
     // allocates player keys. players are subset of connections.
     players: PlayerKeySpace,
     // for each player, their network connection index
@@ -177,7 +176,7 @@ pub enum ConnMgrEffect {
         pk: JoinedPlayerKey,
         /// The saved player state from the save file, or `None` if the save file did not contain
         /// an entry for this player's identity.
-        save_state: Option<PlayerVal>,
+        save_state: Option<PlayerSaveVal>,
     },
     /// See `BeginJoinPlayer`. Send the player a `FinalizeJoinGame` message. It is now safe to send
     /// clients messages about this player.
@@ -207,7 +206,7 @@ pub enum ConnMgrEffect {
         jpk: Option<JoinedPlayerKey>,
         /// Corresponding username.
         username: String,
-    ),
+    },
 }
 
 impl ConnMgr {
@@ -239,8 +238,8 @@ impl ConnMgr {
     }
 
     /// Try to look up a player by username.
-    pub fn username_player(&self, username: &str) -> PlayerKey {
-        self.username_player.get(username)
+    pub fn username_player(&self, username: &str) -> Option<PlayerKey> {
+        self.username_player.get(username).copied()
     }
 
     /// Get the clientside player idx by which `subject` refers to `object`.
@@ -259,6 +258,7 @@ impl ConnMgr {
                     last_processed_acked: true,
                     pk: None,
                     killed: false,
+                    should_join_game: false,
                 });
                 debug_assert_eq!(conn_idx, conn_idx2, "NetworkEvent::AddConnection idx mismatch");
             }
@@ -290,7 +290,8 @@ impl ConnMgr {
     /// situational. Rather, if returns some, the caller should somehow transmit the returned value
     /// to the client as an ack.
     #[must_use]
-    pub fn ack_last_processed(&mut self, pk: PlayerKey) -> Option<u64> {
+    pub fn ack_last_processed<K: Into<PlayerKey>>(&mut self, pk: K) -> Option<u64> {
+        let pk = pk.into();
         if !self.connections[self.player_conn_idx[pk]].last_processed_acked {
             self.connections[self.player_conn_idx[pk]].last_processed_acked = true;
             Some(self.connections[self.player_conn_idx[pk]].last_processed)
@@ -311,7 +312,7 @@ impl ConnMgr {
         self.connections[conn_idx].last_processed_acked = false;
         // delegate for further processing
         match msg {
-            UpMsg::LogIn(UpMsgLogIn { username }) => {
+            UpMsg::LogIn(msg) => {
                 self.try_handle_log_in(conn_idx, msg)
             }
             UpMsg::JoinGame => {
@@ -347,11 +348,11 @@ impl ConnMgr {
 
         // initialize in structure for tracking the loading of its save state
         let aborted_1 = AbortGuard::new();
-        let aborted_2 = aborted.handle();
-        self.player_load_save_state_state.insert(pk, PlayerLoadSaveStaetState::Loading(aborted_1));
+        let aborted_2 = aborted_1.new_handle();
+        self.player_load_save_state_state.insert(pk, PlayerLoadSaveStateState::Loading(aborted_1));
 
         // add the player to the rest of the server and trigger its loading from the save file
-        self.effects.push(ConnMgrEffect::AddPlayerStartLoading {
+        self.effects.push_back(ConnMgrEffect::AddPlayerRequestLoad {
             pk,
             save_key: PlayerSaveKey { username: username.clone() },
             aborted: aborted_2,
@@ -452,7 +453,7 @@ impl ConnMgr {
     fn kill_connection(&mut self, conn_idx: usize) {
         // tell the network connection to die. this will abandon allocation of resources to it and
         // will trigger a corresponding `NetworkEvent::RemoveConnection` to happen soon. 
-        self.connections[conn_idx].kill();
+        self.connections[conn_idx].connection.kill();
         self.connections[conn_idx].killed = true;
 
         // remove the associated player if there is one
@@ -467,7 +468,7 @@ impl ConnMgr {
     // which is dependent on the situation in which this was called.
     fn remove_player(&mut self, pk: PlayerKey) {
         let jpk = self.players.to_jpk(pk);
-        let username self.deinit_player(pk);
+        let username = self.deinit_player(pk);
         if let Some(jpk) = jpk {
             self.deinit_joined_player(jpk);
         }
@@ -491,10 +492,11 @@ impl ConnMgr {
         // unlink from other clients
         for pk2 in self.players.iter() {
             let clientside_player_idx = self.player_player_clientside_player_idx[pk2].remove(pk);
-            self.player_clientside_players[ck2].remove(clientside_player_idx);
-            self.connections[self.player_conn_idx[pk2]].connection.send(DownMsg::RemovePlayer {
-                player_idx: clientside_player_idx,
-            });
+            self.player_clientside_players[pk2].remove(clientside_player_idx);
+            self.connections[self.player_conn_idx[pk2]].connection
+                .send(DownMsg::RemovePlayer(DownMsgRemovePlayer {
+                    player_idx: DownPlayerIdx(clientside_player_idx),
+                }));
         }
     }
 }
@@ -506,7 +508,7 @@ fn uniqueify_username(mut username: String, usernames: &HashMap<String, PlayerKe
         let mut username2;
         while {
             username2 = format!("{}{}", username, i);
-            usernames.contains_key(&username2);
+            usernames.contains_key(&username2)
         } { i += 1 }
         username2
     } else {

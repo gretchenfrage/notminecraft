@@ -6,19 +6,21 @@ pub mod content;
 
 
 pub use self::logic::{
-    block_mesh_logic,
-    item_mesh_logic,
     hitscan_logic,
     physics_logic,
     transclone_logic,
+};
+
+#[cfg(feature = "client")]
+pub use self::logic::{
+    block_mesh_logic,
+    item_mesh_logic,
 };
 
 
 use self::{
     per_block::PerBlock,
     per_item::PerItem,
-    block_mesh_logic::BlockMeshLogic,
-    item_mesh_logic::ItemMeshLogic,
     hitscan_logic::BlockHitscanLogic,
     physics_logic::BlockPhysicsLogic,
     transclone_logic::{
@@ -29,12 +31,9 @@ use self::{
     },
     content::ContentModules,
 };
-use crate::{
-    item::{
-        ItemRegistry,
-        ItemId,
-    },
-    asset::LangKey,
+use crate::item::{
+    ItemRegistry,
+    ItemId,
 };
 use chunk_data::*;
 use std::{
@@ -43,13 +42,21 @@ use std::{
     num::NonZeroU8,
 };
 
+#[cfg(feature = "client")]
+use self::{
+    block_mesh_logic::BlockMeshLogic,
+    item_mesh_logic::ItemMeshLogic,
+};
+#[cfg(feature = "client")]
+use crate::{
+    asset::LangKey
+};
+
 
 pub mod content_module_prelude {
     pub use super::{
         GameDataBuilder,
         per_block::PerBlock,
-        block_mesh_logic::BlockMeshLogic,
-        item_mesh_logic::ItemMeshLogic,
         hitscan_logic::BlockHitscanLogic,
         physics_logic::BlockPhysicsLogic,
         transclone_logic::{
@@ -61,12 +68,20 @@ pub mod content_module_prelude {
         content,
     };
     pub use crate::{
+        item::*,
+        util_array::array_default,
+    };
+    #[cfg(feature = "client")]
+    pub use super::{
+        block_mesh_logic::BlockMeshLogic,
+        item_mesh_logic::ItemMeshLogic,
+    };
+    #[cfg(feature = "client")]
+    pub use crate::{
         asset::{
             consts::*,
             LangKey,
         },
-        item::*,
-        util::array::array_default,
         gui::prelude::*,
         client::{
             item_grid::prelude::*,
@@ -88,6 +103,8 @@ pub struct GameDataBuilder {
 
     // required (doesn't have default):
     pub blocks_machine_name: PerBlock<String>,
+
+    #[cfg(feature = "client")]
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
 
     // optional (has default):
@@ -102,11 +119,13 @@ pub struct GameDataBuilder {
 
     // required (doesn't have default):
     pub items_machine_name: PerItem<String>,
+    #[cfg(feature = "client")]
+    pub items_name: PerItem<Option<LangKey>>,
+    #[cfg(feature = "client")]
+    pub items_mesh_logic: PerItem<ItemMeshLogic>,
 
     // optional (has default):
     pub items_meta_transcloner: PerItem<ItemTranscloner>,
-    pub items_name: PerItem<Option<LangKey>>,
-    pub items_mesh_logic: PerItem<ItemMeshLogic>,
     /// Inclusive upper bound on how many can be stacked.
     pub items_max_count: PerItem<NonZeroU8>,
     /// Inclusive upper bound on its damage level.
@@ -120,6 +139,7 @@ impl GameDataBuilder {
     pub fn register_block<M>(
         &mut self,
         machine_name: &str,
+        #[cfg(feature = "client")]
         mesh_logic: BlockMeshLogic,
     ) -> BlockId<M>
     where
@@ -127,6 +147,7 @@ impl GameDataBuilder {
     {
         let bid = self.blocks.register();
         self.blocks_machine_name.set(bid, machine_name.to_owned());
+        #[cfg(feature = "client")]
         self.blocks_mesh_logic.set(bid, mesh_logic);
         self.blocks_meta_transcloner.set(bid, M::transcloner_for());
         bid
@@ -135,7 +156,9 @@ impl GameDataBuilder {
     pub fn register_item<M>(
         &mut self,
         machine_name: &str,
+        #[cfg(feature = "client")]
         name: LangKey,
+        #[cfg(feature = "client")]
         mesh_logic: ItemMeshLogic,
     ) -> ItemId<M>
     where
@@ -144,7 +167,9 @@ impl GameDataBuilder {
         let iid = self.items.register();
         self.items_machine_name.set(iid, machine_name.to_owned());
         self.items_meta_transcloner.set(iid, M::transcloner_for());
+        #[cfg(feature = "client")]
         self.items_name.set(iid, Some(name));
+        #[cfg(feature = "client")]
         self.items_mesh_logic.set(iid, mesh_logic);
         iid
     }
@@ -154,19 +179,24 @@ impl GameDataBuilder {
 pub struct GameData {
     pub blocks: Arc<BlockRegistry>,
     pub blocks_machine_name: PerBlock<String>,
+    #[cfg(feature = "client")]
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
     pub blocks_meta_transcloner: PerBlock<BlockTranscloner>,
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
     pub blocks_can_place_over: PerBlock<bool>,
+    
 
     pub items: ItemRegistry,
     pub items_machine_name: PerItem<String>,
+    #[cfg(feature = "client")]
     pub items_mesh_logic: PerItem<ItemMeshLogic>,
-    pub items_meta_transcloner: PerItem<ItemTranscloner>,
+    #[cfg(feature = "client")]
     pub items_name: PerItem<Option<LangKey>>,
+    pub items_meta_transcloner: PerItem<ItemTranscloner>,
     pub items_max_count: PerItem<NonZeroU8>,
     pub items_max_damage: PerItem<u16>,
+
 
     pub content: ContentModules,
 }
@@ -178,20 +208,22 @@ impl GameData {
             blocks: BlockRegistry::new(),
 
             blocks_machine_name: PerBlock::new_no_default(),
-            blocks_mesh_logic: PerBlock::new_no_default(),
-
             blocks_meta_transcloner: PerBlock::new(BlockTranscloner::Unit),
             blocks_hitscan_logic: PerBlock::new(BlockHitscanLogic::BasicCube),
             blocks_physics_logic: PerBlock::new(BlockPhysicsLogic::BasicCube),
             blocks_can_place_over: PerBlock::new(false),
 
+            #[cfg(feature = "client")]
+            blocks_mesh_logic: PerBlock::new_no_default(),
+
             items: ItemRegistry::new(),
 
             items_machine_name: PerItem::new_no_default(),
-            items_mesh_logic: PerItem::new_no_default(),
-
             items_meta_transcloner: PerItem::new(ItemTranscloner::Unit),
+            #[cfg(feature = "client")]
             items_name: PerItem::new(None),
+            #[cfg(feature = "client")]
+            items_mesh_logic: PerItem::new_no_default(),
             items_max_count: PerItem::new(64.try_into().unwrap()),
             items_max_damage: PerItem::new(0),
         };
@@ -214,22 +246,25 @@ impl GameData {
             blocks: builder.blocks.finalize(),
 
             blocks_machine_name: builder.blocks_machine_name,
-            blocks_mesh_logic: builder.blocks_mesh_logic,
-
             blocks_meta_transcloner: builder.blocks_meta_transcloner,
             blocks_hitscan_logic: builder.blocks_hitscan_logic,
             blocks_physics_logic: builder.blocks_physics_logic,
             blocks_can_place_over: builder.blocks_can_place_over,
 
+            #[cfg(feature = "client")]
+            blocks_mesh_logic: builder.blocks_mesh_logic,
+
             items: builder.items,
 
             items_machine_name: builder.items_machine_name,
-
-            items_meta_transcloner: builder.items_meta_transcloner,
-            items_name: builder.items_name,
+            #[cfg(feature = "client")]
             items_mesh_logic: builder.items_mesh_logic,
+            #[cfg(feature = "client")]
+            items_name: builder.items_name,
+            items_meta_transcloner: builder.items_meta_transcloner,
             items_max_count: builder.items_max_count,
             items_max_damage: builder.items_max_damage,
+
 
             content
         }

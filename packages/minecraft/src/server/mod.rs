@@ -21,21 +21,29 @@ pub mod tick_mgr;
 pub mod chunk_mgr;
 pub mod save_mgr;
 pub mod conn_mgr;
-pub mod player_msg_processor;
+pub mod process_player_msg;
 pub mod runner;
 
 use self::{
     channel::*,
     per_player::*,
     save_content::*,
-    network_server::{NetworkServer, NetworkEvent},
+    network::{NetworkServer, NetworkEvent},
     chunk_loader::ChunkLoader,
     player_save_state_loader::PlayerSaveStateLoader,
     tick_mgr::TickMgr,
     chunk_mgr::ChunkMgr,
     save_mgr::SaveMgr,
+    conn_mgr::ConnMgr,
 };
-use crate::thread_pool::ThreadPool;
+use crate::{
+    game_data::*,
+    thread_pool::ThreadPool,
+    sync_state_tile_blocks,
+};
+use chunk_data::*;
+use std::sync::Arc;
+use vek::*;
 
 
 /// Event sent to the core server loop from some other thread. See the `channel` module.
@@ -81,9 +89,9 @@ pub struct Server {
 /// in server memory and thus game logic can mutate it without worrying about synchronization.
 pub struct ServerOnlyState {
     /// A sender handle to the server event channel.
-    pub server_send: ServerSend,
+    pub server_send: ServerSender,
     /// A receiver handle to the server event channel.
-    pub server_recv: ServerRecv,
+    pub server_recv: ServerReceiver,
     /// Handle to the thread pool.
     pub thread_pool: ThreadPool,
     /// Handle to the network server.
@@ -150,7 +158,7 @@ impl Server {
     }
 }
 
-impl SyncWorld<'a> {
+impl<'a> SyncWorld<'a> {
     /// Construct manually (with respect to synchronization logic).
     pub fn new_manual(
         server_only: &'a mut ServerOnlyState,

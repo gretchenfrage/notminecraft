@@ -6,6 +6,7 @@ use crate::{
         channel::*,
         ServerEvent,
     },
+    message::*,
 };
 use std::sync::Arc;
 use parking_lot::Mutex;
@@ -35,7 +36,7 @@ pub struct NetworkServer(NetworkServerHandle);
 /// Does not keep network server alive nor shut it down when dropped--see `NetworkServer` for
 /// that. Can be used to open the server to new connections.
 #[derive(Clone)]
-pub struct NetworkServerHandle(Arc<NetworkServerSharedState);
+pub struct NetworkServerHandle(Arc<NetworkServerSharedState>);
 
 // network server state shared between main handle and other tasks
 struct NetworkServerSharedState {
@@ -104,7 +105,7 @@ impl NetworkServer {
                 slab: Default::default(),
                 bind_abort_handles: Default::default(),
             }),
-        }
+        })))
     }
 
     /// Get a handle, which can be used directly to bind, or cloned for use elsewhere.
@@ -165,12 +166,12 @@ impl Connection {
 impl Drop for NetworkServer {
     fn drop(&mut self) {
         // shut down everything upon the main handle being dropped
-        let mut lock = self.shared.lockable.lock();
+        let mut lock = self.0.0.lockable.lock();
         for abort_handle in &lock.bind_abort_handles {
             abort_handle.abort();
         }
         lock.shut_down = true;
-        for entry in &lock.slab {
+        for (_, entry) in &lock.slab {
             match entry {
                 &SlabEntry::Ws(ref inner) => inner.shutdown(),
                 &SlabEntry::InMem(ref inner) => inner.shutdown(),
@@ -208,7 +209,7 @@ fn destroy_conn(shared: &NetworkServerSharedState, conn_idx: usize) {
     let mut lock = shared.lockable.lock();
     if lock.shut_down {
         // save work, make shutdown faster
-        return None;
+        return;
     }
     lock.slab.remove(conn_idx);
     shared.server_send.send(

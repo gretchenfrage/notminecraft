@@ -45,11 +45,12 @@ use crate::{
         channel::*,
     },
     game_data::*,
+    game_binschema::GameBinschema,
 };
 use binschema::*;
 use std::{
     sync::{Arc, Once},
-    time::{Duration, Instant},
+    time::Duration,
     convert::Infallible,
     cmp::{min, max},
     future::Future,
@@ -57,6 +58,7 @@ use std::{
 use tokio::{
     sync::{
         mpsc::{
+            Sender,
             Receiver,
             UnboundedSender,
             UnboundedReceiver,
@@ -69,6 +71,7 @@ use tokio::{
     task::AbortHandle,
     net::{TcpListener, TcpStream},
     time::{
+        Instant,
         sleep,
         timeout,
         timeout_at,
@@ -86,11 +89,13 @@ use tokio_tungstenite::{
         error::Error as TungsteniteError,
         Message,
     },
+    WebSocketStream,
     accept_async_with_config,
 };
 use futures::{
     stream::{Stream, StreamExt},
     sink::{Sink, SinkExt},
+    FutureExt,
     future::pending,
     select,
     select_biased,
@@ -232,7 +237,7 @@ where
 
 // body of the task to bind to the TCP port and start accepting new connections
 async fn accept_task<B: ToSocketAddrs>(
-    ns_shared: Arc<NsShared>,
+    ns_shared: Arc<NetworkServerSharedState>,
     bind_to: B,
     rt: Handle,
     game: Arc<GameData>,
@@ -258,11 +263,14 @@ async fn accept_task<B: ToSocketAddrs>(
     loop {
         // try until error
         let attempt_start = Instant::now();
-        let result = try_accept_task_inner(&ws_shared, &bind_to);
+        let result = try_accept_task_inner(&ws_shared, &bind_to).await;
         let attempt_end = Instant::now();
 
         // log error
-        let Err(e) = result;
+        let e = match result {
+            Err(e) => e,
+            Ok(never) => match never {}
+        };
         error!(%e, "websocket accept task error (retrying in {:.3} s)", backoff.as_secs_f32());
 
         // backoff sleep
@@ -291,7 +299,7 @@ async fn try_accept_task_inner<B: ToSocketAddrs>(
     loop {
         // spawn the receive task for each
         let (tcp, _) = listener.accept().await?;
-        rt.spawn(recv_task(Arc::clone(ws_shared), tcp));
+        ws_shared.rt.spawn(recv_task(Arc::clone(ws_shared), tcp));
     }
 }
 
@@ -339,20 +347,23 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     // spawn send task
     ws_shared.rt.spawn(send_task(
         Arc::clone(&ws_shared),
-        Arc::Clone(&conn_shared),
+        Arc::clone(&conn_shared),
         ws_send,
         recv_pong,
         recv_send,
     ));
 
     // do loop until loop errors or told to shut down
-    let recv_loop = recv_loop(&ws_shared, &conn_shared, ws_recv, seng_pong, conn_idx);
+    let recv_loop = recv_loop(&ws_shared, &conn_shared, ws_recv, send_pong, conn_idx);
     select_biased! {
-        _ = conn_shared.shutdown_recv.notified() => {
+        _ = conn_shared.shutdown_recv.notified().fuse() => {
             trace!("receive task shutting down because shut down requested");
         }
-        result = recv_loop => {
-            let Err(e) = result;
+        result = recv_loop.fuse() => {
+            let e = match result {
+                Err(e) => e,
+                Ok(never) => match never {},
+            };
             trace!(%e, "receive task errored (closing connection)");
         }
     }
@@ -363,10 +374,10 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
 }
 
 // message receiving loop for the portion of a receive task where the connection is alive.
-async fn recv_loop<W: Stream<Item=Result<Message, Error>>>(
+async fn recv_loop<W: Stream<Item=Result<Message, TungsteniteError>> + Unpin>(
     ws_shared: &WsShared,
     conn_shared: &WsConnShared,
-    ws_recv: mut W,
+    mut ws_recv: W,
     send_pong: Sender<Vec<u8>>,
     conn_idx: usize,
 ) -> Result<Infallible, Error> {
@@ -376,7 +387,11 @@ async fn recv_loop<W: Stream<Item=Result<Message, Error>>>(
 
     // enter loop
     loop {
-        let msg = ws_recv.next().await?;
+        let msg = match ws_recv.next().await {
+            Some(Ok(msg)) => msg,
+            Some(Err(e)) => return Err(e.into()),
+            None => bail!("ws connection closed"),
+        };
 
         // extract binary message or early escape this loop iteration
         let msg = match msg {
@@ -400,7 +415,7 @@ async fn recv_loop<W: Stream<Item=Result<Message, Error>>>(
             .and_then(|msg| coder_state
                 .is_finished_or_err()
                 .map(move |()| msg));
-        if let &Err(e) = result {
+        if let &Err(ref e) = &result {
             if e.kind().is_programmer_fault() {
                 error!(%e, "decoding error detected as being programmer's fault");
             }
@@ -414,7 +429,8 @@ async fn recv_loop<W: Stream<Item=Result<Message, Error>>>(
 
         // receive backpressure
         // unwrap safety: we never close the semaphore
-        backpressure_semaphore.acquire_many_owned(msg_size).await.unwrap();
+        let permit = Arc::clone(&backpressure_semaphore)
+            .acquire_many_owned(msg_size as u32).await.unwrap();
 
         // send received message to server
         ws_shared.ns_shared.server_send.send(
@@ -439,14 +455,17 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
     recv_send: UnboundedReceiver<DownMsg>,
 ) {
     // do loop until loop errors or told to shut down
-    let send_loop = send_loop(ws_shared, conn_shared, &mut ws_send, recv_pong, recv_send);
+    let send_loop = send_loop(ws_shared, &conn_shared, &mut ws_send, recv_pong, recv_send);
     let should_send_close = select_biased! {
-        _ = conn_shared.shutdown_send.notified() => {
+        _ = conn_shared.shutdown_send.notified().fuse() => {
             trace!("send task shutting down because shut down requested");
             true
         }
-        result = send_loop => {
-            let Err(e) = result;
+        result = send_loop.fuse() => {
+            let e = match result {
+                Ok(never) => match never {},
+                Err(e) => e,
+            };
             let should_send_close = match e {
                 SendLoopError::Ws(e) => {
                     trace!(%e, "send task error (closing connection)");
@@ -472,10 +491,10 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
 // message sending loop for the portion of a send task where the connection is alive
 async fn send_loop<W: Sink<Message, Error=TungsteniteError> + Unpin>(
     ws_shared: Arc<WsShared>,
-    conn_shared: Arc<WsConnShared>,
+    conn_shared: &Arc<WsConnShared>,
     ws_send: &mut W,
-    recv_pong: Receiver<Vec<u8>>,
-    recv_send: UnboundedReceiver<DownMsg>,
+    mut recv_pong: Receiver<Vec<u8>>,
+    mut recv_send: UnboundedReceiver<DownMsg>,
 ) -> Result<Infallible, SendLoopError> {
     // allocate state
     let mut coder_state_alloc = CoderStateAlloc::new();
@@ -485,12 +504,12 @@ async fn send_loop<W: Sink<Message, Error=TungsteniteError> + Unpin>(
         // take down message to send or early escape this loop iteration
         let msg: DownMsg = select_biased! {
             // ping pong
-            msg = some_or_pending(recv_pong.recv()) => {
+            msg = some_or_pending(recv_pong.recv()).fuse() => {
                 ws_send.send(Message::Pong(msg)).await.map_err(SendLoopError::Ws)?;
                 continue;
             }
             // actual message to send
-            msg = some_or_pending(recv_pong.recv()) => msg,
+            msg = some_or_pending(recv_send.recv()).fuse() => msg,
         };
 
         // encode
@@ -499,13 +518,14 @@ async fn send_loop<W: Sink<Message, Error=TungsteniteError> + Unpin>(
         let result = msg
             .encode(&mut Encoder::new(&mut coder_state, &mut buf), &ws_shared.game)
             .and_then(|()| coder_state.is_finished_or_err());
-        if let &Err(e) = result {
+        if let &Err(ref e) = &result {
             error!(%e, "encoding error");
         }
-        result.map_err(SendLoopError::Ws)?;
+        result.map_err(Error::from).map_err(SendLoopError::WsBinschema)?;
+        coder_state_alloc = coder_state.into_alloc();
 
         // sbpe
-        conn_shared.send_buffer_policy_enforcer.pre_transmit(&msg);
+        conn_shared.sbpe.pre_transmit(&msg);
 
         // send and flush
         ws_send.send(Message::Binary(buf)).await.map_err(SendLoopError::Ws)?;
@@ -522,7 +542,7 @@ enum SendLoopError {
 }
 
 // wrapper around a future option that resolves to the some value or pends forever
-async fn some_or_pending<T, F: Future<Output=Option<T>>>(option: T) -> T {
+async fn some_or_pending<T, F: Future<Output=Option<T>>>(option: F) -> T {
     match option.await {
         Some(t) => t,
         None => pending().await,
@@ -542,7 +562,7 @@ fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
     let mut coder_state_alloc = CoderStateAlloc::new();
     for schema in [send_schema, recv_schema] {
         let mut coder_state = CoderState::new(&schema_schema, coder_state_alloc, None);
-        let result = msg_schema.encode_schema(&mut Encoder::new(&mut coder_state, &mut buf));
+        let result = schema.encode_schema(&mut Encoder::new(&mut coder_state, &mut buf));
         if cfg!(debug_assertions) {
             result
                 .and_then(|()| coder_state.is_finished_or_err())
@@ -581,13 +601,13 @@ async fn try_handshake_handle_err(
         }
         Err(HandshakeError::WsBinschema { ws, reason }) => {
             // try to send back a close frame, with timeout
-            try_close(ws, reason).await;
+            try_close(ws, Some(reason)).await;
             None
         }
         Err(HandshakeError::Timeout(opt_ws)) => {
             // try to send back a close frame here too, if applicable
             if let Some(ws) = opt_ws {
-                try_close(ws, "ws-binschema handshake timeout");
+                try_close(ws, Some("ws-binschema handshake timeout"));
             }
             None
         }
@@ -626,9 +646,14 @@ async fn try_handshake(
     // receive the first binary message from the other side
     let received = loop {
         // receive message with timeout 
-        let ws_msg = match timeout_at(deadline, ws.next().await) {
-            Ok(Ok(ws_msg)) => ws_msg,
-            Ok(Err(e)) => return Err(HandshakeError::Ws(e)),
+        let ws_msg = match timeout_at(deadline, ws.next()).await {
+            // received message
+            Ok(Some(Ok(ws_msg))) => ws_msg,
+            // stream error
+            Ok(Some(Err(e))) => return Err(HandshakeError::Ws(e)),
+            // stream closed
+            Ok(None) => return Err(HandshakeError::Ws(TungsteniteError::ConnectionClosed)),
+            // timeout
             Err(_) => return Err(HandshakeError::Timeout(Some(ws))),
         };
 
@@ -646,7 +671,9 @@ async fn try_handshake(
                 };
             }
             // if connection closed on ws level, that's an error
-            Message::Close(_) => return HandshakeError::Ws(TungsteniteError::ConnectionClosed),
+            Message::Close(_) => {
+                return Err(HandshakeError::Ws(TungsteniteError::ConnectionClosed))
+            }
             // count the receipt of other message types as a ws-binschema error
             _ => return Err(HandshakeError::WsBinschema { ws, reason: "invalid ws msg type" }),
         }

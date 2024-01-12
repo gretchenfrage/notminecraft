@@ -14,7 +14,7 @@ pub enum UpMsg {
     ///
     /// Client sends this right after connecting, which triggers an `AcceptLogIn` message response
     /// if accepted.
-    LogIn(UpMsgLogIn)
+    LogIn(UpMsgLogIn),
     /// Part of connection initialization flow.
     ///
     /// Adds the client fully to the game world, and triggers a `FinalizeJoinGame` message
@@ -57,7 +57,7 @@ pub struct PlayerMsgSetCharState {
 #[derive(Debug, GameBinschema)]
 pub struct PlayerMsgSetTileBlock {
     pub gtc: Vec3<i64>,
-    pub bid_meta: ErasedBlockMeta,
+    pub bid_meta: ErasedBidMeta,
 }
 
 /// Message sent from server to client.
@@ -142,19 +142,19 @@ pub struct DownMsgRemoveChunk {
 }
 
 /// Edit sent from the server to the client regarding some loaded state.
-#[derive(Debug, GameBinschema, Copy, Clone)]
+#[derive(Debug, GameBinschema)]
 pub enum Edit {
     SetTileBlock {
         chunk_idx: DownChunkIdx,
         lti: u16,
         bid_meta: ErasedBidMeta,
-    }
+    },
     SetPlayerCharState {
         player_idx: DownPlayerIdx,
         pos: Vec3<f32>,
         yaw: f32,
         pitch: f32,
-    }
+    },
 }
 
 /// Type safety wrapper around clientside player index in down msgs.

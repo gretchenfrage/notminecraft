@@ -38,7 +38,7 @@ const NULL_IDX: u32 = !0;
 /// - Provides an efficient lookup from chunk coordinate (cc) to chunk index
 ///   (ci) based on a 3-dimensionally linked hashmap which is exploited for
 ///   caching, which makes linear access patterns extremely fast. 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LoadedChunks {
     hmap: HashMap<Vec3<i64>, u32>,
     slab: Slab<SlabEntry>,
@@ -53,10 +53,7 @@ struct SlabEntry {
 impl LoadedChunks {
     /// Construct a new empty set of loaded chunks.
     pub fn new() -> Self {
-        LoadedChunks {
-            hmap: HashMap::new(),
-            slab: Slab::new(),
-        }
+        Self::default()
     }
 
     /// Produce a getter, for lookups, which does caching and link-traversal.

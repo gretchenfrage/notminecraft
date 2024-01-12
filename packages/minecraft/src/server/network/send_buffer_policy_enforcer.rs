@@ -11,9 +11,10 @@
 //! is more coupled to game logic in exchange for simpler interactions with the game logic's more
 //! stringent synchronization requirements.
 
+use crate::message::*;
 use std::sync::atomic::{
     AtomicU64,
-    Ordering::SeqCst,
+    Ordering,
 };
 use anyhow::*;
 
@@ -33,7 +34,7 @@ impl SendBufferPolicyEnforcer {
 
     /// Called right before the message is transmitted.
     pub(super) fn pre_transmit(&self, msg: &DownMsg) {
-        if let &DownMessage::AddChunk(_) = msg {
+        if let &DownMsg::AddChunk(_) = msg {
             self.accept_more_chunks_budget.fetch_add(1, Ordering::SeqCst);
         }
     }
@@ -41,8 +42,8 @@ impl SendBufferPolicyEnforcer {
     /// Called right after the message is received. If errors, send buffer policies were violated
     /// and the connection should be killed.
     pub(super) fn post_receive(&self, msg: &UpMsg) -> Result<()> {
-        if let &UpMessage::AcceptMoreChunks(n) = msg {
-            let pre_sub = self.accept_more_chunks_budget.fetch_sub(n, Ordering::SeqCst);
+        if let &UpMsg::AcceptMoreChunks(n) = msg {
+            let pre_sub = self.accept_more_chunks_budget.fetch_sub(n as u64, Ordering::SeqCst);
             if n as u64 > pre_sub {
                 bail!("client violated accept more chunks buffer policy");
             }

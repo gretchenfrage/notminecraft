@@ -2,6 +2,7 @@
 
 use crate::{
     server::{
+        ServerEvent,
         per_player::*,
         save_content::*,
         save_db::SaveDb,
@@ -16,8 +17,11 @@ use std::{
     cell::RefCell,
     sync::Arc,
     mem::take,
+    collections::HashMap,
 };
 use slab::Slab;
+use vek::*;
+
 
 /// How long to wait between save operations.
 const TICKS_BETWEEN_SAVES: u64 = 200;
@@ -66,7 +70,7 @@ struct TrackingState {
     // collection of loaded players which are unsaved
     unsaved_players: Slab<JoinedPlayerKey>,
     // for each player, if unsaved, the index of its entry in unsaved_players
-    player_unsaved_idx: PerPlayer<Option<usize>>,
+    player_unsaved_idx: PerJoinedPlayer<Option<usize>>,
 }
 
 /// An in-progress operation of saving the world to the save file.
@@ -138,7 +142,7 @@ impl SaveMgr {
             } else {
                 None
             };
-        tracking.chunk_unsaved_idx.insert(cc, ci, unsaved_idx);
+        tracking.chunk_unsaved_idx.add(cc, ci, unsaved_idx);
     }
 
     /// Call upon a player joining the the world.
@@ -262,7 +266,7 @@ impl<'a> SaveOp<'a> {
         let ctx = Arc::clone(&self.save_mgr.save_job_ctx);
         let entries = take(&mut self.will_save);
         let aborted = AbortGuard::new();
-        self.save_mgr.thread_pool.submit(WorkPriority::Server, aborted.handle(), move |_| {
+        self.save_mgr.thread_pool.submit(WorkPriority::Server, aborted.new_handle(), move |_| {
             // do the saving
             let result = ctx.save_db.write(entries);
             if let Err(e) = result {

@@ -2,11 +2,13 @@
 
 use crate::{
     server::{
+        ServerEvent,
         per_player::*,
         channel::*,
         save_content::*,
         save_db::SaveDb,
     },
+    thread_pool::*,
     util_abort_handle::AbortHandle,
 };
 use std::sync::Arc;
@@ -44,7 +46,7 @@ impl PlayerSaveStateLoader {
             match result {
                 Ok(save_val) => {
                     let event = ServerEvent::PlayerSaveStateReady { pk, save_val };
-                    ctx.server_send.send(event);
+                    ctx.server_send.send(event, EventPriority::Other, Some(aborted), None);
                 }
                 Err(e) => {
                     // we don't really have very good error recovery yet

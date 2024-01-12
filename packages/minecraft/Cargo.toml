@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 default-run = "minecraft"
 
+[features]
+client = []
+
 [dependencies]
 tracing = "0.1"
 vek = "0.15"
@@ -33,6 +36,7 @@ url = "2"
 arboard = "3"
 serde_json = "1"
 ctrlc = "3"
+crossbeam = "0.8"
 
 [dependencies.graphics]
 path = "../graphics"

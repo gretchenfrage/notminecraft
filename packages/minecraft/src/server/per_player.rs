@@ -10,7 +10,7 @@ use std::ops::{Index, IndexMut};
 
 
 /// Manages the allocation of `PlayerKey` and `JoinedPlayerKey` in slab patterns.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct PlayerKeySpace {
     // space of players
     players: ThingKeySpace,
@@ -23,11 +23,11 @@ pub struct PlayerKeySpace {
 }
 
 /// Storage of `T` per player connected to the server.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone)]
 pub struct PerPlayer<T>(PerThing<T>);
 
 /// Storage of `T` per player connected to the server which has joined the game.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone)]
 pub struct PerJoinedPlayer<T>(PerThing<T>);
 
 /// Key into `PerPlayer<T>`.
@@ -44,7 +44,7 @@ pub struct JoinedPlayerKey {
 }
 
 
-impl<T> PlayerKeySpace<T> {
+impl PlayerKeySpace {
     /// Construct empty.
     pub fn new() -> Self {
         Self::default()
@@ -67,8 +67,8 @@ impl<T> PlayerKeySpace<T> {
         debug_assert!(self.player_jpk[pk.0].is_none());
         let jpk = self.joined_players.add();
         self.player_jpk[pk.0] = Some(jpk);
-        self.joined_player_pk[pk.0].insert(pk);
-        JoinedPlayerKey { pk, jpk }
+        self.joined_player_pk.insert(jpk, pk.0);
+        JoinedPlayerKey { pk: pk.0, jpk }
     }
 
     /// Remove a player key. If there is a corresponding joined player key, remove that too and
@@ -83,12 +83,12 @@ impl<T> PlayerKeySpace<T> {
             self.joined_players.remove(jpk);
             self.joined_player_pk.remove(jpk);
         }
-        jpk.map(|jpk| JoinedPlayerKey { pk, jpk })
+        jpk.map(|jpk| JoinedPlayerKey { pk: pk.0, jpk })
     }
 
     /// Get the corresponding joined player key to a player key if there is one.
     pub fn to_jpk(&self, pk: PlayerKey) -> Option<JoinedPlayerKey> {
-        self.player_jpk[pk.0].map(|jpk| JoinedPlayerKey { pk, jpk })
+        self.player_jpk[pk.0].map(|jpk| JoinedPlayerKey { pk: pk.0, jpk })
     }
 
     /// Iterate through all current player keys.
@@ -106,7 +106,7 @@ impl<T> PlayerKeySpace<T> {
 
     /// Construct a new `PerPlayer` using `f` to populate entries for existing keys.
     pub fn new_per_player<T, F: FnMut(PlayerKey) -> T>(&self, f: F) -> PerPlayer<T> {
-        PerPlayer(self.players.new_per(move |pk| f(PlayerKey(pk)))))
+        PerPlayer(self.players.new_per(move |pk| f(PlayerKey(pk))))
     }
 
     /// Construct a new `PerJoinedPlayer` using `f` to populate entries for existing keys.
@@ -124,7 +124,7 @@ impl<T> PlayerKeySpace<T> {
 impl<T> PerPlayer<T> {
     /// Construct empty.
     pub fn new() -> Self {
-        Self::default()
+        Self(Default::default())
     }
 
     /// Insert an entry for the given player key.
@@ -152,10 +152,16 @@ impl<T> PerPlayer<T> {
     }
 }
 
+impl<T> Default for PerPlayer<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> PerJoinedPlayer<T> {
     /// Construct empty.
     pub fn new() -> Self {
-        Self::default()
+        Self(Default::default())
     }
 
     /// Insert an entry for the given player key.
@@ -180,6 +186,12 @@ impl<T> PerJoinedPlayer<T> {
     /// Get by mutable reference.
     pub fn get_mut(&mut self, pk: JoinedPlayerKey) -> &mut T {
         self.0.get_mut(pk.jpk)
+    }
+}
+
+impl<T> Default for PerJoinedPlayer<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -224,16 +236,16 @@ impl<T> IndexMut<JoinedPlayerKey> for PerJoinedPlayer<T> {
     }
 }
 
-impl<T> Index<PlayerKey> for PerJoinedPlayer<T> {
+impl<T> Index<JoinedPlayerKey> for PerPlayer<T> {
     type Output = T;
 
-    fn index(&self, pk: PlayerKey) -> &T {
+    fn index(&self, pk: JoinedPlayerKey) -> &T {
         self.get(pk.to_pk())
     }
 }
 
-impl<T> IndexMut<PlayerKey> for PerJoinedPlayer<T> {
-    fn index_mut(&mut self, pk: PlayerKey) -> &mut T {
+impl<T> IndexMut<JoinedPlayerKey> for PerPlayer<T> {
+    fn index_mut(&mut self, pk: JoinedPlayerKey) -> &mut T {
         self.get_mut(pk.to_pk())
     }
 }

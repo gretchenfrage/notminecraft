@@ -4,12 +4,14 @@
 use crate::{
     game_data::*,
     server::{
+        ServerEvent,
         channel::*,
         save_content::*,
         save_db::SaveDb,
         generate_chunk::generate_chunk,
     },
-    util_abort_handle::AbortGuard,
+    thread_pool::*,
+    util_abort_handle::*,
 };
 use std::sync::Arc;
 
@@ -58,13 +60,13 @@ impl ChunkLoader {
                 Ok(Some(save_val)) => {
                     // loaded
                     let event = ServerEvent::ChunkReady { save_key, save_val, saved: true };
-                    ctx.server_send.send(event);
+                    ctx.server_send.send(event, EventPriority::Other, Some(aborted), None);
                 }
                 Ok(None) => {
                     // must generate
-                    let save_val = generate_chunk(&ctx.game);
+                    let save_val = generate_chunk(&ctx.game, save_key.cc);
                     let event = ServerEvent::ChunkReady { save_key, save_val, saved: false };
-                    ctx.server_send.send(event);
+                    ctx.server_send.send(event, EventPriority::Other, Some(aborted), None);
                 }
                 Err(e) => {
                     // we don't really have very good error recovery yet

@@ -2,27 +2,34 @@
 #[macro_use]
 extern crate tracing;
 
-
-pub mod sound;
-pub mod asset;
-pub mod gui;
-pub mod util;
-pub mod chunk_mesh;
-pub mod block_update_queue;
+//pub mod sound;
+//pub mod asset;
+//pub mod gui;
+//pub mod util;
+//pub mod chunk_mesh;
+//pub mod block_update_queue;
+pub mod util_abort_handle;
+pub mod util_per_thing;
+pub mod util_array;
 pub mod game_data;
 pub mod item;
 pub mod physics;
 pub mod game_binschema;
-pub mod menu;
-pub mod save_file;
+//pub mod menu;
+//pub mod save_file;
 pub mod thread_pool;
-pub mod settings;
-pub mod client;
+//pub mod settings;
+//pub mod client;
 pub mod server;
 pub mod message;
-pub mod util_per_thing;
+pub mod sync_state_tile_blocks;
 
 
+fn main() {
+    println!("guten morgen");
+}
+
+/*
 use crate::{
     game_data::GameData,
     gui::GuiEventLoop,
@@ -217,3 +224,4 @@ fn main() {
         }
     };
 }
+*/

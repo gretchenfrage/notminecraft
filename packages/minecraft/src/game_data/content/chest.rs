@@ -11,6 +11,7 @@ impl ContentModule {
     pub fn init(builder: &mut GameDataBuilder) -> Self {
         let bid_chest = builder.register_block(
             "chest",
+            #[cfg(feature = "client")]
             BlockMeshLogic::basic_cube_faces({
                 let mut faces = PerFace::repeat(BTI_CHEST_SIDE);
                 faces[Face::PosY] = BTI_CHEST_TOP_BOTTOM;
@@ -40,7 +41,7 @@ impl Default for ChestBlockMeta {
     }
 }
 
-
+/*
 /// Game menu for an opened chest.
 #[derive(Debug)]
 pub struct ChestMenu {
@@ -188,3 +189,4 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<SingleChestBg> {
             );
     }
 }
+*/

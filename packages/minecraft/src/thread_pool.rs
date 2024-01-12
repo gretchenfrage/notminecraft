@@ -38,7 +38,7 @@ struct State {
     // per thread, per priority level, job queue
     thread_queues: Vec<[SegQueue<Job>; LEVELS]>,
     // for worker threads to sleep when there's no more work
-    parker: Parker,
+    unparker: Unparker,
     // rotating index for which thread to submit work to
     insert_to: AtomicU32,
     // counter of how may ThreadPool handles remain. worker threads shut down once all work is
@@ -79,12 +79,12 @@ impl ThreadPool {
         F: FnOnce(AbortHandle) + Send + 'static,
     {
         let q = self.0.insert_to.fetch_add(1, Ordering::Relaxed);
-        let q = q as usize % self.thread_queues.0.len();
+        let q = q as usize % self.0.thread_queues.len();
         self.0.thread_queues[q][priority as usize].push(Job {
             aborted,
             work: Box::new(work) as _,
         });
-        self.0.unparker().unpark();
+        self.0.parker.unpark();
     }
 }
 
@@ -95,7 +95,7 @@ fn thread_body(q: usize, state: Arc<State>) {
         'my_queues: loop {
             // do whatever job can be found at the best priority
             for queue in my_queues {
-                if let Some(job) = state.thread_queues[q][p].pop() {
+                if let Some(job) = queue.pop() {
                     do_job(job);
                     continue 'my_queues;
                 }
@@ -106,10 +106,10 @@ fn thread_body(q: usize, state: Arc<State>) {
         // loop for trying to process work from neighbors queues
         for offset in 1..state.thread_queues.len() {
             // look through neighbors increasingly "to the right" (wrapping)
-            let q2 = (q + offset) % state.thread_queues.len()
+            let q2 = (q + offset) % state.thread_queues.len();
             // and try to find a job at the best priority
             for queue in &state.thread_queues[q2] {
-                if let Some(job) = state.thread_queues[q][p].pop() {
+                if let Some(job) = queue.pop() {
                     do_job(job);
                     continue 'outer;
                 }
@@ -119,7 +119,7 @@ fn thread_body(q: usize, state: Arc<State>) {
         if state.alive.load(Ordering::SeqCst) == 0 {
             // if it is, die, but make sure to maintain a chain reaction of sleeping threads waking
             // each other up so they all notice the pool is dead and shut off
-            self.0.parker.unparker().unpark();
+            state.parker.unparker().unpark();
             return;
         }
         // elsewise, we're probably just empty, so park until waken up
@@ -129,7 +129,7 @@ fn thread_body(q: usize, state: Arc<State>) {
 
 fn do_job(job: Job) {
     if !job.aborted.is_aborted() {
-        (job.work)(job.aborted());
+        (job.work)(job.aborted);
     }
 }
 

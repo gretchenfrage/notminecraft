@@ -44,6 +44,7 @@
 
 use crate::{
     server::save_content::*,
+    game_binschema::*,
     game_data::GameData,
 };
 use get_assets::DataDir;
@@ -223,7 +224,7 @@ impl SaveDb {
         {
             let mut encoder = Encoder::new(&mut coder_state, &mut self.buf1);
             encoder.begin_enum(K::key_type_idx() + 1, K::key_type_name())?;
-            key.encode(&mut encoder, game);
+            key.encode(&mut encoder, &self.shared.game);
         }
         coder_state.is_finished_or_err()?;
 
@@ -240,7 +241,7 @@ impl SaveDb {
 
         // decode val
         let mut coder_state = CoderState::new(
-            &self.shared.val_schemas[K::key_type_index()],
+            &self.shared.val_schemas[K::key_type_idx()],
             coder_state.into_alloc(),
             None,
         );
@@ -280,11 +281,11 @@ impl SaveDb {
             // encode val into buf2
             self.buf2.clear();
             let mut coder_state = CoderState::new(
-                &self.shared.val_schemas[write.key_type_index()],
+                &self.shared.val_schemas[entry.key_type_idx()],
                 coder_state.into_alloc(),
                 None,
             );
-            write.encode_val(
+            entry.encode_val(
                 &mut Encoder::new(&mut coder_state, &mut self.buf2),
                 &self.shared.game,
             )?;

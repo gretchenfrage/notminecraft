@@ -6,14 +6,14 @@ use slab::Slab;
 
 
 /// Generalized backing structure. Manages the allocation of `ThingKey` in a slab pattern.
-[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ThingKeySpace {
     slab: Slab<u64>,
     ctr: u64,
 }
 
 /// Generalized backing structure. Storage of `T` per thing.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Debug, Clone)]
 pub struct PerThing<T>(Slab<(T, u64)>);
 
 /// Generalized backing structure. Key into `PerThing`.
@@ -23,7 +23,7 @@ pub struct ThingKey {
     ctr: u64,
 }
 
-impl<T> ThingKeySpace<T> {
+impl ThingKeySpace {
     /// Construct empty.
     pub fn new() -> Self {
         Self::default()
@@ -57,7 +57,7 @@ impl<T> ThingKeySpace<T> {
 impl<T> PerThing<T> {
     /// Construct empty.
     pub fn new() -> Self {
-        Self::default()
+        Self(Default::default())
     }
 
     /// Insert value for given key.
@@ -74,6 +74,7 @@ impl<T> PerThing<T> {
     pub fn remove(&mut self, key: ThingKey) -> T {
         let (val, ctr2) = self.0.remove(key.idx);
         debug_assert_eq!(ctr2, key.ctr, "PerThing.remove ctr mismatch");
+        val
     }
 
     /// Get by shared reference.
@@ -92,5 +93,25 @@ impl<T> PerThing<T> {
         let &mut (ref mut val, ctr2) = &mut self.0[key.idx];
         debug_assert_eq!(ctr2, key.ctr, "PerThing.get ctr mismatch");
         val
+    }
+}
+
+impl<T> Index<ThingKey> for PerThing<T> {
+    type Output = T;
+
+    fn index(&self, key: ThingKey) -> &Self::Output {
+        self.get(key)
+    }
+}
+
+impl<T> IndexMut<ThingKey> for PerThing<T> {
+    fn index_mut(&mut self, key: ThingKey) -> &mut Self::Output {
+        self.get_mut(key)
+    }
+}
+
+impl<T> Default for PerThing<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

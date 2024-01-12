@@ -1,7 +1,7 @@
 
 use crate::{
     game_data::GameData,
-    util::array::ArrayBuilder,
+    util_array::ArrayBuilder,
     item::{
         ItemStack,
         RawItemId,

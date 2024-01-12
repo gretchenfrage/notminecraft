@@ -110,7 +110,7 @@ pub enum ChunkMgrEffect {
 
 impl ChunkMgr {
     /// Construct.
-    pub fn new(chunk_loader: ChunkLoader) -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -121,7 +121,7 @@ impl ChunkMgr {
 
     /// Get the clientside ci for a given chunk and client, if the chunk is loaded in that client.
     pub fn chunk_to_clientside(&self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) -> Option<usize> {
-        self.chunk_player_clientside_ci.get(cc, ci)[ck]
+        self.chunk_player_clientside_ci.get(cc, ci)[pk]
     }
 
     /// Call upon a player being added to the world. Initializes it with no chunk client interests.
@@ -160,7 +160,7 @@ impl ChunkMgr {
         }
 
         for loading_chunk in self.loading_chunks.values_mut() {
-            loading_chunk.interest.remove(pk);
+            loading_chunk.player_interest.remove(pk);
         }
     }
 
@@ -168,7 +168,7 @@ impl ChunkMgr {
     pub fn incr_load_request_count(&mut self, cc: Vec3<i64>, players: &PlayerKeySpace) {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // already loaded, just increment count
-            let count = self.load_request_count.get_mut(cc, ci);
+            let count = self.chunk_load_request_count.get_mut(cc, ci);
             *count = count.checked_add(1).unwrap();
         } else {
             match self.loading_chunks.entry(cc) {
@@ -179,12 +179,12 @@ impl ChunkMgr {
                 }
                 hash_map::Entry::Vacant(entry) => {
                     // going from zero to non-zero; create it in the loading state
-                    let aborted_1 = AbortGuard::new()
-                    let aborted_2 = aborted_1.handle();
+                    let aborted_1 = AbortGuard::new();
+                    let aborted_2 = aborted_1.new_handle();
                     entry.insert(LoadingChunk {
                         aborted: aborted_1,
                         load_request_count: 1.try_into().unwrap(),
-                        interest: players.new_mapped_per_player(|_| false),
+                        player_interest: players.new_per_player(|_| false),
                     });
 
                     // trigger it to be loaded
@@ -202,7 +202,7 @@ impl ChunkMgr {
     pub fn decr_load_request_count(&mut self, cc: Vec3<i64>, players: &PlayerKeySpace) {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // chunk is loaded, try to decrement count
-            let count = self.load_request_count.get_mut(cc, ci);
+            let count = self.chunk_load_request_count.get_mut(cc, ci);
             if let Some(decremented) = NonZeroU64::new(count.get() - 1) {
                 // it doesn't reach 0
                 *count = decremented;
@@ -229,7 +229,7 @@ impl ChunkMgr {
             } else {
                 // it does reach 0, remove it and abort loading
                 let loading_chunk = entry.remove();
-                loading_chunk.abort_handle.abort();
+                loading_chunk.aborted.abort();
             }
         }
     }
@@ -254,7 +254,7 @@ impl ChunkMgr {
             // ready.
             //
             // the previous incr_load_request_count call should ensure the entry is present.
-            self.loading_chunks.get_mut(&cc).unwrap().interest[pk] = true;
+            self.loading_chunks.get_mut(&cc).unwrap().player_interest[pk] = true;
         }
     }
 
@@ -271,8 +271,8 @@ impl ChunkMgr {
 
     /// Permit `amount` additional "add chunk to client" operations to occur to the client.
     pub fn increase_client_add_chunk_budget(&mut self, pk: PlayerKey, amount: u32) {
-        self.add_chunk_mgr[pk].increase_budget(amount);
-        while let Some((cc, ci)) = self.add_chunk_mgr[pk].poll_queue() {
+        self.player_add_chunk_mgr[pk].increase_budget(amount);
+        while let Some((cc, ci)) = self.player_add_chunk_mgr[pk].poll_queue() {
             self.add_chunk_to_client(cc, ci, pk);
         }
     }
@@ -296,7 +296,7 @@ impl ChunkMgr {
         let ci = self.chunks.add(cc);
         
         // initialize in corresponding structures
-        self.chunk_player_clientside_ci.add(cc, ci, players.new_mapped_per_player(|_| None));
+        self.chunk_player_clientside_ci.add(cc, ci, players.new_per_player(|_| None::<usize>));
         self.chunk_load_request_count.add(cc, ci, loading_chunk.load_request_count);
         for pk in players.iter() {
             self.player_add_chunk_mgr[pk].on_add_chunk(cc, ci);
@@ -311,7 +311,7 @@ impl ChunkMgr {
         // for each client interested in it, add it to that client, modulo add chunk to client rate
         // limiting
         for pk in players.iter() {
-            if loading_chunk.interest[pk] {
+            if loading_chunk.player_interest[pk] {
                 self.maybe_add_chunk_to_client(cc, ci, pk);
             }
         }
@@ -332,7 +332,7 @@ impl ChunkMgr {
     // internal method for when it's time to add a loaded chunk to a client, or enqueue it to be
     // added to the client once the client's add chunk rate limitation permits it.
     fn maybe_add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) {
-        if self.add_chunk_mgr[pk].maybe_add_chunk_to_client(cc, ci) {
+        if self.player_add_chunk_mgr[pk].maybe_add_chunk_to_client(cc, ci) {
             self.add_chunk_to_client(cc, ci, pk);
         }
     }
@@ -361,7 +361,7 @@ impl ChunkMgr {
 
                 if let Some(clientside_ci) = clientside_ci {
                     // then remove it from the client
-                    self.clientside_chunks[pk].remove(clientside_ci);
+                    self.player_clientside_chunks[pk].remove(clientside_ci);
                     self.effects.push_back(ChunkMgrEffect::RemoveChunkFromClient {
                         cc,
                         ci,
@@ -371,11 +371,11 @@ impl ChunkMgr {
                 } else {
                     // elsewise, it must be pending in the queue of chunks to be added to the
                     // client when rate limits permit it, so remove it from that queue
-                    self.add_chunk_mgr[pk].remove_from_queue(cc, ci);
+                    self.player_add_chunk_mgr[pk].remove_from_queue(cc, ci);
                 }
             } else if let Some(loading_chunk) = self.loading_chunks.get_mut(&cc) {
                 // if the chunk is still loading, simply un-mark the client's interest.
-                loading_chunk.interest[pk] = false;
+                loading_chunk.player_interest[pk] = false;
             }
         }
 

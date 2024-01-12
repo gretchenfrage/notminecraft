@@ -112,7 +112,7 @@ impl InMemClient {
         let alive_lock = self.shared.alive_state.lock();
         if let Some(alive_state) = alive_lock.as_ref() {
             alive_state.ns_shared.server_send.send(
-                ServerEvent::Network(NetworkEvent::Message(conn_idx, msg)),
+                ServerEvent::Network(NetworkEvent::Message(alive_state.conn_idx, msg)),
                 EventPriority::Network,
                 None,
                 None,
@@ -123,7 +123,7 @@ impl InMemClient {
     /// Poll for a message received from the server.
     /// 
     /// Errors if the server has shut down or closed this connection.
-    pub fn poll(&self) -> Result<Option<DownMessage>> {
+    pub fn poll(&self) -> Result<Option<DownMsg>> {
         if self.shared.killed.load(Ordering::Relaxed) {
             bail!("server killed in-mem connection");
         } else {
@@ -134,7 +134,7 @@ impl InMemClient {
 
 impl Drop for InMemClient {
     fn drop(&mut self) {
-        kill(&self.0);
+        kill(&self.shared);
     }
 }
 

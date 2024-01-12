@@ -47,7 +47,7 @@ impl AbortGuard {
     }
 
     /// Mark as aborted (this just drops self).
-    pub fn abort(self) -> Self {
+    pub fn abort(self) {
         drop(self);
     }
 }

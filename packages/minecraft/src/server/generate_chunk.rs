@@ -1,8 +1,8 @@
 //! Generating chunks of the world for the first time.
 
 use crate::{
+    server::save_content::ChunkSaveVal,
     game_data::*,
-    save_content::ChunkVal,
 };
 use chunk_data::*;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use bracket_noise::prelude::FastNoise;
 
 
 /// Generate a chunk of the world for the first time.
-pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkVal {
+pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
     let mut chunk_tile_blocks = ChunkBlocks::new(&game.blocks);
     let mut noise = FastNoise::new();
     noise.set_frequency(1.0 / 75.0);
@@ -32,9 +32,9 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkVal {
                 let ltc = Vec3 { x, y, z };
                 let lti = ltc_to_lti(ltc);
 
-                chunk_tile_blocks.set(lti, self.game.content.stone.bid_stone, ());
+                chunk_tile_blocks.set(lti, game.content.stone.bid_stone, ());
             }
         }
     }
-    ChunkVal { chunk_tile_blocks }
+    ChunkSaveVal { chunk_tile_blocks }
 }
