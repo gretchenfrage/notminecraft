@@ -85,10 +85,6 @@ pub mod content_module_prelude {
             LangKey,
         },
         gui::prelude::*,
-        client::{
-            item_grid::prelude::*,
-            menu::MenuGuiParams,
-        },
     };
     pub use chunk_data::*;
     pub use mesh_data::*;
