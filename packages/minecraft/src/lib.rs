@@ -12,6 +12,8 @@ pub mod gui;
 //pub mod chunk_mesh;
 //pub mod block_update_queue;
 pub mod logging;
+#[cfg(feature = "client")]
+pub mod asset_download_prompt;
 pub mod util_abort_handle;
 pub mod util_per_thing;
 pub mod util_array;
