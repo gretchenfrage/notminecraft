@@ -15,6 +15,7 @@ pub mod logging;
 pub mod util_abort_handle;
 pub mod util_per_thing;
 pub mod util_array;
+pub mod util_must_drain;
 pub mod game_data;
 pub mod item;
 pub mod physics;

@@ -39,7 +39,7 @@ impl<'a> SyncWrite<'a> {
     }
 }
 
-impl<'a> CiGet for &'a mut SyncWrite<'a> {
+impl<'a, 'b> CiGet for &'a mut SyncWrite<'b> {
     type Output = SyncWriteChunk<'a>;
 
     fn get(self, cc: Vec3<i64>, ci: usize) -> Self::Output {

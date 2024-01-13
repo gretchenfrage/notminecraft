@@ -53,10 +53,7 @@ impl Process for PlayerMsgSetTileBlock {
         let PlayerMsgSetTileBlock { gtc, bid_meta } = self;
 
         if let Some(tile) = world.getter.gtc_get(gtc) {
-            let _ = world;
-            let _ = bid_meta;
-            let _ = tile;
-            //tile.get(&mut world.tile_blocks).erased_set(bid_meta); TODO
+            tile.get(&mut world.tile_blocks).erased_set(bid_meta);
         }
     }
 }

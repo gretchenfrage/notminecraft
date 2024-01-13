@@ -17,6 +17,7 @@ use crate::{
     },
     message::*,
     thread_pool::ThreadPool,
+    util_must_drain::MustDrain,
 };
 use std::{
     sync::Arc,
@@ -128,7 +129,7 @@ pub fn run(
                 },
                 // network event
                 ServerEvent::Network(event) => {
-                    server.sync_ctx.conn_mgr.handle_network_event(event);
+                    let MustDrain = server.sync_ctx.conn_mgr.handle_network_event(event);
                     process_conn_mgr_effects(&mut server);
                 }
                 // player save state ready
@@ -137,7 +138,7 @@ pub fn run(
                 }
                 // chunk ready
                 ServerEvent::ChunkReady { save_key, save_val, saved } => {
-                    server.sync_ctx.chunk_mgr.on_chunk_ready(
+                    let MustDrain = server.sync_ctx.chunk_mgr.on_chunk_ready(
                         save_key,
                         save_val,
                         saved,
@@ -171,7 +172,9 @@ fn spawn_chunks() -> impl IntoIterator<Item=Vec3<i64>> {
 // add chunk interests for chunks near spawn
 fn request_load_spawn_chunks(server: &mut Server) {
     for cc in spawn_chunks() {
-        server.sync_ctx.chunk_mgr.incr_load_request_count(cc, server.sync_ctx.conn_mgr.players());
+        let MustDrain = server.sync_ctx.chunk_mgr.incr_load_request_count(
+            cc, server.sync_ctx.conn_mgr.players()
+        );
         process_chunk_mgr_effects(server);
     }
 }
@@ -229,7 +232,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 // add player
                 server.sync_ctx.chunk_mgr.add_player(pk);
                 for cc in spawn_chunks() {
-                    server.sync_ctx.chunk_mgr.add_chunk_client_interest(
+                    let MustDrain = server.sync_ctx.chunk_mgr.add_chunk_client_interest(
                         pk, cc, server.sync_ctx.conn_mgr.players()
                     );
                     process_chunk_mgr_effects(server);
@@ -290,9 +293,10 @@ fn process_conn_mgr_effects(server: &mut Server) {
             }
             // remove player
             ConnMgrEffect::RemovePlayer { pk, jpk, username } => {
-                server.sync_ctx.chunk_mgr.remove_player(
+                let MustDrain = server.sync_ctx.chunk_mgr.remove_player(
                     pk, spawn_chunks(), server.sync_ctx.conn_mgr.players(),
                 );
+                process_chunk_mgr_effects(server);
                 if let Some(jpk) = jpk {
                     server.sync_ctx.save_mgr.remove_player(
                         jpk,
@@ -318,7 +322,8 @@ fn process_pre_join_msg(server: &mut Server, pk: PlayerKey, msg: PreJoinMsg) {
     match msg {
         // relieve chunk load backpressure
         PreJoinMsg::AcceptMoreChunks(n) => {
-            server.sync_ctx.chunk_mgr.increase_client_add_chunk_budget(pk, n);
+            let MustDrain = server.sync_ctx.chunk_mgr.increase_client_add_chunk_budget(pk, n);
+            process_chunk_mgr_effects(server);
         }
     }
 }
@@ -331,7 +336,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             // begin loading / generating save state
             ChunkMgrEffect::RequestLoad { save_key, aborted } => {
                 if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_chunk(&save_key) {
-                    server.sync_ctx.chunk_mgr.on_chunk_ready(
+                    let MustDrain = server.sync_ctx.chunk_mgr.on_chunk_ready(
                         save_key, save_val, false, server.sync_ctx.conn_mgr.players(),
                     );
                 } else {

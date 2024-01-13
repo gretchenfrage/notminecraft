@@ -7,6 +7,7 @@ use crate::{
         save_content::*,
     },
     util_abort_handle::*,
+    util_must_drain::MustDrain,
     message::*,
 };
 use std::{
@@ -21,10 +22,6 @@ use anyhow::*;
 
 
 /// Manages clients and their joining and leaving.
-///
-/// After calling any methods on `ConnMgr` that takes `&mut self`, events should be taken from
-/// `ConnMgr.effects` and processed until exhausted, unless the specific method specifies that this
-/// is not necessary.
 ///
 /// Bridges from the "connection" layer of abstraction to the "player" layer of abstraction.
 ///
@@ -223,8 +220,9 @@ impl ConnMgr {
     }
 
     /// Close the player client connection and remove the player.
-    pub fn kick<K: Into<PlayerKey>>(&mut self, pk: K) {
+    pub fn kick<K: Into<PlayerKey>>(&mut self, pk: K) -> MustDrain {
         self.kill_connection(self.player_conn_idx[pk.into()]);
+        MustDrain
     }
 
     /// Get the given player's username.
@@ -243,7 +241,7 @@ impl ConnMgr {
     }
 
     /// Process a received network event and optionally return an effect for the caller to process.
-    pub fn handle_network_event(&mut self, network_event: NetworkEvent) {
+    pub fn handle_network_event(&mut self, network_event: NetworkEvent) -> MustDrain {
         match network_event {
             NetworkEvent::AddConnection(conn_idx, connection) => {
                 // connection created, add it
@@ -276,6 +274,7 @@ impl ConnMgr {
                 }
             }
         }
+        MustDrain
     }
 
     /// If additional messages from the client were processed since processed messages were last
@@ -389,8 +388,6 @@ impl ConnMgr {
 
     /// Call upon the result of a previously triggered player save state loading operation being
     /// ready, unless aborted.
-    ///
-    /// This does _not_ require draining the effect queue.
     pub fn on_player_save_state_ready(&mut self, pk: PlayerKey, save_val: Option<PlayerSaveVal>) {
         // store
         self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_val);

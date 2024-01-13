@@ -9,6 +9,7 @@ use crate::{
         save_content::*,
     },
     util_abort_handle::*,
+    util_must_drain::MustDrain,
 };
 use chunk_data::*;
 use std::{
@@ -24,10 +25,6 @@ use slab::Slab;
 
 
 /// Manages chunks and their loading and unloading into the server and its clients.
-///
-/// After calling any methods on `ChunkMgr` that take `&mut self`, events should be taken from
-/// `ChunkMgr.effects` and processed until exhausted, unless the specific method specifies that
-/// this is not necessary.
 ///
 /// This uses concepts of "load request counts" and "chunk client interest". Every chunk, loaded or
 /// not, has a load request count, defaulting to 0, wherein a non-zero load request count
@@ -125,8 +122,6 @@ impl ChunkMgr {
     }
 
     /// Call upon a player being added to the world. Initializes it with no chunk client interests.
-    ///
-    /// This does _not_ require draining the effect queue.
     pub fn add_player(&mut self, pk: PlayerKey) {
         // initialize player state with defaults
         self.player_clientside_chunks.insert(pk, Default::default());
@@ -144,11 +139,11 @@ impl ChunkMgr {
         pk: PlayerKey,
         chunk_interests: impl IntoIterator<Item=Vec3<i64>>,
         players: &PlayerKeySpace,
-    ) {
+    ) -> MustDrain {
         // remove chunk interests, but without maintaining that player's per-player state in the
         // course of doing so, since we are about to remove that anyways
         for cc in chunk_interests {
-            self.internal_remove_chunk_client_interest(pk, cc, players, false);
+            let MustDrain = self.internal_remove_chunk_client_interest(pk, cc, players, false);
         }
 
         // remove player state
@@ -162,10 +157,15 @@ impl ChunkMgr {
         for loading_chunk in self.loading_chunks.values_mut() {
             loading_chunk.player_interest.remove(pk);
         }
+        MustDrain
     }
 
     /// Increment the load request count for the given cc.
-    pub fn incr_load_request_count(&mut self, cc: Vec3<i64>, players: &PlayerKeySpace) {
+    pub fn incr_load_request_count(
+        &mut self,
+        cc: Vec3<i64>,
+        players: &PlayerKeySpace,
+    ) -> MustDrain {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // already loaded, just increment count
             let count = self.chunk_load_request_count.get_mut(cc, ci);
@@ -195,11 +195,16 @@ impl ChunkMgr {
                 }
             }
         }
+        MustDrain
     }
 
     /// Decrement the load request count for the given cc. Must correspond to a previous direct
     /// call to incr_load_request_count.
-    pub fn decr_load_request_count(&mut self, cc: Vec3<i64>, players: &PlayerKeySpace) {
+    pub fn decr_load_request_count(
+        &mut self,
+        cc: Vec3<i64>,
+        players: &PlayerKeySpace,
+    ) -> MustDrain {
         if let Some(ci) = self.chunks.getter().get(cc) {
             // chunk is loaded, try to decrement count
             let count = self.chunk_load_request_count.get_mut(cc, ci);
@@ -208,7 +213,7 @@ impl ChunkMgr {
                 *count = decremented;
             } else {
                 // it does reach 0, so remove it
-                self.remove_chunk(cc, ci, players);
+                let MustDrain = self.remove_chunk(cc, ci, players);
             }
         } else {
             // get
@@ -217,7 +222,7 @@ impl ChunkMgr {
                     hash_map::Entry::Occupied(entry) => entry,
                     hash_map::Entry::Vacant(_) => {
                         debug_assert!(false, "decr_load_request_count, but it's not loaded or loading");
-                        return;
+                        return MustDrain;
                     }
                 };
 
@@ -232,6 +237,7 @@ impl ChunkMgr {
                 loading_chunk.aborted.abort();
             }
         }
+        MustDrain
     }
 
     /// Add a chunk client interest for the given cc and player. Must not do redundantly.
@@ -241,9 +247,9 @@ impl ChunkMgr {
         pk: PlayerKey,
         cc: Vec3<i64>,
         players: &PlayerKeySpace,
-    ) {
+    ) -> MustDrain {
         // first, increment the load request count
-        self.incr_load_request_count(cc, players);
+        let MustDrain = self.incr_load_request_count(cc, players);
 
         if let Some(ci) = self.chunks.getter().get(cc) {
             // if the chunk is already loaded, add it to the client, modulo add chunk to client
@@ -256,6 +262,7 @@ impl ChunkMgr {
             // the previous incr_load_request_count call should ensure the entry is present.
             self.loading_chunks.get_mut(&cc).unwrap().player_interest[pk] = true;
         }
+        MustDrain
     }
 
     /// Remove the chunk client interest for the given cc and player. Must not do redundantly.
@@ -265,16 +272,17 @@ impl ChunkMgr {
         pk: PlayerKey,
         cc: Vec3<i64>,
         players: &PlayerKeySpace,
-    ) {
-        self.internal_remove_chunk_client_interest(pk, cc, players, true);
+    ) -> MustDrain {
+        self.internal_remove_chunk_client_interest(pk, cc, players, true)
     }
 
     /// Permit `amount` additional "add chunk to client" operations to occur to the client.
-    pub fn increase_client_add_chunk_budget(&mut self, pk: PlayerKey, amount: u32) {
+    pub fn increase_client_add_chunk_budget(&mut self, pk: PlayerKey, amount: u32) -> MustDrain {
         self.player_add_chunk_mgr[pk].increase_budget(amount);
         while let Some((cc, ci)) = self.player_add_chunk_mgr[pk].poll_queue() {
             self.add_chunk_to_client(cc, ci, pk);
         }
+        MustDrain
     }
 
     /// Call upon the result of a previously triggered chunk loading oepration being ready, unless
@@ -285,7 +293,7 @@ impl ChunkMgr {
         save_val: ChunkSaveVal,
         saved: bool,
         players: &PlayerKeySpace,
-    ) {
+    ) -> MustDrain {
         // prepare
         let ChunkSaveKey { cc } = save_key;
 
@@ -315,11 +323,13 @@ impl ChunkMgr {
                 self.maybe_add_chunk_to_client(cc, ci, pk);
             }
         }
+
+        MustDrain
     }
 
     // internal method for when it's time to remove a loaded chunk. assumes not loaded for any
     // players.
-    fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize, players: &PlayerKeySpace) {
+    fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize, players: &PlayerKeySpace) -> MustDrain {
         self.chunks.remove(cc);
         self.chunk_player_clientside_ci.remove(cc, ci);
         self.chunk_load_request_count.remove(cc, ci);
@@ -327,6 +337,7 @@ impl ChunkMgr {
             self.player_add_chunk_mgr[pk].on_remove_chunk(cc, ci);
         }
         self.effects.push_back(ChunkMgrEffect::RemoveChunk { cc, ci });
+        MustDrain
     }
 
     // internal method for when it's time to add a loaded chunk to a client, or enqueue it to be
@@ -353,7 +364,7 @@ impl ChunkMgr {
         cc: Vec3<i64>,
         players: &PlayerKeySpace,
         update_client: bool,
-    ) {
+    ) -> MustDrain {
         if update_client {
             if let Some(ci) = self.chunks.getter().get(cc) {
                 // if the chunk was already loaded and added to the client
@@ -381,6 +392,6 @@ impl ChunkMgr {
 
         // decrement the load request count. this will handle possibly unloading the chunk from the
         // server or aborting a pending load request.
-        self.decr_load_request_count(cc, players);
+        self.decr_load_request_count(cc, players)
     }
 }
