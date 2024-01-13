@@ -1,3 +1,5 @@
+//! Types which know their schema and how to transcode themselves with binschema given `GameData`
+//! as context.
 
 use crate::{
     game_data::GameData,
@@ -18,12 +20,12 @@ use std::{
 use vek::*;
 
 
+/// Derive `GameBinschema`.
 pub use game_binschema_derive::GameBinschema;
 
 
-/// Types which know their schema and how to transcode themselves with
-/// binschema, given `GameData`. The `game_binschema_derive` package
-/// in the workspace provides a derive proc macro for this :).
+/// Types which know their schema and how to transcode themselves with binschema given `GameData`
+/// as context.
 pub trait GameBinschema {
     fn schema(game: &Arc<GameData>) -> Schema;
     

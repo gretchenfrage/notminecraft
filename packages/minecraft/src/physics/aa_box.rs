@@ -1,3 +1,4 @@
+//! Axis-aligned box.
 
 use vek::*;
 
@@ -5,8 +6,9 @@ use vek::*;
 /// Axis-aligned box.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct AaBox {
+    /// Box minimum corner position.
     pub pos: Vec3<f32>,
-    /// Extent is assumed to be non-negative.
+    /// Box extent from `pos`. Assumed to be non-negative.
     pub ext: Extent3<f32>,
 }
 
@@ -17,17 +19,21 @@ impl AaBox {
         ext: Extent3 { w: 1.0, h: 1.0, d: 1.0 },
     };
 
+    /// Translate self by `v`.
     pub fn translate<V: Into<Vec3<f32>>>(mut self, v: V) -> Self {
         self.pos += v.into();
         self
     }
 
+    /// Move the minimum corner position backwards and the maximum corner position forwards on all
+    /// axes by `amount`.
     pub fn expand(mut self, amount: f32) -> Self {
         self.pos -= Vec3::from(amount);
         self.ext += Extent3::from(amount * 2.0);
         self
     }
 
+    /// Does self contain the point `pos`?
     pub fn contains<V: Into<Vec3<f32>>>(self, pos: V) -> bool {
         let pos = pos.into();
         let max = self.pos + self.ext;
@@ -39,6 +45,7 @@ impl AaBox {
             && pos.z < max.z
     }
 
+    /// Does self intersect with `rhs`?
     pub fn intersects(self, rhs: AaBox) -> bool {
         for i in 0..3 {
             if self.pos[i] >= rhs.pos[i] + rhs.ext[i] {

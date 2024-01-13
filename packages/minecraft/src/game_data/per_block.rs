@@ -1,3 +1,4 @@
+//! See `PerBlock`.
 
 use chunk_data::RawBlockId;
 use std::ops::Index;

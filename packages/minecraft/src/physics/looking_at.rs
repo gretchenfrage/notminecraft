@@ -1,3 +1,4 @@
+//! Compute what tile is being looked at from the given perspective.
 
 use super::{
     world_geometry::{

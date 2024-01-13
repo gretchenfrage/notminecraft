@@ -1,3 +1,4 @@
+//! See `PerItem`.
 
 use crate::item::RawItemId;
 use std::ops::Index;

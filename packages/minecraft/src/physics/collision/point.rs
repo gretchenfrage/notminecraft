@@ -16,6 +16,9 @@ use chunk_data::{
 use vek::*;
 
 
+/// Point collision object.
+///
+/// Collision object is an infinitesimal point at the collision object position.
 #[derive(Debug, Copy, Clone)]
 pub struct PointCollisionObject;
 

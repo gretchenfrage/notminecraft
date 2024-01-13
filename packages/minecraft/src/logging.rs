@@ -37,6 +37,7 @@ pub fn init_logging() {
         .expect("unable to create log file");
     let log_file_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
+        .with_line_number(true)
         .with_writer(Arc::new(log_file));
 
     let mut filter = DEFAULT_FILTER.to_owned();

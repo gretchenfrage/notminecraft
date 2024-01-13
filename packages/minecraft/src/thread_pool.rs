@@ -1,3 +1,4 @@
+//! Work stealing thread pool with priority levels.
 
 use crate::util_abort_handle::AbortHandle;
 use crossbeam::queue::SegQueue;

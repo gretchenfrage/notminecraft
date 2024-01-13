@@ -1,4 +1,6 @@
-//! Not Minecraft Beta 1.0.2.
+//! This is Not Minecraft Beta 1.0.2.
+//!
+//! Created by Phoenix Kahlo. Everything in the universe is in the public domain.
 
 #[macro_use]
 extern crate tracing;

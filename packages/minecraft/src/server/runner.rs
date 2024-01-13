@@ -193,6 +193,7 @@ fn maybe_save(server: &mut Server) {
     // compile changed world state to be saved
     trace!("saving");
     while let Some(should_save) = save_op.should_save.pop() {
+        trace!(?should_save, "will save");
         save_op.will_save.push(match should_save {
             ShouldSave::Chunk { cc, ci } => SaveEntry::Chunk(
                 ChunkSaveKey { cc },

@@ -1,3 +1,4 @@
+//! Do a tick of physics to a physics object.
 
 use super::{
     collision::CollisionObject,
@@ -56,6 +57,6 @@ where
 /// Information returned from `do_physics`.
 #[derive(Debug, Clone)]
 pub struct DidPhysics {
-    /// Whether player collided with the ground at all.
+    /// Whether physics object collided with the ground at all.
     pub on_ground: bool,
 }

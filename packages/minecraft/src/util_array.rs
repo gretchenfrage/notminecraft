@@ -1,3 +1,4 @@
+//! Utilities for manipulating constant-length arrays.
 
 use std::{
     mem::MaybeUninit,

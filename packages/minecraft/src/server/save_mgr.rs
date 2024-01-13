@@ -136,7 +136,7 @@ impl SaveMgr {
     pub fn add_chunk(&self, cc: Vec3<i64>, ci: usize, saved: bool) {
         let mut tracking = self.tracking.borrow_mut();
         let unsaved_idx =
-            if saved {
+            if !saved {
                 Some(tracking.unsaved_chunks.insert((cc, ci)))
             } else {
                 None
@@ -148,7 +148,7 @@ impl SaveMgr {
     pub fn join_player(&self, pk: JoinedPlayerKey, saved: bool) {
         let mut tracking = self.tracking.borrow_mut();
         let unsaved_idx =
-            if saved {
+            if !saved {
                 Some(tracking.unsaved_players.insert(pk))
             } else {
                 None

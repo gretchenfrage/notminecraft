@@ -9,9 +9,13 @@ use chunk_data::{
 
 /// Face of an AA box of world geometry.
 ///
-/// Does not itself contain information about which face is facing (that is,
-/// which axis it is normal to and which direction along that axis the barrier
-/// faces).
+/// Takes advantage of `Axis.other_axes`. For a given `Axis` (X, Y, or Z), `Axis.other_axes`
+/// defines for each of the indexes `0` and `1` one of the two "other" axes. We can use this to
+/// write code that loops over the X, Y, and Z axes in a generic way: in the inner loop, we phrase
+/// our code in terms of "the axis" of the current loop iteration, and the "other axes" 0 and 1.
+///
+/// As such, `AaBoxFace`, being a utility meant to be used within these inner loops, becomes
+/// meaningful within the context of a some axis, but does not itself store that axis.
 #[derive(Debug, Copy, Clone)]
 pub struct AaBoxFace {
     pub axis_pos: f32,

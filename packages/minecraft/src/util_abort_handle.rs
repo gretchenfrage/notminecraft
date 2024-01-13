@@ -1,3 +1,4 @@
+//! System for marking requests as aborted when a guard is dropped.
 
 use std::sync::{
     Arc,

@@ -66,6 +66,25 @@ const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("save");
 const SAVE_FILE_MAGIC_BYTES: [u8; 4] = [0x2c, 0xbf, 0x35, 0x45];
 
 
+/// List the names of existing save files. Logs and swallows errors.
+pub fn list(data_dir: &DataDir) -> Vec<String> {
+    data_dir.subdir(SAVES_SUBDIR).read_dir()
+        .map(|read_dir| read_dir
+            .filter_map(|result| result
+                .map_err(|e| error!(%e, "error reading save dir entry"))
+                .ok())
+            .filter_map(|dir_entry| dir_entry.file_name().into_string()
+                .map_err(|name| error!(?name, "save dir non-utf8 entry"))
+                .ok())
+            .filter(|name| name.ends_with(".redb"))
+            .collect())
+        .unwrap_or_else(|e| {
+            error!(%e, "error reading save dir");
+            Vec::new()
+        })
+}
+
+
 /// Open handle for reading and writing a save file database.
 ///
 /// Operations are blocking.
@@ -273,7 +292,7 @@ impl SaveDb {
             );
             {
                 let mut encoder = Encoder::new(&mut coder_state, &mut self.buf1);
-                encoder.begin_enum(entry.key_type_idx(), entry.key_type_name())?;
+                encoder.begin_enum(entry.key_type_idx() + 1, entry.key_type_name())?;
                 entry.encode_key(&mut encoder, &self.shared.game)?;
             }
             coder_state.is_finished_or_err()?;

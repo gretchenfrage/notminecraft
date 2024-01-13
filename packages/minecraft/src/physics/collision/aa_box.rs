@@ -18,8 +18,11 @@ use chunk_data::{
 use vek::*;
 
 
+/// AA box collision object.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct AaBoxCollisionObject {
+    /// Collision object is a AA box from collision object position to collision object position +
+    /// `ext`.
     pub ext: Extent3<f32>,
 }
 

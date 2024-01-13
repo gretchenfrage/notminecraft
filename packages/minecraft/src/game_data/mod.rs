@@ -1,3 +1,4 @@
+//! Statically defines game logic in abstracted and systematized ways.
 
 pub mod per_block;
 pub mod per_item;
@@ -53,6 +54,7 @@ use crate::{
 };
 
 
+/// Common re-exports for content modules.
 pub mod content_module_prelude {
     pub use super::{
         GameDataBuilder,
@@ -96,6 +98,7 @@ pub mod content_module_prelude {
 }
 
 
+/// Builder of `GameData`, passed to content module initialization.
 #[derive(Debug)]
 pub struct GameDataBuilder {
     // ==== blocks ====
@@ -175,19 +178,32 @@ impl GameDataBuilder {
     }
 }
 
+/// Static definition of game logic in abstracted and systematized ways.
 #[derive(Debug)]
 pub struct GameData {
+    /// The palette of blocks, of which tiles hold instances.
     pub blocks: Arc<BlockRegistry>,
+    /// Machine name for each block (used, for example, in the serialization schema).
     pub blocks_machine_name: PerBlock<String>,
+    /// Logic for generating graphical meshes for instances of each block.
     #[cfg(feature = "client")]
     pub blocks_mesh_logic: PerBlock<BlockMeshLogic>,
+    /// Transcloner for this block's meta type. See transcloner docs.
     pub blocks_meta_transcloner: PerBlock<BlockTranscloner>,
+    /// Logic for hitscans against instances of each block.
     pub blocks_hitscan_logic: PerBlock<BlockHitscanLogic>,
+    /// Logic for physics geometry of instances of each block.
     pub blocks_physics_logic: PerBlock<BlockPhysicsLogic>,
+    /// Whether instances of each block can be "placed over".
+    ///
+    /// This means that some other block can be placed where an instance of this block is without
+    /// first removing this block, and this block just gets frictionlessly overwritten with the new
+    /// one.
     pub blocks_can_place_over: PerBlock<bool>,
     
-
+    /// The space of items, of which instances can exist.
     pub items: ItemRegistry,
+    /// Machine name for each item (used, for example, in the serialization schema).
     pub items_machine_name: PerItem<String>,
     #[cfg(feature = "client")]
     pub items_mesh_logic: PerItem<ItemMeshLogic>,
@@ -197,7 +213,7 @@ pub struct GameData {
     pub items_max_count: PerItem<NonZeroU8>,
     pub items_max_damage: PerItem<u16>,
 
-
+    /// See content modules docs.
     pub content: ContentModules,
 }
 

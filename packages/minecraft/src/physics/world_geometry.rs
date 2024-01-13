@@ -1,3 +1,4 @@
+//! World geometry.
 
 use super::aa_box::AaBox;
 use crate::game_data::{
@@ -72,7 +73,7 @@ pub trait WorldGeometry: Sized {
     }
 }
 
-
+/// World geometry based on chunk-state interpreted through "physics logic" parts of game data.
 #[derive(Debug, Copy, Clone)]
 pub struct WorldPhysicsGeometry<'a> {
     pub getter: &'a Getter<'a>,
@@ -107,7 +108,7 @@ impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
     }
 }
 
-
+/// World geometry based on chunk-state interpreted through "hitscan logic" parts of game data.
 #[derive(Debug, Copy, Clone)]
 pub struct WorldHitscanGeometry<'a> {
     pub getter: &'a Getter<'a>,
