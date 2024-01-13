@@ -175,9 +175,9 @@ impl SaveDb {
             coder_state_alloc = coder_state.into_alloc();
         }
 
-        info!(
-            ?pre_existent,
-            "successfully opened save file database with schema:\n{}\n",
+        info!(?pre_existent, "successfully opened save file database");
+        trace!(
+            "with schema:\n{}\n",
             pretty_fmt_schema_definition(&my_schema_definition),
         );
 
@@ -224,7 +224,7 @@ impl SaveDb {
         {
             let mut encoder = Encoder::new(&mut coder_state, &mut self.buf1);
             encoder.begin_enum(K::key_type_idx() + 1, K::key_type_name())?;
-            key.encode(&mut encoder, &self.shared.game);
+            key.encode(&mut encoder, &self.shared.game)?;
         }
         coder_state.is_finished_or_err()?;
 

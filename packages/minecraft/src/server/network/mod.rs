@@ -8,7 +8,10 @@ use crate::{
     },
     message::*,
 };
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    fmt::Debug,
+};
 use parking_lot::Mutex;
 use slab::Slab;
 use tokio::{
@@ -73,14 +76,17 @@ enum SlabEntry {
 /// channel.
 ///
 /// Dropping this handle does not itself close the network connection.
+#[derive(Debug)]
 pub struct Connection(ConnectionInner);
 
+#[derive(Debug)]
 enum ConnectionInner {
     Ws(ws::Connection),
     InMem(in_mem::Connection),
 }
 
 /// Some discrete network input event happened. Goes to the conn mgr for processing.
+#[derive(Debug)]
 pub enum NetworkEvent {
     /// A new network connection was created and assigned a connection index in a slab pattern.
     AddConnection(usize, Connection),
@@ -118,7 +124,7 @@ impl NetworkServerHandle {
     /// Bind to a port and open the network server to connections on that port.
     pub fn bind<B>(&self, bind_to: B, rt: &Handle, game: &Arc<GameData>)
     where
-        B: ToSocketAddrs + Send + Sync + 'static,
+        B: ToSocketAddrs + Debug + Send + Sync + 'static,
     {
         ws::bind(&self.0, bind_to, rt, game);
     }

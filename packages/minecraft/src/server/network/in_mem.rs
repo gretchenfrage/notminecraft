@@ -4,16 +4,17 @@ use super::{
     send_buffer_policy_enforcer::SendBufferPolicyEnforcer,
     *,
 };
-use crate::server::{
-    channel::*,
-    ServerEvent,
-};
-use std::sync::{
-    atomic::{
-        AtomicBool,
-        Ordering,
+use crate::server::ServerEvent;
+use std::{
+    sync::{
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+        Arc,
     },
-    Arc,
+    fmt::{self, Formatter, Debug},
+    write,
 };
 use crossbeam::queue::SegQueue;
 use parking_lot::Mutex;
@@ -109,14 +110,19 @@ impl InMemClient {
     /// It is undefined whether the queueing of these messages occurs in the server or in the
     /// client in this case because they are using the same memory.
     pub fn send(&self, msg: UpMsg) {
-        let alive_lock = self.shared.alive_state.lock();
-        if let Some(alive_state) = alive_lock.as_ref() {
-            alive_state.ns_shared.server_send.send(
-                ServerEvent::Network(NetworkEvent::Message(alive_state.conn_idx, msg)),
-                EventPriority::Network,
-                None,
-                None,
-            );
+        if let Err(e) = self.sbpe.post_receive(&msg) {
+            error!(%e, "in mem client sbpe error");
+            kill(&self.shared);
+        } else {
+            let alive_lock = self.shared.alive_state.lock();
+            if let Some(alive_state) = alive_lock.as_ref() {
+                alive_state.ns_shared.server_send.send(
+                    ServerEvent::Network(NetworkEvent::Message(alive_state.conn_idx, msg)),
+                    EventPriority::Network,
+                    None,
+                    None,
+                );
+            }
         }
     }
 
@@ -127,7 +133,11 @@ impl InMemClient {
         if self.shared.killed.load(Ordering::Relaxed) {
             bail!("server killed in-mem connection");
         } else {
-            Ok(self.shared.down_queue.pop())
+            let opt_msg = self.shared.down_queue.pop();
+            if let &Some(ref msg) = &opt_msg {
+                self.sbpe.pre_transmit(msg);
+            }
+            Ok(opt_msg)
         }
     }
 }
@@ -146,4 +156,15 @@ fn kill(shared: &InMemShared) {
         destroy_conn(&alive_state.ns_shared, alive_state.conn_idx);
     }
     *alive_lock = None;
+}
+
+impl Debug for Connection {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let conn_idx = self.0.alive_state.lock().as_ref().map(|alive| alive.conn_idx);
+        if let Some(conn_idx) = conn_idx {
+            write!(f, "conn_idx: {}", conn_idx)
+        } else {
+            f.write_str("dead")
+        }
+    }
 }

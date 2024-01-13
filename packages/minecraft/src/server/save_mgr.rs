@@ -7,7 +7,6 @@ use crate::{
         save_content::*,
         save_db::SaveDb,
         channel::*,
-        chunk_mgr,
     },
     thread_pool::*,
     util_abort_handle::AbortGuard,
@@ -220,12 +219,13 @@ impl SaveMgr {
         } {
             // for everything marked as unsaved, mark as clean and add to should_save
             let mut should_save = Vec::new();
-            for (cc, ci) in self.tracking.get_mut().unsaved_chunks.drain() {
-                *self.tracking.get_mut().chunk_unsaved_idx.get_mut(cc, ci) = None;
+            let tracking = self.tracking.get_mut();
+            for (cc, ci) in tracking.unsaved_chunks.drain() {
+                *tracking.chunk_unsaved_idx.get_mut(cc, ci) = None;
                 should_save.push(ShouldSave::Chunk { cc, ci });
             }
-            for pk in self.tracking.get_mut().unsaved_players.drain() {
-                self.tracking.get_mut().player_unsaved_idx[pk] = None;
+            for pk in tracking.unsaved_players.drain() {
+                tracking.player_unsaved_idx[pk] = None;
                 should_save.push(ShouldSave::Player { pk })
             }
 
@@ -268,7 +268,7 @@ impl<'a> SaveOp<'a> {
         let aborted = AbortGuard::new();
         self.save_mgr.thread_pool.submit(WorkPriority::Server, aborted.new_handle(), move |_| {
             // do the saving
-            let result = ctx.save_db.write(entries);
+            let result = ctx.save_db.clone().write(entries);
             if let Err(e) = result {
                 // we don't really very good error recovery yet
                 error!(%e, "save file write failed");

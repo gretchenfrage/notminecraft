@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 default-run = "minecraft"
 
+[[bin]]
+name = "minecraft"
+path = "src/main.rs"
+
 [features]
 client = []
 

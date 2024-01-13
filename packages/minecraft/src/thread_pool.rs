@@ -1,8 +1,9 @@
 
 use crate::util_abort_handle::AbortHandle;
-use crossbeam::{
-    queue::SegQueue,
-    sync::Parker,
+use crossbeam::queue::SegQueue;
+use parking_lot::{
+    Mutex,
+    Condvar,
 };
 use std::{
     thread,
@@ -38,7 +39,8 @@ struct State {
     // per thread, per priority level, job queue
     thread_queues: Vec<[SegQueue<Job>; LEVELS]>,
     // for worker threads to sleep when there's no more work
-    unparker: Unparker,
+    mutex: Mutex<()>,
+    condvar: Condvar,
     // rotating index for which thread to submit work to
     insert_to: AtomicU32,
     // counter of how may ThreadPool handles remain. worker threads shut down once all work is
@@ -57,8 +59,9 @@ impl ThreadPool {
     pub fn new() -> Self {
         let cpus = num_cpus::get();
         let state = Arc::new(State {
-            thread_queues: vec![Default::default(); cpus],
-            parker: Parker::new(),
+            thread_queues: (0..cpus).map(|_| Default::default()).collect(),
+            mutex: Mutex::new(()),
+            condvar: Condvar::new(),
             insert_to: AtomicU32::new(0),
             alive: AtomicU32::new(1),
         });
@@ -84,7 +87,7 @@ impl ThreadPool {
             aborted,
             work: Box::new(work) as _,
         });
-        self.0.parker.unpark();
+        self.0.condvar.notify_one();
     }
 }
 
@@ -119,11 +122,11 @@ fn thread_body(q: usize, state: Arc<State>) {
         if state.alive.load(Ordering::SeqCst) == 0 {
             // if it is, die, but make sure to maintain a chain reaction of sleeping threads waking
             // each other up so they all notice the pool is dead and shut off
-            state.parker.unparker().unpark();
+            state.condvar.notify_all();
             return;
         }
         // elsewise, we're probably just empty, so park until waken up
-        state.parker.park();
+        state.condvar.wait(&mut state.mutex.lock())
     }
 }
 
@@ -144,7 +147,7 @@ impl Drop for ThreadPool {
     fn drop(&mut self) {
         let alive = self.0.alive.fetch_sub(1, Ordering::SeqCst);
         if alive == 1 {
-            self.0.parker.unparker().unpark();
+            self.0.condvar.notify_all();
         }
     }
 }

@@ -47,6 +47,7 @@ use vek::*;
 
 
 /// Event sent to the core server loop from some other thread. See the `channel` module.
+#[derive(Debug)]
 pub enum ServerEvent {
     /// Shut down the server.
     Stop,

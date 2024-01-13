@@ -1051,10 +1051,14 @@ impl<'a> Debug for MetaDebug<'a> {
 
 impl Debug for ChunkBlocks {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("ChunkBlocks(..)")
+        /* yes, we /can/ debug-format the whole chunk's block data
+           it's a bad idea though
         f
             .debug_list()
             .entries((0..=MAX_LTI).map(|lti| self.meta_debug(lti)))
             .finish()
+        */
     }
 }
 

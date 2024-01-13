@@ -916,11 +916,10 @@ pub trait GpuVecContext: Sized {
     {
         trace!("async creating gpu vec with data");
         let mut gpu_vec = self.create_gpu_vec();
-        let len = content.clone().into_iter().count();
         self
             .set_gpu_vec_len(
                 &mut gpu_vec,
-                len,
+                content.len(),
             );
         self
             .patch_gpu_vec(

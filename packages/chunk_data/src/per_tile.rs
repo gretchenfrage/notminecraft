@@ -20,13 +20,14 @@ use std::{
     },
     ptr::drop_in_place,
     mem::MaybeUninit,
+    fmt::{self, Formatter, Debug},
 };
 
 
 /// Per-tile (within a chunk) storage of `T` via an array.
 ///
 /// Implements `FromIterator`, as well as `Index`/`IndexMut<u16>`.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PerTile<T>(pub Box<[T; NUM_LTIS]>);
 
 impl<T> PerTile<T> {
@@ -110,5 +111,11 @@ impl<T> PerTile<MaybeUninit<T>> {
             let array = Box::from_raw(ptr);
             PerTile(array)
         }
+    }
+}
+
+impl<T: Debug> Debug for PerTile<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("PerTile(..)")
     }
 }

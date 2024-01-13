@@ -1,13 +1,16 @@
 
 use crate::coord::NUM_LTIS;
-use std::alloc::{
-    alloc,
-    Layout,
+use std::{
+    alloc::{
+        alloc,
+        Layout,
+    },
+    fmt::{self, Formatter, Debug},
 };
 
 
 /// Per-tile (within a chunk) bit-packed storage of sub-byte u-ints.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PerTilePacked<
     const BYTES: usize,
     const MASK: u8,
@@ -93,5 +96,14 @@ impl PerTileBool {
     /// Set the value at some index. Panics if value out of range.
     pub fn set(&mut self, lti: u16, val: bool) {
         self.0.set(lti, if val { 1 } else { 0 })
+    }
+}
+
+impl<
+    const BYTES: usize,
+    const MASK: u8,
+> Debug for PerTilePacked<BYTES, MASK> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("PerTile(..)")
     }
 }

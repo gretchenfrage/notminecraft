@@ -2,16 +2,9 @@
 
 use crate::{
     server::{
-        ServerEvent,
         per_player::*,
-        channel::*,
         network::*,
         save_content::*,
-        save_db::SaveDb,
-    },
-    thread_pool::{
-        ThreadPool,
-        WorkPriority,
     },
     util_abort_handle::*,
     message::*,
@@ -164,6 +157,8 @@ pub enum ConnMgrEffect {
         save_key: PlayerSaveKey,
         aborted: AbortHandle,
     },
+    /// Process an pre join message from an existing player.
+    PreJoinMsg(PlayerKey, PreJoinMsg),
     /// A previously added player is now joining the game. Initialize it in `PerJoinedPlayer`
     /// structures.
     ///
@@ -315,6 +310,9 @@ impl ConnMgr {
             UpMsg::LogIn(msg) => {
                 self.try_handle_log_in(conn_idx, msg)
             }
+            UpMsg::PreJoinMsg(msg) => {
+                self.try_handle_pre_join_msg(conn_idx, msg)
+            }
             UpMsg::JoinGame => {
                 self.try_handle_join_game(conn_idx)
             }
@@ -344,7 +342,7 @@ impl ConnMgr {
 
         // initialize in username tracking structures
         self.player_username.insert(pk, username.clone());
-        self.username_player.insert(username, pk);
+        self.username_player.insert(username.clone(), pk);
 
         // initialize in structure for tracking the loading of its save state
         let aborted_1 = AbortGuard::new();
@@ -360,7 +358,7 @@ impl ConnMgr {
 
         // load all joined players into the new player
         let mut clientside_players = Slab::new();
-        let mut player_clientside_player_idx =
+        let player_clientside_player_idx =
             self.players.new_per_joined_player(|b_pk| {
                 let b_clientside_player_idx = clientside_players.insert(b_pk);
                 self.effects.push_back(ConnMgrEffect::AddPlayerToClient {
@@ -372,6 +370,19 @@ impl ConnMgr {
             });
         self.player_clientside_players.insert(pk, clientside_players);
         self.player_player_clientside_player_idx.insert(pk, player_clientside_player_idx);
+
+        Ok(())
+    }
+
+    // internal method to try to process a pre join message from a non-killed connection. error
+    // indicates that the network connection should be terminated.
+    fn try_handle_pre_join_msg(&mut self, conn_idx: usize, msg: PreJoinMsg) -> Result<()> {
+        // prepare and validate
+        let pk = self.connections[conn_idx].pk
+            .ok_or_else(|| anyhow!("wrong time to send pre join msg"))?;
+
+        // tell caller to process msg
+        self.effects.push_back(ConnMgrEffect::PreJoinMsg(pk, msg));
 
         Ok(())
     }
@@ -502,7 +513,7 @@ impl ConnMgr {
 }
 
 // temporary method until there's a better decentralized identity system
-fn uniqueify_username(mut username: String, usernames: &HashMap<String, PlayerKey>) -> String {
+fn uniqueify_username(username: String, usernames: &HashMap<String, PlayerKey>) -> String {
     if usernames.contains_key(&username) {
         let mut i = 2;
         let mut username2;

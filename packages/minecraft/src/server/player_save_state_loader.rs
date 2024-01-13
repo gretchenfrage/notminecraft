@@ -1,4 +1,4 @@
-/// Utility for triggering jobs to read players' save state from the save file.
+//! Utility for triggering jobs to read players' save state from the save file.
 
 use crate::{
     server::{
@@ -42,7 +42,7 @@ impl PlayerSaveStateLoader {
     pub fn trigger_load(&self, pk: PlayerKey, save_key: PlayerSaveKey, aborted: AbortHandle) {
         let ctx = Arc::clone(&self.job_ctx);
         self.thread_pool.submit(WorkPriority::Server, aborted, move |aborted| {
-            let result = ctx.save_db.read(save_key);
+            let result = ctx.save_db.clone().read(save_key);
             match result {
                 Ok(save_val) => {
                     let event = ServerEvent::PlayerSaveStateReady { pk, save_val };

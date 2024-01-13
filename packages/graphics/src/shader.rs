@@ -6,8 +6,6 @@
 //! expected `.spv` files to be pre-compiled, and will bake them into the
 //! compiled binary.
 
-pub use mod_impl::*;
-
 
 /// Load and compile a shader with the given name.
 /// 

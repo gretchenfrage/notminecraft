@@ -49,11 +49,14 @@ impl Process for PlayerMsgSetCharState {
 
 impl Process for PlayerMsgSetTileBlock {
     // set tile block
-    fn process(self, world: &mut SyncWorld, pk: JoinedPlayerKey) {
+    fn process(self, world: &mut SyncWorld, _pk: JoinedPlayerKey) {
         let PlayerMsgSetTileBlock { gtc, bid_meta } = self;
 
         if let Some(tile) = world.getter.gtc_get(gtc) {
-            tile.get(&mut world.tile_blocks).erased_set(bid_meta);
+            let _ = world;
+            let _ = bid_meta;
+            let _ = tile;
+            //tile.get(&mut world.tile_blocks).erased_set(bid_meta); TODO
         }
     }
 }

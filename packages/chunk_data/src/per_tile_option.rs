@@ -104,9 +104,11 @@ impl<T: Clone> Clone for PerTileOption<T> {
 
 impl<T: Debug> Debug for PerTileOption<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("PerTileOption(..)")
+        /*
         f
             .debug_list()
             .entries((0..=MAX_LTI).map(|lti| self.get(lti)))
-            .finish()
+            .finish()*/
     }
 }

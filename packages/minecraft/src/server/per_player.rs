@@ -105,12 +105,12 @@ impl PlayerKeySpace {
     }
 
     /// Construct a new `PerPlayer` using `f` to populate entries for existing keys.
-    pub fn new_per_player<T, F: FnMut(PlayerKey) -> T>(&self, f: F) -> PerPlayer<T> {
+    pub fn new_per_player<T, F: FnMut(PlayerKey) -> T>(&self, mut f: F) -> PerPlayer<T> {
         PerPlayer(self.players.new_per(move |pk| f(PlayerKey(pk))))
     }
 
     /// Construct a new `PerJoinedPlayer` using `f` to populate entries for existing keys.
-    pub fn new_per_joined_player<T, F>(&self, f: F) -> PerJoinedPlayer<T>
+    pub fn new_per_joined_player<T, F>(&self, mut f: F) -> PerJoinedPlayer<T>
     where
         F: FnMut(JoinedPlayerKey) -> T,
     {

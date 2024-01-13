@@ -15,17 +15,13 @@ pub enum UpMsg {
     /// Client sends this right after connecting, which triggers an `AcceptLogIn` message response
     /// if accepted.
     LogIn(UpMsgLogIn),
+    /// Message that client may merely need to be logged in to send, rather than fully joined.
+    PreJoinMsg(PreJoinMsg),
     /// Part of connection initialization flow.
     ///
     /// Adds the client fully to the game world, and triggers a `FinalizeJoinGame` message
     /// response to be sent.
     JoinGame,
-    /// Manages client-to-server backpressure for loading additional chunks.
-    ///
-    /// Should be sent after `AddChunk` is fully processed. May include client-side asynchronous
-    /// post-processing such as meshing the chunk. Can deduplicate if multiple by adding together.
-    /// Protocol violation to send more than have received `AddChunk`.
-    AcceptMoreChunks(u32),
     /// "Game logic" message from a joined player to the server.
     PlayerMsg(PlayerMsg),
 }
@@ -36,13 +32,24 @@ pub struct UpMsgLogIn {
     pub username: String,
 }
 
+/// Message that client may merely need to be logged in to send, rather than fully joined.
+#[derive(Debug, GameBinschema)]
+pub enum PreJoinMsg {
+    /// Manages client-to-server backpressure for loading additional chunks.
+    ///
+    /// Should be sent after `AddChunk` is fully processed. "Fully processed" may include client-
+    /// side asynchronous post-processing such as meshing the chunk. Can deduplicate if multiple by
+    /// adding together. Protocol violation to send more than have received `AddChunk`.
+    AcceptMoreChunks(u32),
+}
+
 /// "Game logic" message from a joined player to the server.
 #[derive(Debug, GameBinschema)]
 pub enum PlayerMsg {
     /// Set own position and direction.
     SetCharState(PlayerMsgSetCharState),
     /// Set block at tile.
-    SetTileBlock(PlayerMsgSetTileBlock),
+    SetTileBlock(PlayerMsgSetTileBlock),    
 }
 
 /// Set own position and direction.

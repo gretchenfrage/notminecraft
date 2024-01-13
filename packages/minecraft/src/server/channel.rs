@@ -102,6 +102,11 @@ impl ServerSender {
         self.0.sizes.lock()[priority as usize] += 1;
         self.0.sizes_cvar.notify_one();
     }
+
+    /// Convenience method to send `ServerEvent::Stop`.
+    pub fn send_stop(&self) {
+        self.send(ServerEvent::Stop, EventPriority::Control, None, None);
+    }
 }
 
 impl ServerReceiver {

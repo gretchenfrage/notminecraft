@@ -49,7 +49,7 @@ impl ThingKeySpace {
     }
 
     /// Construct a new `PerThing` using `f` to populate entries for existing keys.
-    pub fn new_per<T, F: FnMut(ThingKey) -> T>(&self, f: F) -> PerThing<T> {
+    pub fn new_per<T, F: FnMut(ThingKey) -> T>(&self, mut f: F) -> PerThing<T> {
         PerThing(self.slab.new_mapped(|idx, &ctr| (f(ThingKey { idx, ctr }), ctr)))
     }
 }

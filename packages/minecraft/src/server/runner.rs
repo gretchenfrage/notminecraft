@@ -104,9 +104,11 @@ pub fn run(
     };
 
     // other initialization
+    trace!("initializing server");
     request_load_spawn_chunks(&mut server);
 
     // enter event loop
+    trace!("entering server event loop");
     loop {
         // do tick
         do_tick(&mut server);
@@ -117,6 +119,7 @@ pub fn run(
         while let Some(event) = server.server_only.server_recv
             .recv(Some(server.sync_ctx.tick_mgr.next_tick()), None)
         {
+            trace!(?event, "server event");
             match event {
                 // server shutdown requested
                 ServerEvent::Stop => {
@@ -174,7 +177,7 @@ fn request_load_spawn_chunks(server: &mut Server) {
 }
 
 // do a tick of world simulation
-fn do_tick(server: &mut Server) {
+fn do_tick(_server: &mut Server) {
     trace!("tick");
 }
 
@@ -188,6 +191,7 @@ fn maybe_save(server: &mut Server) {
     };
 
     // compile changed world state to be saved
+    trace!("saving");
     while let Some(should_save) = save_op.should_save.pop() {
         save_op.will_save.push(match should_save {
             ShouldSave::Chunk { cc, ci } => SaveEntry::Chunk(
@@ -217,6 +221,7 @@ fn maybe_save(server: &mut Server) {
 // drain and process the conn mgr effect queue
 fn process_conn_mgr_effects(server: &mut Server) {
     while let Some(effect) = server.sync_ctx.conn_mgr.effects.pop_front() {
+        trace!(?effect, "conn mgr effect");
         match effect {
             // initialize new player key, begin loading save state
             ConnMgrEffect::AddPlayerRequestLoad { pk, save_key, aborted } => {
@@ -236,13 +241,21 @@ fn process_conn_mgr_effects(server: &mut Server) {
                     server.server_only.player_save_state_loader.trigger_load(pk, save_key, aborted);
                 }
             }
+            // pre join message from player
+            ConnMgrEffect::PreJoinMsg(pk, msg) => {
+                process_pre_join_msg(server, pk, msg);
+            }
             // upgrade player key to joined player key
             ConnMgrEffect::BeginJoinPlayer { pk, save_state } => {
                 server.sync_ctx.save_mgr.join_player(pk, save_state.is_some());
 
-                let pos = save_state.map(|val| val.pos).unwrap_or(Vec3::new(8.0, 8.0, 80.0));
-                let yaw = save_state.map(|val| val.yaw).unwrap_or(0.0);
-                let pitch = save_state.map(|val| val.yaw).unwrap_or(0.0);
+                let (pos, yaw, pitch) = save_state
+                    .map(|val| (val.pos, val.yaw, val.pitch))
+                    .unwrap_or((
+                        Vec3::new(8.0, 8.0, 80.0),
+                        0.0,
+                        0.0,
+                    ));
 
                 server.server_only.player_pos.insert(pk, pos);
                 server.server_only.player_yaw.insert(pk, yaw);
@@ -299,9 +312,20 @@ fn process_conn_mgr_effects(server: &mut Server) {
     }
 }
 
+// process a received pre join msg
+fn process_pre_join_msg(server: &mut Server, pk: PlayerKey, msg: PreJoinMsg) {
+    match msg {
+        // relieve chunk load backpressure
+        PreJoinMsg::AcceptMoreChunks(n) => {
+            server.sync_ctx.chunk_mgr.increase_client_add_chunk_budget(pk, n);
+        }
+    }
+}
+
 // drain and process the chunk mgr effect queue
 fn process_chunk_mgr_effects(server: &mut Server) {
     while let Some(effect) = server.sync_ctx.chunk_mgr.effects.pop_front() {
+        trace!(?effect, "chunk mgr effect");
         match effect {
             // begin loading / generating save state
             ChunkMgrEffect::RequestLoad { save_key, aborted } => {
@@ -335,7 +359,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                 }));
             }
             // tell client to remove chunk
-            ChunkMgrEffect::RemoveChunkFromClient { cc, ci, pk, clientside_ci } => {
+            ChunkMgrEffect::RemoveChunkFromClient { cc: _, ci: _, pk, clientside_ci } => {
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::RemoveChunk(DownMsgRemoveChunk {
                     chunk_idx: DownChunkIdx(clientside_ci),
                 }));

@@ -43,7 +43,7 @@ impl<'a> CiGet for &'a mut SyncWrite<'a> {
     type Output = SyncWriteChunk<'a>;
 
     fn get(self, cc: Vec3<i64>, ci: usize) -> Self::Output {
-        Self::get(self, cc, ci)
+        SyncWrite::get(self, cc, ci)
     }
 }
 
@@ -83,7 +83,7 @@ impl<'a> SyncWriteChunk<'a> {
 impl<'a> LtiGet for SyncWriteChunk<'a> {
     type Output = SyncWriteTile<'a>;
 
-    fn get(mut self, lti: u16) -> Self::Output {
+    fn get(self, lti: u16) -> Self::Output {
         Self::get(self, lti)
     }
 }

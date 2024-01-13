@@ -6,6 +6,7 @@ use crate::{
     },
     per_tile::PerTile,
 };
+use std::fmt::{self, Formatter, Debug};
 
 
 /// Per-tile (within a chunk) sparse-optimized storage of `Option<T>`.
@@ -56,7 +57,7 @@ use crate::{
 /// | 32   | 89%     |
 /// | 64   | 94%     |
 /// | 128  | 97%     |
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PerTileSparse<T> {
     // an idx MAX_LTI denotes None
     // UNLESS
@@ -154,5 +155,11 @@ impl<T> PerTileSparse<T> {
 impl<T> Default for PerTileSparse<T> {
     fn default() -> Self {
         PerTileSparse::new()
+    }
+}
+
+impl<T: Debug> Debug for PerTileSparse<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("PerTileSparse(..)")
     }
 }

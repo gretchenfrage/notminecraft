@@ -55,7 +55,7 @@ impl ChunkLoader {
         // submit task
         self.thread_pool.submit(WorkPriority::Server, aborted, move |aborted| {
             // attempt read
-            let result = ctx.save_db.read(save_key);
+            let result = ctx.save_db.clone().read(save_key);
             match result {
                 Ok(Some(save_val)) => {
                     // loaded

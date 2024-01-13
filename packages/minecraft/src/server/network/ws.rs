@@ -40,11 +40,7 @@ use super::{
     *,
 };
 use crate::{
-    server::{
-        ServerEvent,
-        channel::*,
-    },
-    game_data::*,
+    server::ServerEvent,
     game_binschema::GameBinschema,
 };
 use binschema::*;
@@ -52,9 +48,18 @@ use std::{
     sync::{Arc, Once},
     time::Duration,
     convert::Infallible,
-    cmp::{min, max},
+    cmp::min,
     future::Future,
+    fmt::{self, Formatter, Debug},
 };
+#[cfg(debug_assertions)]
+use std::{
+    net::SocketAddr,
+    io,
+    write,
+};
+#[cfg(debug_assertions)]
+use parking_lot::Mutex;
 use tokio::{
     sync::{
         mpsc::{
@@ -68,7 +73,6 @@ use tokio::{
         Notify,
         Semaphore,
     },
-    task::AbortHandle,
     net::{TcpListener, TcpStream},
     time::{
         Instant,
@@ -97,7 +101,6 @@ use futures::{
     sink::{Sink, SinkExt},
     FutureExt,
     future::pending,
-    select,
     select_biased,
 };
 use anyhow::{Error, bail};
@@ -177,8 +180,17 @@ struct WsConnShared {
     shutdown_send: Notify,
     // enforces send buffer policies
     sbpe: SendBufferPolicyEnforcer,
+    // supplementary debug info
+    #[cfg(debug_assertions)]
+    extra_debug: Mutex<Option<WsConnExtraDebug>>,
 }
 
+// supplementary debug info
+#[cfg(debug_assertions)]
+struct WsConnExtraDebug {
+    conn_idx: usize,
+    peer_addr: io::Result<SocketAddr>,
+}
 
 // ==== API ====
 
@@ -214,7 +226,7 @@ pub(super) fn bind<B>(
     game: &Arc<GameData>,
 )
 where
-    B: ToSocketAddrs + Send + Sync + 'static,
+    B: ToSocketAddrs + Debug + Send + Sync + 'static,
 {
     // lock and deal with edge case
     let mut lock = ns_shared.lockable.lock();
@@ -236,7 +248,7 @@ where
 }
 
 // body of the task to bind to the TCP port and start accepting new connections
-async fn accept_task<B: ToSocketAddrs>(
+async fn accept_task<B: ToSocketAddrs + Debug>(
     ns_shared: Arc<NetworkServerSharedState>,
     bind_to: B,
     rt: Handle,
@@ -288,12 +300,13 @@ async fn accept_task<B: ToSocketAddrs>(
 }
 
 // inner part of the accept task which gets retried if fails
-async fn try_accept_task_inner<B: ToSocketAddrs>(
+async fn try_accept_task_inner<B: ToSocketAddrs + Debug>(
     ws_shared: &Arc<WsShared>,
     bind_to: &B,
 ) -> Result<Infallible, Error> {
     // TCP bind
     let listener = TcpListener::bind(bind_to).await?;
+    info!("bound to {:?}", bind_to);
 
     // accept connections
     loop {
@@ -314,6 +327,9 @@ async fn try_accept_task_inner<B: ToSocketAddrs>(
 // 3. enters the receive loop until something triggers a shutdown
 // 4. destroys the connection and tells the send task to shut down
 async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
+    #[cfg(debug_assertions)]
+    let peer_addr = tcp.peer_addr();
+
     // attempt to disable nagling
     try_denagle(&tcp);
 
@@ -324,7 +340,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
         // if handshake failed, the task can just stop here
         None => return,
     };
-    let (ws_send, mut ws_recv) = ws.split();
+    let (ws_send, ws_recv) = ws.split();
 
     // allocate connection shared state
     let conn_shared = Arc::new(WsConnShared::default());
@@ -343,6 +359,11 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
         // this case happens if the whole network server is being dropped
         None => return,
     };
+
+    #[cfg(debug_assertions)]
+    {
+        *conn_shared.extra_debug.lock() = Some(WsConnExtraDebug { conn_idx, peer_addr });
+    }
 
     // spawn send task
     ws_shared.rt.spawn(send_task(
@@ -607,7 +628,7 @@ async fn try_handshake_handle_err(
         Err(HandshakeError::Timeout(opt_ws)) => {
             // try to send back a close frame here too, if applicable
             if let Some(ws) = opt_ws {
-                try_close(ws, Some("ws-binschema handshake timeout"));
+                try_close(ws, Some("ws-binschema handshake timeout")).await;
             }
             None
         }
@@ -720,5 +741,25 @@ where
         Ok(Ok(())) => (),
         Ok(Err(e)) => trace!(%e, "error sending close frame"),
         Err(_) => trace!("timeout sending close frame"),
+    }
+}
+
+
+impl Debug for Connection {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg(debug_assertions)]
+        if let Some(extra_debug) = self.conn_shared.extra_debug.lock().as_ref() {
+            write!(
+                f,
+                "conn_idx: {:?}, peer_addr: {:?}",
+                extra_debug.conn_idx,
+                extra_debug.peer_addr,
+            )
+        } else {
+            f.write_str("extra debug missing")
+        }
+
+        #[cfg(not(debug_assertions))]
+        f.write_str("..")
     }
 }
