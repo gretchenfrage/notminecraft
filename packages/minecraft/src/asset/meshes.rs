@@ -1,7 +1,7 @@
 
 use crate::{
     asset::loader::AssetLoader,
-    util::hex_color::hex_color,
+    util_hex_color::hex_color,
 };
 use mesh_data::{
     MeshData,

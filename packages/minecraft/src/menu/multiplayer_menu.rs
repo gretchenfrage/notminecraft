@@ -1,8 +1,7 @@
 
 use crate::{
     gui::prelude::*,
-    util::hex_color::hex_color,
-    client::Client,
+    util_hex_color::hex_color,
 };
 use graphics::prelude::*;
 use vek::*;
@@ -160,9 +159,10 @@ impl GuiStateFrame for MultiplayerMenu {
 }
 
 fn on_connect_click<'a>(address: &'a str) -> impl FnOnce(&GuiGlobalContext) + 'a {
-    |ctx| {
+    move |ctx| {
         ctx.pop_state_frame();
-        ctx.push_state_frame(Client::connect(address, ctx));
+        debug!(?address, "unimplemented");
+        //ctx.push_state_frame(Client::connect(address, ctx));
     }
 }
 

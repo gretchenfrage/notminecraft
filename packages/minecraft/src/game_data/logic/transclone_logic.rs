@@ -5,7 +5,7 @@ use crate::{
         content,
     },
     game_binschema::GameBinschema,
-    item::erased::ItemMeta,
+    item::ItemMeta,
 };
 use chunk_data::*;
 use binschema::{*, error::*};

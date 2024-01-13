@@ -1,3 +1,4 @@
+//! Hex color literal utility.
 
 use vek::*;
 

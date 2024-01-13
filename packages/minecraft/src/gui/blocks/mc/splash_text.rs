@@ -1,6 +1,6 @@
 
 use crate::{
-    util::cos::Cosine,
+    util_cos::Cosine,
     gui::{
         GuiNode,
         GuiSpatialContext,

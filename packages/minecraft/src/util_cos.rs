@@ -1,3 +1,4 @@
+//! Cosine wave utility.
 
 use std::f32;
 

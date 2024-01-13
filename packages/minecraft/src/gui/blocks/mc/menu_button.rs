@@ -1,7 +1,7 @@
 
 use crate::{
     asset::Assets,
-    util::hex_color::hex_color,
+    util_hex_color::hex_color,
     gui::{
         GuiBlock,
         DimParentSets,

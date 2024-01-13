@@ -1,7 +1,7 @@
 
 use crate::{
     gui::prelude::*,
-    util::hex_color::hex_color,
+    util_hex_color::hex_color,
 };
 use graphics::prelude::*;
 use vek::*;

@@ -1,5 +1,4 @@
-//! Types which know their schema and how to transcode themselves with binschema given `GameData`
-//! as context.
+//! Types which are transcodable given `GameData`.
 
 use crate::{
     game_data::GameData,

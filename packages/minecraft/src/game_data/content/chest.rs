@@ -30,7 +30,7 @@ impl ContentModule {
 /// Metadata for chest blocks.
 #[derive(Debug, Clone, GameBinschema)]
 pub struct ChestBlockMeta {
-    pub slots: [ItemSlot; 27],
+    pub slots: [Option<ItemStack>; 27],
 }
 
 impl Default for ChestBlockMeta {

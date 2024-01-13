@@ -2,7 +2,7 @@
 use crate::{
 	asset::Assets,
 	gui::prelude::*,
-	util::hex_color::hex_color,
+	util_hex_color::hex_color,
 };
 use graphics::frame_content::{
 	HAlign,

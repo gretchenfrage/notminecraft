@@ -6,9 +6,7 @@ use crate::{
     },
     asset::Assets,
     gui::prelude::*,
-	util::hex_color::hex_color,
-    client::Client,
-    save_file::SaveFile,
+	util_hex_color::hex_color,
 };
 use graphics::{
 	Renderer,
@@ -140,8 +138,10 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    let save = SaveFile::open("server", ctx.data_dir, ctx.game).unwrap(); // TODO: don't panic
-    ctx.push_state_frame(Client::new_internal(save, ctx));
+    let _ = ctx;
+    debug!("unimplemented");
+    //let save = SaveFile::open("server", ctx.data_dir, ctx.game).unwrap(); // TODO: don't panic
+    //ctx.push_state_frame(Client::new_internal(save, ctx));
 }
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {

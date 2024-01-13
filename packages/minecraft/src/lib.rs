@@ -5,9 +5,9 @@
 #[macro_use]
 extern crate tracing;
 
-//pub mod sound;
-//pub mod asset;
-//pub mod gui;
+pub mod sound;
+pub mod asset;
+pub mod gui;
 //pub mod util;
 //pub mod chunk_mesh;
 //pub mod block_update_queue;
@@ -16,14 +16,16 @@ pub mod util_abort_handle;
 pub mod util_per_thing;
 pub mod util_array;
 pub mod util_must_drain;
+pub mod util_hex_color;
+pub mod util_cos;
 pub mod game_data;
 pub mod item;
 pub mod physics;
 pub mod game_binschema;
-//pub mod menu;
+pub mod menu;
 //pub mod save_file;
 pub mod thread_pool;
-//pub mod settings;
+pub mod settings;
 //pub mod client;
 pub mod server;
 pub mod message;

@@ -1,9 +1,4 @@
 //! Erased item metadata.
-//!
-//! Basically a `Box<dyn Any + Debug + Clone + PartialEq + Send + Sync + 'static>` but:
-//!
-//! - Formatting, cloning, and equality checks actually work.
-//! - The inner type `()` is represented as a null pointer.
 
 use std::{
     any::{
@@ -55,7 +50,12 @@ unsafe impl<T: Debug + Clone + PartialEq + Send + Sync + 'static> MetaTrait for 
     }
 }
 
-
+/// Erased item metadata.
+///
+/// Basically a `Box<dyn Any + Debug + Clone + PartialEq + Send + Sync + 'static>` but:
+///
+/// - Formatting, cloning, and equality checks actually work.
+/// - The inner type `()` is represented as a null pointer.
 pub struct ItemMeta(Option<Box<dyn MetaTrait + Send + Sync>>);
 
 impl<M: Debug + Clone + PartialEq + Send + Sync + 'static> From<Box<M>> for ItemMeta {

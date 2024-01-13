@@ -1,3 +1,4 @@
+//! Game settings. A client-side global resource.
 
 use std::{
     path::Path,

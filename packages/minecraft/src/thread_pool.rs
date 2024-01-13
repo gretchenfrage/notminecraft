@@ -15,6 +15,7 @@ use std::{
             Ordering,
         },
     },
+    fmt::{self, Formatter, Debug},
 };
 
 
@@ -150,5 +151,11 @@ impl Drop for ThreadPool {
         if alive == 1 {
             self.0.condvar.notify_all();
         }
+    }
+}
+
+impl Debug for ThreadPool {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("ThreadPool(..)")
     }
 }

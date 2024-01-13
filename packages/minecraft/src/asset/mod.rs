@@ -1,3 +1,4 @@
+//! Defining game's specific assets and loading them from file system.
 
 pub mod loader;
 pub mod meshes;

@@ -1,4 +1,4 @@
-//! Types and data structures for handling items. A bit more relaxed tha
+//! Types and data structures for handling items. A bit more relaxed than
 //! blocks.
 //!
 //! Similarly to blocks, there is a registered range of items, each with
@@ -6,7 +6,7 @@
 //! as item stacks, which includes the item ID and type-erased metadata
 //! instance, as well as other components such as count and durability.
 
-pub mod erased;
+mod erased;
 
 
 use std::{
@@ -147,5 +147,3 @@ impl ItemStack {
         self.meta.cast_mut()
     }
 }
-
-pub type ItemSlot = Option<ItemStack>;
