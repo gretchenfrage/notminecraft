@@ -20,6 +20,7 @@ pub mod util_array;
 pub mod util_must_drain;
 pub mod util_hex_color;
 pub mod util_cos;
+pub mod dyn_flex_channel;
 pub mod game_data;
 pub mod item;
 pub mod physics;
