@@ -9,6 +9,7 @@ name = "minecraft"
 path = "src/main.rs"
 
 [features]
+default = ["client"]
 client = []
 
 [dependencies]

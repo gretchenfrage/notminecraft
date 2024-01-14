@@ -21,34 +21,72 @@ use minecraft::{
         loader::AssetLoader,
         Assets,
     },
-    menu::main_menu::MainMenu,
+    gui_state_main_menu::MainMenu,
 };
 use get_assets::DataDir;
 use std::{
     sync::Arc,
     thread,
+    env::args,
 };
 use tokio::runtime::Runtime;
 
 
-// main method when compiled in server only mode
+const CLI_INTRO: &'static str = r#"This is Not Minecraft Beta 1.0.2.
+
+Created by Phoenix Kahlo.
+Everything in the universe is in the public domain."#;
+
+#[cfg(feature = "client")]
+const CLI_HELP: &'static str = r#"
+Examples:
+
+    [this command]
+    Run the client.
+
+    [this command] --server
+    Run the server
+
+    [this command] --server --save=server --bind=127.0.0.1:35565
+    Run the server with explicit options.
+
+    (Note: Change 127.0.0.1 to 0.0.0.0 to allow connections from other computers).
+
+Env var examples:
+    RUST_LOG=minecraft=trace
+    Changes logging levels"#;
+
 #[cfg(not(feature = "client"))]
-fn main() {
-    init_logging();
-    info!("starting server");
-    run_server(DataDir::new(), "server", "0.0.0.0:35565");
-}
+const CLI_HELP_SERVER_ONLY: &'static str = r#"
+This binary has been compiled in server-only mode.
+Examples:
+
+    [this command]
+    Run the server
+
+    [this command] --save=server --bind=127.0.0.1:35565
+    Run the server with explicit options.
+
+    (Note: Change 127.0.0.1 to 0.0.0.0 to allow connections from other computers).
+
+Env var examples:
+    RUST_LOG=minecraft=trace
+    Changes logging levels"#;
+
 
 // main method when compiled with client
 #[cfg(feature = "client")]
 fn main() {
+    println!("{}", CLI_INTRO);
     init_logging();
-    if false {
-        // TODO parse CLI
-        info!("starting server");
-        run_server(DataDir::new(), "server", "0.0.0.0:35565");
+
+    let args = args().collect::<Vec<_>>();
+    if args.get(1).map(String::as_str) == Some("--help") {
+        println!("{}", CLI_HELP);
+    } else if args.get(1).map(String::as_str) == Some("--server") {
+        run_server_from_cli(&args);
     } else {
-        info!("starting windowed client");
+        info!("starting client");
         let game = Arc::new(GameData::new());
         let rt = Runtime::new().expect("error creating tokio runtime");
         let data_dir = DataDir::new();
@@ -62,12 +100,39 @@ fn main() {
     }
 }
 
+// main method when compiled in server only mode
+#[cfg(not(feature = "client"))]
+fn main() {
+    println!("{}", CLI_INTRO);
+    init_logging();
+    let args = args().collect::<Vec<_>>();
+    if args.get(1).map(String::as_str) == Some("--help") {
+        println!("{}", CLI_HELP_SERVER_ONLY);
+    } else {
+        run_server_from_cli(&args);
+    }
+}
+
 #[cfg(feature = "client")]
 fn maybe_download_assets(rt: &Runtime, data_dir: &DataDir) {
     let result = rt.block_on(asset_download_prompt(&data_dir));
     if let Err(e) = result {
         error!(%e, "unable to download assets");
     }
+}
+
+// parse CLI args and run server from that
+fn run_server_from_cli(args: &Vec<String>) {
+    info!("starting server");
+    let save_file_name = args.iter()
+        .filter_map(|arg| arg.strip_prefix("--save="))
+        .next()
+        .unwrap_or("server");
+    let bind_to = args.iter()
+        .filter_map(|arg| arg.strip_prefix("--bind="))
+        .next()
+        .unwrap_or("127.0.0.1:35565");
+    run_server(DataDir::new(), save_file_name, bind_to);
 }
 
 // run server until it stops, or panic

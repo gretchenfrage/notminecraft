@@ -1,9 +1,7 @@
 
 use crate::{
-    menu::{
-        multiplayer_menu::MultiplayerMenu,
-        about::AboutMenu,
-    },
+    gui_state_multiplayer_menu::MultiplayerMenu,
+    gui_state_about::AboutMenu,
     asset::Assets,
     gui::prelude::*,
 	util_hex_color::hex_color,

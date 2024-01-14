@@ -100,6 +100,9 @@ pub use self::{
             SizedGuiBlockFlatten,
         },
     },
-    gui_event_loop::GuiEventLoop,
+    gui_event_loop::{
+        GuiEventLoop,
+        EventLoopEffectQueue,
+    },
     clipboard::Clipboard,
 };

@@ -52,7 +52,6 @@ pub fn init_logging() {
         .with(log_file_log);
     tracing::subscriber::set_global_default(subscriber)
         .expect("unable to install log subscriber");
-    info!("starting program");
 
     // make panic messages and backtrace go through logging system
     panic::set_hook(Box::new(|info| {
@@ -61,5 +60,4 @@ pub fn init_logging() {
             error!("{:?}", Backtrace::new());
         }
     }));
-    trace!("installed custom panic hook");
 }
