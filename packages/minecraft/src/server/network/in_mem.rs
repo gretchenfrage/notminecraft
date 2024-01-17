@@ -1,166 +1,149 @@
 //! Network connection implementation for in-memory transport between client and internal server.
 
-use super::{
-    send_buffer_policy_enforcer::SendBufferPolicyEnforcer,
-    *,
+use super::*;
+use crate::{
+    server::ServerEvent,
+    dyn_flex_channel::{self, *},
+    client::connection::ConnectionEvent,
 };
-use crate::server::ServerEvent;
 use std::{
-    sync::{
-        atomic::{
-            AtomicBool,
-            Ordering,
-        },
-        Arc,
-    },
+    sync::Arc,
     fmt::{self, Formatter, Debug},
     write,
 };
-use crossbeam::queue::SegQueue;
 use parking_lot::Mutex;
-use anyhow::*;
 
+// TODO: get send buffer policy enforcement working again
 
 // slab entry inner type for in-mem connections
-pub(super) struct SlabEntry(Arc<InMemShared>);
+pub(super) struct SlabEntry(Arc<Mutex<Option<AliveState>>>);
 
 // connection inner type for in-mem connections
-pub(super) struct Connection(Arc<InMemShared>);
+pub(super) struct Connection(Arc<Mutex<Option<AliveState>>>);
 
 /// Client connection to the network server that just sends messages over in-memory queues within
-/// the same process, avoiding both network and serialization costs. Closes the connection if
-/// dropped.
+/// the same process, avoiding both network and serialization costs.
 pub struct InMemClient {
     // shared state
-    shared: Arc<InMemShared>,
-    // we put this "client-side" to help catch bugs, but in a strict sense it's not actually
-    // necessary for in-mem connections at all.
-    sbpe: SendBufferPolicyEnforcer,
+    shared: Arc<Mutex<Option<AliveState>>>,
+    // receiver for down-going client ConnectionEvent
+    recv_down: DynFlexReceiver,
 }
 
-// shared state for an open in-mem connection
-#[derive(Default)]
-struct InMemShared {
-    // lockable alive state, if alive. mutex serializes connection index life cycle.
-    alive_state: Mutex<Option<AliveState>>,
-    // sender for down messages
-    down_queue: SegQueue<DownMsg>,
-    // whether connection has been killed. lags behind the alive mutex in an eventually consistent
-    // sense, so is kind of like the client-side perspective of whether alive.
-    killed: AtomicBool,
-}
-
-// state that's kept iff the in-mem connection is alive
+// shared lockable state that's kept iff the in-mem connection is alive
 struct AliveState {
     // network server shared state
     ns_shared: Arc<NetworkServerSharedState>,
     // connection index
     conn_idx: usize,
+    // sender for down-going client ConnectionEvent
+    send_down: DynFlexSender,
 }
 
 // create an in-mem client for the server
 pub(super) fn create(ns_shared: &Arc<NetworkServerSharedState>) -> InMemClient {
-    let shared = Arc::new(InMemShared::default());
+    let (send_down, recv_down) = dyn_flex_channel::channel();
+    let shared = Arc::new(Mutex::new(None));
     let slab_entry = super::SlabEntry::InMem(SlabEntry(Arc::clone(&shared)));
     let connection = super::Connection(ConnectionInner::InMem(Connection(Arc::clone(&shared))));
     let conn_idx = create_conn(ns_shared, slab_entry, connection);
 
     if let Some(conn_idx) = conn_idx {
         // normal case
-        let mut alive_lock = shared.alive_state.lock();
-        *alive_lock = Some(AliveState {
+        let mut shared_lock = shared.lock();
+        *shared_lock = Some(AliveState {
             ns_shared: Arc::clone(ns_shared),
             conn_idx,
+            send_down,
         });
-        drop(alive_lock);
+        drop(shared_lock);
     } else {
         // this case happens if the whole network server has been dropped
-        shared.killed.store(true, Ordering::Relaxed);
+        send_down.send(
+            Box::new(ConnectionEvent::Closed(Some("server closed".to_owned()))),
+            None,
+            None,
+        );
     }
 
-    InMemClient {
-        shared,
-        sbpe: SendBufferPolicyEnforcer::default(),
-    }
+    InMemClient { shared, recv_down }
 }
 
 impl SlabEntry {
     // called upon network shutdown
     pub(super) fn shutdown(&self) {
-        self.0.killed.store(true, Ordering::Relaxed);
-        *self.0.alive_state.lock() = None;
+        kill(&self.0, false, Some("server closed"));
     }
 }
 
 impl Connection {
     // see outer type
     pub(super) fn send(&self, msg: DownMsg) {
-        let _ = self.0.down_queue.push(msg);
+        let alive_lock = self.0.lock();
+        if let &Some(ref alive_state) = &*alive_lock {
+            alive_state.send_down.send(Box::new(ConnectionEvent::Received(msg)), None, None);
+        } else {
+            trace!("server send msg to closed in-mem connection");
+        }
     }
 
     // see outer type
     pub(super) fn kill(&self) {
-        kill(&self.0);
+        kill(&self.0, true, Some("connection closed by server"));
     }
 }
 
 impl InMemClient {
-    /// Send message to the server.
-    ///
-    /// It is undefined whether the queueing of these messages occurs in the server or in the
-    /// client in this case because they are using the same memory.
+    /// See corresponding method on client `Connection`.
     pub fn send(&self, msg: UpMsg) {
-        if let Err(e) = self.sbpe.post_receive(&msg) {
-            error!(%e, "in mem client sbpe error");
-            kill(&self.shared);
-        } else {
-            let alive_lock = self.shared.alive_state.lock();
-            if let Some(alive_state) = alive_lock.as_ref() {
-                alive_state.ns_shared.server_send.send(
-                    ServerEvent::Network(NetworkEvent::Message(alive_state.conn_idx, msg)),
-                    EventPriority::Network,
-                    None,
-                    None,
-                );
-            }
+         let alive_lock = self.shared.lock();
+        if let &Some(ref alive_state) = &*alive_lock {
+            alive_state.ns_shared.server_send.send(
+                ServerEvent::Network(NetworkEvent::Message(alive_state.conn_idx, msg)),
+                EventPriority::Network,
+                None,
+                None,
+            );
         }
     }
 
-    /// Poll for a message received from the server.
-    /// 
-    /// Errors if the server has shut down or closed this connection.
-    pub fn poll(&self) -> Result<Option<DownMsg>> {
-        if self.shared.killed.load(Ordering::Relaxed) {
-            bail!("server killed in-mem connection");
-        } else {
-            let opt_msg = self.shared.down_queue.pop();
-            if let &Some(ref msg) = &opt_msg {
-                self.sbpe.pre_transmit(msg);
-            }
-            Ok(opt_msg)
-        }
+    /// See corresponding method on client `Connection`.
+    pub fn receiver(&self) -> &DynFlexReceiver {
+        &self.recv_down
     }
 }
 
 impl Drop for InMemClient {
     fn drop(&mut self) {
-        kill(&self.shared);
+        kill(&self.shared, true, None);
     }
 }
 
 // kill the in-mem connection, if not already killed. pretty much synchronization-safe.
-fn kill(shared: &InMemShared) {
-    shared.killed.store(true, Ordering::Relaxed);
-    let mut alive_lock = shared.alive_state.lock();
-    if let Some(alive_state) = alive_lock.as_ref() {
-        destroy_conn(&alive_state.ns_shared, alive_state.conn_idx);
+fn kill(
+    shared: &Arc<Mutex<Option<AliveState>>>,
+    tell_server_dead: bool,
+    tell_client_dead: Option<&str>,
+) {
+    let mut alive_lock = shared.lock();
+    if let &Some(ref alive_state) = &*alive_lock {
+        if tell_server_dead {
+            destroy_conn(&alive_state.ns_shared, alive_state.conn_idx);
+        }
+        if let Some(tell_client_dead) = tell_client_dead {
+            alive_state.send_down.send(
+                Box::new(ConnectionEvent::Closed(Some(tell_client_dead.to_owned()))),
+                None,
+                None,
+            );
+        }
     }
     *alive_lock = None;
 }
 
 impl Debug for Connection {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let conn_idx = self.0.alive_state.lock().as_ref().map(|alive| alive.conn_idx);
+        let conn_idx = self.0.lock().as_ref().map(|alive| alive.conn_idx);
         if let Some(conn_idx) = conn_idx {
             write!(f, "conn_idx: {}", conn_idx)
         } else {

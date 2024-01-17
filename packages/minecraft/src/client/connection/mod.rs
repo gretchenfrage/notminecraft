@@ -6,6 +6,7 @@ use crate::{
     message::*,
     game_data::GameData,
     dyn_flex_channel::DynFlexReceiver,
+    server::network::InMemClient,
 };
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -20,6 +21,7 @@ pub struct Connection(ConnectionInner);
 
 enum ConnectionInner {
     Ws(ws::Connection),
+    InMem(InMemClient),
 }
 
 /// Message received from `Connection.receiver()`.
@@ -34,17 +36,23 @@ pub enum ConnectionEvent {
 impl Connection {
     /// Connect to a server at the given url.
     ///
-    /// Returns immediately without blocking or erroring, spawning as task to initialize the
+    /// Returns immediately without blocking or erroring, spawning a task to initialize the
     /// connection in the background. If that initialization fails, will simply appear as the
     /// connection closing.
     pub fn connect(url: &str, rt: &Handle, game: &Arc<GameData>) -> Self {
         Connection(ConnectionInner::Ws(ws::Connection::connect(url, rt, game)))
     }
 
+    /// Wrap around a server in-mem client.
+    pub fn in_mem(inner: InMemClient) -> Self {
+        Connection(ConnectionInner::InMem(inner))
+    }
+
     /// Enqueue a message to be transmitted to the server.
     pub fn send<M: Into<UpMsg>>(&self, msg: M) {
         match &self.0 {
             &ConnectionInner::Ws(ref inner) => inner.send(msg.into()),
+            &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
         }
     }
 
@@ -52,6 +60,13 @@ impl Connection {
     pub fn receiver(&self) -> &DynFlexReceiver {
         match &self.0 {
             &ConnectionInner::Ws(ref inner) => inner.receiver(),
+            &ConnectionInner::InMem(ref inner) => inner.receiver(),
         }
+    }
+}
+
+impl From<InMemClient> for Connection {
+    fn from(inner: InMemClient) -> Self {
+        Self::in_mem(inner)
     }
 }
