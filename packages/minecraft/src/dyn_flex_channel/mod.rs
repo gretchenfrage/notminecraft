@@ -10,9 +10,10 @@ use std::{
 use tokio::sync::OwnedSemaphorePermit;
 use crossbeam::queue::SegQueue;
 
-
+#[derive(Clone)]
 pub struct DynFlexSender(Arc<State>);
 
+#[derive(Clone)]
 pub struct DynFlexReceiver(Arc<State>);
 
 #[derive(Default)]

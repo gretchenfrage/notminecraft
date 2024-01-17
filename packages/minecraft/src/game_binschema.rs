@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
     iter,
     hash::Hash,
+    io::Cursor,
 };
 use vek::*;
 
@@ -30,7 +31,7 @@ pub trait GameBinschema {
     
     fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()>;
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self>
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self>
     where
         Self: Sized;
 }
@@ -46,7 +47,7 @@ macro_rules! scalar_game_binschema {
                 encoder.$encode(*self)
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, _: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, _: &Arc<GameData>) -> Result<Self> {
                 decoder.$decode()
             }
         }
@@ -79,7 +80,7 @@ macro_rules! size_game_binschema {
                 encoder.$encode(*self as $fixed)
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, _: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, _: &Arc<GameData>) -> Result<Self> {
                 decoder.$decode()
                     .and_then(|n| $size::try_from(n)
                         .map_err(|e| Error::new(
@@ -104,7 +105,7 @@ impl GameBinschema for String {
         encoder.encode_str(self)
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, _: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, _: &Arc<GameData>) -> Result<Self> {
         decoder.decode_str()
     }
 }
@@ -118,7 +119,7 @@ impl GameBinschema for () {
         encoder.encode_unit()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, _: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, _: &Arc<GameData>) -> Result<Self> {
         decoder.decode_unit()
     }
 }
@@ -137,7 +138,7 @@ impl<T: GameBinschema> GameBinschema for Option<T> {
         }
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         Ok(if decoder.begin_option()? {
             Some(T::decode(decoder, game)?)
         } else {
@@ -162,7 +163,7 @@ macro_rules! seq_game_binschema {
                 encoder.finish_seq()
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
                 let len = decoder.begin_var_len_seq()?;
                 let collection = iter::from_fn(|| Some(
                     decoder.begin_seq_elem()
@@ -208,7 +209,7 @@ macro_rules! map_game_binschema {
                 encoder.finish_seq()
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
                 let len = decoder.begin_var_len_seq()?;
                 let collection = iter::from_fn(|| Some(
                     decoder.begin_seq_elem()
@@ -248,7 +249,7 @@ impl<T: GameBinschema, const N: usize> GameBinschema for [T; N] {
         encoder.finish_seq()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         let mut array = ArrayBuilder::new();
         decoder.begin_fixed_len_seq(N)?;
         for _ in 0..N {
@@ -281,7 +282,7 @@ macro_rules! tuples_game_binschema {
                 encoder.finish_tuple()
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
                 decoder.begin_tuple()?;
                 $(
                     decoder.begin_tuple_elem()?;
@@ -312,7 +313,7 @@ impl<T: GameBinschema> GameBinschema for Box<T> {
         T::encode(&**self, encoder, game)
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         T::decode(decoder, game).map(Box::new)
     }
 }
@@ -326,7 +327,7 @@ impl<T: GameBinschema> GameBinschema for RefCell<T> {
         T::encode(&*self.borrow(), encoder, game)
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         T::decode(decoder, game).map(RefCell::new)
     }
 }
@@ -349,7 +350,7 @@ macro_rules! vek_vec_game_binschema {
                 encoder.finish_seq()
             }
 
-            fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+            fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
                 decoder.begin_fixed_len_seq($n)?;
                 $(
                     decoder.begin_seq_elem()?;
@@ -385,7 +386,7 @@ impl GameBinschema for RawBlockId {
         encoder.encode_unit()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         let bid = RawBlockId(decoder.begin_enum()? as u16);
         decoder.begin_enum_variant(&game.blocks_machine_name.get(bid))?;
         decoder.decode_unit()?;
@@ -412,7 +413,7 @@ impl GameBinschema for ErasedBidMeta {
         )
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         let bid = RawBlockId(decoder.begin_enum()? as u16);
         decoder.begin_enum_variant(&game.blocks_machine_name[bid])?;
         let meta = game.blocks_meta_transcloner[bid].decode_erased_block_meta(
@@ -445,7 +446,7 @@ impl GameBinschema for ChunkBlocks {
         encoder.finish_seq()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         decoder.begin_fixed_len_seq(NUM_LTIS)?;
         let mut chunk = ChunkBlocks::new(&game.blocks);
         for lti in 0..=MAX_LTI {
@@ -496,7 +497,7 @@ impl GameBinschema for ItemStack {
         encoder.finish_struct()
     }
 
-    fn decode(decoder: &mut Decoder<&[u8]>, game: &Arc<GameData>) -> Result<Self> {
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
         decoder.begin_struct()?;
         decoder.begin_struct_field("item")?;
         let iid = RawItemId(decoder.begin_enum()? as u16);

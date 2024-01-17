@@ -49,7 +49,10 @@ use crate::{
 };
 use get_assets::DataDir;
 use binschema::*;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    io::Cursor,
+};
 use anyhow::*;
 use redb::{
     Database,
@@ -155,13 +158,15 @@ impl SaveDb {
 
             // decode saved schema
             let mut coder_state = CoderState::new(&schema_definition_schema, coder_state_alloc, None);
+            let mut cursor = Cursor::new(&saved_schema_definition_bytes.value()[8..]);
             let saved_schema_definition = decode_schema_definition(
-                &mut Decoder::new(
-                    &mut coder_state,
-                    &mut &saved_schema_definition_bytes.value()[8..],
-                )
+                &mut Decoder::new(&mut coder_state, &mut cursor)
             )
                 .context("pre existent save file database saved schema definition failed to decode")?;
+            ensure!(
+                cursor.position() >= cursor.get_ref().len() as u64,
+                "pre existent save file database saved schema definition has extra bytes at end",
+            );
 
             // validate saved schema
             ensure!(
@@ -264,11 +269,16 @@ impl SaveDb {
             coder_state.into_alloc(),
             None,
         );
+        let mut cursor = Cursor::new(&*val_bytes.value());
         let val = <K as SaveKey>::Val::decode(
-            &mut Decoder::new(&mut coder_state, &mut &*val_bytes.value()),
+            &mut Decoder::new(&mut coder_state, &mut cursor),
             &self.shared.game,
         )?;
         coder_state.is_finished_or_err()?;
+        ensure!(
+            cursor.position() >= cursor.get_ref().len() as u64,
+            "save file database value has extra bytes at end"
+        );
 
         // done
         self.coder_state_alloc = Some(coder_state.into_alloc());
@@ -391,7 +401,7 @@ fn encode_schema_definition(definition: &SchemaDefinition, encoder: &mut Encoder
 }
 
 // manually decode a key/val schema definition
-fn decode_schema_definition(decoder: &mut Decoder<&[u8]>) -> Result<SchemaDefinition> {
+fn decode_schema_definition(decoder: &mut Decoder<Cursor<&[u8]>>) -> Result<SchemaDefinition> {
     let mut definition = Vec::new();
     for _ in 0..decoder.begin_var_len_seq()? {
         decoder.begin_seq_elem()?;

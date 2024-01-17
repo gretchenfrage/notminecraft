@@ -363,7 +363,7 @@ pub fn derive_game_binschema(input: TokenStream) -> TokenStream {
                 #encode
             }
 
-            fn decode(decoder: &mut ::binschema::Decoder<&[u8]>, game: &::std::sync::Arc<crate::game_data::GameData>) -> ::binschema::error::Result<Self> {
+            fn decode(decoder: &mut ::binschema::Decoder<::std::io::Cursor<&[u8]>>, game: &::std::sync::Arc<crate::game_data::GameData>) -> ::binschema::error::Result<Self> {
                 #decode
             }
         }

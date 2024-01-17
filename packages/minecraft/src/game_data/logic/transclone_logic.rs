@@ -12,6 +12,7 @@ use binschema::{*, error::*};
 use std::{
     sync::Arc,
     any::TypeId,
+    io::Cursor,
 };
 
 
@@ -108,7 +109,7 @@ macro_rules! block_transcloner {
                 &self,
                 bid: RawBlockId,
                 mut tile: TileBlockWrite,
-                decoder: &mut Decoder<&[u8]>,
+                decoder: &mut Decoder<Cursor<&[u8]>>,
                 game: &Arc<GameData>,
             ) -> Result<()> {
                 match self {$(
@@ -141,7 +142,7 @@ macro_rules! block_transcloner {
             /// surrounding enum).
             pub fn decode_erased_block_meta(
                 &self,
-                decoder: &mut Decoder<&[u8]>,
+                decoder: &mut Decoder<Cursor<&[u8]>>,
                 game: &Arc<GameData>,
             ) -> Result<ErasedBlockMeta> {
                 Ok(match self {$(
@@ -182,7 +183,7 @@ macro_rules! item_transcloner {
             /// surrounding enum).
             pub fn decode_item_meta(
                 &self,
-                decoder: &mut Decoder<&[u8]>,
+                decoder: &mut Decoder<Cursor<&[u8]>>,
                 game: &Arc<GameData>,
             ) -> Result<ItemMeta> {
                 Ok(match self {$(

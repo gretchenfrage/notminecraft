@@ -42,15 +42,20 @@ use super::{
 use crate::{
     server::ServerEvent,
     game_binschema::GameBinschema,
+    util_net::{
+        try_denagle,
+        try_close,
+        some_or_pending,
+    },
 };
 use binschema::*;
 use std::{
-    sync::{Arc, Once},
+    sync::Arc,
     time::Duration,
     convert::Infallible,
     cmp::min,
-    future::Future,
     fmt::{self, Formatter, Debug},
+    io::Cursor,
 };
 #[cfg(debug_assertions)]
 use std::{
@@ -77,19 +82,12 @@ use tokio::{
     time::{
         Instant,
         sleep,
-        timeout,
         timeout_at,
     },
 };
 use tokio_tungstenite::{
     tungstenite::{
-        protocol::{
-            frame::{
-                coding::CloseCode,
-                CloseFrame,
-            },
-            WebSocketConfig,
-        },
+        protocol::WebSocketConfig,
         error::Error as TungsteniteError,
         Message,
     },
@@ -100,10 +98,13 @@ use futures::{
     stream::{Stream, StreamExt},
     sink::{Sink, SinkExt},
     FutureExt,
-    future::pending,
     select_biased,
 };
-use anyhow::{Error, bail};
+use anyhow::{
+    Error,
+    bail,
+    ensure,
+};
 
 
 // ==== constants ====
@@ -428,10 +429,11 @@ async fn recv_loop<W: Stream<Item=Result<Message, TungsteniteError>> + Unpin>(
         let msg_size = msg.len();
 
         // decode
+        let mut cursor = Cursor::new(msg.as_slice());
         let mut coder_state = CoderState::new(&ws_shared.up_schema, coder_state_alloc, None);
         let result =
             UpMsg::decode(
-                &mut Decoder::new(&mut coder_state, &mut msg.as_slice()), &ws_shared.game,
+                &mut Decoder::new(&mut coder_state, &mut cursor), &ws_shared.game,
             )
             .and_then(|msg| coder_state
                 .is_finished_or_err()
@@ -444,6 +446,10 @@ async fn recv_loop<W: Stream<Item=Result<Message, TungsteniteError>> + Unpin>(
         let msg = result?;
         coder_state.is_finished_or_err()?;
         coder_state_alloc = coder_state.into_alloc();
+        ensure!(
+            cursor.position() >= cursor.get_ref().len() as u64,
+            "received msg with extra bytes at end",
+        );
 
         // send buffer policies
         conn_shared.sbpe.post_receive(&msg)?;
@@ -505,7 +511,7 @@ async fn send_task<W: Sink<Message, Error=TungsteniteError> + Unpin>(
 
     // close if applicable
     if should_send_close {
-        try_close(ws_send, None).await;
+        try_close(ws_send, None, SEND_CLOSE_TIMEOUT).await;
     }
 }
 
@@ -562,14 +568,6 @@ enum SendLoopError {
     WsBinschema(Error),
 }
 
-// wrapper around a future option that resolves to the some value or pends forever
-async fn some_or_pending<T, F: Future<Output=Option<T>>>(option: F) -> T {
-    match option.await {
-        Some(t) => t,
-        None => pending().await,
-    }
-}
-
 
 // ==== handshake ====
 
@@ -594,16 +592,6 @@ fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
     buf
 }
 
-// attempt to disable nagling, log error on failure
-fn try_denagle(tcp: &TcpStream) {
-    let denagle_result = tcp.set_nodelay(true);
-    if let Err(e) = denagle_result {
-        // ooh I get to use a static variable in Rust, how exciting!
-        static WARN_DENAGLE_FAILED: Once = Once::new();
-        WARN_DENAGLE_FAILED.call_once(|| warn!(%e, "failed to disable nagling"));
-    }
-}
-
 // attempt to do a ws handshake then a ws-binschema handshake on the TCP stream. on error, attempt
 // to handle the error appropriately. implement timeouts as necessary in both parts.
 async fn try_handshake_handle_err(
@@ -622,13 +610,13 @@ async fn try_handshake_handle_err(
         }
         Err(HandshakeError::WsBinschema { ws, reason }) => {
             // try to send back a close frame, with timeout
-            try_close(ws, Some(reason)).await;
+            try_close(ws, Some(reason), SEND_CLOSE_TIMEOUT).await;
             None
         }
         Err(HandshakeError::Timeout(opt_ws)) => {
             // try to send back a close frame here too, if applicable
             if let Some(ws) = opt_ws {
-                try_close(ws, Some("ws-binschema handshake timeout")).await;
+                try_close(ws, Some("ws-binschema handshake timeout"), SEND_CLOSE_TIMEOUT).await;
             }
             None
         }
@@ -722,28 +710,6 @@ enum HandshakeError {
     // handshake timeout reached. try to properly close websocket connection if exists.
     Timeout(Option<WebSocketStream<TcpStream>>),
 }
-
-// attempt to elegantly close a websocket connection by sending a close message, with a timeout. if
-// `reason` is given it will be sent in a close frame to the client.
-async fn try_close<W>(mut ws: W, reason: Option<&'static str>)
-where
-    W: Sink<Message, Error=TungsteniteError> + Unpin,
-{
-    trace!(?reason, "sending ws close frame");
-    let close_frame = reason
-        .map(|reason| CloseFrame {
-            code: CloseCode::Invalid,
-            reason: reason.into(),
-        });
-    let msg = Message::Close(close_frame);
-    let result = timeout(SEND_CLOSE_TIMEOUT, ws.send(msg)).await;
-    match result {
-        Ok(Ok(())) => (),
-        Ok(Err(e)) => trace!(%e, "error sending close frame"),
-        Err(_) => trace!("timeout sending close frame"),
-    }
-}
-
 
 impl Debug for Connection {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
