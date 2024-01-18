@@ -194,6 +194,7 @@ pub use self::{
     loaded::{
         LoadedChunks,
         Getter,
+        AddChunkError,
     },
     per_chunk::PerChunk,
     block::{

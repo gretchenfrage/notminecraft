@@ -52,6 +52,10 @@ impl ThingKeySpace {
     pub fn new_per<T, F: FnMut(ThingKey) -> T>(&self, mut f: F) -> PerThing<T> {
         PerThing(self.slab.new_mapped(|idx, &ctr| (f(ThingKey { idx, ctr }), ctr)))
     }
+
+    pub fn idx_to_key(&self, idx: usize) -> Option<ThingKey> {
+        self.slab.get(idx).map(|&ctr| ThingKey { idx, ctr })
+    }
 }
 
 impl<T> PerThing<T> {
@@ -93,6 +97,12 @@ impl<T> PerThing<T> {
         let &mut (ref mut val, ctr2) = &mut self.0[key.idx];
         debug_assert_eq!(ctr2, key.ctr, "PerThing.get ctr mismatch");
         val
+    }
+}
+
+impl ThingKey {
+    pub fn get_idx(self) -> usize {
+        self.idx
     }
 }
 

@@ -50,6 +50,15 @@ struct SlabEntry {
     cc: Vec3<i64>,
 }
 
+/// Possible errors when trying to add a chunk to `LoadedChunks`.
+#[derive(Debug, Clone)]
+pub enum AddChunkError {
+    /// Existing chunk with same cc already present.
+    AlreadyLoaded,
+    /// Would exceed maximum supported number of chunks in `LoadedChunks` (really high).
+    TooManyChunks,
+}
+
 impl LoadedChunks {
     /// Construct a new empty set of loaded chunks.
     pub fn new() -> Self {
@@ -84,17 +93,24 @@ impl LoadedChunks {
     /// per-chunk world data, with all the generation or loading logic that may
     /// require.
     pub fn add(&mut self, cc: Vec3<i64>) -> usize {
+        self.try_add(cc).unwrap_or_else(|e| match e {
+            AddChunkError::AlreadyLoaded => panic!("chunk already loaded"),
+            AddChunkError::TooManyChunks => panic!("exceeded maximum number of loaded chunks"),
+        })
+    }
+
+    /// Like `add`, but returns None rather than panicking
+    pub fn try_add(&mut self, cc: Vec3<i64>) -> Result<usize, AddChunkError> {
         // validate and anticipate idx
         let hmap_entry =
             match self.hmap.entry(cc) {
                 hmap::Entry::Vacant(vacant) => vacant,
-                hmap::Entry::Occupied(_) => panic!("chunk already loaded"),
+                hmap::Entry::Occupied(_) => return Err(AddChunkError::AlreadyLoaded),
             };
 
-        assert!(
-            self.slab.vacant_key() < NULL_IDX as usize,
-            "too many loaded chunks",
-        );
+        if self.slab.vacant_key() >= NULL_IDX as usize {
+            return Err(AddChunkError::TooManyChunks);
+        }
         let idx = self.slab.vacant_key() as u32;
 
         // insert idx into hmap
@@ -113,7 +129,7 @@ impl LoadedChunks {
         self.slab.insert(SlabEntry { neighbors, cc });
 
         // done
-        idx as usize
+        Ok(idx as usize)
     }
 
     /// Remove a chunk from the set of loaded chunks. Its chunk index may be
@@ -191,6 +207,10 @@ impl LoadedChunks {
         F: FnMut(Vec3<i64>, usize) -> T,
     {
         PerChunk(self.slab.new_mapped(|ci, entry| (entry.cc, f(entry.cc, ci))))
+    }
+
+    pub fn ci_to_cc(&self, ci: usize) -> Option<Vec3<i64>> {
+        self.slab.get(ci).map(|entry| entry.cc)
     }
 }
 
