@@ -113,7 +113,7 @@ pub mod prelude {
 
 /// Top-level resource for drawing frames onto a window.
 pub struct Renderer {
-    surface: Surface,
+    surface: Surface<'static>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     color_texture: Texture,
@@ -222,7 +222,7 @@ impl Renderer {
         let instance = Instance::new(InstanceDescriptor::default());
         trace!("creating surface");
         // safety: surface must be dropped before window
-        let surface = unsafe { instance.create_surface(&*window) }?;
+        let surface = instance.create_surface(Arc::clone(&window))?;
 
         trace!("creating adapter");
         let adapter = instance
@@ -243,8 +243,8 @@ impl Renderer {
             .request_device(
                 &DeviceDescriptor {
                     label: None,
-                    features: Features::empty(),
-                    limits: Limits {
+                    required_features: Features::empty(),
+                    required_limits: Limits {
                         max_bind_groups: 5, // TODO don't do that
                         ..Default::default()
                     },
@@ -385,6 +385,7 @@ impl Renderer {
             width: size.w,
             height: size.h,
             present_mode: PresentMode::AutoNoVsync,
+            desired_maximum_frame_latency: 1,
             alpha_mode: CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
@@ -666,7 +667,7 @@ impl Renderer {
                                     resolve_target: None,
                                     ops: Operations {
                                         load: LoadOp::Load,
-                                        store: true,
+                                        store: StoreOp::Store,
                                     },
                                 }),
                             ],
@@ -674,10 +675,12 @@ impl Renderer {
                                 view: &depth_texture,
                                 depth_ops: Some(Operations {
                                     load: depth_load_op,
-                                    store: true,
+                                    store: StoreOp::Store,
                                 }),
                                 stencil_ops: None,
                             }),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
                         });
                     pass
                         .set_bind_group(

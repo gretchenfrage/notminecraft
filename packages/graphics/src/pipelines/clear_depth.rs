@@ -72,10 +72,12 @@ impl ClearDepthPipeline {
                     view,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(value),
-                        store: true,
+                        store: StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
         pass.set_pipeline(&self.clear_depth_pipeline);
         pass.draw(0..1, 0..1);

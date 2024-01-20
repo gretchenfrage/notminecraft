@@ -301,11 +301,13 @@ impl ClipPipeline {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Load,
-                            store: true,
+                            store: StoreOp::Store,
                         },
                     }),
                 ],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
         pass.set_pipeline(&self.clip_edit_pipeline);
         pass.set_bind_group(0, &clip_edit_uniform_bind_group, &[edit.uniform_offset]);

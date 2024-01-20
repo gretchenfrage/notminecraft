@@ -77,11 +77,13 @@ impl ClearPipeline {
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(color),
-                            store: true,
+                            store: StoreOp::Store,
                         },
                     }),
                 ],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
         pass.set_pipeline(&self.clear_pipeline);
         pass.draw(0..1, 0..1);

@@ -5,7 +5,10 @@ use std::{
 };
 use wgpu::{
     *,
-    util::DeviceExt,
+    util::{
+        DeviceExt,
+        TextureDataOrder,
+    },
 };
 use image::{
     DynamicImage,
@@ -118,6 +121,7 @@ impl GpuImageArrayManager {
                     usage: TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
                 },
+                TextureDataOrder::LayerMajor,
                 &image_data,
             );
 
