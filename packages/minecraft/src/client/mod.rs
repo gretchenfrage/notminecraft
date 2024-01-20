@@ -3,11 +3,13 @@
 pub mod connection;
 pub mod per_player;
 pub mod client_loaded_chunks;
+pub mod chunk_mesh;
 
 use self::{
     connection::Connection,
     client_loaded_chunks::ClientLoadedChunks,
     per_player::*,
+    chunk_mesh::ChunkMeshState,
 };
 use crate::{
     server::runner::ServerThread,
@@ -24,6 +26,7 @@ pub struct PreJoinClient {
 
     /// Client-side space of chunks.
     pub chunks: ClientLoadedChunks,
+    pub chunk_mesh_state: PerChunk<ChunkMeshState>,
     pub tile_blocks: PerChunk<ChunkBlocks>,
 
     /// Client-side space of players.
