@@ -12,7 +12,11 @@ use crate::{
 			GuiWindowContext,
 			FocusLevel,
 		},
-		event::ScrolledAmount,
+		event::{
+			ScrolledAmount,
+			TypingInput,
+			TypingControl,
+		},
 		state_frame::GuiStateFrame,
 		state_frame_obj::GuiStateFrameObj,
 		fps_overlay::FpsOverlay,
@@ -41,6 +45,7 @@ use std::{
 		catch_unwind,
 		AssertUnwindSafe,
 	},
+	process::exit,
 	env,
 };
 use winit::{
@@ -57,8 +62,6 @@ use winit::{
     	Event,
     	WindowEvent,
     	DeviceEvent,
-    	VirtualKeyCode,
-	    ScanCode,
 	    MouseButton,
 	    ElementState,
 	    MouseScrollDelta,
@@ -69,6 +72,7 @@ use winit::{
 		PhysicalSize,
 		PhysicalPosition,
 	},
+	keyboard::PhysicalKey,
 };
 use tokio::runtime::Handle;
 use pollster::FutureExt;
@@ -138,8 +142,7 @@ struct State {
     settings: RefCell<Settings>,
     game: Arc<GameData>,
     focus_level: FocusLevel,
-	pressed_keys_semantic: HashSet<VirtualKeyCode>,
-    pressed_keys_physical: HashSet<ScanCode>,
+	pressed_keys: HashSet<PhysicalKey>,
     pressed_mouse_buttons: HashSet<MouseButton>,
     cursor_pos: Option<Vec2<f32>>,
     size: Extent2<u32>,
@@ -147,8 +150,7 @@ struct State {
     app_scale: f32,
 
     // TODO: only necessary until they stabilize const set constructor
-    pressed_keys_semantic_empty: HashSet<VirtualKeyCode>,
-    pressed_keys_physical_empty: HashSet<ScanCode>,
+    pressed_keys_empty: HashSet<PhysicalKey>,
     pressed_mouse_buttons_empty: HashSet<MouseButton>,
 
 }
@@ -194,8 +196,7 @@ impl State {
 			data_dir,
 			game,
 			focus_level: FocusLevel::Focused,
-			pressed_keys_semantic: HashSet::new(),
-			pressed_keys_physical: HashSet::new(),
+			pressed_keys: HashSet::new(),
 			pressed_mouse_buttons: HashSet::new(),
 			cursor_pos: None,
 			size: Extent2 {
@@ -205,8 +206,7 @@ impl State {
 			os_scale: window.scale_factor() as f32,
 			app_scale: 1.0,
 
-			pressed_keys_semantic_empty: HashSet::new(),
-			pressed_keys_physical_empty: HashSet::new(),
+			pressed_keys_empty: HashSet::new(),
 			pressed_mouse_buttons_empty: HashSet::new(),
 		}
 	}
@@ -232,14 +232,10 @@ impl State {
 					settings: &self.settings,
 					game: &self.game,
 					focus_level: self.focus_level,
-					pressed_keys_semantic:
+					pressed_keys:
 						if self.focus_level >= FocusLevel::Focused {
-							&self.pressed_keys_semantic
-						} else { &self.pressed_keys_semantic_empty },
-					pressed_keys_physical: 
-						if self.focus_level >= FocusLevel::Focused {
-							&self.pressed_keys_physical
-						} else { &self.pressed_keys_physical_empty },
+							&self.pressed_keys
+						} else { &self.pressed_keys_empty },
 					pressed_mouse_buttons: 
 						if self.focus_level >= FocusLevel::Focused {
 							&self.pressed_mouse_buttons
@@ -279,7 +275,8 @@ pub struct GuiEventLoop {
 
 impl GuiEventLoop {
 	pub fn new(tokio: &Handle, thread_pool: ThreadPool) -> Self {
-		let event_loop = EventLoop::new();
+		let event_loop = EventLoop::new()
+			.expect("failed to create event loop");
 		let window = WindowBuilder::new()
 			.with_inner_size(LogicalSize::new(854, 480))
 			.with_title("Not Minecraft")
@@ -336,10 +333,10 @@ impl GuiEventLoop {
 
 		let mut frame_is_happening: bool = true;
 		
-		self.event_loop.run(move |event, _target, control_flow| {
+		let result = self.event_loop.run(move |event, target| {
 			trace!(?event, "winit event");
 
-			if *control_flow == ControlFlow::Exit {
+			if target.exiting() {
 				return;
 			}
 
@@ -354,7 +351,7 @@ impl GuiEventLoop {
 					};
 					if frame_is_happening {
 						state.next_frame_target = now + state.frame_duration_target;
-						*control_flow = ControlFlow::WaitUntil(state.next_frame_target);
+						target.set_control_flow(ControlFlow::WaitUntil(state.next_frame_target));
 					}
 				}
 				Event::WindowEvent { event, .. } => match event {
@@ -364,16 +361,11 @@ impl GuiEventLoop {
 					}
 					WindowEvent::CloseRequested => {
 						stack.0.clear();
-						*control_flow = ControlFlow::Exit;
+						target.exit();
 					}
 					WindowEvent::Destroyed => {
 						stack.0.clear();
-						*control_flow = ControlFlow::Exit;
-					}
-					WindowEvent::ReceivedCharacter(c) => {
-						state.with_ctx(|ctx| stack
-							.top()
-							.on_character_input(ctx, c));
+						target.exit();
 					}
 					WindowEvent::Focused(focused) => {
 						if state.focus_level == FocusLevel::MouseCaptured {
@@ -387,69 +379,48 @@ impl GuiEventLoop {
 					}
 					WindowEvent::KeyboardInput {
 						is_synthetic: false,
-						input,
+						event,
 						..
 					} => {
 						let focused = state.focus_level >= FocusLevel::Focused;
-						match input.state {
+						match event.state {
 							ElementState::Pressed => {
-								// semantic press
-								if let Some(key) = input.virtual_keycode {
-									let changed = state
-										.pressed_keys_semantic
-										.insert(key);
-									if
-										false && // TODO
-										key == VirtualKeyCode::Escape
-										&& state.focus_level
-										== FocusLevel::MouseCaptured
-									{
-										try_center_cursor(&self.window);
-										try_uncapture_mouse(&self.window);
-										state.focus_level = FocusLevel::Focused;
-										state
-											.with_ctx(|ctx|
-												stack.top().on_focus_change(ctx));
-									} else if changed && focused {
-										state.with_ctx(|ctx| stack
-											.top()
-											.on_key_press_semantic(ctx, key));
-									}
-								}
-
-								// physical press
-								let key = input.scancode;
 								let changed = state
-									.pressed_keys_physical
-									.insert(key);
+									.pressed_keys
+									.insert(event.physical_key);
 								if changed && focused {
+									let typing = event.text.as_ref()
+										.map(|s| s.as_str())
+										.and_then(|s| {
+											let c = s.chars().next().unwrap();
+											if c.is_control() {
+												match c {
+													'\u{8}' => Some(TypingInput::Control(TypingControl::Backspace)),
+													'\r' => Some(TypingInput::Control(TypingControl::Enter)),
+													'\t' => Some(TypingInput::Control(TypingControl::Tab)),
+													'\u{7f}' => Some(TypingInput::Control(TypingControl::Delete)),
+													c => {
+														debug!(?c, "ignoring unknown control character");
+														None
+													},
+												}
+											} else {
+												Some(TypingInput::Text(s))
+											}
+										});
 									state.with_ctx(|ctx| stack
 										.top()
-										.on_key_press_physical(ctx, key));
+										.on_key_press(ctx, event.physical_key, typing));
 								}
 							}
 							ElementState::Released => {
-								// semantic release
-								if let Some(key) = input.virtual_keycode {
-									let changed = state
-										.pressed_keys_semantic
-										.remove(&key);
-									if changed && focused {
-										state.with_ctx(|ctx| stack
-											.top()
-											.on_key_release_semantic(ctx, key));
-									}
-								}
-
-								// physical release
-								let key = input.scancode;
 								let changed = state
-									.pressed_keys_physical
-									.remove(&key);
+									.pressed_keys
+									.remove(&event.physical_key);
 								if changed && focused {
 									state.with_ctx(|ctx| stack
 										.top()
-										.on_key_release_physical(ctx, key));
+										.on_key_release(ctx, event.physical_key));
 								}
 							}
 						}
@@ -557,7 +528,7 @@ impl GuiEventLoop {
 					}
 					_ => (),
 				}
-				Event::MainEventsCleared => if frame_is_happening {
+				Event::AboutToWait => if frame_is_happening {
 					state.with_ctx(|ctx| {
 						// TODO: kinda awkward to just have this right here
 						let big = ctx.size.w >= 960 && ctx.size.h >= 720;
@@ -584,8 +555,8 @@ impl GuiEventLoop {
 								state.effect_queue.borrow_mut().uncapture_mouse();
 
 								if stack.0.is_empty() {
-									stack.0.clear();stack.0.clear();
-									*control_flow = ControlFlow::Exit;
+									stack.0.clear();
+									target.exit();
 									return;
 								}
 							}
@@ -624,9 +595,9 @@ impl GuiEventLoop {
 							.expect("failed to draw frame");
 					});
 				},
-				Event::LoopDestroyed => {
+				Event::LoopExiting => {
 					stack.0.clear();
-					*control_flow = ControlFlow::Exit;
+					target.exit();
 				}
 				_ => (),
 			}
@@ -641,7 +612,7 @@ impl GuiEventLoop {
 
 						if stack.0.is_empty() {
 							stack.0.clear();stack.0.clear();
-							*control_flow = ControlFlow::Exit;
+							target.exit();
 							return;
 						}
 					}
@@ -669,6 +640,9 @@ impl GuiEventLoop {
 				}
 			}
 		});
+		error!(?result, "event loop exited");
+		drop(result);
+		exit(0);
 	}
 }
 

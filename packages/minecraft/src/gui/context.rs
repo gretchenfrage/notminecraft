@@ -28,10 +28,12 @@ use vek::*;
 use tokio::runtime::Handle;
 
 
-pub use winit::event::{
-    VirtualKeyCode,
-    ScanCode,
-    MouseButton,
+pub use winit::{
+    event::MouseButton,
+    keyboard::{
+        PhysicalKey,
+        KeyCode,
+    },
 };
 
 
@@ -71,10 +73,7 @@ pub struct GuiGlobalContext<'c> {
     pub focus_level: FocusLevel,
     /// Set of pressed virtual key codes, if the window is focused. Empty set
     /// if the window is not focused.
-    pub pressed_keys_semantic: &'c HashSet<VirtualKeyCode>,
-    /// Set of pressed physical keyboard scan codes, if the window is focused.
-    /// Empty set if the window is not focused.
-    pub pressed_keys_physical: &'c HashSet<ScanCode>,
+    pub pressed_keys: &'c HashSet<PhysicalKey>,
     /// Set of pressed mouse buttons, if the window is focused. Empty set if
     /// the window is not focused.
     pub pressed_mouse_buttons: &'c HashSet<MouseButton>,
@@ -129,11 +128,11 @@ impl<'c> GuiGlobalContext<'c> {
     /// key is in `self.pressed_keys_semantic`. (The ctrl or command key).
     pub fn is_command_key_pressed(&self) -> bool {
         if cfg!(target_os = "macos") {
-            self.pressed_keys_semantic.contains(&VirtualKeyCode::LWin)
-            || self.pressed_keys_semantic.contains(&VirtualKeyCode::RWin)
+            self.pressed_keys.contains(&KeyCode::SuperLeft.into())
+            || self.pressed_keys.contains(&KeyCode::SuperRight.into())
         } else {
-            self.pressed_keys_semantic.contains(&VirtualKeyCode::LControl)
-            || self.pressed_keys_semantic.contains(&VirtualKeyCode::RControl)
+            self.pressed_keys.contains(&KeyCode::ControlLeft.into())
+            || self.pressed_keys.contains(&KeyCode::ControlRight.into())
         }
     }
 

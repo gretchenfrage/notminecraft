@@ -121,26 +121,25 @@ impl MultiplayerMenu {
 impl GuiStateFrame for MultiplayerMenu {
     impl_visit_nodes!();
 
-    fn on_character_input(&mut self, ctx: &GuiWindowContext, c: char) {
-        if c.is_control() {
-            if c == '\u{8}' {
-                // backspace
-                self.address.pop();
-            } else {
-                trace!(?c, "ignoring unknown control character");
-                return;
-            }
-        } else {
-            self.address.push(c);
-        }
-        self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
-    }
-
-    fn on_key_press_semantic(&mut self, ctx: &GuiWindowContext, key: VirtualKeyCode) {
-        if key == VirtualKeyCode::Return {
+    fn on_key_press(&mut self, ctx: &GuiWindowContext, key: PhysicalKey, typing: Option<TypingInput>) {
+        debug!(?key, ?typing, address=?self.address, "on_key_press");
+        if key == KeyCode::Enter {
             on_connect_click(&self.address)(ctx.global())
-        } else if key == VirtualKeyCode::V && ctx.global().is_command_key_pressed() {
-            self.address.push_str(&ctx.global().clipboard.get());
+        } else if key == KeyCode::KeyV && ctx.global().is_command_key_pressed() {
+            self.address.push_str(dbg!(&ctx.global().clipboard.get()));
+            self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
+        } else if let Some(typing) = typing {
+            match typing {
+                TypingInput::Text(text) => {
+                    self.address.push_str(text);
+                }
+                TypingInput::Control(control) => match control {
+                    TypingControl::Backspace => {
+                        self.address.pop();
+                    }
+                    _ => (),
+                }
+            }
             self.address_text_block = make_address_text_block(&self.address, self.address_blinker, ctx.global())
         }
     }

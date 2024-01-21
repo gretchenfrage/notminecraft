@@ -64,11 +64,15 @@ pub use self::{
         GuiSpatialContext,
         GuiWindowContext,
         FocusLevel,
-        VirtualKeyCode,
-        ScanCode,
         MouseButton,
+        PhysicalKey,
+        KeyCode,
     },
-    event::ScrolledAmount,
+    event::{
+        ScrolledAmount,
+        TypingInput,
+        TypingControl,
+    },
     state_frame::{
         GuiStateFrame,
         impl_visit_nodes,

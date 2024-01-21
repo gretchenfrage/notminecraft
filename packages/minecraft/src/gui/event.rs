@@ -21,3 +21,26 @@ impl ScrolledAmount {
         }
     }
 }
+
+/// Corresponds to a key press, represents the associated meaning if the key
+/// press is to try to be interpreted in the context of typing text.
+#[derive(Copy, Clone, Debug)]
+pub enum TypingInput<'a> {
+    /// The key press may be an attempt to type the character(s).
+    Text(&'a str),
+    /// The key press may be an attempt to type the text "control" characters. 
+    Control(TypingControl),
+}
+
+/// Text "control" characters that may be typed.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum TypingControl {
+    /// Typing an enter character.
+    Enter,
+    /// Typing a backspace character.
+    Backspace,
+    /// Typing a delete character.
+    Delete,
+    /// Typing a tab character.
+    Tab,
+}

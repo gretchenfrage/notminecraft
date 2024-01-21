@@ -19,6 +19,10 @@ impl Clipboard {
     }
 
     pub fn get(&self) -> String {
+        self.get_raw().chars().filter(|c| !c.is_control()).collect()
+    }
+
+    pub fn get_raw(&self) -> String {
         self.0.as_ref()
             .and_then(|inner| inner.lock().get_text()
                 .map_err(|e| error!(%e, "error getting clipboard text"))
