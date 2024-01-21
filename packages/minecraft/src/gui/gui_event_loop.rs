@@ -33,7 +33,10 @@ use std::{
 		HashSet,
 		VecDeque,
 	},
-	sync::Arc,
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		Arc,
+	},
 	cell::RefCell,
 	time::{
 		UNIX_EPOCH,
@@ -47,11 +50,13 @@ use std::{
 	},
 	process::exit,
 	env,
+	cmp::max,
 };
 use winit::{
     event_loop::{
     	ControlFlow,
     	EventLoop,
+    	EventLoopProxy,
     },
     window::{
     	Window,
@@ -123,6 +128,21 @@ impl EventLoopEffectQueue {
 	}
 }
 
+#[derive(Clone)]
+pub struct GuiUserEventNotify(Arc<NotifyInner>);
+
+struct NotifyInner {
+	notified: AtomicBool,
+	event_loop: EventLoopProxy<()>,
+}
+
+impl GuiUserEventNotify {
+	pub fn notify(&self) {
+		if !self.0.notified.swap(true, Ordering::SeqCst) {
+			let _ = self.0.event_loop.send_event(());
+		}
+	}
+}
 
 struct State {
 	effect_queue: RefCell<EventLoopEffectQueue>,
@@ -307,6 +327,11 @@ impl GuiEventLoop {
 		data_dir: DataDir,
 		game: Arc<GameData>,
 	) -> ! {
+		let notify = GuiUserEventNotify(Arc::new(NotifyInner {
+			notified: AtomicBool::new(false),
+			event_loop: self.event_loop.create_proxy(),
+		}));
+
 		// decide what FPS to try and render at
 		const MIN_AUTO_MILLIHERTZ: u32 = 1000 * 60;
 		let millihertz = self.event_loop.available_monitors()
@@ -331,7 +356,8 @@ impl GuiEventLoop {
 		let mut prev_update_time = None;
 		let mut fps_queue = VecDeque::new();
 
-		let mut frame_is_happening: bool = true;
+		let mut frame_is_happening = true;
+		let mut user_event_stop_at = Instant::now();
 		
 		let result = self.event_loop.run(move |event, target| {
 			trace!(?event, "winit event");
@@ -528,6 +554,12 @@ impl GuiEventLoop {
 					}
 					_ => (),
 				}
+				Event::UserEvent(()) => {
+					state.with_ctx(|ctx| {
+						notify.0.notified.store(false, Ordering::SeqCst);
+						stack.top().poll_user_events(ctx, user_event_stop_at, &notify);
+					});
+				}
 				Event::AboutToWait => if frame_is_happening {
 					state.with_ctx(|ctx| {
 						// TODO: kinda awkward to just have this right here
@@ -593,6 +625,18 @@ impl GuiEventLoop {
 							.borrow_mut()
 							.draw_frame(&frame_content)
 							.expect("failed to draw frame");
+
+						let finished_render_time = Instant::now();
+						let frame_took = finished_render_time - (state.next_frame_target - state.frame_duration_target);
+						user_event_stop_at = max(
+							finished_render_time + frame_took / 2,
+							state.next_frame_target,
+						);
+
+						state.with_ctx(|ctx| {
+							notify.0.notified.store(false, Ordering::SeqCst);
+							stack.top().poll_user_events(ctx, user_event_stop_at, &notify);
+						});
 					});
 				},
 				Event::LoopExiting => {

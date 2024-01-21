@@ -13,8 +13,12 @@ use crate::gui::{
 		GuiVisitorTarget,
 		GuiVisitor,
 	},
+    gui_event_loop::GuiUserEventNotify,
 };
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    time::Instant,
+};
 use vek::*;
 
 
@@ -59,6 +63,41 @@ pub trait GuiStateFrame: Debug {
     /// by a call to `update`.
     #[allow(unused_variables)]
     fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {}
+
+    /// The gui should enter a loop of polling for and processing user events.
+    ///
+    /// If this gui does not have a concept of user events it can ignore this.
+    ///
+    /// This exists to facilitate the pattern of a gui having channels from
+    /// which it asynchronously receives and processes events from other
+    /// threads. When this method is called, the implementor should enter a
+    /// loop to poll for and process these events until either no event can be
+    /// retrieved without blocking or until `Instant::now()` reaches `stop_at`.
+    ///
+    /// If the loop terminates because no more events can be found without
+    /// blocking, `notify` may be hooked up to the channel to tell the event
+    /// loop when more events may be available. This is useful because it is
+    /// uniquely capable of waking up the event loop while it is sleeping.
+    ///
+    /// To prevent race conditions when doing so, it may be necessary to poll
+    /// once more _after_ hooking up notify as a callback.
+    ///
+    /// In addition to this method being called in response to `notify` being
+    /// used, it is also always called immediately after drawing a frame. This
+    /// makes this system nicely "self-healing" from states where the notifier
+    /// may not have gotten hooked properly, such as during gui state
+    /// transitions.
+    ///
+    /// The gui event loop chooses a `stop_at` value to maintain performance
+    /// for both drawing frames and processing user events and to prevent
+    /// either from starving the other.
+    #[allow(unused_variables)]
+    fn poll_user_events(
+        &mut self,
+        ctx: &GuiWindowContext,
+        stop_at: Instant,
+        notify: &GuiUserEventNotify,
+    ) {}
 
     /// Called upon the window's focus level changing, except when caused by
     /// the window explicitly asking for that to happen.

@@ -107,6 +107,7 @@ pub use self::{
     gui_event_loop::{
         GuiEventLoop,
         EventLoopEffectQueue,
+        GuiUserEventNotify,
     },
     clipboard::Clipboard,
 };
