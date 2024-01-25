@@ -4,10 +4,14 @@ use crate::{
     util_abort_handle::AbortHandle,
     util_callback_cell::CallbackCell,
     client::ClientEvent,
+    gui::GuiUserEventNotify,
 };
 use std::sync::Arc;
 use tokio::sync::OwnedSemaphorePermit;
-use crossbeam::queue::SegQueue;
+use crossbeam::{
+    queue::SegQueue,
+    sync::Parker,
+};
 
 
 /// Priority level. Variants decrease in priority.
@@ -88,5 +92,32 @@ impl ClientReceiver {
     /// Put the callback to be run once after next time an event is sent into the channel.
     pub fn put_callback<F: FnOnce() + Send + 'static>(&self, callback: F) {
         self.0.callback.put(callback);
+    }
+
+    /// Convenience method poll and block until an event is found.
+    pub fn poll_blocking(&self) -> ClientEvent {
+        if let Some(event) = self.poll() {
+            return event;
+        }
+        let parker = Parker::new();
+        loop {
+            let unparker = parker.unparker().clone();
+            self.put_callback(move || unparker.unpark());
+            if let Some(event) = self.poll() {
+                return event;
+            }
+            parker.park();
+        }
+    }
+
+    /// Convenience method to poll within a gui state frame context.
+    pub fn poll_gui(&self, gui_notify: &GuiUserEventNotify) -> Option<ClientEvent> {
+        if let Some(event) = self.poll() {
+            Some(event)
+        } else {
+            let gui_notify = gui_notify.clone();
+            self.put_callback(move || gui_notify.notify());
+            self.poll()
+        }
     }
 }
