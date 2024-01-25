@@ -502,9 +502,9 @@ impl ConnMgr {
             let clientside_player_idx = self.player_player_clientside_player_idx[pk2].remove(pk);
             self.player_clientside_players[pk2].remove(clientside_player_idx);
             self.connections[self.player_conn_idx[pk2]].connection
-                .send(DownMsg::RemovePlayer(DownMsgRemovePlayer {
+                .send(DownMsg::PreJoin(PreJoinDownMsg::RemovePlayer(DownMsgRemovePlayer {
                     player_idx: DownPlayerIdx(clientside_player_idx),
-                }));
+                })));
         }
     }
 }

@@ -29,7 +29,7 @@ pub(super) struct SendBufferPolicyEnforcer {
 impl SendBufferPolicyEnforcer {
     /// Called right before the message is transmitted.
     pub(super) fn pre_transmit(&self, msg: &DownMsg) {
-        if let &DownMsg::AddChunk(_) = msg {
+        if let &DownMsg::PreJoin(PreJoinDownMsg::AddChunk(_)) = msg {
             self.accept_more_chunks_budget.fetch_add(1, Ordering::SeqCst);
         }
     }

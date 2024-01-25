@@ -273,13 +273,15 @@ fn process_conn_mgr_effects(server: &mut Server) {
             }
             // add fully joined player to client
             ConnMgrEffect::AddPlayerToClient { add_to, to_add, clientside_player_idx } => {
-                server.sync_ctx.conn_mgr.send(add_to, DownMsg::AddPlayer(DownMsgAddPlayer {
-                    player_idx: DownPlayerIdx(clientside_player_idx),
-                    username: server.sync_ctx.conn_mgr.player_username(to_add).into(),
-                    pos: server.server_only.player_pos[to_add],
-                    yaw: server.server_only.player_yaw[to_add],
-                    pitch: server.server_only.player_pitch[to_add],
-                }));
+                server.sync_ctx.conn_mgr.send(add_to, DownMsg::PreJoin(PreJoinDownMsg::AddPlayer(
+                        DownMsgAddPlayer {
+                        player_idx: DownPlayerIdx(clientside_player_idx),
+                        username: server.sync_ctx.conn_mgr.player_username(to_add).into(),
+                        pos: server.server_only.player_pos[to_add],
+                        yaw: server.server_only.player_yaw[to_add],
+                        pitch: server.server_only.player_pitch[to_add],
+                    }
+                )));
             }
             // message from player
             ConnMgrEffect::PlayerMsg(pk, msg) => {
@@ -357,18 +359,22 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             }
             // download chunk to client
             ChunkMgrEffect::AddChunkToClient { cc, ci, pk, clientside_ci } => {
-                server.sync_ctx.conn_mgr.send(pk, DownMsg::AddChunk(DownMsgAddChunk {
-                    chunk_idx: DownChunkIdx(clientside_ci),
-                    cc,
-                    chunk_tile_blocks: server.sync_ctx.game
-                        .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
-                }));
+                server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::AddChunk(
+                    DownMsgAddChunk {
+                        chunk_idx: DownChunkIdx(clientside_ci),
+                        cc,
+                        chunk_tile_blocks: server.sync_ctx.game
+                            .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
+                    }
+                )));
             }
             // tell client to remove chunk
             ChunkMgrEffect::RemoveChunkFromClient { cc: _, ci: _, pk, clientside_ci } => {
-                server.sync_ctx.conn_mgr.send(pk, DownMsg::RemoveChunk(DownMsgRemoveChunk {
-                    chunk_idx: DownChunkIdx(clientside_ci),
-                }));
+                server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::RemoveChunk(
+                    DownMsgRemoveChunk {
+                        chunk_idx: DownChunkIdx(clientside_ci),
+                    }
+                )));
             }
         }
     }

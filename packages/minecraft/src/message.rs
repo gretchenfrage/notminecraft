@@ -76,14 +76,8 @@ pub enum DownMsg {
     /// messages to load parts of the world into the client. Once enough of the world is loaded,
     /// the client will receive a `ShouldJoinGame` message.
     AcceptLogIn,
-    /// Load a player into the client.
-    AddPlayer(DownMsgAddPlayer),
-    /// Remove a loaded player from the client.
-    RemovePlayer(DownMsgRemovePlayer),
-    /// Load a chunk into the client. When done, send back an `AcceptMoreChunks` message.
-    AddChunk(DownMsgAddChunk),
-    /// Remove a loaded chunk from the client.
-    RemoveChunk(DownMsgRemoveChunk),
+    /// Message that client can process once logged in but possibly still before joining game.
+    PreJoin(PreJoinDownMsg),
     /// Part of connection initialization flow.
     ///
     /// When the client receives this, when ready, the client should send a `JoinGame` message.
@@ -97,6 +91,19 @@ pub enum DownMsg {
     /// Acknowledge having fully processed messages from client up to and including message number
     /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
     Ack { last_processed: u64 },
+}
+
+/// Message that client can process once logged in but possibly still before joining game.
+#[derive(Debug, GameBinschema)]
+pub enum PreJoinDownMsg {
+    /// Load a player into the client.
+    AddPlayer(DownMsgAddPlayer),
+    /// Remove a loaded player from the client.
+    RemovePlayer(DownMsgRemovePlayer),
+    /// Load a chunk into the client. When done, send back an `AcceptMoreChunks` message.
+    AddChunk(DownMsgAddChunk),
+    /// Remove a loaded chunk from the client.
+    RemoveChunk(DownMsgRemoveChunk),
     /// Apply an edit to a loaded part of the world.
     ApplyEdit(Edit),
 }

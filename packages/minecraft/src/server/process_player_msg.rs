@@ -35,14 +35,16 @@ impl Process for PlayerMsgSetCharState {
         world.server_only.player_pitch[pk] = pitch;
 
         for pk2 in world.sync_ctx.conn_mgr.players().iter() {
-            world.sync_ctx.conn_mgr.send(pk2, DownMsg::ApplyEdit(Edit::SetPlayerCharState {
-                player_idx: DownPlayerIdx(
-                    world.sync_ctx.conn_mgr.player_to_clientside(pk, pk2)
-                ),
-                pos,
-                yaw,
-                pitch,
-            }));
+            world.sync_ctx.conn_mgr.send(pk2, DownMsg::PreJoin(PreJoinDownMsg::ApplyEdit(
+                Edit::SetPlayerCharState {
+                    player_idx: DownPlayerIdx(
+                        world.sync_ctx.conn_mgr.player_to_clientside(pk, pk2)
+                    ),
+                    pos,
+                    yaw,
+                    pitch,
+                }
+            )));
         }
     }
 }

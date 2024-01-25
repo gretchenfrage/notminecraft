@@ -115,11 +115,13 @@ impl<'a> SyncWriteTile<'a> {
         // send update to all clients with the chunk loaded
         for (pk, clientside_ci) in self.iter_clients() {
             self.inner.ctx.conn_mgr
-                .send(pk, DownMsg::ApplyEdit(Edit::SetTileBlock {
-                    chunk_idx: clientside_ci,
-                    lti: self.lti,
-                    bid_meta: self.inner.ctx.game.clone_erased_tile_block(&bid_meta),
-                }));
+                .send(pk, DownMsg::PreJoin(PreJoinDownMsg::ApplyEdit(
+                    Edit::SetTileBlock {
+                        chunk_idx: clientside_ci,
+                        lti: self.lti,
+                        bid_meta: self.inner.ctx.game.clone_erased_tile_block(&bid_meta),
+                    }
+                )));
         }
 
         // mark chunk as unsaved
