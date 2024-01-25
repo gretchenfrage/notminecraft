@@ -94,7 +94,7 @@ impl ClientReceiver {
         self.0.callback.put(callback);
     }
 
-    /// Convenience method poll and block until an event is found.
+    /// Convenience method to poll and block until an event is found.
     pub fn poll_blocking(&self) -> ClientEvent {
         if let Some(event) = self.poll() {
             return event;

@@ -16,7 +16,7 @@ pub enum UpMsg {
     /// if accepted.
     LogIn(UpMsgLogIn),
     /// Message that client may merely need to be logged in to send, rather than fully joined.
-    PreJoinMsg(PreJoinMsg),
+    PreJoin(PreJoinUpMsg),
     /// Part of connection initialization flow.
     ///
     /// Adds the client fully to the game world, and triggers a `FinalizeJoinGame` message
@@ -34,7 +34,7 @@ pub struct UpMsgLogIn {
 
 /// Message that client may merely need to be logged in to send, rather than fully joined.
 #[derive(Debug, GameBinschema)]
-pub enum PreJoinMsg {
+pub enum PreJoinUpMsg {
     /// Manages client-to-server backpressure for loading additional chunks.
     ///
     /// Should be sent after `AddChunk` is fully processed. "Fully processed" may include client-

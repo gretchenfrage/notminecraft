@@ -155,7 +155,7 @@ pub enum ConnMgrEffect {
         aborted: AbortHandle,
     },
     /// Process an pre join message from an existing player.
-    PreJoinMsg(PlayerKey, PreJoinMsg),
+    PreJoinMsg(PlayerKey, PreJoinUpMsg),
     /// A previously added player is now joining the game. Initialize it in `PerJoinedPlayer`
     /// structures.
     ///
@@ -309,7 +309,7 @@ impl ConnMgr {
             UpMsg::LogIn(msg) => {
                 self.try_handle_log_in(conn_idx, msg)
             }
-            UpMsg::PreJoinMsg(msg) => {
+            UpMsg::PreJoin(msg) => {
                 self.try_handle_pre_join_msg(conn_idx, msg)
             }
             UpMsg::JoinGame => {
@@ -375,7 +375,7 @@ impl ConnMgr {
 
     // internal method to try to process a pre join message from a non-killed connection. error
     // indicates that the network connection should be terminated.
-    fn try_handle_pre_join_msg(&mut self, conn_idx: usize, msg: PreJoinMsg) -> Result<()> {
+    fn try_handle_pre_join_msg(&mut self, conn_idx: usize, msg: PreJoinUpMsg) -> Result<()> {
         // prepare and validate
         let pk = self.connections[conn_idx].pk
             .ok_or_else(|| anyhow!("wrong time to send pre join msg"))?;

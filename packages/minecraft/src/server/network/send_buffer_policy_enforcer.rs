@@ -37,7 +37,7 @@ impl SendBufferPolicyEnforcer {
     /// Called right after the message is received. If errors, send buffer policies were violated
     /// and the connection should be killed.
     pub(super) fn post_receive(&self, msg: &UpMsg) -> Result<()> {
-        if let &UpMsg::PreJoinMsg(PreJoinMsg::AcceptMoreChunks(n)) = msg {
+        if let &UpMsg::PreJoin(PreJoinUpMsg::AcceptMoreChunks(n)) = msg {
             let pre_sub = self.accept_more_chunks_budget.fetch_sub(n as u64, Ordering::SeqCst);
             if n as u64 > pre_sub {
                 bail!("client violated accept more chunks buffer policy");

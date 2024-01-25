@@ -318,10 +318,10 @@ fn process_conn_mgr_effects(server: &mut Server) {
 }
 
 // process a received pre join msg
-fn process_pre_join_msg(server: &mut Server, pk: PlayerKey, msg: PreJoinMsg) {
+fn process_pre_join_msg(server: &mut Server, pk: PlayerKey, msg: PreJoinUpMsg) {
     match msg {
         // relieve chunk load backpressure
-        PreJoinMsg::AcceptMoreChunks(n) => {
+        PreJoinUpMsg::AcceptMoreChunks(n) => {
             let MustDrain = server.sync_ctx.chunk_mgr.increase_client_add_chunk_budget(pk, n);
             process_chunk_mgr_effects(server);
         }
