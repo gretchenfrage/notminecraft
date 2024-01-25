@@ -3,8 +3,14 @@
 use super::*;
 use crate::{
     server::ServerEvent,
-    dyn_flex_channel::{self, *},
-    client::connection::ConnectionEvent,
+    client::{
+        channel::{
+            ClientSender,
+            EventPriority as ClientEventPriority,
+        },
+        network::NetworkEvent as ClientNetworkEvent,
+        ClientEvent,
+    },
 };
 use std::{
     sync::Arc,
@@ -26,8 +32,6 @@ pub(super) struct Connection(Arc<Mutex<Option<AliveState>>>);
 pub struct InMemClient {
     // shared state
     shared: Arc<Mutex<Option<AliveState>>>,
-    // receiver for down-going client ConnectionEvent
-    recv_down: DynFlexReceiver,
 }
 
 // shared lockable state that's kept iff the in-mem connection is alive
@@ -36,13 +40,15 @@ struct AliveState {
     ns_shared: Arc<NetworkServerSharedState>,
     // connection index
     conn_idx: usize,
-    // sender for down-going client ConnectionEvent
-    send_down: DynFlexSender,
+    // sender for down-going client network event
+    client_send: ClientSender,
 }
 
 // create an in-mem client for the server
-pub(super) fn create(ns_shared: &Arc<NetworkServerSharedState>) -> InMemClient {
-    let (send_down, recv_down) = dyn_flex_channel::channel();
+pub(super) fn create(
+    ns_shared: &Arc<NetworkServerSharedState>,
+    client_send: ClientSender,
+) -> InMemClient {
     let shared = Arc::new(Mutex::new(None));
     let slab_entry = super::SlabEntry::InMem(SlabEntry(Arc::clone(&shared)));
     let connection = super::Connection(ConnectionInner::InMem(Connection(Arc::clone(&shared))));
@@ -54,19 +60,20 @@ pub(super) fn create(ns_shared: &Arc<NetworkServerSharedState>) -> InMemClient {
         *shared_lock = Some(AliveState {
             ns_shared: Arc::clone(ns_shared),
             conn_idx,
-            send_down,
+            client_send,
         });
         drop(shared_lock);
     } else {
         // this case happens if the whole network server has been dropped
-        send_down.send(
-            Box::new(ConnectionEvent::Closed(Some("server closed".to_owned()))),
+        client_send.send(
+            ClientEvent::Network(ClientNetworkEvent::Closed(Some("server closed".to_owned()))),
+            ClientEventPriority::Network,
             None,
             None,
         );
     }
 
-    InMemClient { shared, recv_down }
+    InMemClient { shared }
 }
 
 impl SlabEntry {
@@ -81,7 +88,12 @@ impl Connection {
     pub(super) fn send(&self, msg: DownMsg) {
         let alive_lock = self.0.lock();
         if let &Some(ref alive_state) = &*alive_lock {
-            alive_state.send_down.send(Box::new(ConnectionEvent::Received(msg)), None, None);
+            alive_state.client_send.send(
+                ClientEvent::Network(ClientNetworkEvent::Received(msg)),
+                ClientEventPriority::Network,
+                None,
+                None,
+            );
         } else {
             trace!("server send msg to closed in-mem connection");
         }
@@ -106,11 +118,6 @@ impl InMemClient {
             );
         }
     }
-
-    /// See corresponding method on client `Connection`.
-    pub fn receiver(&self) -> &DynFlexReceiver {
-        &self.recv_down
-    }
 }
 
 impl Drop for InMemClient {
@@ -130,9 +137,10 @@ fn kill(
         if tell_server_dead {
             destroy_conn(&alive_state.ns_shared, alive_state.conn_idx);
         }
-        if let Some(tell_client_dead) = tell_client_dead {
-            alive_state.send_down.send(
-                Box::new(ConnectionEvent::Closed(Some(tell_client_dead.to_owned()))),
+        if let Some(close_frame) = tell_client_dead {
+            alive_state.client_send.send(
+                ClientEvent::Network(ClientNetworkEvent::Closed(Some(close_frame.to_owned()))),
+                ClientEventPriority::Network,
                 None,
                 None,
             );

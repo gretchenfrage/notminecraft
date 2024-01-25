@@ -11,9 +11,6 @@ use std::{
     },
 };
 
-
-// like an `Atomic<Option<Box<dyn FnOnce() + Send + 'static>>>`
-//
 // internals
 // ---------
 //
@@ -27,16 +24,17 @@ use std::{
 //   - deallocates the heap allocation
 // - padding
 // - the `F: FnOnce() + Send + 'static` value
-//
+
+/// Like an `Atomic<Option<Box<dyn FnOnce() + Send + 'static>>>`.
 pub struct CallbackCell(AtomicUsize);
 
 impl CallbackCell {
-    // initialize with no callback
+    /// Construct with no callback.
     pub fn new() -> Self {
         CallbackCell(AtomicUsize::new(0))
     }
 
-    // atomically set the callback
+    /// Atomically set the callback.
     pub fn put<F: FnOnce() + Send + 'static>(&self, f: F) {
         unsafe {
             // allocate and initialize heap allocation
@@ -54,7 +52,7 @@ impl CallbackCell {
         }
     }
 
-    // atomically take the callback then run it
+    /// Atomically take the callback then run it.
     pub fn take_call(&self) {
         unsafe {
             // atomic take

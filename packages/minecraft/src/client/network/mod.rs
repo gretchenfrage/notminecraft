@@ -5,8 +5,11 @@ mod ws;
 use crate::{
     message::*,
     game_data::GameData,
-    dyn_flex_channel::DynFlexReceiver,
     server::network::InMemClient,
+    client::channel::{
+        ClientSender,
+        EventPriority,
+    },
 };
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -24,8 +27,9 @@ enum ConnectionInner {
     InMem(InMemClient),
 }
 
-/// Message received from `Connection.receiver()`.
-pub enum ConnectionEvent {
+/// Network event for client.
+#[derive(Debug)]
+pub enum NetworkEvent {
     /// Message received from connection.
     Received(DownMsg),
     /// Connection closed. No further connection events will occur after this. May contain message
@@ -39,8 +43,13 @@ impl Connection {
     /// Returns immediately without blocking or erroring, spawning a task to initialize the
     /// connection in the background. If that initialization fails, will simply appear as the
     /// connection closing.
-    pub fn connect(url: &str, rt: &Handle, game: &Arc<GameData>) -> Self {
-        Connection(ConnectionInner::Ws(ws::Connection::connect(url, rt, game)))
+    pub fn connect(
+        url: &str,
+        client_send: ClientSender,
+        rt: &Handle,
+        game: &Arc<GameData>,
+    ) -> Self {
+        Connection(ConnectionInner::Ws(ws::Connection::connect(url, client_send, rt, game)))
     }
 
     /// Wrap around a server in-mem client.
@@ -53,14 +62,6 @@ impl Connection {
         match &self.0 {
             &ConnectionInner::Ws(ref inner) => inner.send(msg.into()),
             &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
-        }
-    }
-
-    /// Get the dyn flex receiver. Will produce `ConnectionEvent`.
-    pub fn receiver(&self) -> &DynFlexReceiver {
-        match &self.0 {
-            &ConnectionInner::Ws(ref inner) => inner.receiver(),
-            &ConnectionInner::InMem(ref inner) => inner.receiver(),
         }
     }
 }

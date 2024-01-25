@@ -6,6 +6,7 @@ use crate::{
         channel::*,
         ServerEvent,
     },
+    client::channel::ClientSender,
     message::*,
 };
 use std::{
@@ -132,8 +133,8 @@ impl NetworkServerHandle {
     /// Construct a new in-memory client. See `InMemClient`. This directly causes a single add
     /// connection network event, with the given connection object being the server-side half of
     /// this in-mem client.
-    pub fn in_mem_client(&self) -> InMemClient {
-        in_mem::create(&self.0)
+    pub fn in_mem_client(&self, client_send: ClientSender) -> InMemClient {
+        in_mem::create(&self.0, client_send)
     }
 }
 

@@ -3,10 +3,9 @@
 
 use super::*;
 use crate::{
-    dyn_flex_channel::{
-        self,
-        DynFlexSender,
-        DynFlexReceiver,
+    client::{
+        channel::ClientSender,
+        ClientEvent,
     },
     message::*,
     game_data::GameData,
@@ -85,8 +84,6 @@ const SEND_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) struct Connection {
     // sender for queue of messages to be transmitted to server
     send_send: UnboundedSender<UpMsg>,
-    // receiver of ConnectionEvent
-    recv_recv: DynFlexReceiver,
     // connection-level shared state
     shared: Arc<ConnShared>,
 }
@@ -105,27 +102,26 @@ struct ConnShared {
 impl Connection {
     // initiate connection. returns immediately and has the connection initialize in the
     // background, closing the connection if that process fails.
-    pub(super) fn connect(url: &str, rt: &Handle, game: &Arc<GameData>) -> Self {
+    pub(super) fn connect(
+        url: &str,
+        client_send: ClientSender,
+        rt: &Handle,
+        game: &Arc<GameData>,
+    ) -> Self {
         let (send_send, recv_send) = unbounded_channel();
-        let (send_recv, recv_recv) = dyn_flex_channel::channel();
         let shared_1 = Arc::new(ConnShared {
             shutdown_recv: Notify::new(),
             shutdown_send: Notify::new(),
             game: Arc::clone(game),
         });
         let shared_2 = Arc::clone(&shared_1);
-        rt.spawn(recv_task(url.to_owned(), recv_send, send_recv, rt.clone(), shared_1));
-        Connection { send_send, recv_recv, shared: shared_2 }
+        rt.spawn(recv_task(url.to_owned(), recv_send, client_send, rt.clone(), shared_1));
+        Connection { send_send, shared: shared_2 }
     }
 
     // see outer type
     pub(super) fn send(&self, msg: UpMsg) {
         let _ = self.send_send.send(msg);
-    }
-
-    // see outer type
-    pub(super) fn receiver(&self) -> &DynFlexReceiver {
-        &self.recv_recv
     }
 }
 
@@ -139,7 +135,7 @@ impl Drop for Connection {
 async fn recv_task(
     url: String,
     recv_send: UnboundedReceiver<UpMsg>,
-    send_recv: DynFlexSender,
+    client_send: ClientSender,
     rt: Handle,
     shared: Arc<ConnShared>,
 ) {
@@ -148,10 +144,11 @@ async fn recv_task(
         Ok(url) => url,
         Err(e) => {
             error!(%e, ?url, "error parsing url");
-            send_recv.send(
-                Box::new(ConnectionEvent::Closed(Some(
+            client_send.send(
+                ClientEvent::Network(NetworkEvent::Closed(Some(
                     format!("invalid url: {}", e)
                 ))),
+                EventPriority::Network,
                 None,
                 None,
             );
@@ -182,10 +179,11 @@ async fn recv_task(
         Err(e) => {
             // close connection on failure
             error!(%e, "error establishing ws connection");
-            send_recv.send(
-                Box::new(ConnectionEvent::Closed(Some(
+            client_send.send(
+                ClientEvent::Network(NetworkEvent::Closed(Some(
                     format!("unable to connect: {}", e)
                 ))),
+                EventPriority::Network,
                 None,
                 None,
             );
@@ -208,8 +206,9 @@ async fn recv_task(
             Err(e) => {
                 // close connection _elegantly_ on failure
                 error!(%e, "error in ws-binschema handshake (closing connection)");
-                send_recv.send(
-                    Box::new(ConnectionEvent::Closed(Some(e.to_string()))),
+                client_send.send(
+                    ClientEvent::Network(NetworkEvent::Closed(Some(e.to_string()))),
+                    EventPriority::Network,
                     None,
                     None,
                 );
@@ -230,7 +229,7 @@ async fn recv_task(
         &mut ws_recv,
         &shared,
         send_pong,
-        &send_recv,
+        &client_send,
         down_schema,
     );
     let closed_event = select_biased! {
@@ -246,14 +245,14 @@ async fn recv_task(
                 Ok(never) => match never {},
             };
             error!(%e, "recv loop error (closing connection)");
-            Some(ConnectionEvent::Closed(Some(e.to_string())))
+            Some(ClientEvent::Network(NetworkEvent::Closed(Some(e.to_string()))))
         }
     };
 
     // shut down elegantly
     shared.shutdown_send.notify_one();
     if let Some(closed_event) = closed_event {
-        send_recv.send(Box::new(closed_event), None, None);
+        client_send.send(closed_event, EventPriority::Network, None, None);
     }
 }
 
@@ -377,7 +376,7 @@ async fn recv_loop<W>(
     ws: &mut W,
     shared: &Arc<ConnShared>,
     send_pong: Sender<Vec<u8>>,
-    send_recv: &DynFlexSender,
+    client_send: &ClientSender,
     down_schema: Schema,
 ) -> Result<Infallible, Error>
 where
@@ -440,7 +439,12 @@ where
             .acquire_many_owned(msg_size as u32).await.unwrap();
 
         // deliver received message to user
-        send_recv.send(Box::new(ConnectionEvent::Received(msg)), None, Some(permit));
+        client_send.send(
+            ClientEvent::Network(NetworkEvent::Received(msg)),
+            EventPriority::Network,
+            None,
+            Some(permit),
+        );
     }
 }
 

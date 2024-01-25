@@ -1,12 +1,16 @@
 //! The client.
 
-pub mod connection;
+pub mod channel;
+pub mod network;
 pub mod per_player;
 pub mod client_loaded_chunks;
 pub mod chunk_mesh;
 
 use self::{
-    connection::Connection,
+    network::{
+        Connection,
+        NetworkEvent,
+    },
     client_loaded_chunks::ClientLoadedChunks,
     per_player::*,
     chunk_mesh::ChunkMeshState,
@@ -17,6 +21,15 @@ use crate::{
 use chunk_data::*;
 use vek::*;
 
+/// Asynchronous event sent to the client from some other thread. See the `channel` module.
+#[derive(Debug)]
+pub enum ClientEvent {
+    /// Only processed when the client state is still initializing in a background thread. Aborts
+    /// that background thread.
+    AbortInit,
+    /// See inner type docs.
+    Network(NetworkEvent),
+}
 
 pub struct PreJoinClient {
     /// Connection to the server.
