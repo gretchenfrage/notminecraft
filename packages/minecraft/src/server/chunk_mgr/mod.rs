@@ -50,6 +50,12 @@ pub struct ChunkMgr {
     chunk_load_request_count: PerChunk<NonZeroU64>,
     // chunks which are pending being loaded
     loading_chunks: HashMap<Vec3<i64>, LoadingChunk>,
+    // for each player, number of chunk client interests
+    player_num_interest: PerPlayer<u64>,
+    // for each player, number of chunks loaded onto client
+    player_num_loaded: PerPlayer<u64>,
+    // for each player, whether a `ConsiderSendShouldJoinGame` effect was produced.
+    player_considered_send_should_join_game: PerPlayer<bool>,
 }
 
 // chunk pending being loaded by the chunk loader
@@ -103,6 +109,9 @@ pub enum ChunkMgrEffect {
         pk: PlayerKey,
         clientside_ci: usize,
     },
+    /// Chunk mgr approves of send the client a `ShouldJoinGame` message (whereas it previously did
+    /// not). If all other relevant systems approve, should do so.
+    ConsiderSendShouldJoinGame(PlayerKey),
 }
 
 impl ChunkMgr {
@@ -126,6 +135,9 @@ impl ChunkMgr {
         // initialize player state with defaults
         self.player_clientside_chunks.insert(pk, Default::default());
         self.player_add_chunk_mgr.insert(pk, ClientAddChunkMgr::new(&self.chunks));
+        self.player_num_interest.insert(pk, 0);
+        self.player_num_loaded.insert(pk, 0);
+        self.player_considered_send_should_join_game.insert(pk, false);
 
         for (cc, ci) in self.chunks.iter() {
             self.chunk_player_clientside_ci.get_mut(cc, ci).insert(pk, None);
@@ -152,6 +164,9 @@ impl ChunkMgr {
         // remove player state
         self.player_clientside_chunks.remove(pk);
         self.player_add_chunk_mgr.remove(pk);
+        self.player_num_interest.remove(pk);
+        self.player_num_loaded.remove(pk);
+        self.player_considered_send_should_join_game.remove(pk);
 
         for (cc, ci) in self.chunks.iter() {
             self.chunk_player_clientside_ci.get_mut(cc, ci).remove(pk);
@@ -253,11 +268,12 @@ impl ChunkMgr {
     ) -> MustDrain {
         // first, increment the load request count
         let MustDrain = self.incr_load_request_count(cc, players);
+        self.player_num_interest[pk] += 1;
 
         if let Some(ci) = self.chunks.getter().get(cc) {
             // if the chunk is already loaded, add it to the client, modulo add chunk to client
             // rate limiting
-            self.maybe_add_chunk_to_client(cc, ci, pk);
+            let MustDrain = self.maybe_add_chunk_to_client(cc, ci, pk);
         } else {
             // if the chunk is still being loaded, mark the client as interested in it when it's
             // ready.
@@ -283,9 +299,15 @@ impl ChunkMgr {
     pub fn increase_client_add_chunk_budget(&mut self, pk: PlayerKey, amount: u32) -> MustDrain {
         self.player_add_chunk_mgr[pk].increase_budget(amount);
         while let Some((cc, ci)) = self.player_add_chunk_mgr[pk].poll_queue() {
-            self.add_chunk_to_client(cc, ci, pk);
+            let MustDrain = self.add_chunk_to_client(cc, ci, pk);
         }
-        MustDrain
+        self.maybe_consider_send_should_join_game(pk)
+    }
+
+    /// Whether chunk mgr approves of sending the client a `ShouldJoinGame` message.
+    pub fn may_send_should_join_game(&self, pk: PlayerKey) -> bool {
+        self.player_num_interest[pk] == self.player_num_loaded[pk]
+            && self.player_add_chunk_mgr[pk].budget_full()
     }
 
     /// Call upon the result of a previously triggered chunk loading oepration being ready, unless
@@ -323,7 +345,7 @@ impl ChunkMgr {
         // limiting
         for pk in players.iter() {
             if loading_chunk.player_interest[pk] {
-                self.maybe_add_chunk_to_client(cc, ci, pk);
+                let MustDrain = self.maybe_add_chunk_to_client(cc, ci, pk);
             }
         }
 
@@ -345,17 +367,20 @@ impl ChunkMgr {
 
     // internal method for when it's time to add a loaded chunk to a client, or enqueue it to be
     // added to the client once the client's add chunk rate limitation permits it.
-    fn maybe_add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) {
+    fn maybe_add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) -> MustDrain {
         if self.player_add_chunk_mgr[pk].maybe_add_chunk_to_client(cc, ci) {
-            self.add_chunk_to_client(cc, ci, pk);
+            let MustDrain = self.add_chunk_to_client(cc, ci, pk);
         }
+        MustDrain
     }
 
     // internal method for when it's time to add a loaded chunk to a client.
-    fn add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) {
+    fn add_chunk_to_client(&mut self, cc: Vec3<i64>, ci: usize, pk: PlayerKey) -> MustDrain {
         let clientside_ci = self.player_clientside_chunks[pk].insert(());
         self.chunk_player_clientside_ci.get_mut(cc, ci)[pk] = Some(clientside_ci);
         self.effects.push_back(ChunkMgrEffect::AddChunkToClient { cc, ci, pk, clientside_ci });
+        self.player_num_loaded[pk] += 1;
+        self.maybe_consider_send_should_join_game(pk)
     }
 
     // internal method to remove a chunk client interest that lets the caller specify whether to
@@ -382,6 +407,7 @@ impl ChunkMgr {
                         pk,
                         clientside_ci,
                     });
+                    self.player_num_loaded[pk] -= 1;
                 } else {
                     // elsewise, it must be pending in the queue of chunks to be added to the
                     // client when rate limits permit it, so remove it from that queue
@@ -391,10 +417,24 @@ impl ChunkMgr {
                 // if the chunk is still loading, simply un-mark the client's interest.
                 loading_chunk.player_interest[pk] = false;
             }
+            // update this too
+            self.player_num_interest[pk] -= 1;
+            let MustDrain = self.maybe_consider_send_should_join_game(pk);
         }
 
         // decrement the load request count. this will handle possibly unloading the chunk from the
         // server or aborting a pending load request.
         self.decr_load_request_count(cc, players)
+    }
+
+    // internal method for when may_send_should_join_game may have become true for the first time
+    // for the given client.
+    fn maybe_consider_send_should_join_game(&mut self, pk: PlayerKey) -> MustDrain {
+        if !self.player_considered_send_should_join_game[pk]
+            && self.may_send_should_join_game(pk)
+        {
+            self.effects.push_back(ChunkMgrEffect::ConsiderSendShouldJoinGame(pk));
+        }
+        MustDrain
     }
 }

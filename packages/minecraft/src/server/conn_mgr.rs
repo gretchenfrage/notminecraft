@@ -156,6 +156,9 @@ pub enum ConnMgrEffect {
     },
     /// Process an pre join message from an existing player.
     PreJoinMsg(PlayerKey, PreJoinUpMsg),
+    /// Conn mgr approves of sending the client a `ShouldJoinGame` message (whereas it previously
+    /// did not). If all other relevant systems approve, should do so.
+    ConsiderSendShouldJoinGame(PlayerKey),
     /// A previously added player is now joining the game. Initialize it in `PerJoinedPlayer`
     /// structures.
     ///
@@ -388,16 +391,35 @@ impl ConnMgr {
 
     /// Call upon the result of a previously triggered player save state loading operation being
     /// ready, unless aborted.
-    pub fn on_player_save_state_ready(&mut self, pk: PlayerKey, save_val: Option<PlayerSaveVal>) {
+    pub fn on_player_save_state_ready(
+        &mut self,
+        pk: PlayerKey,
+        save_val: Option<PlayerSaveVal>,
+    ) -> MustDrain {
         // store
         self.player_load_save_state_state[pk] = PlayerLoadSaveStateState::Stashed(save_val);
 
-        // TODO
-        //
-        // in the future we'd like to also make it so that we wait for the chunk manager to be
-        // satisfied with a sufficient amount of chunks being loaded into the client before sending
-        // it this. but for now, we'll just tell the player to join as soon as their player save
-        // state is retrieved.
+        // may send should join game
+        self.effects.push_back(ConnMgrEffect::ConsiderSendShouldJoinGame(pk));
+        MustDrain
+    }
+
+    /// Whether conn mgr approves of sending the client a `ShouldJoinGame` message.
+    ///
+    /// Conn mgr tracks both whether it is an appropriate time to do so in terms of the
+    /// server/client flow, and other pre-requisites for doing so. Other systems may track
+    /// additional pre-requisites for doing so. When conn mgr or any other such system switches
+    /// from not approving of such to approving of such, at least the first time, it produces a
+    /// `ConsiderSendShouldJoinGame` event. That should be processed by checking whether _all_
+    /// relevant systems approve and, if so, calling `ConnMgr.send_should_join_game`.
+    pub fn may_send_should_join_game(&self, pk: PlayerKey) -> bool {
+        matches!(&self.player_load_save_state_state[pk], &PlayerLoadSaveStateState::Stashed(_))
+            && !self.connections[self.player_conn_idx[pk]].should_join_game
+    }
+
+    /// Send the client a `ShouldJoinGame` message. Assumes this and all other systems approve.
+    pub fn send_should_join_game(&mut self, pk: PlayerKey) {
+        debug_assert!(self.may_send_should_join_game(pk));
         self.connections[self.player_conn_idx[pk]].connection.send(DownMsg::ShouldJoinGame);
         self.connections[self.player_conn_idx[pk]].should_join_game = true;
     }

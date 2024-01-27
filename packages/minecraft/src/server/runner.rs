@@ -134,7 +134,9 @@ pub fn run(
                 }
                 // player save state ready
                 ServerEvent::PlayerSaveStateReady { pk, save_val } => {
-                    server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, save_val);
+                    let MustDrain =
+                        server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, save_val);
+                    process_conn_mgr_effects(&mut server);
                 }
                 // chunk ready
                 ServerEvent::ChunkReady { save_key, save_val, saved } => {
@@ -240,7 +242,8 @@ fn process_conn_mgr_effects(server: &mut Server) {
 
                 // request load
                 if let Some(save_val) = server.sync_ctx.save_mgr.take_unflushed_player(&save_key) {
-                    server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, Some(save_val));
+                    let MustDrain =
+                        server.sync_ctx.conn_mgr.on_player_save_state_ready(pk, Some(save_val));
                 } else {
                     server.server_only.player_save_state_loader.trigger_load(pk, save_key, aborted);
                 }
@@ -248,6 +251,12 @@ fn process_conn_mgr_effects(server: &mut Server) {
             // pre join message from player
             ConnMgrEffect::PreJoinMsg(pk, msg) => {
                 process_pre_join_msg(server, pk, msg);
+            }
+            // maybe send player ShouldJoinGame
+            ConnMgrEffect::ConsiderSendShouldJoinGame(pk) => {
+                if server.sync_ctx.chunk_mgr.may_send_should_join_game(pk) {
+                    server.sync_ctx.conn_mgr.send_should_join_game(pk);
+                }
             }
             // upgrade player key to joined player key
             ConnMgrEffect::BeginJoinPlayer { pk, save_state } => {
@@ -375,6 +384,12 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         chunk_idx: DownChunkIdx(clientside_ci),
                     }
                 )));
+            }
+            // maybe send player ShouldJoinGame
+            ChunkMgrEffect::ConsiderSendShouldJoinGame(pk) => {
+                if server.sync_ctx.conn_mgr.may_send_should_join_game(pk) {
+                    server.sync_ctx.conn_mgr.send_should_join_game(pk);
+                }
             }
         }
     }

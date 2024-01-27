@@ -127,6 +127,11 @@ impl ClientAddChunkMgr {
         self.budget += amount;
     }
 
+    /// Whether the budget is at / has recovered to its initial value.
+    pub fn budget_full(&self) -> bool {
+        self.budget == DEFAULT_BUDGET
+    }
+
     /// If the queue is non-empty and the budget allows a chunk to be added to
     /// the client now, update budget info and return the front of the queue.
     pub fn poll_queue(&mut self) -> Option<(Vec3<i64>, usize)> {
