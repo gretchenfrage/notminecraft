@@ -2,6 +2,7 @@
 use crate::{
     gui_state_multiplayer_menu::MultiplayerMenu,
     gui_state_about::AboutMenu,
+    gui_state_loading::LoadingMenu,
     asset::Assets,
     gui::prelude::*,
 	util_hex_color::hex_color,
@@ -136,8 +137,29 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    let _ = ctx;
-    debug!("unimplemented");
+    use crate::{
+        client::pre_join::{ServerLocation, join_in_background},
+        message::*,
+    };
+    let oneshot = join_in_background(
+        ctx.game.clone(),
+        ctx.thread_pool.clone(),
+        ServerLocation::Internal {
+            save_name: "server".to_owned(),
+            data_dir: ctx.data_dir.clone(),
+        },
+        UpMsgLogIn { username: "client".to_owned() },
+        ctx.renderer.borrow().create_async_gpu_vec_context(),
+    );
+    ctx.push_state_frame(LoadingMenu::new(ctx, oneshot));
+
+    /*use crate::gui_state_loading::LoadingOneshot;
+    struct NeverLoads;
+    impl LoadingOneshot for NeverLoads {
+        fn poll(&mut self) -> Option<Box<dyn GuiStateFrameObj>> { None }
+    }
+    ctx.push_state_frame(LoadingMenu::new(ctx, Box::new(NeverLoads)));*/
+
     //let save = SaveFile::open("server", ctx.data_dir, ctx.game).unwrap(); // TODO: don't panic
     //ctx.push_state_frame(Client::new_internal(save, ctx));
 }

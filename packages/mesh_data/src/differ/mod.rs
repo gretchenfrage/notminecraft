@@ -16,7 +16,10 @@ use graphics::{
         GpuVecElem,
     },
 };
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    fmt::{self, Formatter, Debug},
+};
 use slab::Slab;
 
 
@@ -106,7 +109,7 @@ impl From<PackedIdx> for VertexOrOuterIdx {
 
 // ==== the differ ====
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct MeshDiffer {
     outer: Slab<PackedIdxRepr<Option<VertexIdx>>>,
     
@@ -144,6 +147,20 @@ struct IndexElem {
 pub struct GpuVecDiff<I> {
     pub new_len: usize,
     pub writes: I,
+}
+
+impl Debug for MeshDiffer {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("MeshDiffer")
+            .field("outer.len()", &self.outer.len())
+            .field("vertices.len()", &self.vertices.len())
+            .field("vertices_holes.len()", &self.vertices_holes.len())
+            .field("vertices_writes.len()", &self.vertices_writes.len())
+            .field("triangles.len()", &self.triangles.len())
+            .field("triangles_holes.len()", &self.triangles_holes.len())
+            .field("indices_writes.len()", &self.indices_writes.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl MeshDiffer {

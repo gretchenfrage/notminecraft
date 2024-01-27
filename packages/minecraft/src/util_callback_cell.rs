@@ -59,8 +59,10 @@ impl CallbackCell {
             let ptr = self.0.swap(0, Ordering::SeqCst) as *mut u8;
 
             // run it
-            let fn_ptr = (ptr as *mut unsafe fn(bool, *mut u8)).read();
-            fn_ptr(true, ptr);
+            if !ptr.is_null() {
+                let fn_ptr = (ptr as *mut unsafe fn(bool, *mut u8)).read();
+                fn_ptr(true, ptr);
+            }
         }
     }
 }

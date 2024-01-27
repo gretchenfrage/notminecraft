@@ -30,6 +30,7 @@ pub mod game_binschema;
 pub mod gui_state_main_menu;
 pub mod gui_state_multiplayer_menu;
 pub mod gui_state_about;
+pub mod gui_state_loading;
 //pub mod save_file;
 pub mod thread_pool;
 pub mod settings;

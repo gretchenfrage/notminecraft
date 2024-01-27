@@ -16,6 +16,7 @@ use std::{
     marker::PhantomData,
     iter::once,
     mem::size_of,
+    fmt::{self, Formatter, Debug},
 };
 use wgpu::{
     *,
@@ -36,7 +37,7 @@ const INDEX_FORMAT: IndexFormat = IndexFormat::Uint32;
 
 /// Vector-like resizable and updatable array of elements on the GPU,
 /// comprising a GPU memory allocation, a length, and a capacity.
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct GpuVec<T> {
     buffer: Option<Buffer>,
     // NOTE: length is in elements, but capacity is in bytes
@@ -46,6 +47,14 @@ pub struct GpuVec<T> {
 
     #[cfg(debug_assertions)]
     dbg_content: Vec<Option<T>>,
+}
+
+impl<T: Debug> Debug for GpuVec<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("GpuVec")
+            .field("len", &self.len)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<T> GpuVec<T> {

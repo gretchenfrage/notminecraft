@@ -684,9 +684,14 @@ impl GuiEventLoop {
 				}
 			}
 		});
-		error!(?result, "event loop exited");
-		drop(result);
-		exit(0);
+		if let Err(e) = result {
+			error!(?e, "event loop errored");
+			drop(e);
+			exit(1);
+		} else {
+			println!("Goodbye!");
+			exit(0);
+		}
 	}
 }
 

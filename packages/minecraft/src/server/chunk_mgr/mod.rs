@@ -130,6 +130,9 @@ impl ChunkMgr {
         for (cc, ci) in self.chunks.iter() {
             self.chunk_player_clientside_ci.get_mut(cc, ci).insert(pk, None);
         }
+        for loading_chunk in self.loading_chunks.values_mut() {
+            loading_chunk.player_interest.insert(pk, false);
+        }
     }
 
     /// Call upon a player being removed from the world. We rely on the caller to provide the

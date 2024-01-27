@@ -49,6 +49,7 @@ pub enum ClientEvent {
     }
 }
 
+/// Client state that already exists in the pre-join state.
 pub struct PreJoinClient {
     /// Helps define game logic. See type docs.
     pub game: Arc<GameData>,

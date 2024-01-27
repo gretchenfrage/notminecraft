@@ -25,6 +25,7 @@ use std::{
     },
     thread::spawn,
     mem::replace,
+    iter::once,
 };
 use vek::*;
 use crossbeam::channel::{
@@ -203,6 +204,15 @@ impl ChunkMeshMgr {
         // if it's dirty, just patch it again right away
         if !self.chunk_dirty_tiles.get(cc, ci).is_empty() {
             self.patch_chunk(cc, ci, chunks, tile_blocks);
+        }
+    }
+
+    /// Call `mark_dirty` on `gtc` and its 6 face-neighbors if present.
+    pub fn mark_adj_dirty(&mut self, getter: &Getter, gtc: Vec3<i64>) {
+        for gtc in once(gtc).chain(FACES.map(|face| gtc + face.to_vec())) {
+            if let Some(tile) = getter.gtc_get(gtc) {
+                self.mark_dirty(tile);
+            }
         }
     }
 
@@ -424,8 +434,9 @@ impl ChunkMeshMgr {
             // build a fake world
             let mut chunks = LoadedChunks::new();
             let mut tile_blocks = PerChunk::new();
-            let ci = chunks.add(cc);
-            tile_blocks.add(cc, ci, chunk_tile_blocks);
+            let ci2 = chunks.add(cc);
+            debug_assert_eq!(ci2, 0);
+            tile_blocks.add(cc, ci2, chunk_tile_blocks);
 
             // mesh every tile not on the border
             let mut mesh_buf = MeshData::new();
@@ -438,7 +449,8 @@ impl ChunkMeshMgr {
                 // mesh the tile
                 let lti = ltc_to_lti(ltc);
                 debug_assert!(mesh_buf.is_empty());
-                mesh_tile(&mut mesh_buf, TileKey { cc, ci, lti }, &ctx.game, &getter, &tile_blocks);
+                let tile = TileKey { cc, ci: ci2, lti };
+                mesh_tile(&mut mesh_buf, tile, &ctx.game, &getter, &tile_blocks);
                 
                 // add the tile mesh to the chunk mesh
                 if !mesh_buf.is_empty() {
