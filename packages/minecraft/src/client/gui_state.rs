@@ -8,9 +8,11 @@ use crate::{
         *,
     },
     message::*,
+    physics::prelude::*,
     gui::prelude::*,
 };
 use graphics::prelude::*;
+use chunk_data::*;
 use std::{
     fmt::{self, Formatter, Debug},
     time::Instant,
@@ -138,6 +140,40 @@ impl GuiStateFrame for ClientGuiState {
             &self.0.pre_join.chunks,
             &self.0.pre_join.tile_blocks,
         );
+    }
+
+    fn on_key_press(
+        &mut self,
+        _: &GuiWindowContext,
+        key: PhysicalKey,
+        _: Option<TypingInput>,
+    ) {
+        trace!(?key, "key press");
+        if key == KeyCode::KeyP {
+            let getter = self.0.pre_join.chunks.getter();
+            let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
+            let looking_at = compute_looking_at(
+                self.0.pos,
+                rot * Vec3::new(0.0, 0.0, 1.0),
+                50.0,
+                &getter,
+                &self.0.pre_join.tile_blocks,
+                &self.0.pre_join.game,
+            );
+            if let Some(looking_at) = looking_at {
+                let offset = looking_at.face.map(|face| face.to_vec()).unwrap_or(0.into());
+                let gtc = looking_at.tile.gtc() + offset;
+                self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::SetTileBlock(
+                    PlayerMsgSetTileBlock {
+                        gtc,
+                        bid_meta: ErasedBidMeta::new(
+                            self.0.pre_join.game.content.stone.bid_stone,
+                            (),
+                        ),
+                    }
+                )));
+            }
+        }
     }
 
     fn poll_user_events(
