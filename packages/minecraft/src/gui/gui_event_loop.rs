@@ -425,6 +425,7 @@ impl GuiEventLoop {
 													'\r' => Some(TypingInput::Control(TypingControl::Enter)),
 													'\t' => Some(TypingInput::Control(TypingControl::Tab)),
 													'\u{7f}' => Some(TypingInput::Control(TypingControl::Delete)),
+													'\u{1b}' => None, // escape
 													c => {
 														debug!(?c, "ignoring unknown control character");
 														None
@@ -592,6 +593,8 @@ impl GuiEventLoop {
 									return;
 								}
 							}
+
+							// TODO: immediately process effects of updating before calling more methods on it
 						}
 
 						prev_update_time = Some(curr_update_time);
@@ -625,6 +628,7 @@ impl GuiEventLoop {
 							.borrow_mut()
 							.draw_frame(&frame_content)
 							.expect("failed to draw frame");
+						// TODO: immediately process effects of rendering before calling more methods on it
 
 						let finished_render_time = Instant::now();
 						let frame_took = finished_render_time - (state.next_frame_target - state.frame_duration_target);

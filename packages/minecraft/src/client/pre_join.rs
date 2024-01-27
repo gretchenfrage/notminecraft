@@ -4,6 +4,7 @@ use crate::{
     client::{
         channel::*,
         network::*,
+        gui_state::ClientGuiState,
         *,
     },
     message::*,
@@ -125,14 +126,14 @@ pub fn join_in_background(
             let event = match client.client_recv.poll() {
                 Some(event) => event,
                 None => {
-                    trace!("flushing chunk mesh before blocking");
+                    trace!("flushing chunk mesh (about to block)");
                     client.chunk_mesh_mgr.flush_dirty(&client.chunks, &client.tile_blocks);
                     flushed = Instant::now();
                     client.client_recv.poll_blocking()
                 }
             };
             if Instant::now() - flushed > Duration::from_millis(10) {
-                trace!("flushing chunk mesh (periodic)");
+                trace!("flushing chunk mesh (period elapsed)");
                 client.chunk_mesh_mgr.flush_dirty(&client.chunks, &client.tile_blocks);
                 flushed = Instant::now();
             }
@@ -175,16 +176,31 @@ pub fn join_in_background(
                 }
             }
         };
-        let _ = finalize_msg;
-        debug!("TODO enter the client state...");
+        info!("finalizing joining game");
+        let DownMsgFinalizeJoinGame { self_player_idx } = finalize_msg;
+        let self_pk = match client.players.lookup(self_player_idx) {
+            Ok(pk) => pk,
+            Err(e) => {
+                error!(%e, "server protocol violation");
+                todo!("handle this");
+            },
+        };
+        let client = Client {
+            pre_join: client,
+            self_pk,
+            pos: Vec3::new(16.0, 48.0, 16.0),
+            yaw: f32::to_radians(45.0),
+            pitch: f32::to_radians(45.0),
+        };
+        let _ = oneshot_1.push(Box::new(ClientGuiState(client)));
     });
     struct ClientLoadingOneshot {
-        oneshot: Arc<ArrayQueue<Box<dyn GuiStateFrameObj>>>,
+        oneshot: Arc<ArrayQueue<Box<ClientGuiState>>>,
         client_send: ClientSender,
     }
     impl LoadingOneshot for ClientLoadingOneshot {
         fn poll(&mut self) -> Option<Box<dyn GuiStateFrameObj>> {
-            self.oneshot.pop()
+            self.oneshot.pop().map(|b| b as _)
         }
     }
     impl Drop for ClientLoadingOneshot {

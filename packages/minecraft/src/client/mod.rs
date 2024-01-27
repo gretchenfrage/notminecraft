@@ -7,6 +7,7 @@ pub mod client_loaded_chunks;
 pub mod mesh_tile;
 pub mod chunk_mesh_mgr;
 pub mod pre_join;
+pub mod gui_state;
 
 use self::{
     channel::*,
@@ -77,4 +78,13 @@ pub struct PreJoinClient {
     pub player_pos: PerPlayer<Vec3<f32>>,
     pub player_yaw: PerPlayer<f32>,
     pub player_pitch: PerPlayer<f32>,
+}
+
+/// Client state once the client has joined the game.
+pub struct Client {
+    pub pre_join: PreJoinClient,
+    pub self_pk: PlayerKey,
+    pub pos: Vec3<f32>,
+    pub yaw: f32,
+    pub pitch: f32,
 }

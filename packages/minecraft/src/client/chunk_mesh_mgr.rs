@@ -26,6 +26,7 @@ use std::{
     thread::spawn,
     mem::replace,
     iter::once,
+    ops::Range,
 };
 use vek::*;
 use crossbeam::channel::{
@@ -144,7 +145,7 @@ impl ChunkMeshMgr {
         }
     }
 
-    /// Call upon a chunk being added to the world.
+    /// Call upon a chunk being added to the world. May interally call `self.mark_dirty()`.
     pub fn add_chunk(
         &mut self,
         cc: Vec3<i64>,
@@ -160,8 +161,9 @@ impl ChunkMeshMgr {
         self.chunk_dirty_tiles.add(cc, ci, Vec::new());
         self.chunk_dirty_meshed_idx.add(cc, ci, None);
         
-        // begin meshing the chunk
+        // trigger relevant meshing
         self.trigger_init_mesh(cc, ci, chunks, tile_blocks, aborted_2);
+        self.mark_chunk_adj_dirty(cc, ci, chunks);
     }
 
     /// Call upon the given chunk being removed from the world.
@@ -234,7 +236,9 @@ impl ChunkMeshMgr {
             dirty_tiles.push(tile.lti);
 
             // maybe mark chunk as dirty
-            if chunk_dirtied {
+            if chunk_dirtied
+                && matches!(self.chunk_mesh_state.get(tile.cc, tile.ci), &MeshState::Meshed(_))
+            {
                 let dirty_meshed_idx = self.dirty_meshed_chunks.len();
                 self.dirty_meshed_chunks.push((tile.cc, tile.ci));
                 *self.chunk_dirty_meshed_idx.get_mut(tile.cc, tile.ci) = Some(dirty_meshed_idx);
@@ -393,21 +397,14 @@ impl ChunkMeshMgr {
         let mut chunk_mesh = ChunkMesh::default();
         let getter = chunks.getter_pre_cached(cc, ci);
         for ltc in FACES_EDGES_CORNERS.into_iter()
-            .flat_map(|fec| {
-                let ranges = fec.to_signs()
-                    .zip(CHUNK_EXTENT)
-                    .map(|(sign, ext)| match sign {
-                        Sign::Neg => 0..1,
-                        Sign::Zero => 1..ext - 1,
-                        Sign::Pos => ext - 1..ext,
-                    });
-                ranges.z.flat_map(move |z| {
-                    let x_range = ranges.x.clone();
-                    ranges.y.clone()
-                        .flat_map(move |y| x_range.clone()
-                            .map(move |x| Vec3 { x, y, z }))
-                })
-            })
+            .flat_map(|fec| permute_ranges(fec
+                .to_signs()
+                .zip(CHUNK_EXTENT)
+                .map(|(sign, ext)| match sign {
+                    Sign::Neg => 0..1,
+                    Sign::Zero => 1..ext - 1,
+                    Sign::Pos => ext - 1..ext,
+                })))
         {
             let lti = ltc_to_lti(ltc);
             debug_assert!(self.mesh_buf.is_empty());
@@ -471,6 +468,27 @@ impl ChunkMeshMgr {
             ctx.client_send.send(event, EventPriority::Other, Some(aborted), None);
         });
     }
+
+    // marks dirty all tiles bordering on the new chunk, not including tiles in that chunk
+    fn mark_chunk_adj_dirty(&mut self, cc: Vec3<i64>, ci: usize, chunks: &ClientLoadedChunks) {
+        let getter = chunks.getter_pre_cached(cc, ci);
+        for face in FACES {
+            let cc2 = cc + face.to_vec();
+            if let Some(ci2) = getter.get(cc2) {
+                for ltc in permute_ranges(face
+                    .to_signs()
+                    .zip(CHUNK_EXTENT)
+                    .map(|(sign, ext)| match sign {
+                        Sign::Neg => ext - 1..ext,
+                        Sign::Zero => 0..ext,
+                        Sign::Pos => 0..1,
+                    }))
+                {
+                    self.mark_dirty(TileKey { cc: cc2, ci: ci2, lti: ltc_to_lti(ltc) });
+                }
+            }
+        }
+    }
 }
 
 impl Drop for ChunkMeshMgr {
@@ -500,4 +518,14 @@ fn patch_thread_body(
             let _ = send_res.send(msg);
         }
     }
+}
+
+// helper function
+fn permute_ranges(ranges: Vec3<Range<i64>>) -> impl Iterator<Item=Vec3<i64>> {
+    ranges.z.flat_map(move |z| {
+        let x_range = ranges.x.clone();
+        ranges.y.clone()
+            .flat_map(move |y| x_range.clone()
+                .map(move |x| Vec3 { x, y, z }))
+    })
 }
