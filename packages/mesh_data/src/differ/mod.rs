@@ -106,7 +106,7 @@ impl From<PackedIdx> for VertexOrOuterIdx {
 
 // ==== the differ ====
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MeshDiffer {
     outer: Slab<PackedIdxRepr<Option<VertexIdx>>>,
     
@@ -146,20 +146,9 @@ pub struct GpuVecDiff<I> {
     pub writes: I,
 }
 
-
 impl MeshDiffer {
     pub fn new() -> Self {
-        MeshDiffer {
-            outer: Slab::new(),
-
-            vertices: Vec::new(),
-            vertices_holes: VecDeque::new(),
-            vertices_writes: VecDeque::new(),
-
-            triangles: Vec::new(),
-            triangles_holes: VecDeque::new(),
-            indices_writes: VecDeque::new(),
-        }
+        Default::default()
     }
 
     pub fn add_submesh(&mut self, submesh: &MeshData) -> usize {

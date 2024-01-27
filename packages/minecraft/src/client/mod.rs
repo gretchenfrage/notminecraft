@@ -24,7 +24,6 @@ use self::{
 use crate::{
     server::runner::ServerThread,
     thread_pool::ThreadPool,
-    block_update_queue::BlockUpdateQueue,
     game_data::*,
 };
 use chunk_data::*;
@@ -65,15 +64,11 @@ pub struct PreJoinClient {
     pub thread_pool: ThreadPool,
     /// Handle for uploading data to the GPU asynchronously.
     pub gpu_vec_ctx: AsyncGpuVecContext,
-    // /// Services requests to asynchronously load new chunks in background.
-    // pub chunk_mesher: ChunkMesher,
 
     /// Client-side space of chunks.
     pub chunks: ClientLoadedChunks,
     pub tile_blocks: PerChunk<ChunkBlocks>,
-    // pub chunk_mesh_state: PerChunk<ChunkMeshState>,
-    // /// Only nonempty within an update.
-    // pub mesh_block_update_queue: BlockUpdateQueue,
+    pub chunk_mesh_mgr: ChunkMeshMgr,
 
     /// Client-side space of players.
     pub players: PlayerKeySpace,
