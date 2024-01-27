@@ -15,7 +15,6 @@ use vek::*;
 #[derive(Debug, Clone, Default)]
 pub struct ClientLoadedChunks {
     inner: LoadedChunks,
-    just_added: Option<(Vec3<i64>, usize)>,
 }
 
 impl ClientLoadedChunks {
@@ -29,31 +28,29 @@ impl ClientLoadedChunks {
         self.inner.getter()
     }
 
+    /// Create a getter with the given pre-cached (cc, ci).
+    pub fn getter_pre_cached(&self, cc: Vec3<i64>, ci: usize) -> Getter {
+        self.inner.getter_pre_cached(cc, ci)
+    }
+
     /// Call upon receiving an `AddChunk` message from the server.
     ///
-    /// Validates it and adds it to the chunk space. This should be followed by a call to
-    /// `on_add_chunk_result`, to get the allocated ci and a getter with the chunk pre-cached, then
-    /// by adding that to all `PerChunk` structures. The reason to split it up like that is because
-    /// this takes `&mut self`, whereas `on_add_chunk_result` only takes `&self`.
+    /// Validates it and adds it to the chunk space. This should be followed by calling `.get` on
+    /// the returned `JustAdded`, so as to get the allocated ci and a getter with the chunk
+    /// pre-cached in a way that requires only a shared reference to self, then by adding that to
+    /// all `PerChunk` structures.
     pub fn on_add_chunk(
         &mut self,
         chunk_idx: DownChunkIdx,
         cc: Vec3<i64>,
-    ) -> Result<()> {
+    ) -> Result<JustAdded> {
         let ci = self.inner.try_add(cc)
             .map_err(|e| match e {
                 AddChunkError::AlreadyLoaded => anyhow!("server add chunk with cc collision"),
                 AddChunkError::TooManyChunks => anyhow!("server added illegally many chunks"),
             })?;
         ensure!(ci == chunk_idx.0, "server add chunk did not follow slab pattern");
-        self.just_added = Some((cc, ci));
-        Ok(())
-    }
-
-    /// Get the output of the call to `on_add_chunk` that was just made. See `on_add_chunk`.
-    pub fn on_add_chunk_result(&self) -> (usize, Getter) {
-        let (cc, ci) = self.just_added.expect("invalid time to call just_added");
-        (ci, self.inner.getter_pre_cached(cc, ci))
+        Ok(JustAdded(cc, ci))
     }
 
     /// Call upon receiving a `RemoveChunk` message from the server.
@@ -61,7 +58,6 @@ impl ClientLoadedChunks {
     /// Validates it and removes it from the chunk space, returning the removed (cc, ci) pair. This
     /// should be followed by removing from all `PerChunk` structures.
     pub fn on_remove_chunk(&mut self, chunk_idx: DownChunkIdx) -> Result<(Vec3<i64>, usize)> {
-        self.just_added = None;
         let cc = self.inner.ci_to_cc(chunk_idx.0)
             .ok_or_else(|| anyhow!("server remove invalid chunk idx {}", chunk_idx.0))?;
         self.inner.remove(cc);
@@ -92,5 +88,15 @@ impl ClientLoadedChunks {
         self.inner.new_per_chunk_mapped(move |cc, ci| {
             f(cc, ci, self.inner.getter_pre_cached(cc, ci))
         })
+    }
+}
+
+/// See `ClientLoadedChunks.on_add_chunk`.
+pub struct JustAdded(Vec3<i64>, usize);
+
+impl JustAdded {
+    pub fn get(self, chunks: &ClientLoadedChunks) -> (usize, Getter) {
+        let JustAdded(cc, ci) = self;
+        (ci, chunks.inner.getter_pre_cached(cc, ci))
     }
 }

@@ -195,7 +195,8 @@ impl LoadedChunks {
     /// Construct a getter with a pre-cached (cc, ci) pair. If this pair is not
     /// actually correct, unspecified behavior results.
     pub fn getter_pre_cached(&self, cc: Vec3<i64>, ci: usize) -> Getter {
-        assert!(ci < NULL_IDX as usize, "ci too big for getter_pre_cached");
+        //assert!(ci < NULL_IDX as usize, "ci too big for getter_pre_cached");
+        debug_assert!(self.slab[ci].cc == cc);
         Getter {
             chunks: self,
             cache: Cell::new(Some((cc, ci as u32))),

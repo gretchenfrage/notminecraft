@@ -49,6 +49,14 @@ pub struct GpuVec<T> {
 }
 
 impl<T> GpuVec<T> {
+    /// Construct an empty GPU vec.
+    pub fn new() -> Self
+    where
+        T: GpuVecElem,
+    {
+        MeshPipeline::create_gpu_vec()
+    }
+
     /// The current length, in elements.
     pub fn len(&self) -> usize {
         self.len
@@ -66,6 +74,12 @@ impl<T> GpuVec<T> {
     }
 }
 
+impl<T: GpuVecElem> Default for GpuVec<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Types which can be stored in a `GpuVec`. Not intended to be implemented
 /// externally.
 pub trait GpuVecElem: Copy {
@@ -79,7 +93,7 @@ pub trait GpuVecElem: Copy {
 // ==== mesh ====
 
 /// Vertex and index data for a mesh, stored on the GPU.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mesh {
     /// Vertices within the mesh. Are grouped together into triangles by the
     /// `indices` field.
@@ -91,6 +105,13 @@ pub struct Mesh {
     ///
     /// TODO: do they need to be clockwise or counter-clockwise?
     pub indices: GpuVec<usize>,
+}
+
+impl Mesh {
+    /// Construct an empty mesh.
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 /// Vertex within a `Mesh`.

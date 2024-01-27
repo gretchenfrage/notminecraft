@@ -22,6 +22,7 @@ pub mod util_hex_color;
 pub mod util_cos;
 pub mod util_net;
 pub mod util_callback_cell;
+pub mod block_update_queue;
 pub mod game_data;
 pub mod item;
 pub mod physics;
