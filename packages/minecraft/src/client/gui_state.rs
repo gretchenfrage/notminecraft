@@ -149,7 +149,7 @@ impl GuiStateFrame for ClientGuiState {
         _: Option<TypingInput>,
     ) {
         trace!(?key, "key press");
-        if key == KeyCode::KeyP {
+        if key == KeyCode::KeyP ||key == KeyCode::KeyL {
             let getter = self.0.pre_join.chunks.getter();
             let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
             let looking_at = compute_looking_at(
@@ -161,16 +161,21 @@ impl GuiStateFrame for ClientGuiState {
                 &self.0.pre_join.game,
             );
             if let Some(looking_at) = looking_at {
-                let offset = looking_at.face.map(|face| face.to_vec()).unwrap_or(0.into());
-                let gtc = looking_at.tile.gtc() + offset;
+                let (gtc, bid_meta) =
+                    if key == KeyCode::KeyP {
+                        (
+                            looking_at.tile.gtc() +
+                                looking_at.face.map(|face| face.to_vec()).unwrap_or(0.into()),
+                            ErasedBidMeta::new(self.0.pre_join.game.content.stone.bid_stone, ()),
+                        )
+                    } else {
+                        (
+                            looking_at.tile.gtc(),
+                            ErasedBidMeta::new(AIR, ())
+                        )
+                    };
                 self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::SetTileBlock(
-                    PlayerMsgSetTileBlock {
-                        gtc,
-                        bid_meta: ErasedBidMeta::new(
-                            self.0.pre_join.game.content.stone.bid_stone,
-                            (),
-                        ),
-                    }
+                    PlayerMsgSetTileBlock { gtc, bid_meta }
                 )));
             }
         }

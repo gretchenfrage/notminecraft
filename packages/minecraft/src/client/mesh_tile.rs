@@ -10,6 +10,9 @@ use std::sync::Arc;
 use vek::*;
 
 
+const OCCLUSION: f32 = 1.0;
+
+
 /// Mesh a single tile in isolation, relative to its gtc.
 pub fn mesh_tile(
     mesh_buf: &mut MeshData,
@@ -67,10 +70,10 @@ pub fn mesh_tile(
                         })
                         .unwrap_or(0);
                     let ab = a * b;
-                    let occlusion = 3 * ab + (1 - ab) * (ab * c);
+                    let occlusion = 3 * ab + (a + b + c) * (1 - ab);
 
                     // light accordingly
-                    vert_rgbs[corner] *= 1.0 - occlusion as f32 / 3.0 * 0.25;
+                    vert_rgbs[corner] *= 1.0 - occlusion as f32 / 3.0 * OCCLUSION;
                 }
 
                 // axis lighting

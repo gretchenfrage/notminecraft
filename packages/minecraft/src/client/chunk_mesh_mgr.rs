@@ -25,7 +25,6 @@ use std::{
     },
     thread::spawn,
     mem::replace,
-    iter::once,
     ops::Range,
 };
 use vek::*;
@@ -209,11 +208,15 @@ impl ChunkMeshMgr {
         }
     }
 
-    /// Call `mark_dirty` on `gtc` and its 6 face-neighbors if present.
+    /// Call `mark_dirty` on `gtc` and its neighbors if present.
     pub fn mark_adj_dirty(&mut self, getter: &Getter, gtc: Vec3<i64>) {
-        for gtc in once(gtc).chain(FACES.map(|face| gtc + face.to_vec())) {
-            if let Some(tile) = getter.gtc_get(gtc) {
-                self.mark_dirty(tile);
+        for z in gtc.z - 1..=gtc.z + 1 {
+            for y in gtc.y - 1..=gtc.y + 1 {
+                for x in gtc.x - 1..=gtc.x + 1 {
+                    if let Some(tile) = getter.gtc_get(Vec3 { x, y, z }) {
+                        self.mark_dirty(tile);
+                    }
+                }
             }
         }
     }
@@ -371,7 +374,9 @@ impl ChunkMeshMgr {
             if let Some(&submesh_key) = chunk_mesh.tile_submesh_key.get(lti) {
                 chunk_mesh.differ.remove_submesh(submesh_key as usize);
             }
-            if !self.mesh_buf.is_empty() {
+            if self.mesh_buf.is_empty() {
+                chunk_mesh.tile_submesh_key.set_none(lti);
+            } else {
                 let submesh_key = chunk_mesh.differ.add_submesh(&self.mesh_buf);
                 chunk_mesh.tile_submesh_key.set_some(lti, submesh_key.try_into().unwrap());
                 self.mesh_buf.clear();
