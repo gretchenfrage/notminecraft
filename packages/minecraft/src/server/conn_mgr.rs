@@ -512,6 +512,7 @@ impl ConnMgr {
         self.player_conn_idx.remove(pk);
         let username = self.player_username.remove(pk);
         self.username_player.remove(&username).unwrap();
+        self.player_load_save_state_state.remove(pk);
         self.player_clientside_players.remove(pk);
         self.player_player_clientside_player_idx.remove(pk);
         username

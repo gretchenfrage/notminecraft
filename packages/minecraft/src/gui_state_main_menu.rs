@@ -152,16 +152,6 @@ fn on_singleplayer_click(ctx: &GuiGlobalContext) {
         ctx.renderer.borrow().create_async_gpu_vec_context(),
     );
     ctx.push_state_frame(LoadingMenu::new(ctx, oneshot));
-
-    /*use crate::gui_state_loading::LoadingOneshot;
-    struct NeverLoads;
-    impl LoadingOneshot for NeverLoads {
-        fn poll(&mut self) -> Option<Box<dyn GuiStateFrameObj>> { None }
-    }
-    ctx.push_state_frame(LoadingMenu::new(ctx, Box::new(NeverLoads)));*/
-
-    //let save = SaveFile::open("server", ctx.data_dir, ctx.game).unwrap(); // TODO: don't panic
-    //ctx.push_state_frame(Client::new_internal(save, ctx));
 }
 
 fn on_multiplayer_click(ctx: &GuiGlobalContext) {

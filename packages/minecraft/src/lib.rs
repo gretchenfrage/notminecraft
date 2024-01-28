@@ -27,9 +27,13 @@ pub mod game_data;
 pub mod item;
 pub mod physics;
 pub mod game_binschema;
+#[cfg(feature = "client")]
 pub mod gui_state_main_menu;
+#[cfg(feature = "client")]
 pub mod gui_state_multiplayer_menu;
+#[cfg(feature = "client")]
 pub mod gui_state_about;
+#[cfg(feature = "client")]
 pub mod gui_state_loading;
 //pub mod save_file;
 pub mod thread_pool;

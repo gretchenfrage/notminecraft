@@ -1,6 +1,7 @@
 
 use crate::{
     gui::prelude::*,
+    gui_state_loading::LoadingMenu,
     util_hex_color::hex_color,
 };
 use graphics::prelude::*;
@@ -160,7 +161,22 @@ impl GuiStateFrame for MultiplayerMenu {
 fn on_connect_click<'a>(address: &'a str) -> impl FnOnce(&GuiGlobalContext) + 'a {
     move |ctx| {
         ctx.pop_state_frame();
-        debug!(?address, "unimplemented");
+        use crate::{
+            client::pre_join::{ServerLocation, join_in_background},
+            message::*,
+        };
+        let oneshot = join_in_background(
+            ctx.game.clone(),
+            ctx.thread_pool.clone(),
+            ServerLocation::External {
+                url: address.to_owned(),
+                rt: ctx.tokio.clone(),
+            },
+            UpMsgLogIn { username: "client".to_owned() },
+            ctx.renderer.borrow().create_async_gpu_vec_context(),
+        );
+        ctx.push_state_frame(LoadingMenu::new(ctx, oneshot));
+        //debug!(?address, "unimplemented");
         //ctx.push_state_frame(Client::connect(address, ctx));
     }
 }

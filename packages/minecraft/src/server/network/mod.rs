@@ -6,9 +6,10 @@ use crate::{
         channel::*,
         ServerEvent,
     },
-    client::channel::ClientSender,
     message::*,
 };
+#[cfg(feature = "client")]
+use crate::client::channel::ClientSender;
 use std::{
     sync::Arc,
     fmt::Debug,
@@ -22,10 +23,12 @@ use tokio::{
 
 mod send_buffer_policy_enforcer;
 mod ws;
+#[cfg(feature = "client")]
 mod in_mem;
 
-pub use self::in_mem::InMemClient;
 pub use tokio::net::ToSocketAddrs;
+#[cfg(feature = "client")]
+pub use self::in_mem::InMemClient;
 
 
 /// Main handle to the tokio system for handling network IO with clients.
@@ -67,6 +70,7 @@ struct NetworkServerLockableState {
 // as a whole has been shut down.
 enum SlabEntry {
     Ws(ws::SlabEntry),
+    #[cfg(feature = "client")]
     InMem(in_mem::SlabEntry),
 }
 
@@ -83,6 +87,7 @@ pub struct Connection(ConnectionInner);
 #[derive(Debug)]
 enum ConnectionInner {
     Ws(ws::Connection),
+    #[cfg(feature = "client")]
     InMem(in_mem::Connection),
 }
 
@@ -133,6 +138,7 @@ impl NetworkServerHandle {
     /// Construct a new in-memory client. See `InMemClient`. This directly causes a single add
     /// connection network event, with the given connection object being the server-side half of
     /// this in-mem client.
+    #[cfg(feature = "client")]
     pub fn in_mem_client(&self, client_send: ClientSender) -> InMemClient {
         in_mem::create(&self.0, client_send)
     }
@@ -150,6 +156,7 @@ impl Connection {
         let msg = msg.into();
         match &self.0 {
             &ConnectionInner::Ws(ref inner) => inner.send(msg),
+            #[cfg(feature = "client")]
             &ConnectionInner::InMem(ref inner) => inner.send(msg),
         }
     }
@@ -165,6 +172,7 @@ impl Connection {
     pub fn kill(&self) {
         match &self.0 {
             &ConnectionInner::Ws(ref inner) => inner.kill(),
+            #[cfg(feature = "client")]
             &ConnectionInner::InMem(ref inner) => inner.kill(),
         }
     }
@@ -181,6 +189,7 @@ impl Drop for NetworkServer {
         for (_, entry) in &lock.slab {
             match entry {
                 &SlabEntry::Ws(ref inner) => inner.shutdown(),
+                #[cfg(feature = "client")]
                 &SlabEntry::InMem(ref inner) => inner.shutdown(),
             }
         }

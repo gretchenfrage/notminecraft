@@ -159,10 +159,17 @@ pub fn run(
 
 // temporary, until we made chunk interest logic better
 fn spawn_chunks() -> impl IntoIterator<Item=Vec3<i64>> {
+    let ld = std::env::var("LOAD_DIST").ok()
+        .and_then(|s| s
+            .parse::<i64>()
+            .map_err(|e| error!(%e, "error parsing load dist env var"))
+            .ok()
+            .filter(|&n| n > 0))
+        .unwrap_or(8);
     let mut ccs = Vec::new();
-    for z in -8..8 {
+    for z in -ld..ld {
         for y in 0..2 {
-            for x in -8..8 {
+            for x in -ld..ld {
                 ccs.push(Vec3 { x, y, z });
             }
         }
