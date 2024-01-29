@@ -8,6 +8,7 @@ pub mod mesh_tile;
 pub mod chunk_mesh_mgr;
 pub mod pre_join;
 pub mod gui_state;
+pub mod menu_mgr;
 
 use self::{
     channel::*,
@@ -21,6 +22,7 @@ use self::{
         ChunkMeshMgr,
         ChunkMesh,
     },
+    menu_mgr::MenuMgr,
 };
 use crate::{
     server::runner::ServerThread,
@@ -87,4 +89,5 @@ pub struct Client {
     pub pos: Vec3<f32>,
     pub yaw: f32,
     pub pitch: f32,
+    pub menu_mgr: MenuMgr,
 }

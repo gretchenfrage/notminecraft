@@ -10,7 +10,7 @@ use std::sync::Arc;
 use vek::*;
 
 
-const OCCLUSION: f32 = 1.0;
+const OCCLUSION: f32 = 0.25;
 
 
 /// Mesh a single tile in isolation, relative to its gtc.

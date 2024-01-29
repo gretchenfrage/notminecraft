@@ -191,6 +191,7 @@ pub fn join_in_background(
             pos: Vec3::new(16.0, 48.0, 16.0),
             yaw: f32::to_radians(45.0),
             pitch: f32::to_radians(45.0),
+            menu_mgr: Default::default(),
         };
         let _ = oneshot_1.push(Box::new(ClientGuiState(client)));
     });

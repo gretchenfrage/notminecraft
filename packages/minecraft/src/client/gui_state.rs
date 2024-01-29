@@ -70,7 +70,7 @@ impl ClientGuiState {
     /// Get as a gui block.
     pub fn gui<'a>(
         &'a mut self,
-        _ctx: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         layer((
             WorldGuiBlock {
@@ -80,6 +80,7 @@ impl ClientGuiState {
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
             },
+            self.0.menu_mgr.gui(ctx),
         ))
     }
 }
@@ -131,6 +132,9 @@ impl GuiStateFrame for ClientGuiState {
         self.0.yaw += lookment.x;
         self.0.pitch -= lookment.y;
 
+        // other update stuff
+        self.0.menu_mgr.update();
+
         // fully synchronize chunk meshes so they're ready to render
         self.0.pre_join.chunk_mesh_mgr.flush_dirty(
             &self.0.pre_join.chunks,
@@ -178,6 +182,9 @@ impl GuiStateFrame for ClientGuiState {
                     PlayerMsgSetTileBlock { gtc, bid_meta }
                 )));
             }
+        } else if key == KeyCode::KeyO {
+            use crate::client::menu_mgr::Menu;
+            self.0.menu_mgr.set_menu(Some(Menu::Foo));
         }
     }
 

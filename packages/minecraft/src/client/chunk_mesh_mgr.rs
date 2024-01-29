@@ -1,6 +1,5 @@
 //! Asynchronously generating graphical meshes for chunks.
 
-
 use crate::{
     util_abort_handle::*,
     game_data::*,
