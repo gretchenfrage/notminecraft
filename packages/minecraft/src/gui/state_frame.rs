@@ -146,7 +146,7 @@ pub trait GuiStateFrame: Debug {
     /// gaining focus.
     ///
     /// Context guarantees:
-    /// - `presed_mouse_buttons` contains `button`.
+    /// - `pressed_mouse_buttons` contains `button`.
     /// - `focus_level` == `MouseCaptured`.
     #[allow(unused_variables)]
     fn on_captured_mouse_click(
@@ -196,6 +196,32 @@ pub trait GuiStateFrame: Debug {
         ctx: &GuiWindowContext,
         amount: ScrolledAmount,
     ) {}
+
+    
+    /// The gui should process any internal gui effect queue-like things it has.
+    ///
+    /// If this gui does not have a concept of such things it can ignore this.
+    ///
+    /// A common lifetime problem in gui systems like these is when a gui component needs to
+    /// trigger side effects which conflict with borrows which exist at the time of those effects
+    /// being triggered. For example, a menu may contain a button that closes it, but the logic for
+    /// that button being clicked involves it being passed a reference to itself, which would be
+    /// invalidated if the menu were to be moved or dropped then and there.
+    ///
+    /// A pattern to solve this is for these gui components to instead write a description of
+    /// effects to be actuated to some queue, and then process the queue once any conflicting
+    /// borrows have ended. The gui event loop's effect queue is an example of this pattern on the
+    /// level of changing gui states. This method exists to facilitate analogous patterns within a
+    /// gui state.
+    ///
+    /// As such, this method is called after every gui state other method is called, alongside the
+    /// event loop processing its own gui effect queue.
+    ///
+    /// Notably, when `visit_nodes` is called, it can return values that borrow `&mut self`. The
+    /// gui event loop will call this method after that borrow ends, allowing patterns that would
+    /// otherwise be fraught to implement without this method.
+    #[allow(unused_variables)]
+    fn process_gui_effects(&mut self, ctx: &GuiWindowContext) {}
 }
 
 

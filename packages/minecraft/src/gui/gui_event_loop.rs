@@ -650,6 +650,10 @@ impl GuiEventLoop {
 				_ => (),
 			}
 
+			if !stack.0.is_empty() {
+				state.with_ctx(|ctx| stack.top().process_gui_effects(ctx))
+			};
+
 			let mut effect_queue = state.effect_queue.borrow_mut();
 			while let Some(effect) = effect_queue.0.pop_front() {
 				match effect {

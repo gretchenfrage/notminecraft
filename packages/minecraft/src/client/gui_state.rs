@@ -5,6 +5,7 @@ use crate::{
         pre_join::process_pre_join_msg,
         client_loaded_chunks::ClientLoadedChunks,
         chunk_mesh_mgr::ChunkMeshMgr,
+        menu_esc::EscMenu,
         *,
     },
     message::*,
@@ -93,47 +94,46 @@ impl GuiStateFrame for ClientGuiState {
         trace!("client tick");
         
         // super basic movement logic
-        let mut movement = Vec3::new(0.0, 0.0, 0.0);
-        if ctx.global().pressed_keys.contains(&KeyCode::KeyW.into()) {
-            movement.z += 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::KeyS.into()) {
-            movement.z -= 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::KeyD.into()) {
-            movement.x += 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::KeyA.into()) {
-            movement.x -= 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::Space.into()) {
-            movement.y += 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::ShiftLeft.into()) {
-            movement.y -= 1.0;
-        }
-        let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
-        self.0.pos += rot * movement * elapsed * 10.0;
+        if !self.0.menu_mgr.is_open_menu() {
+            let mut movement = Vec3::new(0.0, 0.0, 0.0);
+            if ctx.global().pressed_keys.contains(&KeyCode::KeyW.into()) {
+                movement.z += 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::KeyS.into()) {
+                movement.z -= 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::KeyD.into()) {
+                movement.x += 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::KeyA.into()) {
+                movement.x -= 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::Space.into()) {
+                movement.y += 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::ShiftLeft.into()) {
+                movement.y -= 1.0;
+            }
+            let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
+            self.0.pos += rot * movement * elapsed * 10.0;
 
-        let mut lookment = Vec2::new(0.0, 0.0);
-        if ctx.global().pressed_keys.contains(&KeyCode::ArrowRight.into()) {
-            lookment.x += 1.0;
+            let mut lookment = Vec2::new(0.0, 0.0);
+            if ctx.global().pressed_keys.contains(&KeyCode::ArrowRight.into()) {
+                lookment.x += 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::ArrowLeft.into()) {
+                lookment.x -= 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::ArrowUp.into()) {
+                lookment.y += 1.0;
+            }
+            if ctx.global().pressed_keys.contains(&KeyCode::ArrowDown.into()) {
+                lookment.y -= 1.0;
+            }
+            lookment *= elapsed * f32::to_radians(45.0);
+            self.0.yaw += lookment.x;
+            self.0.pitch -= lookment.y;
         }
-        if ctx.global().pressed_keys.contains(&KeyCode::ArrowLeft.into()) {
-            lookment.x -= 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::ArrowUp.into()) {
-            lookment.y += 1.0;
-        }
-        if ctx.global().pressed_keys.contains(&KeyCode::ArrowDown.into()) {
-            lookment.y -= 1.0;
-        }
-        lookment *= elapsed * f32::to_radians(45.0);
-        self.0.yaw += lookment.x;
-        self.0.pitch -= lookment.y;
-
-        // other update stuff
-        self.0.menu_mgr.update();
 
         // fully synchronize chunk meshes so they're ready to render
         self.0.pre_join.chunk_mesh_mgr.flush_dirty(
@@ -148,12 +148,16 @@ impl GuiStateFrame for ClientGuiState {
 
     fn on_key_press(
         &mut self,
-        _: &GuiWindowContext,
+        ctx: &GuiWindowContext,
         key: PhysicalKey,
-        _: Option<TypingInput>,
+        typing: Option<TypingInput>,
     ) {
         trace!(?key, "key press");
-        if key == KeyCode::KeyP ||key == KeyCode::KeyL {
+        if self.0.menu_mgr.is_open_menu() {
+            // have menu handle
+            self.0.menu_mgr.on_key_press(ctx, key, typing);
+            return;
+        } else if key == KeyCode::KeyP || key == KeyCode::KeyL {
             let getter = self.0.pre_join.chunks.getter();
             let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
             let looking_at = compute_looking_at(
@@ -182,9 +186,8 @@ impl GuiStateFrame for ClientGuiState {
                     PlayerMsgSetTileBlock { gtc, bid_meta }
                 )));
             }
-        } else if key == KeyCode::KeyO {
-            use crate::client::menu_mgr::Menu;
-            self.0.menu_mgr.set_menu(Some(Menu::Foo));
+        } else if key == KeyCode::Escape {
+            self.0.menu_mgr.set_menu(EscMenu::new(ctx.global()));
         }
     }
 
@@ -226,6 +229,10 @@ impl GuiStateFrame for ClientGuiState {
             &self.0.pre_join.chunks,
             &self.0.pre_join.tile_blocks,
         );
+    }
+
+    fn process_gui_effects(&mut self, ctx: &GuiWindowContext) {
+        self.0.menu_mgr.process_gui_effects(ctx);
     }
 }
 

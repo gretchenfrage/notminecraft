@@ -56,6 +56,7 @@ pub mod prelude {
         simple_blocks_cursor_impl,
         never_blocks_cursor_impl,
     };
+    pub use graphics::frame_content::{HAlign, VAlign};
 }
 
 pub use self::{
