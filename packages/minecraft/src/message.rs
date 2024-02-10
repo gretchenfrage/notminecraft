@@ -49,7 +49,7 @@ pub enum PlayerMsg {
     /// Set own position and direction.
     SetCharState(PlayerMsgSetCharState),
     /// Set block at tile.
-    SetTileBlock(PlayerMsgSetTileBlock),    
+    SetTileBlock(PlayerMsgSetTileBlock),
 }
 
 /// Set own position and direction.

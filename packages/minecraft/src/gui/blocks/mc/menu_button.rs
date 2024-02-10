@@ -40,6 +40,7 @@ impl<'a> MenuButtonBuilder<'a> {
             color: hex_color(0xE0E0E0FF),
             h_align: HAlign::Center,
             v_align: VAlign::Center,
+            shadow: true,
         });
         MenuButton {
             text,

@@ -6,6 +6,7 @@ use crate::{
         client_loaded_chunks::ClientLoadedChunks,
         chunk_mesh_mgr::ChunkMeshMgr,
         menu_esc::EscMenu,
+        menu_inventory::InventoryMenu,
         *,
     },
     message::*,
@@ -188,6 +189,8 @@ impl GuiStateFrame for ClientGuiState {
             }
         } else if key == KeyCode::Escape {
             self.0.menu_mgr.set_menu(EscMenu::new(ctx.global()));
+        } else if key == KeyCode::KeyE {
+            self.0.menu_mgr.set_menu(InventoryMenu::new(ctx.global()));
         }
     }
 

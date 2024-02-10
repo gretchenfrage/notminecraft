@@ -10,6 +10,7 @@ pub mod pre_join;
 pub mod gui_state;
 pub mod menu_mgr;
 pub mod menu_esc;
+pub mod menu_inventory;
 
 use self::{
     channel::*,

@@ -32,6 +32,7 @@ impl MultiplayerMenu {
             color: Rgba::white(),
             h_align: HAlign::Center,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let info_text_1 = GuiTextBlock::new(&GuiTextBlockConfig {
             text: "Not Minecraft Beta 1.0.2 multiplayer is yes! \
@@ -41,6 +42,7 @@ impl MultiplayerMenu {
             color: hex_color(0xa0a0a0ff),
             h_align: HAlign::Left,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let info_text_2 = GuiTextBlock::new(&GuiTextBlockConfig {
             text: "Enter the address of a server to connect to it:",
@@ -49,6 +51,7 @@ impl MultiplayerMenu {
             color: hex_color(0xa0a0a0ff),
             h_align: HAlign::Left,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let connect_button = menu_button(&ctx.assets.lang.multiplayer_connect)
             .build(&ctx.assets);
@@ -197,6 +200,7 @@ fn make_address_text_block(address: &str, blinker: bool, ctx: &GuiGlobalContext)
         color: hex_color(0xe0e0e0ff),
         h_align: HAlign::Left,
         v_align: VAlign::Center,
+        shadow: true,
     })
 }
 

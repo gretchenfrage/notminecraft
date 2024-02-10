@@ -58,6 +58,7 @@ pub struct GuiTextBlockConfig<'a> {
     pub color: Rgba<f32>,
     pub h_align: HAlign,
     pub v_align: VAlign,
+    pub shadow: bool,
 }
 
 
@@ -79,8 +80,9 @@ pub struct GuiTextBlockInner {
     color: Rgba<f32>,
     h_align: HAlign,
     v_align: VAlign,
+    shadow: bool,
     wrap: bool,
-    
+
     cache: Option<(CacheKey, LayedOutTextBlock)>,
 }
 
@@ -99,6 +101,7 @@ impl GuiTextBlockInner {
             color: config.color,
             h_align: config.h_align,
             v_align: config.v_align,
+            shadow: config.shadow,
             wrap: wrap,
 
             cache: None,
@@ -200,10 +203,12 @@ impl GuiTextBlockInner {
         let mut canvas = canvas.reborrow()
             .translate(align_translate)
             .translate(mystery_gap_adjust_translate);
+        if self.shadow {
         canvas.reborrow()
             .translate(text_shadow_translate)
             .color(SHADOW_DROP_COLOR)
             .draw_text(&layed_out);
+        }
         canvas.reborrow()
             .translate(text_main_translate)
             .draw_text(&layed_out);

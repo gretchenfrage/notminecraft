@@ -27,6 +27,7 @@ impl LoadingMenu {
             color: Rgba::white(),
             h_align: HAlign::Center,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let cancel_button = menu_button(&ctx.assets.lang.gui_cancel)
             .build(&ctx.assets);

@@ -24,6 +24,7 @@ impl AboutMenu {
             color: Rgba::white(),
             h_align: HAlign::Center,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let info_text = GuiTextBlock::new(&GuiTextBlockConfig {
             text: include_str!("about.txt"),
@@ -32,6 +33,7 @@ impl AboutMenu {
             color: hex_color(0xa0a0a0ff),
             h_align: HAlign::Left,
             v_align: VAlign::Top,
+            shadow: true,
         });
         let done_button = menu_button(&ctx.assets.lang.gui_done)
             .build(&ctx.assets);

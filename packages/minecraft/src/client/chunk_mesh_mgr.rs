@@ -54,9 +54,9 @@ pub struct ChunkMeshMgr {
     chunk_tile_dirty: PerChunk<PerTileBool>,
     // for each chunk, list of dirty tiles in it
     chunk_dirty_tiles: PerChunk<Vec<u16>>,
-    // list of chunks in MeshState::Mesghed with dirty tiles
+    // list of chunks in MeshState::Meshed with dirty tiles
     dirty_meshed_chunks: Vec<(Vec3<i64>, usize)>,
-    // for each chunk in MeshState::meshed with dirty tiles, its index in dirty_meshed_chunks
+    // for each chunk in MeshState::Meshed with dirty tiles, its index in dirty_meshed_chunks
     chunk_dirty_meshed_idx: PerChunk<Option<usize>>,
 
     // just a reusable buffer
@@ -252,8 +252,8 @@ impl ChunkMeshMgr {
     ///
     /// See mark_dirty for best description. This polls the patch thread, potentially causing some
     /// chunks in the patching state to transition to the meshed state. Then, this loops through
-    /// all chunks in the meshed state containing dirty tiles patches them, causing all their tiles
-    /// to become clean but also transitioning them into the patching state.
+    /// all chunks in the meshed state containing dirty tiles and patches them, causing all their
+    /// tiles to become clean but also transitioning them into the patching state.
     pub fn flush_dirty(
         &mut self,
         chunks: &ClientLoadedChunks,

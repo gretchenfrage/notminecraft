@@ -24,6 +24,7 @@ impl FpsOverlay {
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Right,
 			v_align: VAlign::Top,
+			shadow: false,
 		});
 		FpsOverlay {
 			gui_text,

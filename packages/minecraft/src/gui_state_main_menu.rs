@@ -46,6 +46,7 @@ impl MainMenu {
 			color: hex_color(0x505050FF),
 			h_align: HAlign::Left,
 			v_align: VAlign::Top,
+            shadow: true,
 		});
 		let uncopyright_text = GuiTextBlock::new(&GuiTextBlockConfig {
 			text: &assets.lang.menu_uncopyright,
@@ -54,6 +55,7 @@ impl MainMenu {
 			color: Rgba::white(),
 			h_align: HAlign::Right,
 			v_align: VAlign::Bottom,
+            shadow: true,
 		});
         let singleplayer_button = menu_button(&assets.lang.menu_singleplayer)
             .build(assets);

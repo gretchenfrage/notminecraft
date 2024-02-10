@@ -11,7 +11,8 @@ use vek::*;
 #[derive(Debug)]
 pub struct EscMenu {
     title: GuiTextBlock<true>,
-
+    exit_menu: MenuButton,
+    exit_game: MenuButton,
 }
 
 impl EscMenu {
@@ -23,26 +24,26 @@ impl EscMenu {
             color: Rgba::white(),
             h_align: HAlign::Center,
             v_align: VAlign::Bottom,
+            shadow: true,
         });
-        EscMenu { title }
+        let exit_menu = menu_button("Back to game").build(ctx.assets);
+        let exit_game = menu_button("Save and quit to title").build(ctx.assets);
+        EscMenu { title, exit_menu, exit_game }
     }
 
-    pub fn gui<'a>(&'a mut self) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
+    pub fn gui<'a>(
+        &'a mut self,
+        menu_setter: MenuSetter<'a>,
+    ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         align(0.5,
             logical_size([400.0, 320.0],
                 v_align(0.0,
                     v_stack(0.0, (
                         &mut self.title,
-                        /*
                         logical_height(72.0, gap()),
-                        resources.exit_menu_button.gui(on_exit_menu_click(&resources.effect_queue)),
+                        self.exit_menu.gui(move |_| menu_setter.clear_menu()),
                         logical_height(8.0, gap()),
-                        resources.exit_game_button.gui(on_exit_game_click),
-                        logical_height(8.0, gap()),
-                        resources.open_to_lan_button.gui(on_open_to_lan_click(args.internal_server)),
-                        logical_height(56.0 - 48.0, gap()),
-                        resources.options_button.gui(on_options_click(&resources.effect_queue)),
-                        */
+                        self.exit_game.gui(|ctx| ctx.event_loop.borrow_mut().pop_state_frame()),
                     ))
                 )
             )

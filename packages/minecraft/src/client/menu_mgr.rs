@@ -1,7 +1,10 @@
 //! Manager for the client having a menu open.
 
 use crate::{
-    client::menu_esc::EscMenu,
+    client::{
+        menu_esc::EscMenu,
+        menu_inventory::InventoryMenu,
+    },
     gui::prelude::*,
 };
 use std::cell::Cell;
@@ -12,7 +15,7 @@ use std::cell::Cell;
 pub struct MenuMgr {
     // currently open menu
     menu: Option<Menu>,
-    // if Some, menu will be set to this value next tick
+    // if Some, menu will be set to this value upon gui effect processing
     set_to: Cell<Option<Option<Menu>>>,
 }
 
@@ -24,6 +27,7 @@ pub struct MenuSetter<'a>(&'a Cell<Option<Option<Menu>>>);
 #[derive(Debug)]
 pub enum Menu {
     EscMenu(EscMenu),
+    InventoryMenu(InventoryMenu),
 }
 
 impl MenuMgr {
@@ -32,17 +36,17 @@ impl MenuMgr {
         Self::default()
     }
 
-    /// Set the open menu.
+    /// Set the open menu (uppon gui effect processing).
     pub fn set_menu<M: Into<Menu>>(&self, menu: M) {
         self.set_menu_opt(Some(menu.into()))
     }
 
-    /// Clear the open menu.
+    /// Clear the open menu (uppon gui effect processing).
     pub fn clear_menu(&self) {
         self.set_menu_opt(None);
     }
 
-    /// Set or clear the open menu.
+    /// Set or clear the open menu (upon gui effect processing).
     pub fn set_menu_opt(&self, menu: Option<Menu>) {
         self.set_to.set(Some(menu));
     }
@@ -55,20 +59,26 @@ impl MenuMgr {
     /// Get the gui for any menu that may be open.
     pub fn gui<'a>(
         &'a mut self,
-        _ctx: &'a GuiWindowContext,
+        ctx: &'a GuiWindowContext,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         self.menu.as_mut().map(|menu| {
             // darkened background
             let darkened_bg = match menu {
-                &mut Menu::EscMenu(_) => true,
+                _ => true,
             };
             let darkened_bg = if darkened_bg {
                 Some(solid([0.0, 0.0, 0.0, 1.0 - 0x2a as f32 / 0x97 as f32]))
             } else { None };
 
             // delegate
+            let menu_setter = MenuSetter(&self.set_to);
             let inner = match menu {
-                &mut Menu::EscMenu(ref mut inner) => inner.gui(),
+                &mut Menu::EscMenu(ref mut inner) => GuiEither::A(
+                    inner.gui(menu_setter)
+                ),
+                &mut Menu::InventoryMenu(ref mut inner) => GuiEither::B(
+                    inner.gui(ctx.global(), menu_setter)
+                ),
             };
 
             // compose
@@ -90,6 +100,7 @@ impl MenuMgr {
             let menu_setter = MenuSetter(&self.set_to);
             match menu {
                 &mut Menu::EscMenu(ref mut inner) => inner.on_key_press(key, menu_setter),
+                &mut Menu::InventoryMenu(ref mut inner) => inner.on_key_press(key, menu_setter),
             }
         }
     }
@@ -103,17 +114,17 @@ impl MenuMgr {
 }
 
 impl<'a> MenuSetter<'a> {
-    /// Set the open menu.
+    /// Set the open menu (uppon gui effect processing).
     pub fn set_menu<M: Into<Menu>>(&self, menu: M) {
         self.set_menu_opt(Some(menu.into()))
     }
 
-    /// Clear the open menu.
+    /// Clear the open menu (uppon gui effect processing).
     pub fn clear_menu(&self) {
         self.set_menu_opt(None);
     }
 
-    /// Set or clear the open menu.
+    /// Set or clear the open menu (uppon gui effect processing).
     pub fn set_menu_opt(&self, menu: Option<Menu>) {
         self.0.set(Some(menu));
     }
@@ -122,5 +133,11 @@ impl<'a> MenuSetter<'a> {
 impl From<EscMenu> for Menu {
     fn from(inner: EscMenu) -> Self {
         Menu::EscMenu(inner)
+    }
+}
+
+impl From<InventoryMenu> for Menu {
+    fn from(inner: InventoryMenu) -> Self {
+        Menu::InventoryMenu(inner)
     }
 }
