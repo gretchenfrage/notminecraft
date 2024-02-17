@@ -50,6 +50,11 @@ impl ClientGuiState {
                     DownMsg::ShouldJoinGame => bail!("server protocol violation"),
                     DownMsg::FinalizeJoinGame(_) => bail!("server protocol violation"),
                     DownMsg::Ack { .. } => (), // TODO
+                    DownMsg::InvalidateSyncMenu { up_msg_idx } => {
+                        // TODO: refactor where this is processed
+                        // TODO: process this
+                        debug!("sync menu invalidated");
+                    }
                 }
                 NetworkEvent::Closed(msg) => bail!("server connection closed: {:?}", msg),
             },
@@ -235,7 +240,7 @@ impl GuiStateFrame for ClientGuiState {
     }
 
     fn process_gui_effects(&mut self, ctx: &GuiWindowContext) {
-        self.0.menu_mgr.process_gui_effects(ctx);
+        self.0.menu_mgr.process_gui_effects(ctx, &self.0.pre_join.connection);
     }
 }
 

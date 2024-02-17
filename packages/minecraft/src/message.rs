@@ -50,6 +50,12 @@ pub enum PlayerMsg {
     SetCharState(PlayerMsgSetCharState),
     /// Set block at tile.
     SetTileBlock(PlayerMsgSetTileBlock),
+    /// Open a game menu in a way that's synced with the server.
+    OpenSyncMenu(PlayerMsgOpenSyncMenu),
+    /// Close the currently open sync menu.
+    CloseSyncMenu(PlayerMsgCloseSyncMenu),
+    /// Player message to be processed by the currently open sync menu.
+    SyncMenuMsg(SyncMenuMsg)
 }
 
 /// Set own position and direction.
@@ -66,6 +72,49 @@ pub struct PlayerMsgSetTileBlock {
     pub gtc: Vec3<i64>,
     pub bid_meta: ErasedBidMeta,
 }
+
+/// Open a game menu in a way that's synced with the server.
+#[derive(Debug, GameBinschema, Copy, Clone, PartialEq)]
+pub enum PlayerMsgOpenSyncMenu {
+    Inventory,
+}
+
+/// Close the currently open sync menu.
+#[derive(Debug, GameBinschema)]
+pub struct PlayerMsgCloseSyncMenu;
+
+/// Reference to an item slot transmitted from client to server.
+///
+/// This means it may be relative to the sync menu the client has open.
+#[derive(Debug, GameBinschema, Clone)]
+pub enum UpItemSlotRef {
+    /// The held item.
+    Held,
+    /// Item in the player's open inventory.
+    Inventory(u8),
+}
+
+/// Player message to be processed by the currently open sync menu.
+#[derive(Debug, GameBinschema)]
+pub enum SyncMenuMsg {
+    TransferItems(SyncMenuMsgTransferItems),
+    SwapItemSlots(SyncMenuMsgSwapItemSlots),
+}
+
+/// Attempt to move the given number of items from one slot to another.
+#[derive(Debug, GameBinschema)]
+pub struct SyncMenuMsgTransferItems {
+    /// Item slot transferring from.
+    pub from: UpItemSlotRef,
+    /// Item slot transferring to.
+    pub to: UpItemSlotRef,
+    /// Number of items to transfer.
+    pub amount: u8,
+}
+
+/// Attempt to swap the contents of two item slots.
+#[derive(Debug, GameBinschema)]
+pub struct SyncMenuMsgSwapItemSlots(pub [UpItemSlotRef; 2]);
 
 /// Message sent from server to client.
 #[derive(Debug, GameBinschema)]
@@ -91,6 +140,16 @@ pub enum DownMsg {
     /// Acknowledge having fully processed messages from client up to and including message number
     /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
     Ack { last_processed: u64 },
+    /// Invalidate the open sync menu opened with the given up msg index.
+    ///
+    /// The client unilaterally determines what sync menu it thinks it has open, and so may send
+    /// other messages to be processed within the context of the sync menu it thinks it has open.
+    /// However, the server has the ability to "invalidate" the client opening or having open some
+    /// sync menu, both immediately upon the client opening it so as to reject the opening of it,
+    /// and also later on if some conditions occur which makes forces it to close. Messages
+    /// received from the client which are to be processed within the context of the currently open
+    /// sync menu are generally just ignored if the currently open sync menu is invalidated.
+    InvalidateSyncMenu { up_msg_idx: u64 },
 }
 
 /// Message that client can process once logged in but possibly still before joining game.

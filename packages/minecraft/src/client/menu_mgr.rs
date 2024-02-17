@@ -2,10 +2,12 @@
 
 use crate::{
     client::{
+        network::Connection,
         menu_esc::EscMenu,
         menu_inventory::InventoryMenu,
     },
     gui::prelude::*,
+    message::*,
 };
 use std::cell::Cell;
 
@@ -17,6 +19,8 @@ pub struct MenuMgr {
     menu: Option<Menu>,
     // if Some, menu will be set to this value upon gui effect processing
     set_to: Cell<Option<Option<Menu>>>,
+    // currently open sync menu in terms of the server-client protocol
+    sync_menu: Option<PlayerMsgOpenSyncMenu>,
 }
 
 /// Shareable callback for a menu to set the open menu to something else.
@@ -106,9 +110,25 @@ impl MenuMgr {
     }
 
     /// Handle menu gui effects.
-    pub fn process_gui_effects(&mut self, ctx: &GuiWindowContext) {
+    pub fn process_gui_effects(&mut self, _: &GuiWindowContext, connection: &Connection) {
+        // setting the open menu (or lack thereof)
         if let Some(set_to) = self.set_to.take() {
+            let sync_menu_set_to = set_to.as_ref().and_then(|menu| match menu {
+                &Menu::EscMenu(_) => None,
+                &Menu::InventoryMenu(_) => Some(PlayerMsgOpenSyncMenu::Inventory),
+            });
+
+            // set the open menu client side
             self.menu = set_to;
+
+            // possibly send the server a sync message related menu
+            if self.sync_menu != sync_menu_set_to {
+                self.sync_menu = sync_menu_set_to;
+                let msg = sync_menu_set_to
+                    .map(PlayerMsg::OpenSyncMenu)
+                    .unwrap_or(PlayerMsg::CloseSyncMenu(PlayerMsgCloseSyncMenu));
+                connection.send(UpMsg::PlayerMsg(msg));
+            }
         }
     }
 }

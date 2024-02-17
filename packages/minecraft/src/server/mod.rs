@@ -108,6 +108,8 @@ pub struct ServerOnlyState {
     pub player_yaw: PerJoinedPlayer<f32>,
     pub player_pitch: PerJoinedPlayer<f32>,
 
+    pub player_open_sync_menu: PerJoinedPlayer<Option<process_player_msg::PlayerOpenSyncMenu>>,
+
     //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
     //pub char_states: PerPlayer<CharState>,
 }

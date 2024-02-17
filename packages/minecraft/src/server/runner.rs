@@ -91,6 +91,7 @@ pub fn run(
             player_pos: Default::default(),
             player_yaw: Default::default(),
             player_pitch: Default::default(),
+            player_open_sync_menu: Default::default(),
         },
         sync_ctx: ServerSyncCtx {
             game,
@@ -274,6 +275,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
             }
             // upgrade player key to joined player key
             ConnMgrEffect::BeginJoinPlayer { pk, save_state } => {
+                // **initialize most per-player stuff here**
                 server.sync_ctx.save_mgr.join_player(pk, save_state.is_some());
 
                 let (pos, yaw, pitch) = save_state
@@ -287,6 +289,8 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 server.server_only.player_pos.insert(pk, pos);
                 server.server_only.player_yaw.insert(pk, yaw);
                 server.server_only.player_pitch.insert(pk, pitch);
+
+                server.server_only.player_open_sync_menu.insert(pk, None)
             }
             // send player FinalizeJoinGame message
             ConnMgrEffect::FinalizeJoinPlayer { pk, self_clientside_player_idx } => {
@@ -318,6 +322,8 @@ fn process_conn_mgr_effects(server: &mut Server) {
             }
             // remove player
             ConnMgrEffect::RemovePlayer { pk, jpk, username } => {
+                // **deinitialize per-player stuff here**
+
                 let MustDrain = server.sync_ctx.chunk_mgr.remove_player(
                     pk, spawn_chunks(), server.sync_ctx.conn_mgr.players(),
                 );
@@ -336,6 +342,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
                     server.server_only.player_pos.remove(jpk);
                     server.server_only.player_yaw.remove(jpk);
                     server.server_only.player_pitch.remove(jpk);
+                    server.server_only.player_open_sync_menu.remove(jpk);
                 }
             }
         }

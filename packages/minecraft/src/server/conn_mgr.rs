@@ -280,6 +280,15 @@ impl ConnMgr {
         MustDrain
     }
 
+    /// Get the client's last_processed value.
+    ///
+    /// If currently processing a message from that client, this is the up msg index of that
+    /// message.
+    pub fn last_processed<K: Into<PlayerKey>>(&self, pk: K) -> u64 {
+        let pk = pk.into();
+        self.connections[self.player_conn_idx[pk]].last_processed
+    }
+
     /// If additional messages from the client were processed since processed messages were last
     /// marked as acked, return the current last_processed value and mark it as acked.
     ///

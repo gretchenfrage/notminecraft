@@ -5,7 +5,6 @@ use crate::{
     gui::prelude::*,
     util_hex_color::*,
 };
-use vek::*;
 
 
 /// The inventory menu.
@@ -31,7 +30,7 @@ impl InventoryMenu {
     pub fn gui<'a>(
         &'a mut self,
         ctx: &GuiGlobalContext<'a>,
-        menu_setter: MenuSetter<'a>,
+        _: MenuSetter<'a>,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         align(0.5,
             logical_size([176.0 * 2.0, 166.0 * 2.0],

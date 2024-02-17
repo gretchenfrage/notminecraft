@@ -1,6 +1,5 @@
 
 use crate::gui::prelude::*;
-use graphics::prelude::*;
 use std::fmt::{self, Formatter, Debug};
 use vek::*;
 
