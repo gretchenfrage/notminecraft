@@ -125,6 +125,11 @@ pub fn run(
                 // server shutdown requested
                 ServerEvent::Stop => {
                     info!("server stopping (stop requested)");
+                    return stop(server);
+                },
+                // server forceful shutdown requested
+                ServerEvent::ForceStop => {
+                    info!("server force stopping immediately, won't save (force stop requested)");
                     return;
                 },
                 // network event
@@ -196,14 +201,16 @@ fn do_tick(_server: &mut Server) {
 // do a save operation if appropriate to do so
 fn maybe_save(server: &mut Server) {
     // ask whether should save
-    let save_op = server.sync_ctx.save_mgr.maybe_save(server.sync_ctx.tick_mgr.tick());
-    let mut save_op = match save_op {
-        Some(save_op) => save_op,
-        None => return,
-    };
+    if server.sync_ctx.save_mgr.should_save(server.sync_ctx.tick_mgr.tick()) {
+        save(server);
+    }
+}
 
+// unconditionally do a save operation
+fn save(server: &mut Server) {
     // compile changed world state to be saved
-    trace!("saving");
+    debug!("saving");
+    let mut save_op = server.sync_ctx.save_mgr.begin_save();
     while let Some(should_save) = save_op.should_save.pop() {
         trace!(?should_save, "will save");
         save_op.will_save.push(match should_save {
@@ -400,4 +407,33 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             }
         }
     }
+}
+
+// gracefully shut down the server
+fn stop(mut server: Server) {
+    // shutdown subsystems
+    server.sync_ctx.conn_mgr.on_shutdown();
+    server.sync_ctx.chunk_mgr.on_shutdown();
+
+    // try to save until fully saved
+    while !server.sync_ctx.save_mgr.fully_saved() {
+        if !server.sync_ctx.save_mgr.save_op_in_progress() {
+            save(&mut server);
+        }
+
+        let event = server.server_only.server_recv.recv_unlimited_blocking(None);
+        match event {
+            // abort graceful shutdown upon receiving force stop
+            ServerEvent::ForceStop => return,
+            // kill incoming network connections when made
+            ServerEvent::Network(NetworkEvent::AddConnection(_, conn)) => conn.kill(),
+            // loop will exit after receiving this 0, 1, or 2 times
+            ServerEvent::SaveOpDone => {
+                server.sync_ctx.save_mgr.on_save_op_done(server.sync_ctx.tick_mgr.tick());
+            }
+            // everything else just ignore
+            _ => (),
+        }
+    }
+    info!("server fully saved, now exiting");
 }

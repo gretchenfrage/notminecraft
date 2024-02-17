@@ -437,4 +437,9 @@ impl ChunkMgr {
         }
         MustDrain
     }
+
+    /// Abort all loading chunks. For server shutdown.
+    pub fn on_shutdown(&mut self) {
+        self.loading_chunks.clear();
+    }
 }

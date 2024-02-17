@@ -51,6 +51,8 @@ use vek::*;
 pub enum ServerEvent {
     /// Shut down the server.
     Stop,
+    /// Shut down the server immediately without saving.
+    ForceStop,
     /// See inner type docs.
     Network(NetworkEvent),
     /// A job triggered by the conn mgr to load a player's save state from the save file is done

@@ -5,7 +5,7 @@ use crate::{
     server::ServerEvent,
 };
 use std::{
-    time::Instant,
+    time::{Instant, Duration},
     sync::Arc,
 };
 use parking_lot::{Mutex, Condvar};
@@ -150,4 +150,15 @@ impl ServerReceiver {
             }
         }
     }
+
+    /// Receive an event with unlimited blocking.
+    pub fn recv_unlimited_blocking(&self, priority_lteq: Option<EventPriority>) -> ServerEvent {
+        loop {
+            // this is the simplest way to do it, it's fine
+            let one_sec_later = Instant::now() + Duration::from_secs(1);
+            if let Some(event) = self.recv(Some(one_sec_later), priority_lteq) {
+                return event;
+            }
+        }
+    } 
 }

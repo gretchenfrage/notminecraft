@@ -45,7 +45,7 @@ Examples:
     Run the client.
 
     [this command] --server
-    Run the server
+    Run the server.
 
     [this command] --server --save=server --bind=127.0.0.1:35565
     Run the server with explicit options.

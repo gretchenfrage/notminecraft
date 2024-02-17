@@ -530,6 +530,20 @@ impl ConnMgr {
                 })));
         }
     }
+
+
+    /// Close all connections and abort all load player save state requests. For server shutdown.
+    pub fn on_shutdown(&mut self) {
+        for (_, conn) in &self.connections {
+            conn.connection.kill();
+        }
+        for pk in self.players.iter() {
+            let plsss = &self.player_load_save_state_state[pk];
+            if let &PlayerLoadSaveStateState::Loading(ref abort) = plsss {
+                abort.abort();
+            }
+        }
+    }
 }
 
 // temporary method until there's a better decentralized identity system

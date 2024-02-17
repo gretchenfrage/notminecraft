@@ -47,9 +47,9 @@ impl AbortGuard {
         self.0.clone()
     }
 
-    /// Mark as aborted (this just drops self).
-    pub fn abort(self) {
-        drop(self);
+    /// Mark as aborted (which is also done when dropped).
+    pub fn abort(&self) {
+        self.0.abort();
     }
 }
 

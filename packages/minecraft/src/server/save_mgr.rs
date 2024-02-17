@@ -81,6 +81,7 @@ struct TrackingState {
 /// 2. For each entry, assemble the appropriate `SaveEntry` from the data currently in the world
 ///    and push it to `SaveOp.will_save`.
 /// 3. Call `SaveOp.submit`.
+#[must_use]
 pub struct SaveOp<'a> {
     save_mgr: &'a mut SaveMgr,
     pub should_save: Vec<ShouldSave>,
@@ -209,45 +210,68 @@ impl SaveMgr {
         }
     }
 
-    /// Begin a save operation if appropriate. See `SaveOp`.
-    #[must_use]
-    pub fn maybe_save(&mut self, tick: u64) -> Option<SaveOp> {
-        // if should save
+    /// Whether a save operation should be done now. See `save`. Call every tick.
+    pub fn should_save(&mut self, tick: u64) -> bool {
         if match &self.last_saved {
             &LastSaved::AtTick(tick2) => tick >= tick2 + TICKS_BETWEEN_SAVES,
             &LastSaved::InProgress(_) => false,
         } {
-            // for everything marked as unsaved, mark as clean and add to should_save
-            let mut should_save = Vec::new();
-            let tracking = self.tracking.get_mut();
-            for (cc, ci) in tracking.unsaved_chunks.drain() {
-                *tracking.chunk_unsaved_idx.get_mut(cc, ci) = None;
-                should_save.push(ShouldSave::Chunk { cc, ci });
+            if self.fully_saved() {
+                self.last_saved = LastSaved::AtTick(tick);
+                false
+            } else {
+                true
             }
-            for pk in tracking.unsaved_players.drain() {
-                tracking.player_unsaved_idx[pk] = None;
-                should_save.push(ShouldSave::Player { pk })
-            }
-
-            // transfer the unflushed cache into will_save
-            let mut will_save = Vec::new();
-            for (chunk_key, chunk_val) in self.unflushed_chunks.drain() {
-                will_save.push(SaveEntry::Chunk(chunk_key, chunk_val));
-            }
-            for (player_key, player_val) in self.unflushed_players.drain() {
-                will_save.push(SaveEntry::Player(player_key, player_val));
-            }
-
-            // return the op
-            Some(SaveOp {
-                save_mgr: self,
-                should_save,
-                will_save,
-                submitted: false,
-            })
         } else {
-            None
+            false
         }
+    }
+
+    /// Begin a save operation. Save op must not be in-progress, or race conditions occur. See
+    /// `SaveOp`.
+    pub fn begin_save(&mut self) -> SaveOp {
+        debug_assert!(!self.save_op_in_progress());
+
+        // for everything marked as unsaved, mark as clean and add to should_save
+        let mut should_save = Vec::new();
+        let tracking = self.tracking.get_mut();
+        for (cc, ci) in tracking.unsaved_chunks.drain() {
+            *tracking.chunk_unsaved_idx.get_mut(cc, ci) = None;
+            should_save.push(ShouldSave::Chunk { cc, ci });
+        }
+        for pk in tracking.unsaved_players.drain() {
+            tracking.player_unsaved_idx[pk] = None;
+            should_save.push(ShouldSave::Player { pk })
+        }
+
+        // transfer the unflushed cache into will_save
+        let mut will_save = Vec::new();
+        for (chunk_key, chunk_val) in self.unflushed_chunks.drain() {
+            will_save.push(SaveEntry::Chunk(chunk_key, chunk_val));
+        }
+        for (player_key, player_val) in self.unflushed_players.drain() {
+            will_save.push(SaveEntry::Player(player_key, player_val));
+        }
+
+        // return the op
+        SaveOp {
+            save_mgr: self,
+            should_save,
+            will_save,
+            submitted: false,
+        }
+    }
+
+    /// Whether there is currently a save operation in-progress.
+    pub fn save_op_in_progress(&self) -> bool {
+        matches!(&self.last_saved, &LastSaved::InProgress(_))
+    }
+
+    /// Whether there is nothing in the world marked as unsaved and no in-progress save operation.
+    pub fn fully_saved(&self) -> bool {
+        !self.save_op_in_progress()
+        && self.tracking.borrow().unsaved_chunks.is_empty()
+        && self.tracking.borrow().unsaved_players.is_empty()
     }
 
     /// Call upon receiving a save op done event.
