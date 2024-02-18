@@ -30,6 +30,7 @@ use crate::{
     server::runner::ServerThread,
     thread_pool::ThreadPool,
     game_data::*,
+    sync_state_inventory_slots,
 };
 use chunk_data::*;
 use graphics::AsyncGpuVecContext;
@@ -92,4 +93,5 @@ pub struct Client {
     pub yaw: f32,
     pub pitch: f32,
     pub menu_mgr: MenuMgr,
+    pub inventory_slots: sync_state_inventory_slots::PlayerInventorySlots,
 }

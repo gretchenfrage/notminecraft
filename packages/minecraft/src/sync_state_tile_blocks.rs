@@ -1,4 +1,4 @@
-//! Module in the sync state pattern for the block ID and metadata at each tile.
+//! Sync state module for the block ID and metadata at each tile.
 
 use crate::{
     server::{

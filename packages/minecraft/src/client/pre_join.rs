@@ -14,6 +14,7 @@ use crate::{
         save_db::SaveDb,
     },
     gui::prelude::*,
+    sync_state_inventory_slots,
 };
 use chunk_data::*;
 use get_assets::DataDir;
@@ -192,6 +193,10 @@ pub fn join_in_background(
             yaw: f32::to_radians(45.0),
             pitch: f32::to_radians(45.0),
             menu_mgr: Default::default(),
+            inventory_slots: sync_state_inventory_slots::PlayerInventorySlots {
+                inventory_slots: crate::util_array::array_default(),
+                held_slot: Default::default(), // TODO: populate from message
+            }
         };
         let _ = oneshot_1.push(Box::new(ClientGuiState(client)));
     });
@@ -265,6 +270,10 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 client.player_pos[pk] = pos;
                 client.player_yaw[pk] = yaw;
                 client.player_pitch[pk] = pitch;
+            }
+            // set item slot
+            Edit::SetItemSlot { item_slot, slot_content } => {
+                // TODO
             }
         }
     }

@@ -102,6 +102,7 @@ pub fn run(
         },
         sync_state: ServerSyncState {
             tile_blocks: Default::default(),
+            player_inventory_slots: Default::default(),
         },
     };
 
@@ -289,8 +290,11 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 server.server_only.player_pos.insert(pk, pos);
                 server.server_only.player_yaw.insert(pk, yaw);
                 server.server_only.player_pitch.insert(pk, pitch);
-
-                server.server_only.player_open_sync_menu.insert(pk, None)
+                server.server_only.player_open_sync_menu.insert(pk, None);
+                server.sync_state.player_inventory_slots.insert(pk, sync_state_inventory_slots::PlayerInventorySlots {
+                    inventory_slots: crate::util_array::array_default(),
+                    held_slot: Default::default(), // TODO: populate from save file
+                });
             }
             // send player FinalizeJoinGame message
             ConnMgrEffect::FinalizeJoinPlayer { pk, self_clientside_player_idx } => {
@@ -301,7 +305,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
             // add fully joined player to client
             ConnMgrEffect::AddPlayerToClient { add_to, to_add, clientside_player_idx } => {
                 server.sync_ctx.conn_mgr.send(add_to, DownMsg::PreJoin(PreJoinDownMsg::AddPlayer(
-                        DownMsgAddPlayer {
+                    DownMsgAddPlayer {
                         player_idx: DownPlayerIdx(clientside_player_idx),
                         username: server.sync_ctx.conn_mgr.player_username(to_add).into(),
                         pos: server.server_only.player_pos[to_add],
@@ -343,6 +347,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
                     server.server_only.player_yaw.remove(jpk);
                     server.server_only.player_pitch.remove(jpk);
                     server.server_only.player_open_sync_menu.remove(jpk);
+                    server.sync_state.player_inventory_slots.remove(jpk);
                 }
             }
         }

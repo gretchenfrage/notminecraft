@@ -8,7 +8,9 @@ use crate::{
         SyncWorld,
     },
     message::*,
+    sync_state_inventory_slots,
 };
+use std::cmp::min;
 
 
 /// Per-player optional state for tracking sync menu they have open.
@@ -108,11 +110,79 @@ impl Process for SyncMenuMsg {
     }
 }
 
+fn resolve_slot<'a>(
+    item_slot: UpItemSlotRef,
+    world: &'a mut SyncWorld,
+    pk: JoinedPlayerKey,
+) -> sync_state_inventory_slots::SyncWriteSlot<'a> {
+    match item_slot {
+        UpItemSlotRef::Inventory(idx) =>
+            world.player_inventory_slots.get(pk).inventory_slot(idx.get()),
+        UpItemSlotRef::Held => world.player_inventory_slots.get(pk).held_slot()
+    }
+}
+
 impl Process for SyncMenuMsgTransferItems {
     // transfer items from one item slot to another
     fn process(self, world: &mut SyncWorld, pk: JoinedPlayerKey) {
         let SyncMenuMsgTransferItems { from, to, amount } = self;
-        // TODO
+        // clone the from slot, early-return if from slot is empty
+        let mut from_stack_clone = match resolve_slot(from, world, pk).as_ref() {
+            Some(from_stack_ref) => from_stack_ref.clone(),
+            None => return,
+        };
+        // compute how much we transfer over
+        let stack_limit = world.sync_ctx.game.items_max_count[from_stack_clone.iid].get();
+        let mut to_stack_write = resolve_slot(to, world, pk);
+        let to_can_take = to_stack_write.reborrow().as_ref()
+            .map(|to_stack_ref|
+                if to_stack_ref.iid == from_stack_clone.iid
+                    && to_stack_ref.meta == from_stack_clone.meta
+                    && to_stack_ref.damage == from_stack_clone.damage
+                {
+                    stack_limit.saturating_sub(to_stack_ref.count.get())
+                } else { 0 }
+            )
+            .unwrap_or(stack_limit);
+        if to_can_take > 0 {
+            let amount_transfer = min(to_can_take, from_stack_clone.count.get());
+            let from_final_amount = from_stack_clone.count.get() - amount_transfer;
+
+            // do the movement now
+            if let Some(mut to_stack_clone) = to_stack_write.reborrow().as_ref().cloned() {
+                // case where they both start non-0 count
+                // change to slot count
+                to_stack_clone.count = (to_stack_clone.count.get() + amount_transfer)
+                    .try_into().unwrap();
+                to_stack_write.write(Some(to_stack_clone));
+
+                let mut from_stack_write = resolve_slot(from, world, pk);
+                if from_final_amount > 0 {
+                    // change from slot count
+                    from_stack_clone.count = from_final_amount.try_into().unwrap();
+                    from_stack_write.write(Some(from_stack_clone));
+                } else {
+                    // from slot drops to 0
+                    from_stack_write.write(None);
+                }
+            } else {
+                if from_final_amount > 0 {
+                    // case where some but not all of from slot is splitting off to fill empty to
+                    let mut from_stack_clone_2 = from_stack_clone.clone();
+                    from_stack_clone_2.count = amount_transfer.try_into().unwrap();
+                    to_stack_write.write(Some(from_stack_clone_2));
+
+                    from_stack_clone.count = from_final_amount.try_into().unwrap();
+                    resolve_slot(from, world, pk).write(Some(from_stack_clone));
+                } else {
+                    // case where the entirety of from slot is moving to to slot
+                    debug_assert_eq!(from_stack_clone.count.get(), amount_transfer);
+                    to_stack_write.write(Some(from_stack_clone));
+
+                    resolve_slot(from, world, pk).write(None);
+                }
+            }
+        }
     }
 }
 
@@ -120,6 +190,10 @@ impl Process for SyncMenuMsgSwapItemSlots {
     // swap item slots content
     fn process(self, world: &mut SyncWorld, pk: JoinedPlayerKey) {
         let SyncMenuMsgSwapItemSlots([a, b]) = self;
-        // TODO
+        let a_clone = resolve_slot(a, world, pk).as_ref().cloned();
+        let mut b_write = resolve_slot(b, world, pk);
+        let b_clone = b_write.reborrow().as_ref().cloned();
+        b_write.write(a_clone);
+        resolve_slot(a, world, pk).write(b_clone);
     }
 }

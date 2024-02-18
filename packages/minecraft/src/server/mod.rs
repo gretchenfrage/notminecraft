@@ -40,6 +40,7 @@ use crate::{
     game_data::*,
     thread_pool::ThreadPool,
     sync_state_tile_blocks,
+    sync_state_inventory_slots,
 };
 use chunk_data::*;
 use std::sync::Arc;
@@ -119,7 +120,7 @@ pub struct ServerOnlyState {
 /// and/or save file.
 pub struct ServerSyncState {
     pub tile_blocks: PerChunk<ChunkBlocks>,
-    //pub inventory_slots: sync_state_inventory_slots::ServerState,
+    pub player_inventory_slots: PerJoinedPlayer<sync_state_inventory_slots::PlayerInventorySlots>,
 }
 
 /// State which game logic gets only shared references to. Often this is because the state is
@@ -152,7 +153,7 @@ pub struct SyncWorld<'a> {
     // ==== sync writers ====
 
     pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
-    //pub inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
+    pub player_inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
 }
 
 
@@ -172,6 +173,7 @@ impl<'a> SyncWorld<'a> {
     ) -> Self {
         let &mut ServerSyncState {
             ref mut tile_blocks,
+            ref mut player_inventory_slots,
         } = sync_state;
         SyncWorld {
             server_only,
@@ -180,6 +182,7 @@ impl<'a> SyncWorld<'a> {
             getter: sync_ctx.chunk_mgr.chunks().getter(),
 
             tile_blocks: sync_state_tile_blocks::SyncWrite::new_manual(sync_ctx, tile_blocks),
+            player_inventory_slots: sync_state_inventory_slots::SyncWrite::new_manual(sync_ctx, player_inventory_slots),
         }
     }
 }

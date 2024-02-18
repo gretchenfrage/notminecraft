@@ -2,7 +2,11 @@
 //!
 //! See `server::conn_mgr` module for more detailed explanation of connection protocol.
 
-use crate::game_binschema::GameBinschema;
+use crate::{
+    game_binschema::GameBinschema,
+    util_usize_lt::UsizeLt,
+    item::*,
+};
 use chunk_data::*;
 use vek::*;
 
@@ -86,12 +90,12 @@ pub struct PlayerMsgCloseSyncMenu;
 /// Reference to an item slot transmitted from client to server.
 ///
 /// This means it may be relative to the sync menu the client has open.
-#[derive(Debug, GameBinschema, Clone)]
+#[derive(Debug, GameBinschema, Copy, Clone)]
 pub enum UpItemSlotRef {
+    /// Item in the player's open inventory.
+    Inventory(UsizeLt<36>),
     /// The held item.
     Held,
-    /// Item in the player's open inventory.
-    Inventory(u8),
 }
 
 /// Player message to be processed by the currently open sync menu.
@@ -228,6 +232,10 @@ pub enum Edit {
         yaw: f32,
         pitch: f32,
     },
+    SetItemSlot {
+        item_slot: DownItemSlotRef,
+        slot_content: Option<ItemStack>,
+    }
 }
 
 /// Type safety wrapper around clientside player index in down msgs.
@@ -237,3 +245,12 @@ pub struct DownPlayerIdx(pub usize);
 /// Type safety wrapper around clientside chunk index in down msgs.
 #[derive(Debug, GameBinschema, Copy, Clone)]
 pub struct DownChunkIdx(pub usize);
+
+/// Reference to an item slot transmitted from server to client.
+#[derive(Debug, GameBinschema, Copy, Clone)]
+pub enum DownItemSlotRef {
+    /// The held item.
+    Held,
+    /// Item in the player's open inventory.
+    Inventory(UsizeLt<36>),
+}
