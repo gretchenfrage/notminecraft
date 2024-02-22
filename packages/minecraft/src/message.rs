@@ -141,6 +141,11 @@ pub enum DownMsg {
     /// the client should begin displaying the world to the user and allowing the user to interact
     /// with the world in ways that trigger player msgs.
     FinalizeJoinGame(DownMsgFinalizeJoinGame),
+    /*
+    /// Message that is only valid to send to client once it has fully joined the game.
+    PostJoin(PostJoinDownMsg),
+    */
+    
     /// Acknowledge having fully processed messages from client up to and including message number
     /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
     Ack { last_processed: u64 },
@@ -154,6 +159,7 @@ pub enum DownMsg {
     /// received from the client which are to be processed within the context of the currently open
     /// sync menu are generally just ignored if the currently open sync menu is invalidated.
     InvalidateSyncMenu { up_msg_idx: u64 },
+    
 }
 
 /// Message that client can process once logged in but possibly still before joining game.

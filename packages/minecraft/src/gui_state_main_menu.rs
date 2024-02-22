@@ -6,6 +6,11 @@ use crate::{
     asset::Assets,
     gui::prelude::*,
 	util_hex_color::hex_color,
+    client::join_server::{
+        ServerLocation,
+        spawn_join_server_thread,
+    },
+    message::*,
 };
 use graphics::{
 	Renderer,
@@ -139,17 +144,13 @@ impl GuiStateFrame for MainMenu {
 }
 
 fn on_singleplayer_click(ctx: &GuiGlobalContext) {
-    use crate::{
-        client::pre_join::{ServerLocation, join_in_background},
-        message::*,
-    };
-    let oneshot = join_in_background(
-        ctx.game.clone(),
-        ctx.thread_pool.clone(),
+    let oneshot = spawn_join_server_thread(
         ServerLocation::Internal {
             save_name: "server".to_owned(),
             data_dir: ctx.data_dir.clone(),
         },
+        &ctx.game,
+        &ctx.thread_pool,
         UpMsgLogIn { username: "client".to_owned() },
         ctx.renderer.borrow().create_async_gpu_vec_context(),
     );

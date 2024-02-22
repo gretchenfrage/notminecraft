@@ -2,7 +2,7 @@
 
 use crate::{
     client::{
-        pre_join::process_pre_join_msg,
+        process_msg::process_pre_join_msg,
         client_loaded_chunks::ClientLoadedChunks,
         chunk_mesh_mgr::ChunkMeshMgr,
         menu_esc::EscMenu,
