@@ -60,15 +60,18 @@ pub fn spawn_join_server_thread(
     let oneshot_2 = Arc::clone(&oneshot_1);
     let game = Arc::clone(game);
     let thread_pool = thread_pool.clone();
-    spawn(move || join_server(
-        server_location,
-        game,
-        thread_pool,
-        log_in_msg,
-        client_send_1,
-        client_recv,
-        gpu_vec_ctx,
-    ));
+    spawn(move || {
+        let client = join_server(
+            server_location,
+            game,
+            thread_pool,
+            log_in_msg,
+            client_send_1,
+            client_recv,
+            gpu_vec_ctx,
+        ).expect("uhhh idk it broked"); // TODO
+        oneshot_1.push(Box::new(ClientGuiState(client)))
+    });
     struct ClientLoadingOneshot {
         oneshot: Arc<ArrayQueue<Box<ClientGuiState>>>,
         client_send: ClientSender,
