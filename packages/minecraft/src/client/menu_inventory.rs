@@ -7,6 +7,7 @@ use crate::{
     },
     gui::prelude::*,
     util_hex_color::*,
+    util_array::*,
 };
 
 
@@ -14,6 +15,8 @@ use crate::{
 #[derive(Debug)]
 pub struct InventoryMenu {
     crafting: GuiTextBlock<false>,
+    hotbar_slot_text_caches: [ItemSlotTextCache; 9],
+    non_hotbar_slot_text_caches: [ItemSlotTextCache; 27],
 }
 
 impl InventoryMenu {
@@ -27,7 +30,11 @@ impl InventoryMenu {
             v_align: VAlign::Bottom,
             shadow: false,
         });
-        InventoryMenu { crafting }
+        InventoryMenu {
+            crafting,
+            hotbar_slot_text_caches: array_default(),
+            non_hotbar_slot_text_caches: array_default(),
+        }
     }
 
     pub fn gui<'a>(
@@ -44,18 +51,6 @@ impl InventoryMenu {
                             &mut self.crafting
                         )
                     ),
-                    margin(7.0 * 2.0, 0.0, 83.0 * 2.0, 0.0,
-                        align(0.0,
-                            item_grid_gui_block(
-                                &client.inventory_slots.inventory_slots[9..],
-                                ItemGridDefaultLayout::new(9),
-                                ItemGridDefaultRenderLogic {
-                                    item_mesh: client.item_mesh,
-                                },
-                                ItemGridDefaultClickLogic {},
-                            )
-                        )
-                    ),
                     margin(7.0 * 2.0, 0.0, 141.0 * 2.0, 0.0,
                         align(0.0,
                             item_grid_gui_block(
@@ -63,6 +58,20 @@ impl InventoryMenu {
                                 ItemGridDefaultLayout::new(9),
                                 ItemGridDefaultRenderLogic {
                                     item_mesh: client.item_mesh,
+                                    text_caches: self.hotbar_slot_text_caches.iter_mut(),
+                                },
+                                ItemGridDefaultClickLogic {},
+                            )
+                        )
+                    ),
+                    margin(7.0 * 2.0, 0.0, 83.0 * 2.0, 0.0,
+                        align(0.0,
+                            item_grid_gui_block(
+                                &client.inventory_slots.inventory_slots[9..],
+                                ItemGridDefaultLayout::new(9),
+                                ItemGridDefaultRenderLogic {
+                                    item_mesh: client.item_mesh,
+                                    text_caches: self.non_hotbar_slot_text_caches.iter_mut(),
                                 },
                                 ItemGridDefaultClickLogic {},
                             )

@@ -6,7 +6,10 @@ mod click_logic_default;
 
 pub use self::{
     layout_logic_default::ItemGridDefaultLayout,
-    render_logic_default::ItemGridDefaultRenderLogic,
+    render_logic_default::{
+        ItemGridDefaultRenderLogic,
+        ItemSlotTextCache,
+    },
     click_logic_default::ItemGridDefaultClickLogic,
 };
 

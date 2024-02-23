@@ -306,7 +306,7 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 // TODO: this is temp, for debugging:
                 let mut server = server.as_sync_world();
                 server.player_inventory_slots.get(pk).inventory_slot(0).write(Some(
-                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), ONE_NZU8, 0)
+                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), 13.try_into().unwrap(), 0)
                 ));
             }
             // add fully joined player to client
