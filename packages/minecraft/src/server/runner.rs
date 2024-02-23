@@ -321,7 +321,9 @@ fn process_conn_mgr_effects(server: &mut Server) {
 
                 // ack
                 if let Some(last_processed) = server.sync_ctx.conn_mgr.ack_last_processed(pk) {
-                    server.sync_ctx.conn_mgr.send(pk, DownMsg::Ack { last_processed });
+                    server.sync_ctx.conn_mgr.send(pk, DownMsg::PostJoin(
+                        PostJoinDownMsg::Ack { last_processed }
+                    ));
                 }
             }
             // remove player

@@ -52,8 +52,8 @@ impl Process for PlayerMsgSetCharState {
         world.server_only.player_pitch[pk] = pitch;
 
         for pk2 in world.sync_ctx.conn_mgr.players().iter() {
-            world.sync_ctx.conn_mgr.send(pk2, DownMsg::PreJoin(PreJoinDownMsg::ApplyEdit(
-                Edit::SetPlayerCharState {
+            world.sync_ctx.conn_mgr.send(pk2, DownMsg::PreJoin(
+                PreJoinDownMsg::SetPlayerCharState {
                     player_idx: DownPlayerIdx(
                         world.sync_ctx.conn_mgr.player_to_clientside(pk, pk2)
                     ),
@@ -61,7 +61,7 @@ impl Process for PlayerMsgSetCharState {
                     yaw,
                     pitch,
                 }
-            )));
+            ));
         }
     }
 }
@@ -87,7 +87,9 @@ impl Process for PlayerMsgOpenSyncMenu {
         world.server_only.player_open_sync_menu[pk] =
             Some(PlayerOpenSyncMenu { valid, menu: self, up_msg_idx });
         if !valid {
-            world.sync_ctx.conn_mgr.send(pk, DownMsg::InvalidateSyncMenu { up_msg_idx });
+            world.sync_ctx.conn_mgr.send(pk, DownMsg::PostJoin(
+                PostJoinDownMsg::InvalidateSyncMenu { up_msg_idx }
+            ));
         }
     }
 }
@@ -145,7 +147,7 @@ impl Process for SyncMenuMsgTransferItems {
             )
             .unwrap_or(stack_limit);
         if to_can_take > 0 {
-            let amount_transfer = min(to_can_take, from_stack_clone.count.get());
+            let amount_transfer = min(amount, min(to_can_take, from_stack_clone.count.get()));
             let from_final_amount = from_stack_clone.count.get() - amount_transfer;
 
             // do the movement now

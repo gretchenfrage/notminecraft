@@ -16,6 +16,7 @@ use crate::{
     gui::prelude::*,
     util_array::*,
     gui_state_loading::LoadingOneshot,
+    gui_state_loading_failure::LoadingFailureMenu,
 };
 use get_assets::DataDir;
 use std::{
@@ -31,7 +32,7 @@ use anyhow::*;
 /// Description of how to connect to a server when initializing a client.
 #[derive(Debug)]
 pub enum ServerLocation {
-    /// Create an internal by opening the given save file and connect to it.
+    /// Create an internal server by opening the given save file and connect to it.
     Internal {
         save_name: String,
         data_dir: DataDir,
@@ -61,7 +62,7 @@ pub fn spawn_join_server_thread(
     let game = Arc::clone(game);
     let thread_pool = thread_pool.clone();
     spawn(move || {
-        let client = join_server(
+        let result = join_server(
             server_location,
             game,
             thread_pool,
@@ -69,16 +70,21 @@ pub fn spawn_join_server_thread(
             client_send_1,
             client_recv,
             gpu_vec_ctx,
-        ).expect("uhhh idk it broked"); // TODO
-        oneshot_1.push(Box::new(ClientGuiState(client)))
+        );
+        if let Err(e) = result.as_ref() {
+            error!(%e, "error joining server");
+        }
+        let _ = oneshot_1.push(result);
     });
     struct ClientLoadingOneshot {
-        oneshot: Arc<ArrayQueue<Box<ClientGuiState>>>,
+        oneshot: Arc<ArrayQueue<Result<Client>>>,
         client_send: ClientSender,
     }
     impl LoadingOneshot for ClientLoadingOneshot {
-        fn poll(&mut self) -> Option<Box<dyn GuiStateFrameObj>> {
-            self.oneshot.pop().map(|b| b as _)
+        fn poll(&mut self, ctx: &GuiGlobalContext) -> Option<Box<dyn GuiStateFrameObj>> {
+            self.oneshot.pop().map(|result| result
+                .map(|client| Box::new(ClientGuiState(client)) as _)
+                .unwrap_or_else(|e| Box::new(LoadingFailureMenu::new(ctx, e)) as _))
         }
     }
     impl Drop for ClientLoadingOneshot {

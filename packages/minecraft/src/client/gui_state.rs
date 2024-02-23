@@ -2,7 +2,10 @@
 
 use crate::{
     client::{
-        process_msg::process_pre_join_msg,
+        process_msg::{
+            process_pre_join_msg,
+            process_post_join_msg,
+        },
         client_loaded_chunks::ClientLoadedChunks,
         chunk_mesh_mgr::ChunkMeshMgr,
         menu_esc::EscMenu,
@@ -49,12 +52,7 @@ impl ClientGuiState {
                     DownMsg::PreJoin(msg) => process_pre_join_msg(&mut self.0.pre_join, msg)?,
                     DownMsg::ShouldJoinGame => bail!("server protocol violation"),
                     DownMsg::FinalizeJoinGame(_) => bail!("server protocol violation"),
-                    DownMsg::Ack { .. } => (), // TODO
-                    DownMsg::InvalidateSyncMenu { up_msg_idx } => {
-                        // TODO: refactor where this is processed
-                        // TODO: process this
-                        debug!("sync menu invalidated");
-                    }
+                    DownMsg::PostJoin(msg) => process_post_join_msg(&mut self.0, msg)?,
                 }
                 NetworkEvent::Closed(msg) => bail!("server connection closed: {:?}", msg),
             },

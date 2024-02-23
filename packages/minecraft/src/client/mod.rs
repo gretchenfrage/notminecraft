@@ -9,6 +9,7 @@ pub mod chunk_mesh_mgr;
 pub mod join_server;
 pub mod process_msg;
 pub mod gui_state;
+pub mod item_grid;
 pub mod menu_mgr;
 pub mod menu_esc;
 pub mod menu_inventory;

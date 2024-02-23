@@ -32,6 +32,16 @@ impl<const LT: usize> UsizeLt<LT> {
     pub fn get(self) -> usize {
         self.0
     }
+
+    /// Use to index into an array with type-guaranteed safety.
+    pub fn idx<T>(self, array: &[T; LT]) -> &T {
+        unsafe { array.get_unchecked(self.0) }
+    }
+
+    /// Use to mutably index into an array with type-guaranteed safety.
+    pub fn idx_mut<T>(self, array: &mut [T; LT]) -> &mut T {
+        unsafe { array.get_unchecked_mut(self.0) }
+    }
 }
 
 impl<const LT: usize> Into<usize> for UsizeLt<LT> {

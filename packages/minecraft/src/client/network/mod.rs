@@ -11,7 +11,10 @@ use crate::{
         EventPriority,
     },
 };
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    cell::Cell,
+};
 use tokio::runtime::Handle;
 
 
@@ -20,7 +23,10 @@ use tokio::runtime::Handle;
 /// Closes the connection when dropped. If dropped, a `ConnectionEvent::Closed` may not be
 /// delivered, because it's assumed that the client is intentionally dropping the entire
 /// connection-related state.
-pub struct Connection(ConnectionInner);
+pub struct Connection {
+    inner: ConnectionInner,
+    last_up_msg_idx: Cell<u64>,
+}
 
 enum ConnectionInner {
     Ws(ws::Connection),
@@ -49,20 +55,30 @@ impl Connection {
         rt: &Handle,
         game: &Arc<GameData>,
     ) -> Self {
-        Connection(ConnectionInner::Ws(ws::Connection::connect(url, client_send, rt, game)))
+        Connection {
+            inner: ConnectionInner::Ws(ws::Connection::connect(url, client_send, rt, game)),
+            last_up_msg_idx: Cell::new(0),
+        }
     }
 
     /// Wrap around a server in-mem client.
     pub fn in_mem(inner: InMemClient) -> Self {
-        Connection(ConnectionInner::InMem(inner))
+        Connection {
+            inner: ConnectionInner::InMem(inner),
+            last_up_msg_idx: Cell::new(0),
+        }
     }
 
     /// Enqueue a message to be transmitted to the server.
-    pub fn send<M: Into<UpMsg>>(&self, msg: M) {
-        match &self.0 {
+    ///
+    /// Return the up msg index of the message that was just sent. They start at 1.
+    pub fn send<M: Into<UpMsg>>(&self, msg: M) -> u64 {
+        self.last_up_msg_idx.set(self.last_up_msg_idx.get() + 1);
+        match &self.inner {
             &ConnectionInner::Ws(ref inner) => inner.send(msg.into()),
             &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
         }
+        self.last_up_msg_idx.get()
     }
 }
 

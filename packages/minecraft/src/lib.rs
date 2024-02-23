@@ -36,6 +36,8 @@ pub mod gui_state_multiplayer_menu;
 pub mod gui_state_about;
 #[cfg(feature = "client")]
 pub mod gui_state_loading;
+#[cfg(feature = "client")]
+pub mod gui_state_loading_failure;
 //pub mod save_file;
 pub mod thread_pool;
 pub mod settings;

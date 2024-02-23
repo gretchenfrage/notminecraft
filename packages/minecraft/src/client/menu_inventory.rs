@@ -1,7 +1,10 @@
 //! The escape menu.
 
 use crate::{
-    client::menu_mgr::*,
+    client::{
+        menu_mgr::*,
+        item_grid::*,
+    },
     gui::prelude::*,
     util_hex_color::*,
 };
@@ -39,6 +42,26 @@ impl InventoryMenu {
                     margin(172.0, 0.0, 0.0, 166.0 * 2.0 - 46.0,
                         align([0.0, 1.0],
                             &mut self.crafting
+                        )
+                    ),
+                    margin(7.0 * 2.0, 0.0, 83.0 * 2.0, 0.0,
+                        align(0.0,
+                            item_grid_gui_block(
+                                &[(); 27],
+                                ItemGridDefaultLayout::new(9),
+                                ItemGridDefaultRenderLogic {},
+                                ItemGridDefaultClickLogic {},
+                            )
+                        )
+                    ),
+                    margin(7.0 * 2.0, 0.0, 141.0 * 2.0, 0.0,
+                        align(0.0,
+                            item_grid_gui_block(
+                                &[(); 9],
+                                ItemGridDefaultLayout::new(9),
+                                ItemGridDefaultRenderLogic {},
+                                ItemGridDefaultClickLogic {},
+                            )
                         )
                     ),
                 ))

@@ -141,25 +141,8 @@ pub enum DownMsg {
     /// the client should begin displaying the world to the user and allowing the user to interact
     /// with the world in ways that trigger player msgs.
     FinalizeJoinGame(DownMsgFinalizeJoinGame),
-    /*
     /// Message that is only valid to send to client once it has fully joined the game.
     PostJoin(PostJoinDownMsg),
-    */
-    
-    /// Acknowledge having fully processed messages from client up to and including message number
-    /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
-    Ack { last_processed: u64 },
-    /// Invalidate the open sync menu opened with the given up msg index.
-    ///
-    /// The client unilaterally determines what sync menu it thinks it has open, and so may send
-    /// other messages to be processed within the context of the sync menu it thinks it has open.
-    /// However, the server has the ability to "invalidate" the client opening or having open some
-    /// sync menu, both immediately upon the client opening it so as to reject the opening of it,
-    /// and also later on if some conditions occur which makes forces it to close. Messages
-    /// received from the client which are to be processed within the context of the currently open
-    /// sync menu are generally just ignored if the currently open sync menu is invalidated.
-    InvalidateSyncMenu { up_msg_idx: u64 },
-    
 }
 
 /// Message that client can process once logged in but possibly still before joining game.
@@ -173,8 +156,39 @@ pub enum PreJoinDownMsg {
     AddChunk(DownMsgAddChunk),
     /// Remove a loaded chunk from the client.
     RemoveChunk(DownMsgRemoveChunk),
-    /// Apply an edit to a loaded part of the world.
-    ApplyEdit(Edit),
+    SetTileBlock {
+        chunk_idx: DownChunkIdx,
+        lti: u16,
+        bid_meta: ErasedBidMeta,
+    },
+    SetPlayerCharState {
+        player_idx: DownPlayerIdx,
+        pos: Vec3<f32>,
+        yaw: f32,
+        pitch: f32,
+    },
+}
+
+/// Message that is only valid to send to client once it has fully joined the game.
+#[derive(Debug, GameBinschema)]
+pub enum PostJoinDownMsg {
+    /// Acknowledge having fully processed messages from client up to and including message number
+    /// `last_processed`, wherein the first up msg the client sends has a message number of 1.
+    Ack { last_processed: u64 },
+    /// Invalidate the open sync menu opened with the given up msg index.
+    ///
+    /// The client unilaterally determines what sync menu it thinks it has open, and so may send
+    /// other messages to be processed within the context of the sync menu it thinks it has open.
+    /// However, the server has the ability to "invalidate" the client opening or having open some
+    /// sync menu, both immediately upon the client opening it so as to reject the opening of it,
+    /// and also later on if some conditions occur which makes forces it to close. Messages
+    /// received from the client which are to be processed within the context of the currently open
+    /// sync menu are generally just ignored if the currently open sync menu is invalidated.
+    InvalidateSyncMenu { up_msg_idx: u64 },
+    SetItemSlot {
+        item_slot: DownItemSlotRef,
+        slot_content: Option<ItemStack>,
+    }
 }
 
 /// Part of connection initialization flow.
@@ -222,26 +236,6 @@ pub struct DownMsgAddChunk {
 pub struct DownMsgRemoveChunk {
     /// Follows a slab pattern.
     pub chunk_idx: DownChunkIdx,
-}
-
-/// Edit sent from the server to the client regarding some loaded state.
-#[derive(Debug, GameBinschema)]
-pub enum Edit {
-    SetTileBlock {
-        chunk_idx: DownChunkIdx,
-        lti: u16,
-        bid_meta: ErasedBidMeta,
-    },
-    SetPlayerCharState {
-        player_idx: DownPlayerIdx,
-        pos: Vec3<f32>,
-        yaw: f32,
-        pitch: f32,
-    },
-    SetItemSlot {
-        item_slot: DownItemSlotRef,
-        slot_content: Option<ItemStack>,
-    }
 }
 
 /// Type safety wrapper around clientside player index in down msgs.

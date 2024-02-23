@@ -45,26 +45,37 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.tile_blocks.remove(cc, ci);
             client.chunk_mesh_mgr.remove_chunk(cc, ci);
         }
-        // apply edit
-        PreJoinDownMsg::ApplyEdit(edit) => match edit {
-            // set tile block
-            Edit::SetTileBlock { chunk_idx, lti, bid_meta } => {
-                let (cc, ci, getter) = client.chunks.lookup(chunk_idx)?;
-                let tile = TileKey { cc, ci, lti };
-                tile.get(&mut client.tile_blocks).erased_set(bid_meta);
-                client.chunk_mesh_mgr.mark_adj_dirty(&getter, tile.gtc());
-            }
-            // set char state
-            Edit::SetPlayerCharState { player_idx, pos, yaw, pitch } => {
-                let pk = client.players.lookup(player_idx)?;
-                client.player_pos[pk] = pos;
-                client.player_yaw[pk] = yaw;
-                client.player_pitch[pk] = pitch;
-            }
-            // set item slot
-            Edit::SetItemSlot { item_slot, slot_content } => {
-                // TODO
-            }
+        // set tile block
+        PreJoinDownMsg::SetTileBlock { chunk_idx, lti, bid_meta } => {
+            let (cc, ci, getter) = client.chunks.lookup(chunk_idx)?;
+            let tile = TileKey { cc, ci, lti };
+            tile.get(&mut client.tile_blocks).erased_set(bid_meta);
+            client.chunk_mesh_mgr.mark_adj_dirty(&getter, tile.gtc());
+        }
+        // set char state
+        PreJoinDownMsg::SetPlayerCharState { player_idx, pos, yaw, pitch } => {
+            let pk = client.players.lookup(player_idx)?;
+            client.player_pos[pk] = pos;
+            client.player_yaw[pk] = yaw;
+            client.player_pitch[pk] = pitch;
+        }
+    }
+    Ok(())
+}
+
+/// Process a post join msg received from the network. Error indicates server protocol violation.
+pub fn process_post_join_msg(client: &mut Client, msg: PostJoinDownMsg) -> Result<()> {
+    match msg {
+        PostJoinDownMsg::Ack { .. } => (), // TODO
+        PostJoinDownMsg::InvalidateSyncMenu { up_msg_idx } =>
+            client.menu_mgr.on_invalidate_sync_menu_msg(up_msg_idx)?,
+        // set item slot
+        PostJoinDownMsg::SetItemSlot { item_slot, slot_content } => {
+            *match item_slot {
+                DownItemSlotRef::Held => &mut client.inventory_slots.held_slot,
+                DownItemSlotRef::Inventory(i) =>
+                    i.idx_mut(&mut client.inventory_slots.inventory_slots)
+            } = slot_content;
         }
     }
     Ok(())

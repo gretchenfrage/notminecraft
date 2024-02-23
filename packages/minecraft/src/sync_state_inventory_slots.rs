@@ -117,12 +117,10 @@ impl<'a> SyncWriteSlot<'a> {
     pub fn write(&mut self, content: Option<ItemStack>) {
         // send update to client
         self.ctx.conn_mgr
-            .send(self.pk, DownMsg::PreJoin(PreJoinDownMsg::ApplyEdit(
-                Edit::SetItemSlot {
-                    item_slot: self.slot_ref,
-                    slot_content: content.clone(),
-                }
-            )));
+            .send(self.pk, DownMsg::PostJoin(PostJoinDownMsg::SetItemSlot {
+                item_slot: self.slot_ref,
+                slot_content: content.clone(),
+            }));
 
         // TODO mark player state as unsaved
 

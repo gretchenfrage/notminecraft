@@ -10,7 +10,15 @@ use crate::{
     message::*,
 };
 use std::cell::Cell;
+use anyhow::*;
 
+
+/// A menu that the client can have open.
+#[derive(Debug)]
+pub enum Menu {
+    EscMenu(EscMenu),
+    InventoryMenu(InventoryMenu),
+}
 
 /// Manager for the client having a menu open.
 #[derive(Default)]
@@ -20,19 +28,19 @@ pub struct MenuMgr {
     // if Some, menu will be set to this value upon gui effect processing
     set_to: Cell<Option<Option<Menu>>>,
     // currently open sync menu in terms of the server-client protocol
-    sync_menu: Option<PlayerMsgOpenSyncMenu>,
+    curr_open_sync_menu: Option<CurrOpenSyncMenu>,
+}
+
+// currently open sync menu in terms of the server-client protocol
+#[derive(Debug, Copy, Clone)]
+struct CurrOpenSyncMenu {
+    open_sync_menu_msg: PlayerMsgOpenSyncMenu,
+    up_msg_idx: u64,
 }
 
 /// Shareable callback for a menu to set the open menu to something else.
 #[derive(Copy, Clone)]
 pub struct MenuSetter<'a>(&'a Cell<Option<Option<Menu>>>);
-
-/// A menu that the client can have open.
-#[derive(Debug)]
-pub enum Menu {
-    EscMenu(EscMenu),
-    InventoryMenu(InventoryMenu),
-}
 
 impl MenuMgr {
     /// Construct with no open menu.
@@ -109,11 +117,24 @@ impl MenuMgr {
         }
     }
 
+    /// Handle the receipt of an InvalidateSyncMenu message from the server.
+    ///
+    /// Error indicates server protocol violation.
+    pub fn on_invalidate_sync_menu_msg(&mut self, up_msg_idx: u64) -> Result<()> {
+        if let Some(cosm) = self.curr_open_sync_menu {
+            ensure!(up_msg_idx <= cosm.up_msg_idx, "InvalidateSyncMenu from future");
+            if up_msg_idx == cosm.up_msg_idx {
+                self.clear_menu();
+            }
+        }
+        Ok(())
+    }
+
     /// Handle menu gui effects.
     pub fn process_gui_effects(&mut self, _: &GuiWindowContext, connection: &Connection) {
         // setting the open menu (or lack thereof)
         if let Some(set_to) = self.set_to.take() {
-            let sync_menu_set_to = set_to.as_ref().and_then(|menu| match menu {
+            let open_sync_menu_msg = set_to.as_ref().and_then(|menu| match menu {
                 &Menu::EscMenu(_) => None,
                 &Menu::InventoryMenu(_) => Some(PlayerMsgOpenSyncMenu::Inventory),
             });
@@ -122,12 +143,15 @@ impl MenuMgr {
             self.menu = set_to;
 
             // possibly send the server a sync message related menu
-            if self.sync_menu != sync_menu_set_to {
-                self.sync_menu = sync_menu_set_to;
-                let msg = sync_menu_set_to
+            if self.curr_open_sync_menu.map(|cosm| cosm.open_sync_menu_msg) != open_sync_menu_msg {
+                let msg = open_sync_menu_msg
                     .map(PlayerMsg::OpenSyncMenu)
                     .unwrap_or(PlayerMsg::CloseSyncMenu(PlayerMsgCloseSyncMenu));
-                connection.send(UpMsg::PlayerMsg(msg));
+                let up_msg_idx = connection.send(UpMsg::PlayerMsg(msg));
+                self.curr_open_sync_menu = open_sync_menu_msg.map(|osmm| CurrOpenSyncMenu {
+                    open_sync_menu_msg: osmm,
+                    up_msg_idx,
+                });
             }
         }
     }

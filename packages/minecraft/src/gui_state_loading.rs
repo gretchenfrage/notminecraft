@@ -14,7 +14,7 @@ pub struct LoadingMenu {
 /// Loading menu queries this every frame to see if loading is done. If dropped should cancel the
 /// loading.
 pub trait LoadingOneshot {
-    fn poll(&mut self) -> Option<Box<dyn GuiStateFrameObj>>;
+    fn poll(&mut self, ctx: &GuiGlobalContext) -> Option<Box<dyn GuiStateFrameObj>>;
 }
 
 impl LoadingMenu {
@@ -67,7 +67,7 @@ impl GuiStateFrame for LoadingMenu {
     impl_visit_nodes!();
 
     fn update(&mut self, ctx: &GuiWindowContext, _: f32) {
-        if let Some(loaded) = self.oneshot.poll() {
+        if let Some(loaded) = self.oneshot.poll(ctx.global()) {
             ctx.global().pop_state_frame();
             ctx.global().push_state_frame_obj(loaded);
         }
