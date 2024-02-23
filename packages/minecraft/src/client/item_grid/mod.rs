@@ -14,7 +14,10 @@ use crate::{
     gui::prelude::*,
     game_data::*,
 };
-use graphics::prelude::*;
+use graphics::{
+    prelude::*,
+    modifier::Transform2,
+};
 use std::{
     sync::Arc,
     fmt::Debug,
@@ -32,7 +35,7 @@ pub fn item_grid_gui_block<'a, I, L, R, C>(
 where
     I: Debug,
     L: ItemGridLayoutLogic,
-    R: ItemGridRenderLogic<I>,
+    R: ItemGridRenderLogic<'a, I>,
     C: ItemGridClickLogic<I>,
 {
     ItemGridGuiBlock { item_slots, layout, render_logic, click_logic }
@@ -56,8 +59,20 @@ pub trait ItemGridLayoutLogic: Debug {
 }
 
 /// Logic/state for rendering each item slot.
-pub trait ItemGridRenderLogic<I>: Debug {
-
+pub trait ItemGridRenderLogic<'a, I>: Debug {
+    /// Draw an item slot to the canvas starting at the origin.
+    ///
+    /// The caller is required to only call this with strictly increasing item slot indexes.
+    fn draw(
+        &mut self,
+        ctx: GuiSpatialContext<'a>,
+        canvas: &mut Canvas2<'a, '_>,
+        item_slot_idx: usize,
+        item_slot: &'a I,
+        size: f32,
+        scale: f32,
+        is_cursor_over: bool,
+    );
 }
 
 /// Logic/state for handling an item slot being clicked.
@@ -87,7 +102,7 @@ impl<
     'a,
     I: Debug,
     L: ItemGridLayoutLogic,
-    R: ItemGridRenderLogic<I>,
+    R: ItemGridRenderLogic<'a, I>,
     C: ItemGridClickLogic<I>,
 > GuiBlock<'a, DimChildSets, DimChildSets> for ItemGridGuiBlock<'a, I, L, R, C> {
     type Sized = SizedItemGridGuiBlock<'a, I, L, R, C>;
@@ -95,8 +110,8 @@ impl<
     fn size(
         self,
         ctx: &GuiGlobalContext<'a>,
-        w_in: (),
-        h_in: (),
+        _w_in: (),
+        _h_in: (),
         scale: f32,
     ) -> (f32, f32, Self::Sized) {
         let size = self.layout.grid_size(self.item_slots.len(), scale);
@@ -114,7 +129,7 @@ impl<
     'a,
     I: Debug,
     L: ItemGridLayoutLogic,
-    R: ItemGridRenderLogic<I>,
+    R: ItemGridRenderLogic<'a, I>,
     C: ItemGridClickLogic<I>,
 > GuiNode<'a> for SizedItemGridGuiBlock<'a, I, L, R, C> {
     fn blocks_cursor(&self, ctx: GuiSpatialContext<'a>) -> bool {
@@ -136,7 +151,7 @@ impl<
         }
     }
 
-    fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+    fn draw(mut self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
         let cursor_over = ctx.cursor_pos
             .and_then(|pos| self.inner.layout.cursor_over(
                 pos,
@@ -144,17 +159,22 @@ impl<
                 self.scale,
             ));
         for (i, item_slot) in self.inner.item_slots.iter().enumerate() {
-            if cursor_over == Some(i) {
-                const SELECTED_ALPHA: f32 = (0xc5 as f32 - 0x8b as f32) / (0xff as f32 - 0x8b as f32);
-                let (
-                    pos,
-                    size,
-                ) = self.inner.layout.slot_pos_size(i, self.inner.item_slots.len(), self.scale);
-                canvas.reborrow()
-                    .translate(pos)
-                    .color([1.0, 1.0, 1.0, SELECTED_ALPHA])
-                    .draw_solid(size);
-            }
+            let (pos, size) =
+                self.inner.layout.slot_pos_size(i, self.inner.item_slots.len(), self.scale);
+            let trans = Transform2::translate(pos);
+            self.inner.render_logic.draw(
+                {
+                    let mut ctx = ctx;
+                    ctx.relativize(trans);
+                    ctx
+                },
+                &mut canvas.reborrow().modify(trans),
+                i,
+                item_slot,
+                size,
+                self.scale,
+                cursor_over == Some(i),
+            );
         }
     }
 }

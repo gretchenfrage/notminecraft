@@ -49,7 +49,9 @@ impl InventoryMenu {
                             item_grid_gui_block(
                                 &client.inventory_slots.inventory_slots[9..],
                                 ItemGridDefaultLayout::new(9),
-                                ItemGridDefaultRenderLogic {},
+                                ItemGridDefaultRenderLogic {
+                                    item_mesh: client.item_mesh,
+                                },
                                 ItemGridDefaultClickLogic {},
                             )
                         )
@@ -59,7 +61,9 @@ impl InventoryMenu {
                             item_grid_gui_block(
                                 &client.inventory_slots.inventory_slots[..9],
                                 ItemGridDefaultLayout::new(9),
-                                ItemGridDefaultRenderLogic {},
+                                ItemGridDefaultRenderLogic {
+                                    item_mesh: client.item_mesh,
+                                },
                                 ItemGridDefaultClickLogic {},
                             )
                         )

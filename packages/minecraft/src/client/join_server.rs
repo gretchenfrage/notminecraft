@@ -6,6 +6,7 @@ use crate::{
         network::*,
         process_msg::process_pre_join_msg,
         gui_state::ClientGuiState,
+        mesh_item::create_item_meshes,
         *,
     },
     server::{
@@ -189,6 +190,7 @@ fn construct_pre_join_client(
         server,
         thread_pool: thread_pool.clone(),
         gpu_vec_ctx: gpu_vec_ctx.clone(),
+        item_mesh: create_item_meshes(&game, &gpu_vec_ctx),
         chunks: Default::default(),
         tile_blocks: Default::default(),
         chunk_mesh_mgr: ChunkMeshMgr::new(game, client_send, thread_pool, gpu_vec_ctx),

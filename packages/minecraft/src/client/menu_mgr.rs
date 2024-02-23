@@ -9,7 +9,9 @@ use crate::{
     gui::prelude::*,
     message::*,
     sync_state_inventory_slots,
+    game_data::per_item::PerItem,
 };
+use graphics::prelude::*;
 use std::cell::Cell;
 use anyhow::*;
 
@@ -24,6 +26,7 @@ pub enum Menu {
 /// Client borrows that are given to the currently open menu when projecting the client as a gui.
 pub struct MenuGuiClientBorrows<'a> {
     pub inventory_slots: &'a sync_state_inventory_slots::PlayerInventorySlots,
+    pub item_mesh: &'a PerItem<Mesh>,
 }
 
 /// Manager for the client having a menu open.

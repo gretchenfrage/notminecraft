@@ -5,6 +5,7 @@ pub mod network;
 pub mod per_player;
 pub mod client_loaded_chunks;
 pub mod mesh_tile;
+pub mod mesh_item;
 pub mod chunk_mesh_mgr;
 pub mod join_server;
 pub mod process_msg;
@@ -31,11 +32,14 @@ use self::{
 use crate::{
     server::runner::ServerThread,
     thread_pool::ThreadPool,
-    game_data::*,
+    game_data::{
+        per_item::PerItem,
+        *,
+    },
     sync_state_inventory_slots,
 };
 use chunk_data::*;
-use graphics::AsyncGpuVecContext;
+use graphics::prelude::*;
 use std::sync::Arc;
 use vek::*;
 
@@ -73,6 +77,8 @@ pub struct PreJoinClient {
     pub thread_pool: ThreadPool,
     /// Handle for uploading data to the GPU asynchronously.
     pub gpu_vec_ctx: AsyncGpuVecContext,
+
+    pub item_mesh: PerItem<Mesh>,
 
     /// Client-side space of chunks.
     pub chunks: ClientLoadedChunks,
