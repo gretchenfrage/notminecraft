@@ -16,6 +16,7 @@ use crate::{
         *,
     },
     message::*,
+    item::*,
     thread_pool::ThreadPool,
     util_must_drain::MustDrain,
 };
@@ -301,6 +302,12 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::FinalizeJoinGame(DownMsgFinalizeJoinGame {
                     self_player_idx: DownPlayerIdx(self_clientside_player_idx),
                 }));
+
+                // TODO: this is temp, for debugging:
+                let mut server = server.as_sync_world();
+                server.player_inventory_slots.get(pk).inventory_slot(0).write(Some(
+                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), ONE_NZU8, 0)
+                ));
             }
             // add fully joined player to client
             ConnMgrEffect::AddPlayerToClient { add_to, to_add, clientside_player_idx } => {

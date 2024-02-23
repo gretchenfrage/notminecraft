@@ -8,6 +8,7 @@ use crate::{
         },
         client_loaded_chunks::ClientLoadedChunks,
         chunk_mesh_mgr::ChunkMeshMgr,
+        menu_mgr::MenuGuiClientBorrows,
         menu_esc::EscMenu,
         menu_inventory::InventoryMenu,
         *,
@@ -85,7 +86,9 @@ impl ClientGuiState {
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
             },
-            self.0.menu_mgr.gui(ctx),
+            self.0.menu_mgr.gui(ctx, MenuGuiClientBorrows {
+                inventory_slots: &self.0.inventory_slots,
+            }),
         ))
     }
 }

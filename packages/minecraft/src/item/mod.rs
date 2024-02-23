@@ -18,6 +18,9 @@ use std::{
 pub use self::erased::ItemMeta;
 
 
+pub const ONE_NZU8: NonZeroU8 = unsafe { NonZeroU8::new_unchecked(1) };
+
+
 /// Raw item ID, analogous to raw block ID.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct RawItemId(pub u16);
@@ -40,6 +43,19 @@ impl<M> ItemId<M> {
         ItemId {
             iid,
             _p: PhantomData,
+        }
+    }
+
+    /// Instantiate an item stack with this iid.
+    pub fn instantiate(self, meta: M, count: NonZeroU8, damage: u16) -> ItemStack
+    where
+        M: Debug + Clone + PartialEq + Send + Sync + 'static,
+    {
+        ItemStack {
+            iid: self.iid,
+            meta: ItemMeta::new(meta),
+            count,
+            damage,
         }
     }
 }

@@ -8,6 +8,7 @@ use crate::{
     },
     gui::prelude::*,
     message::*,
+    sync_state_inventory_slots,
 };
 use std::cell::Cell;
 use anyhow::*;
@@ -18,6 +19,11 @@ use anyhow::*;
 pub enum Menu {
     EscMenu(EscMenu),
     InventoryMenu(InventoryMenu),
+}
+
+/// Client borrows that are given to the currently open menu when projecting the client as a gui.
+pub struct MenuGuiClientBorrows<'a> {
+    pub inventory_slots: &'a sync_state_inventory_slots::PlayerInventorySlots,
 }
 
 /// Manager for the client having a menu open.
@@ -72,6 +78,7 @@ impl MenuMgr {
     pub fn gui<'a>(
         &'a mut self,
         ctx: &'a GuiWindowContext,
+        client: MenuGuiClientBorrows<'a>,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         self.menu.as_mut().map(|menu| {
             // darkened background
@@ -89,7 +96,7 @@ impl MenuMgr {
                     inner.gui(menu_setter)
                 ),
                 &mut Menu::InventoryMenu(ref mut inner) => GuiEither::B(
-                    inner.gui(ctx.global(), menu_setter)
+                    inner.gui(ctx.global(), client)
                 ),
             };
 

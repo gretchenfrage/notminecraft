@@ -33,7 +33,7 @@ impl InventoryMenu {
     pub fn gui<'a>(
         &'a mut self,
         ctx: &GuiGlobalContext<'a>,
-        _: MenuSetter<'a>,
+        client: MenuGuiClientBorrows<'a>,
     ) -> impl GuiBlock<'a, DimParentSets, DimParentSets> {
         align(0.5,
             logical_size([176.0 * 2.0, 166.0 * 2.0],
@@ -47,7 +47,7 @@ impl InventoryMenu {
                     margin(7.0 * 2.0, 0.0, 83.0 * 2.0, 0.0,
                         align(0.0,
                             item_grid_gui_block(
-                                &[(); 27],
+                                &client.inventory_slots.inventory_slots[9..],
                                 ItemGridDefaultLayout::new(9),
                                 ItemGridDefaultRenderLogic {},
                                 ItemGridDefaultClickLogic {},
@@ -57,7 +57,7 @@ impl InventoryMenu {
                     margin(7.0 * 2.0, 0.0, 141.0 * 2.0, 0.0,
                         align(0.0,
                             item_grid_gui_block(
-                                &[(); 9],
+                                &client.inventory_slots.inventory_slots[..9],
                                 ItemGridDefaultLayout::new(9),
                                 ItemGridDefaultRenderLogic {},
                                 ItemGridDefaultClickLogic {},
