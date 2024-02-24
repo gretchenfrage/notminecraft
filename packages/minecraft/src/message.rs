@@ -198,6 +198,8 @@ pub enum PostJoinDownMsg {
 pub struct DownMsgFinalizeJoinGame {
     /// The loaded player corresponding to the client itself.
     pub self_player_idx: DownPlayerIdx,
+    pub inventory_slots: [Option<ItemStack>; 36],
+    pub held_slot: Option<ItemStack>,
 }
 
 /// Load a player into the client.

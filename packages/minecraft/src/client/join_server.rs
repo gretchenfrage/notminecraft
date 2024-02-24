@@ -15,7 +15,6 @@ use crate::{
     },
     message::*,
     gui::prelude::*,
-    util_array::*,
     gui_state_loading::LoadingOneshot,
     gui_state_loading_failure::LoadingFailureMenu,
 };
@@ -261,7 +260,11 @@ fn finalize_join_game(
     client: PreJoinClient,
     finalize_join_game_msg: DownMsgFinalizeJoinGame,
 ) -> Result<Client> {
-    let DownMsgFinalizeJoinGame { self_player_idx } = finalize_join_game_msg;
+    let DownMsgFinalizeJoinGame {
+        self_player_idx,
+        inventory_slots,
+        held_slot,
+    } = finalize_join_game_msg;
     let self_pk = client.players.lookup(self_player_idx).context("server protocol violation")?;
     Ok(Client {
         pre_join: client,
@@ -271,8 +274,8 @@ fn finalize_join_game(
         pitch: f32::to_radians(45.0),
         menu_mgr: Default::default(),
         inventory_slots: sync_state_inventory_slots::PlayerInventorySlots {
-            inventory_slots: array_default(),
-            held_slot: Default::default(),
-        }
+            inventory_slots,
+            held_slot,
+        },
     })
 }

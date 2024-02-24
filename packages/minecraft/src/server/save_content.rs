@@ -3,6 +3,7 @@
 use crate::{
     game_data::GameData,
     game_binschema::GameBinschema,
+    item::*,
 };
 use binschema::{*, error::Result};
 use chunk_data::*;
@@ -47,7 +48,8 @@ pub struct PlayerSaveVal {
     pub pos: Vec3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    //pub inventory_slots: [ItemSlot; 36],
+    pub inventory_slots: [Option<ItemStack>; 36],
+    pub held_slot: Option<ItemStack>,
 }
 
 

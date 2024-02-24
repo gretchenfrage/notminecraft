@@ -18,6 +18,7 @@ use crate::{
     message::*,
     thread_pool::ThreadPool,
     util_must_drain::MustDrain,
+    util_array::*,
 };
 use std::{
     sync::Arc,
@@ -231,6 +232,9 @@ fn save(server: &mut Server) {
                     pos: server.server_only.player_pos[pk],
                     yaw: server.server_only.player_yaw[pk],
                     pitch: server.server_only.player_pitch[pk],
+                    inventory_slots:
+                        server.sync_state.player_inventory_slots[pk].inventory_slots.clone(),
+                    held_slot: server.sync_state.player_inventory_slots[pk].held_slot.clone(),
                 },
             ),
         });
@@ -279,12 +283,22 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 // **initialize most per-player stuff here**
                 server.sync_ctx.save_mgr.join_player(pk, save_state.is_some());
 
-                let (pos, yaw, pitch) = save_state
-                    .map(|val| (val.pos, val.yaw, val.pitch))
+                let (pos, yaw, pitch, inventory_slots, held_slot) = save_state
+                    .map(|val| (val.pos, val.yaw, val.pitch, val.inventory_slots, val.held_slot))
                     .unwrap_or((
                         Vec3::new(8.0, 8.0, 80.0),
                         0.0,
                         0.0,
+                        {
+                            let mut inventory_slots = array_default();
+                            inventory_slots[0] = Some(server.sync_ctx.game.content.stone.iid_stone
+                                .instantiate((), 13.try_into().unwrap(), 0));
+                            inventory_slots
+                        },
+                        Some(
+                            server.sync_ctx.game.content.stone.iid_stone
+                                .instantiate((), 7.try_into().unwrap(), 0)
+                        ),
                     ));
 
                 server.server_only.player_pos.insert(pk, pos);
@@ -292,24 +306,17 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 server.server_only.player_pitch.insert(pk, pitch);
                 server.server_only.player_open_sync_menu.insert(pk, None);
                 server.sync_state.player_inventory_slots.insert(pk, sync_state_inventory_slots::PlayerInventorySlots {
-                    inventory_slots: crate::util_array::array_default(),
-                    held_slot: Default::default(), // TODO: populate from save file
+                    inventory_slots,
+                    held_slot,
                 });
             }
             // send player FinalizeJoinGame message
             ConnMgrEffect::FinalizeJoinPlayer { pk, self_clientside_player_idx } => {
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::FinalizeJoinGame(DownMsgFinalizeJoinGame {
                     self_player_idx: DownPlayerIdx(self_clientside_player_idx),
+                    inventory_slots: server.sync_state.player_inventory_slots[pk].inventory_slots.clone(),
+                    held_slot: server.sync_state.player_inventory_slots[pk].held_slot.clone(),
                 }));
-
-                // TODO: this is temp, for debugging:
-                let mut server = server.as_sync_world();
-                server.player_inventory_slots.get(pk).inventory_slot(0).write(Some(
-                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), 13.try_into().unwrap(), 0)
-                ));
-                server.player_inventory_slots.get(pk).held_slot().write(Some(
-                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), 7.try_into().unwrap(), 0)
-                ));
             }
             // add fully joined player to client
             ConnMgrEffect::AddPlayerToClient { add_to, to_add, clientside_player_idx } => {
@@ -344,21 +351,23 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 );
                 process_chunk_mgr_effects(server);
                 if let Some(jpk) = jpk {
+                    let pos = server.server_only.player_pos.remove(jpk);
+                    let yaw = server.server_only.player_yaw.remove(jpk);
+                    let pitch = server.server_only.player_pitch.remove(jpk);
+                    server.server_only.player_open_sync_menu.remove(jpk);
+                    let inventory_slots = server.sync_state.player_inventory_slots.remove(jpk);
+
                     server.sync_ctx.save_mgr.remove_player(
                         jpk,
                         PlayerSaveKey { username },
                         PlayerSaveVal {
-                            pos: server.server_only.player_pos[jpk],
-                            yaw: server.server_only.player_yaw[jpk],
-                            pitch: server.server_only.player_pitch[jpk],
+                            pos,
+                            yaw,
+                            pitch,
+                            inventory_slots: inventory_slots.inventory_slots,
+                            held_slot: inventory_slots.held_slot,
                         },
                     );
-
-                    server.server_only.player_pos.remove(jpk);
-                    server.server_only.player_yaw.remove(jpk);
-                    server.server_only.player_pitch.remove(jpk);
-                    server.server_only.player_open_sync_menu.remove(jpk);
-                    server.sync_state.player_inventory_slots.remove(jpk);
                 }
             }
         }
