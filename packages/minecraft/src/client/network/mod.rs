@@ -14,6 +14,7 @@ use crate::{
 use std::{
     sync::Arc,
     cell::Cell,
+    fmt::{self, Formatter, Debug},
 };
 use tokio::runtime::Handle;
 
@@ -85,5 +86,11 @@ impl Connection {
 impl From<InMemClient> for Connection {
     fn from(inner: InMemClient) -> Self {
         Self::in_mem(inner)
+    }
+}
+
+impl Debug for Connection {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("Connection { .. }")
     }
 }

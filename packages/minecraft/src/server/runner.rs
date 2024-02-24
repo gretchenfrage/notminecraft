@@ -16,7 +16,6 @@ use crate::{
         *,
     },
     message::*,
-    item::*,
     thread_pool::ThreadPool,
     util_must_drain::MustDrain,
 };
@@ -307,6 +306,9 @@ fn process_conn_mgr_effects(server: &mut Server) {
                 let mut server = server.as_sync_world();
                 server.player_inventory_slots.get(pk).inventory_slot(0).write(Some(
                     server.sync_ctx.game.content.stone.iid_stone.instantiate((), 13.try_into().unwrap(), 0)
+                ));
+                server.player_inventory_slots.get(pk).held_slot().write(Some(
+                    server.sync_ctx.game.content.stone.iid_stone.instantiate((), 7.try_into().unwrap(), 0)
                 ));
             }
             // add fully joined player to client

@@ -8,6 +8,7 @@ use crate::{
     gui::prelude::*,
     util_hex_color::*,
     util_array::*,
+    message::*,
 };
 
 
@@ -17,6 +18,7 @@ pub struct InventoryMenu {
     crafting: GuiTextBlock<false>,
     hotbar_slot_text_caches: [ItemSlotTextCache; 9],
     non_hotbar_slot_text_caches: [ItemSlotTextCache; 27],
+    held_slot_text_cache: ItemSlotTextCacheNonhoverable,
 }
 
 impl InventoryMenu {
@@ -34,6 +36,7 @@ impl InventoryMenu {
             crafting,
             hotbar_slot_text_caches: array_default(),
             non_hotbar_slot_text_caches: array_default(),
+            held_slot_text_cache: Default::default(),
         }
     }
 
@@ -56,11 +59,16 @@ impl InventoryMenu {
                             item_grid_gui_block(
                                 &client.inventory_slots.inventory_slots[..9],
                                 ItemGridDefaultLayout::new(9),
-                                ItemGridDefaultRenderLogic {
-                                    item_mesh: client.item_mesh,
-                                    text_caches: self.hotbar_slot_text_caches.iter_mut(),
-                                },
-                                ItemGridDefaultClickLogic {},
+                                item_grid_default_render_logic(
+                                    client.item_mesh,
+                                    &client.inventory_slots.held_slot,
+                                    self.hotbar_slot_text_caches.iter_mut(),
+                                ),
+                                item_grid_default_click_logic(
+                                    client.connection,
+                                    &client.inventory_slots.held_slot,
+                                    |i| UpItemSlotRef::Inventory(i.try_into().unwrap()),
+                                ),
                             )
                         )
                     ),
@@ -69,13 +77,22 @@ impl InventoryMenu {
                             item_grid_gui_block(
                                 &client.inventory_slots.inventory_slots[9..],
                                 ItemGridDefaultLayout::new(9),
-                                ItemGridDefaultRenderLogic {
-                                    item_mesh: client.item_mesh,
-                                    text_caches: self.non_hotbar_slot_text_caches.iter_mut(),
-                                },
-                                ItemGridDefaultClickLogic {},
+                                item_grid_default_render_logic(
+                                    client.item_mesh,
+                                    &client.inventory_slots.held_slot,
+                                    self.non_hotbar_slot_text_caches.iter_mut(),
+                                ),
+                                item_grid_default_click_logic(
+                                    client.connection,
+                                    &client.inventory_slots.held_slot,
+                                    |i| UpItemSlotRef::Inventory((i + 9).try_into().unwrap()),
+                                ),
                             )
                         )
+                    ),
+                    self.held_slot_text_cache.held_item_gui_block(
+                        client.item_mesh,
+                        &client.inventory_slots.held_slot,
                     ),
                 ))
             )

@@ -25,6 +25,7 @@ pub enum Menu {
 
 /// Client borrows that are given to the currently open menu when projecting the client as a gui.
 pub struct MenuGuiClientBorrows<'a> {
+    pub connection: &'a Connection,
     pub inventory_slots: &'a sync_state_inventory_slots::PlayerInventorySlots,
     pub item_mesh: &'a PerItem<Mesh>,
 }

@@ -2,7 +2,7 @@
 use super::*;
 
 
-const DEFAULT_SLOT_LOGICAL_SIZE: f32 = 32.0;
+pub const DEFAULT_SLOT_LOGICAL_SIZE: f32 = 32.0;
 
 /// Reasonable-defaults `ItemGridLayoutLogic` implementation.
 #[derive(Debug)]

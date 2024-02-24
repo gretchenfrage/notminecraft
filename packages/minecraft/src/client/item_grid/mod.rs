@@ -5,12 +5,17 @@ mod render_logic_default;
 mod click_logic_default;
 
 pub use self::{
-    layout_logic_default::ItemGridDefaultLayout,
-    render_logic_default::{
-        ItemGridDefaultRenderLogic,
-        ItemSlotTextCache,
+    layout_logic_default::{
+        DEFAULT_SLOT_LOGICAL_SIZE,
+        ItemGridDefaultLayout,
     },
-    click_logic_default::ItemGridDefaultClickLogic,
+    render_logic_default::{
+        item_grid_default_render_logic,
+        ItemSlotTextCache,
+        ItemSlotTextCacheNonhoverable,
+        ItemSlotRenderer,
+    },
+    click_logic_default::item_grid_default_click_logic,
 };
 
 use crate::{
@@ -23,7 +28,7 @@ use graphics::{
 };
 use std::{
     sync::Arc,
-    fmt::Debug,
+    fmt::{self, Formatter, Debug},
 };
 use vek::*;
 
@@ -45,7 +50,7 @@ where
 }
 
 /// Logic/state for converting between item slot index and geometric space.
-pub trait ItemGridLayoutLogic: Debug {
+pub trait ItemGridLayoutLogic {
     /// Compute the gui block size of the grid as a whole.
     fn grid_size(&self, num_slots: usize, scale: f32) -> Extent2<f32>;
 
@@ -62,7 +67,7 @@ pub trait ItemGridLayoutLogic: Debug {
 }
 
 /// Logic/state for rendering each item slot.
-pub trait ItemGridRenderLogic<'a, I>: Debug {
+pub trait ItemGridRenderLogic<'a, I> {
     /// Draw an item slot to the canvas starting at the origin.
     ///
     /// The caller is required to only call this with strictly increasing item slot indexes.
@@ -79,7 +84,7 @@ pub trait ItemGridRenderLogic<'a, I>: Debug {
 }
 
 /// Logic/state for handling an item slot being clicked.
-pub trait ItemGridClickLogic<I>: Debug {
+pub trait ItemGridClickLogic<I> {
     /// Handle an item slot being clicked.
     fn handle_click(
         self,
@@ -93,7 +98,6 @@ pub trait ItemGridClickLogic<I>: Debug {
 
 // ==== gui block implementation ====
 
-#[derive(Debug)]
 struct ItemGridGuiBlock<'a, I, L, R, C> {
     item_slots: &'a [I],
     layout: L,
@@ -112,7 +116,7 @@ impl<
 
     fn size(
         self,
-        ctx: &GuiGlobalContext<'a>,
+        _ctx: &GuiGlobalContext<'a>,
         _w_in: (),
         _h_in: (),
         scale: f32,
@@ -122,7 +126,12 @@ impl<
     }
 }
 
-#[derive(Debug)]
+impl<'a, I, L, R, C> Debug for ItemGridGuiBlock<'a, I, L, R, C> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("ItemGridGuiBlock { .. }")
+    }
+}
+
 struct SizedItemGridGuiBlock<'a, I, L, R, C> {
     inner: ItemGridGuiBlock<'a, I, L, R, C>,
     scale: f32,
@@ -179,5 +188,11 @@ impl<
                 cursor_over == Some(i),
             );
         }
+    }
+}
+
+impl<'a, I, L, R, C> Debug for SizedItemGridGuiBlock<'a, I, L, R, C> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("SizedItemGridGuiBlock { .. }")
     }
 }

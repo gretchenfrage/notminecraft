@@ -87,6 +87,7 @@ impl ClientGuiState {
                 pitch: self.0.pitch,
             },
             self.0.menu_mgr.gui(ctx, MenuGuiClientBorrows {
+                connection: &self.0.pre_join.connection,
                 inventory_slots: &self.0.inventory_slots,
                 item_mesh: &self.0.pre_join.item_mesh,
             }),
