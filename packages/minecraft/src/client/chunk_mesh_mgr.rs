@@ -78,11 +78,11 @@ pub struct ChunkMesh {
 // state a chunk's mesh can be in
 enum MeshState {
     // chunk is still being meshed for the first time in the thread pool
-    Meshing(AbortGuard),
+    Meshing(#[allow(dead_code)] AbortGuard),
     // chunk's mesh exists and is owned here
     Meshed(ChunkMesh),
     // chunk's mesh is currently being patched in the patching thread
-    Patching(AbortGuard),
+    Patching(#[allow(dead_code)] AbortGuard),
 }
 
 // shared state for initial meshing jobs in the thread pool

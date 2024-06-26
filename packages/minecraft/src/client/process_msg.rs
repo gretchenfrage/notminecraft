@@ -59,6 +59,11 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw[pk] = yaw;
             client.player_pitch[pk] = pitch;
         }
+        PreJoinDownMsg::SetStevePosVel { steve_idx, pos, vel } => {
+            let steve = &mut client.steves[steve_idx];
+            steve.pos = pos;
+            steve.vel = vel;
+        }
     }
     Ok(())
 }

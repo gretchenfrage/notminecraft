@@ -198,6 +198,7 @@ fn construct_pre_join_client(
         player_pos: Default::default(),
         player_yaw: Default::default(),
         player_pitch: Default::default(),
+        steves: Default::default(),
     }
 }
 
@@ -266,6 +267,30 @@ fn finalize_join_game(
         held_slot,
     } = finalize_join_game_msg;
     let self_pk = client.players.lookup(self_player_idx).context("server protocol violation")?;
+    let steve_mesh = {
+        let mut mesh_buf = MeshData::new();
+        use mesh_data::*;
+        for face in FACES {
+            let (pos_start, [pos_ext_1, pos_ext_2]) = face.quad_start_extents();
+            let steve_ext = Vec3::new(
+                sync_state_steve::STEVE_WIDTH,
+                sync_state_steve::STEVE_HEIGHT,
+                sync_state_steve::STEVE_WIDTH,
+            );
+            let mut pos_start = pos_start.to_poles().map(|pole| pole.to_int() as f32) * (steve_ext / 2.0);
+            pos_start.y += sync_state_steve::STEVE_HEIGHT / 2.0;
+            mesh_buf.add_quad(&Quad {
+                pos_start,
+                pos_ext_1: (pos_ext_1.to_signs().map(|sign| sign.to_int() as f32) * steve_ext).into(),
+                pos_ext_2: (pos_ext_2.to_signs().map(|sign| sign.to_int() as f32) * steve_ext).into(),
+                tex_start: 0.0.into(),
+                tex_extent: 1.0.into(),
+                vert_colors: [Rgba::red(); 4],
+                tex_index: 0,
+            });
+        }
+        mesh_buf.upload(&client.gpu_vec_ctx)
+    };
     Ok(Client {
         pre_join: client,
         self_pk,
@@ -277,5 +302,6 @@ fn finalize_join_game(
             inventory_slots,
             held_slot,
         },
+        steve_mesh,
     })
 }

@@ -55,7 +55,7 @@ enum LastSaved {
     // last save operation completed at this tick
     AtTick(u64),
     // a save operation is currently pending
-    InProgress(AbortGuard),
+    InProgress(#[allow(dead_code)] AbortGuard),
 }
 
 // refcell-guarded state for tracking which things are saved

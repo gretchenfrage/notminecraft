@@ -8,6 +8,7 @@ use std::{
         Layout,
         alloc,
         dealloc,
+        handle_alloc_error,
     },
 };
 
@@ -41,11 +42,14 @@ impl CallbackCell {
             let (layout, callback_offset) = Layout::new::<unsafe fn(bool, *mut u8)>()
                 .extend(Layout::new::<F>()).unwrap();
             let ptr = alloc(layout);
+            if ptr.is_null() {
+                handle_alloc_error(layout);
+            }
             (ptr as *mut unsafe fn(bool, *mut u8)).write(fn_ptr_impl::<F>);
             (ptr.add(callback_offset) as *mut F).write(f);
 
             // atomic put
-            let old_ptr = self.0.swap(ptr as usize, Ordering::SeqCst);
+            let old_ptr = self.0.swap(ptr as usize, Ordering::Release);
 
             // clean up previous value
             drop_raw(old_ptr as *mut u8);
@@ -56,7 +60,7 @@ impl CallbackCell {
     pub fn take_call(&self) {
         unsafe {
             // atomic take
-            let ptr = self.0.swap(0, Ordering::SeqCst) as *mut u8;
+            let ptr = self.0.swap(0, Ordering::Acquire) as *mut u8;
 
             // run it
             if !ptr.is_null() {

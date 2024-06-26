@@ -60,7 +60,6 @@ use winit::{
     },
     window::{
     	Window,
-    	WindowBuilder,
     	CursorGrabMode,
     },
     event::{
@@ -297,10 +296,12 @@ impl GuiEventLoop {
 	pub fn new(tokio: &Handle, thread_pool: ThreadPool) -> Self {
 		let event_loop = EventLoop::new()
 			.expect("failed to create event loop");
-		let window = WindowBuilder::new()
-			.with_inner_size(LogicalSize::new(854, 480))
-			.with_title("Not Minecraft")
-			.build(&event_loop)
+		let window = event_loop
+			.create_window(
+				Window::default_attributes()
+				.with_inner_size(LogicalSize::new(854, 480))
+				.with_title("Not Minecraft")
+			)
 			.expect("failed to build window");
 		let window = Arc::new(window);
 	
@@ -334,7 +335,7 @@ impl GuiEventLoop {
 
 		// decide what FPS to try and render at
 		const MIN_AUTO_MILLIHERTZ: u32 = 1000 * 60;
-		let millihertz = self.event_loop.available_monitors()
+		let millihertz = self.window.available_monitors()
 			.filter_map(|monitor| monitor.refresh_rate_millihertz())
 			.filter(|&millihertz| millihertz >= MIN_AUTO_MILLIHERTZ)
 			.max()

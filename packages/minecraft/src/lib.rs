@@ -23,6 +23,7 @@ pub mod util_cos;
 pub mod util_net;
 pub mod util_callback_cell;
 pub mod util_usize_lt;
+pub mod util_erased_option_ref;
 pub mod block_update_queue;
 pub mod game_data;
 pub mod item;
@@ -46,6 +47,7 @@ pub mod server;
 pub mod message;
 pub mod sync_state_tile_blocks;
 pub mod sync_state_inventory_slots;
+pub mod sync_state_steve;
 #[cfg(feature = "client")]
 pub mod client;
 

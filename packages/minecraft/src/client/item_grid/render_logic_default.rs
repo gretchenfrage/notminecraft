@@ -36,7 +36,7 @@ pub struct ItemSlotTextCache {
     name_text: NameTextCache,
 }
 
-/// Cache for the layout-out text for rendering an item slot, excluding hover text.
+/// Cache for the layed-out text for rendering an item slot, excluding hover text.
 #[derive(Debug, Default)]
 pub struct ItemSlotTextCacheNonhoverable {
     count_text: CountTextCache,

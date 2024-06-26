@@ -15,14 +15,14 @@ pub fn do_physics<C, W>(
     vel: &mut Vec3<f32>,
     collision_obj: &C,
     world_geom: &W,
-) -> DidPhysics
+) -> DidPhysics<W::BarrierId>
 where
     C: CollisionObject,
     W: WorldGeometry,
 {
     const EPSILON: f32 = 0.0001;
 
-    let mut on_ground = false;
+    let mut on_ground = None;
 
     while dt > EPSILON {
         if let Some(collision) = collision_obj.first_collision(
@@ -33,7 +33,7 @@ where
             world_geom,
         ) {
             if collision.barrier_face == Face::PosY {
-                on_ground = true;
+                on_ground = Some(collision.barrier_id);
             }
 
             *pos += *vel * collision.dt;
@@ -56,7 +56,7 @@ where
 
 /// Information returned from `do_physics`.
 #[derive(Debug, Clone)]
-pub struct DidPhysics {
+pub struct DidPhysics<B> {
     /// Whether physics object collided with the ground at all.
-    pub on_ground: bool,
+    pub on_ground: Option<B>,
 }

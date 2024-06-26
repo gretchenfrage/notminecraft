@@ -82,7 +82,7 @@ pub struct WorldPhysicsGeometry<'a> {
 }
 
 impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
-    type BarrierId = ();
+    type BarrierId = Vec3<i64>;
 
     fn tile_geometry<V: FnMut(AaBox, Self::BarrierId)>(
         &self,
@@ -101,7 +101,7 @@ impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
             &BlockPhysicsLogic::BasicCube => {
                 visit(
                     AaBox::UNIT_BOX,
-                    (),
+                    gtc,
                 );
             }
         }
