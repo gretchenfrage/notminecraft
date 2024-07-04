@@ -1,0 +1,375 @@
+binschema data format
+---------------------
+
+Binschema deals with 3 main concepts:
+
+- encoded messages, which are sequences of bytes
+- values, which are structured trees of data
+- schemas, which are like data types for values
+    - a schema defines a set of possible values
+    - a schema defines how each value in that set is represented in
+      encoded messages
+
+## possible schemas
+
+The following "leaf" schemas exist:
+
+- u8 and i8: (ints) encoded as-is
+- u16 and i16: (ints) encoded little-endian
+- u32, u64, and u128: (ints) encoded as var-len uints
+- i32, i64, and i128: (ints) encoded as var-len sints
+- f32 and f64: (floats) encoded little-endian
+- char: (unicode scalar) encoded as var-len uint
+- bool: (boolean) encoded as single byte, 0 if false and 1 if true
+- str: (valid unicode string) encoded as:
+    - byte length of UTF-8, encoded as var-len uint
+    - UTF-8 bytes
+- bytes: (string of arbitrary bytes) encoded as:
+    - byte length, encoded as var-len uint
+    - the bytes
+- unit: (unitary data type) encoded as nothing (empty byte sequence)
+
+The following "branch" types of schemas exist, which include inner
+schemas in their definitions:
+
+- option
+    - defined by: a single inner schema
+    - possible values (any of):
+        - none
+        - some, containing a value of its inner schema
+    - represented as (concatenation of):
+        - single byte "someness", 0 if none and 1 if some
+        - the representation of the inner value
+- seq
+    - defined by (all of):
+        - optionally: fixed length
+        - a single inner schema
+    - possible values:
+        a sequence of values of its inner schema. if the seq schema has
+        a fixed length, the number of values in the sequence of values
+        must equal that fixed length.
+    - represented as (concatenation of):
+        - if the seq schema **does not** have a fixed length:
+            the number of values in the sequence of values, encoded as
+            a var-len uint
+        - concatenation of the representations of the inner values
+- tuple
+    - defined by: a sequence of inner schemas
+    - possible values:
+        a sequence of values, one for each element in the sequence of
+        inner schemas, each one a value of the corresponding inner
+        schema
+    - represented as:
+        concatenation of the representations of the inner values
+- struct
+    - defined by:
+        a sequence of "fields", wherein each field is defined by:
+        - the field's name (a string)
+        - the field's inner schema
+    - possible values:
+        a sequence of values, one for each element in the sequence of
+        fields, each one a value of the corresponding field's inner
+        schema
+    - represented as:
+        concatenation of the representations of the inner values
+- enum
+    - defined by:
+        a sequence of "variants", wherein each variant is defined by:
+        - the variant's name (a string)
+        - the variant's inner schema
+    - possible values:
+        a selection of one of the variants in the sequence of variants,
+        and a value of the selected variant's inner schema
+    - represented as (concatenation of):
+        - index of the selected variant within the sequence of
+          variants, ordinal-encoded with the maximum value for ordinal
+          encoding being the length of the sequence of variants minus
+          one
+        - representation of the inner value
+
+Finally, the "recurse" schema exists. This is to allow the
+representation of recursive schemas. A "recurse" schema is defined by
+an integer, the recurse level. In terms of possible values and
+representation, a recurse schema simply acts as a reference to the
+schema that many levels up in the schema tree from the recurse schema.
+
+For example, a linked list schema could be constructed as:
+
+- struct
+  field 0 (name = "value"):
+    - i32
+  field 1 (name = "next"):
+    - option:
+        - recurse (level = 2)
+
+In that example, recurse(0) would refer to the recurse itself,
+recurse(1) would refer to the option, and recurse(2) refers to
+the struct.
+
+## the meta-schema
+
+Schemas themselves are values which can be encoded. Schemas are thus
+encoded with the following schema, the "meta-schema":
+
+- enum <--------------------------\-\-\-\-\
+  variant 0 (name = "Scalar"):    | | | | |
+    - enum                        | | | | |
+      variant 0 (name = "U8"):    | | | | |
+        - unit                    | | | | |
+      variant 1 (name = "U16"):   | | | | |
+        - unit                    | | | | |
+      variant 2 (name = "U32"):   | | | | |
+        - unit                    | | | | |
+      variant 3 (name = "U64"):   | | | | |
+        - unit                    | | | | |
+      variant 4 (name = "U128"):  | | | | |
+        - unit                    | | | | |
+      variant 5 (name = "I8"):    | | | | |
+        - unit                    | | | | |
+      variant 6 (name = "I16"):   | | | | |
+        - unit                    | | | | |
+      variant 7 (name = "I32"):   | | | | |
+        - unit                    | | | | |
+      variant 8 (name = "I64"):   | | | | |
+        - unit                    | | | | |
+      variant 9 (name = "I128"):  | | | | |
+        - unit                    | | | | |
+      variant 10 (name = "F32"):  | | | | |
+        - unit                    | | | | |
+      variant 11 (name = "F64"):  | | | | |
+        - unit                    | | | | |
+      variant 12 (name = "Char"): | | | | |
+        - unit                    | | | | |
+      variant 13 (name = "Bool"): | | | | |
+        - unit                    | | | | |
+  variant 1 (name = "Str"):       | | | | |
+    - unit                        | | | | |
+  variant 2 (name = "Bytes"):     | | | | |
+    - unit                        | | | | |
+  variant 3 (name = "Unit"):      | | | | |
+    - unit                        | | | | |
+  variant 4 (name = "Option"):    | | | | |
+    - recurse (level = 1) --------/ | | | |
+  variant 5 (name = "Seq"):         | | | |
+    - struct                        | | | |
+      field 0 (name = "len"):       | | | |
+        - option:                   | | | |
+            - u64                   | | | |
+      field 1 (name = "inner"):     | | | |
+        - recurse (level = 2) ------/ | | |
+  variant 6 (name = "Tuple"):         | | |
+    - seq (variable length):          | | |
+        - recurse (level = 2) --------/ | |
+  variant 7 (name = "Struct"):          | |
+    - seq (variable length):            | |
+        - struct                        | |
+          field 0 (name = "name"):      | |
+            - str                       | |
+          field 1 (name = "inner"):     | |
+            - recurse (level = 3) ------/ |
+  variant 8 (name = "Enum"):              |
+    - seq (variable length):              |
+        - struct                          |
+          field 0 (name = "name"):        |
+            - str                         |
+          field 1 (name = "inner"):       |
+            - recurse (level = 3) --------/
+  variant 9 (name = "Recurse"):
+    - u64
+
+## variable length int encodings
+
+#### var-len uint encoding
+
+The lowest 7 bits of each encoded byte are the next lowest 7 bits of
+the actual integer. The highest bit of each byte is 1 if there is at
+least one additional byte after the current byte in the encoded
+integer, and 0 if the current byte is the last byte in the encoded
+integer.
+
+Reference code:
+
+    const MORE_BIT: u8  = 0b10000000;
+    const LO_7_BITS: u8 = 0b01111111;
+
+    /// Write a variable length unsigned int.
+    pub fn write_var_len_uint<W>(
+        write: &mut W,
+        mut n: u128,
+    ) -> Result<()>
+    where
+        W: Write,
+    {
+        let mut more = true;
+        while more {
+            let curr_7_bits = (n & (LO_7_BITS as u128)) as u8;
+            n >>= 7;
+            more = n != 0;
+            let curr_byte = ((more as u8) << 7) | curr_7_bits;
+            write.write_all(&[curr_byte])?;
+        }
+        Ok(())
+    }
+
+    /// Read a variable length unsigned int.
+    pub fn read_var_len_uint<R>(
+        read: &mut R,
+    ) -> Result<u128>
+    where
+        R: Read,
+    {
+        let mut n: u128 = 0;
+        let mut shift = 0;
+        let mut more = true;
+        while more {
+            ensure!(
+                shift < 128,
+                "malformed data: too many bytes in var len uint",
+            );
+
+            let mut buf = [0];
+            read.read_exact(&mut buf)?;
+            let [curr_byte] = buf;
+
+            n |= ((curr_byte & LO_7_BITS) as u128) << shift;
+            shift += 7;
+            more = (curr_byte & MORE_BIT) != 0;
+        }
+        Ok(n)
+    }
+
+#### var-len sint encoding
+
+This is a modification of the var-len uint encoding.
+
+If the integer is negative, the "neg" bit is considered to be 1,
+otherwise it is considered to be 0. Before the ingteger is encoded
+or after it is decoded, if the neg bit is 1, the integer is
+bitwise-negated.
+
+In the first encoded byte, the second-to-highest bit is used to store
+the neg bit. As such, in the first encoded byte, only the 6 lowest
+bits are used to encode bits of the actual integer, as opposed to the
+typical 7. However, for all subsequent bytes in the encoded message,
+if any exist, the typical 7 bits of content are present.
+
+Reference code:
+
+    const MORE_BIT: u8  = 0b10000000;
+    const LO_7_BITS: u8 = 0b01111111;
+
+    const ENCODED_SIGN_BIT: u8 = 0b01000000;
+    const LO_6_BITS: u8        = 0b00111111;
+
+    /// Write a variable length signed int.
+    pub fn write_var_len_sint<W>(
+        write: &mut W,
+        mut n: i128,
+    ) -> Result<()>
+    where
+        W: Write,
+    {
+        let neg = n < 0;
+        if neg {
+            n = !n;
+        }
+        let curr_7_bits =
+            ((neg as u8) << 6)
+            | (n & (LO_6_BITS as i128)) as u8;
+        n >>= 6;
+        let mut more = n != 0;
+        let curr_byte = ((more as u8) << 7) | curr_7_bits;
+        write.write_all(&[curr_byte])?;
+
+        while more {
+            let curr_7_bits = (n & (LO_7_BITS as i128)) as u8;
+            n >>= 7;
+            more = n != 0;
+            let curr_byte = ((more as u8) << 7) | curr_7_bits;
+            write.write_all(&[curr_byte])?;
+        }
+
+        Ok(())
+    }
+
+    /// Read a variable length signed int.
+    pub fn read_var_len_sint<R>(
+        read: &mut R,
+    ) -> Result<i128>
+    where
+        R: Read,
+    {
+        let mut n: i128 = 0;
+        
+        let mut buf = [0];
+        read.read_exact(&mut buf)?;
+        let [curr_byte] = buf;
+
+        let neg = (curr_byte & ENCODED_SIGN_BIT) != 0;
+        n |= (curr_byte & LO_6_BITS) as i128;
+        let mut more = (curr_byte & MORE_BIT) != 0;
+        let mut shift = 6;
+
+        while more {
+            // TODO: should use crate-specific error types
+            ensure!(
+                shift < 128,
+                "malformed data: too many bytes in var len sint",
+            );
+
+            let mut buf = [0];
+            read.read_exact(&mut buf)?;
+            let [curr_byte] = buf;
+
+            n |= ((curr_byte & LO_7_BITS) as i128) << shift;
+            shift += 7;
+            more = (curr_byte & MORE_BIT) != 0;
+        }
+
+        if neg {
+            n = !n;
+        }
+        
+        Ok(n)
+    }
+
+#### ordinal encoding
+
+Ordinal encoding is used to encode integers in a number of bytes which
+is a function of some statically known maximum value. The number of
+bytes is calculated as the minimum number of bytes necessary to store
+the maximum value. Then, the value is encoded in that many bytes.
+
+Reference code:
+
+    /// Number of bytes needed to encode an ordinal based on max ordinal
+    /// value.
+    fn ord_byte_len(max_ord: usize) -> usize {
+        let mut mask = !0;
+        let mut bytes = 0;
+
+        while (mask & max_ord) != 0 {
+            mask <<= 8;
+            bytes += 1;
+        }
+
+        bytes
+    }
+
+    /// Write an enum ordinal. Assumes `ord` < `num_variants`.
+    pub fn write_ord<W>(
+        write: &mut W,
+        ord: usize,
+        num_variants: usize,
+    ) -> Result<()>
+    where
+        W: Write,
+    {
+        debug_assert!(ord < num_variants, "enum ord out of bounds");
+        // if the ord is greater than 2^64... congratulations, future man, on
+        // having several dozen exabytes of RAM. you get a free bug.
+        let all_bytes = u64::to_le_bytes(ord as _);
+        let byte_len = ord_byte_len(num_variants - 1);
+        let used_bytes = &all_bytes[..byte_len];
+        write.write_all(used_bytes)
+    }
