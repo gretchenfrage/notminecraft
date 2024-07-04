@@ -517,8 +517,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         vel: Default::default(),
                         color,
                     },
-                );
-                
+                );                
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {

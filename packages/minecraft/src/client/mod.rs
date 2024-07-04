@@ -37,11 +37,16 @@ use crate::{
         *,
     },
     sync_state_inventory_slots,
-    //sync_state_steve,
+    entity::*,
 };
 use chunk_data::*;
 use graphics::prelude::*;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    collections::HashMap,
+};
+use uuid::Uuid;
+use slab::Slab;
 use vek::*;
 
 
@@ -93,7 +98,14 @@ pub struct PreJoinClient {
     pub player_yaw: PerPlayer<f32>,
     pub player_pitch: PerPlayer<f32>,
 
-    //pub steves: [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
+    // ==== entity stuff ====
+
+    // TODO: this all is duplicated with the server
+    pub global_entity_hmap: HashMap<Uuid, usize>,
+    pub global_entity_slab: Slab<GlobalEntityEntry>,
+    
+    pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,
 }
 
 /// Client state once the client has joined the game.

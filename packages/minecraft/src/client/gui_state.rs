@@ -38,8 +38,9 @@ pub struct WorldGuiBlock<'a> {
     pub pos: Vec3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    //pub steves: &'a [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
     pub steve_mesh: &'a Mesh,
+    pub chunk_steves: &'a PerChunk<Vec<EntityEntry<SteveEntityState>>>,
+    pub chunk_pigs: &'a PerChunk<Vec<EntityEntry<PigEntityState>>>,
 }
 
 impl ClientGuiState {
@@ -88,8 +89,9 @@ impl ClientGuiState {
                 pos: self.0.pos,
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
-                //steves: &self.0.pre_join.steves,
                 steve_mesh: &self.0.steve_mesh,
+                chunk_steves: &self.0.pre_join.chunk_steves,
+                chunk_pigs: &self.0.pre_join.chunk_pigs,
             },
             self.0.menu_mgr.gui(ctx, MenuGuiClientBorrows {
                 connection: &self.0.pre_join.connection,
@@ -278,17 +280,28 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                 continue;
             }
 
+            let mut canvas = canvas.reborrow()
+                .translate(bbox_pos);
+
             if let Some(mesh) = self.inner.chunk_mesh_mgr.chunk_mesh(cc, ci) {
                 canvas.reborrow()
-                    .translate(bbox_pos)
                     .draw_mesh(mesh, &ctx.assets().blocks);
             }
+
+            for steve in self.inner.chunk_steves.get(cc, ci) {
+                canvas.reborrow()
+                    .translate(steve.rel_pos)
+                    .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
+            }
+
+            for pig in self.inner.chunk_pigs.get(cc, ci) {
+                canvas.reborrow()
+                    .translate(pig.rel_pos)
+                    .scale([1.0, 0.5, 1.0])
+                    .color(pig.state.color)
+                    .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
+            }
         }
-        /*for steve in self.inner.steves {
-            canvas.reborrow()
-                .translate(steve.pos)
-                .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
-        }*/
     }
 }
 

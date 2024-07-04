@@ -226,6 +226,11 @@ fn construct_pre_join_client(
         player_pos: Default::default(),
         player_yaw: Default::default(),
         player_pitch: Default::default(),
+
+        global_entity_hmap: Default::default(),
+        global_entity_slab: Default::default(),
+        chunk_steves: Default::default(),
+        chunk_pigs: Default::default(),
         //steves: Default::default(),
     }
 }
@@ -313,7 +318,7 @@ fn finalize_join_game(
                 pos_ext_2: (pos_ext_2.to_signs().map(|sign| sign.to_int() as f32) * steve_ext).into(),
                 tex_start: 0.0.into(),
                 tex_extent: 1.0.into(),
-                vert_colors: [Rgba::red(); 4],
+                vert_colors: [Rgba::white(); 4],
                 tex_index: 0,
             });
         }
