@@ -24,7 +24,14 @@ use std::{
     sync::Arc,
     time::{Instant, Duration},
 };
-use tokio::runtime::Handle;
+use tokio::{
+    sync::Notify,
+    runtime::Handle,
+};
+use futures::{
+    FutureExt as _,
+    select_biased
+};
 use crossbeam::queue::ArrayQueue;
 use anyhow::*;
 
@@ -59,6 +66,8 @@ pub fn spawn_join_server_thread(
     let client_send_2 = client_send_1.clone();
     let oneshot_1 = Arc::new(ArrayQueue::new(1));
     let oneshot_2 = Arc::clone(&oneshot_1);
+    let cancel_connect_1 = Arc::new(Notify::new());
+    let cancel_connect_2 = Arc::clone(&cancel_connect_1);
     let game = Arc::clone(game);
     let thread_pool = thread_pool.clone();
     spawn(move || {
@@ -70,6 +79,7 @@ pub fn spawn_join_server_thread(
             client_send_1,
             client_recv,
             gpu_vec_ctx,
+            cancel_connect_1,
         );
         if let Err(e) = result.as_ref() {
             error!(%e, "error joining server");
@@ -79,6 +89,8 @@ pub fn spawn_join_server_thread(
     struct ClientLoadingOneshot {
         oneshot: Arc<ArrayQueue<Result<Client>>>,
         client_send: ClientSender,
+        // used to possibly cancel the Connection::connect future
+        cancel_connect: Arc<Notify>,
     }
     impl LoadingOneshot for ClientLoadingOneshot {
         fn poll(&mut self, ctx: &GuiGlobalContext) -> Option<Box<dyn GuiStateFrameObj>> {
@@ -90,9 +102,14 @@ pub fn spawn_join_server_thread(
     impl Drop for ClientLoadingOneshot {
         fn drop(&mut self) {
             self.client_send.send(ClientEvent::AbortInit, EventPriority::Control, None, None);
+            self.cancel_connect.notify_one();
         }
     }
-    Box::new(ClientLoadingOneshot { oneshot: oneshot_2, client_send: client_send_2 })
+    Box::new(ClientLoadingOneshot {
+        oneshot: oneshot_2,
+        client_send: client_send_2,
+        cancel_connect: cancel_connect_2,
+    })
 }
 
 // fully connect to and join a server, blocking until success or error
@@ -104,9 +121,10 @@ fn join_server(
     client_send: ClientSender,
     client_recv: ClientReceiver,
     gpu_vec_ctx: AsyncGpuVecContext,
+    cancel_connect: Arc<Notify>,
 ) -> Result<Client> {
     let (connection, server) =
-        connect_to_server(server_location, &game, &thread_pool, &client_send)?;
+        connect_to_server(server_location, &game, &thread_pool, &client_send, cancel_connect)?;
     log_in(&connection, &client_recv, log_in_msg)?;
     let mut client = construct_pre_join_client(
         game,
@@ -127,6 +145,7 @@ fn connect_to_server(
     game: &Arc<GameData>,
     thread_pool: &ThreadPool,
     client_send: &ClientSender,
+    cancel_connect: Arc<Notify>,
 ) -> Result<(Connection, Option<ServerThread>)> {
     Ok(match server_location {
         // start internal server
@@ -139,9 +158,17 @@ fn connect_to_server(
             (Connection::in_mem(connection), Some(server))
         }
         // connect to external server
-        ServerLocation::External { url, rt } => {
+        ServerLocation::External { url, rt: rt_1 } => {
             info!(?url, "connecting to server");
-            (Connection::connect(&url, client_send.clone(), &rt, game), None)
+            let rt_2 = rt_1.clone();
+            let connection = rt_1.block_on(async move {
+                let connect = Connection::connect(&url, client_send.clone(), &rt_2, game);
+                select_biased! {
+                    _ = cancel_connect.notified().fuse() => Err(anyhow!("cancelled")),
+                    result = connect.fuse() => result,
+                }
+            })?;
+            (connection, None)
         }
     })
 }

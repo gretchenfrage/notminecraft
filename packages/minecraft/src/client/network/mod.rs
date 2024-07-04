@@ -17,6 +17,7 @@ use std::{
     fmt::{self, Formatter, Debug},
 };
 use tokio::runtime::Handle;
+use anyhow::Error;
 
 
 /// Handle to the network IO connection to the server.
@@ -45,21 +46,18 @@ pub enum NetworkEvent {
 }
 
 impl Connection {
-    /// Connect to a server at the given url.
-    ///
-    /// Returns immediately without blocking or erroring, spawning a task to initialize the
-    /// connection in the background. If that initialization fails, will simply appear as the
-    /// connection closing.
-    pub fn connect(
+    /// Establish a connection to a server at the given url.
+    pub async fn connect(
         url: &str,
         client_send: ClientSender,
         rt: &Handle,
         game: &Arc<GameData>,
-    ) -> Self {
-        Connection {
-            inner: ConnectionInner::Ws(ws::Connection::connect(url, client_send, rt, game)),
+    ) -> Result<Self, Error> {
+        let inner = ws::Connection::connect(url, client_send, rt, game).await?;
+        Ok(Connection {
+            inner: ConnectionInner::Ws(inner),
             last_up_msg_idx: Cell::new(0),
-        }
+        })
     }
 
     /// Wrap around a server in-mem client.

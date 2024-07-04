@@ -4,10 +4,34 @@
 //! messages are used, not text ones. When the connection begins, after the ws handshake completes,
 //! the "ws-binschema" handshake is performed as such:
 //!
-//! 1. Both sides transmit a message containing a concatenation of:
+//! 1. This first part establishes a shared and synchronized clock between the client and server
+//!    and thus both parties should process and transmit the messages involved in this part with
+//!    minimal delay between them:
 //!
-//!    - A constant defined here, the "ws-binschema magic bytes", which should be changed if this
-//!      binschema integration protocol is changed.
+//!    Before beginning this time-sensitive part, the client may wait 0.1 seconds.
+//!    
+//!    1. The client samples and stores its current monotonic clock timestamp as `client_t0`.
+//!    2. The client transmits a constant defined here, the "ws-binschema client hello magic
+//!       bytes", which should be changed if this binschema integration protocol is changed.
+//!    3. The server waits to receive that client hello message.
+//!    4. The server samples and stores its current monotonic clock timestamp as `server_t0`.
+//!    5. The server transmits a constant defined here, the "ws-binschema server hello magic
+//!       bytes", which should be changed if this binschema integration protocol is changed.
+//!    6. The client waits to receive that server hello message.
+//!    7. The client samples and stores its current monotonic clock timestamp as `client_t1`.
+//!
+//!    At this point, the client and server have performed the time-sensitive exchange necessary
+//!    to establish a synchronized clock. The client forms its estimate of `server_t0` expressed
+//!    in terms of its own monotonic clock, `est_server_t0 = average(client_t0, client_t1)`. All
+//!    real time timestamps send and received by either side are thus expressed as some duration
+//!    relative to `server_t0`/`est_server_t0`.
+//!
+//!    The client then transmits a message to the server consisting of the ASCII string
+//!    "synchronized" (but still as a binary websocket message, not a text websocket message).
+//!    The client then moves on to the next step, whereas the server waits to receive the
+//!    "synchronized" message before moving on to the next step.
+//! 2. Both sides transmit a message containing a concatenation of:
+//!
 //!    - A constant defined in binschema, the "schema schema magic bytes", which should be changed
 //!      if binschema's behavior or the schema of schemas are changed.
 //!    - The binschema-encoded schema of the messages this side will send.
@@ -51,7 +75,7 @@ use crate::{
 use binschema::*;
 use std::{
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
     convert::Infallible,
     cmp::min,
     fmt::{self, Formatter, Debug},
@@ -80,7 +104,7 @@ use tokio::{
     },
     net::{TcpListener, TcpStream},
     time::{
-        Instant,
+        Instant as TokioInstant,
         sleep,
         timeout_at,
     },
@@ -110,8 +134,14 @@ use anyhow::{
 // ==== constants ====
 
 
-// should be changed if meta-level things about how ws-binschema integration works changes  
-const WS_BINSCHEMA_MAGIC_BYTES: [u8; 4] = [0x1f, 0x1b, 0x08, 0x63];
+// should be changed if meta-level things about how ws-binschema integration works changes.
+const WS_BINSCHEMA_CLIENT_HELLO_MAGIC_BYTES: [u8; 4] = [0x2b, 0xc7, 0xa3, 0x41];
+
+// should be changed if meta-level things about how ws-binschema integration works changes.
+const WS_BINSCHEMA_SERVER_HELLO_MAGIC_BYTES: [u8; 4] = [0x62, 0xc2, 0xff, 0x90];
+
+// part of clock synchronization protocol.
+const CLOCK_SYNCHRONIZED_MSG: &[u8] = b"synchronized";
 
 // 16 MiB. 
 //
@@ -151,6 +181,8 @@ pub(super) struct Connection {
     conn_shared: Arc<WsConnShared>,
     // sender for queue of messages to send
     send_send: UnboundedSender<DownMsg>,
+    // time synchronized with the client for communication of realtime instants
+    server_t0: Instant,
 }
 
 // general module-level shared context
@@ -290,7 +322,7 @@ async fn accept_task<B: ToSocketAddrs + Debug>(
         sleep(backoff).await;
 
         // increase the backoff, unless the attempt ran for a long time, in which case reset it
-        let attempt_elapsed = attempt_end - attempt_start;
+        let attempt_elapsed = attempt_end.duration_since(attempt_start);
         if attempt_elapsed > BIND_BACKOFF_MAX {
             backoff = BIND_BACKOFF_MIN;
         } else {
@@ -335,9 +367,9 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     try_denagle(&tcp);
 
     // attempt to do the ws and ws-binschema handshakes (with timeout)
-    let ws = try_handshake_handle_err(tcp, &ws_shared).await;
-    let ws = match ws {
-        Some(ws) => ws,
+    let opt_outcome = try_handshake_handle_err(tcp, &ws_shared).await;
+    let (ws, server_t0) = match opt_outcome {
+        Some(outcome) => outcome,
         // if handshake failed, the task can just stop here
         None => return,
     };
@@ -353,6 +385,7 @@ async fn recv_task(ws_shared: Arc<WsShared>, tcp: TcpStream) {
     let connection = super::Connection(ConnectionInner::Ws(Connection {
         conn_shared: Arc::clone(&conn_shared),
         send_send,
+        server_t0,
     }));
     let conn_idx = create_conn(&ws_shared.ns_shared, slab_entry, connection);
     let conn_idx = match conn_idx {
@@ -575,7 +608,6 @@ enum SendLoopError {
 // form a ws-binschema handshake message that should be sent by the side transmitting send_schema
 fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
     let mut buf = Vec::new();
-    buf.extend(&WS_BINSCHEMA_MAGIC_BYTES);
     buf.extend(&Schema::schema_schema_magic_bytes());
     let schema_schema = Schema::schema_schema();
     let mut coder_state_alloc = CoderStateAlloc::new();
@@ -597,12 +629,12 @@ fn form_handshake_msg(send_schema: &Schema, recv_schema: &Schema) -> Vec<u8> {
 async fn try_handshake_handle_err(
     tcp: TcpStream,
     ws_shared: &Arc<WsShared>,
-) -> Option<WebSocketStream<TcpStream>> {
-    let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
+) -> Option<(WebSocketStream<TcpStream>, Instant)> {
+    let deadline = TokioInstant::now() + HANDSHAKE_TIMEOUT;
     let result = try_handshake(tcp, deadline, ws_shared).await;
     match result {
         // success
-        Ok(ws) => Some(ws),
+        Ok(outcome) => Some(outcome),
         Err(HandshakeError::Ws(e)) => {
             // just log these ones
             trace!(%e, "ws-level handshake error");
@@ -627,9 +659,9 @@ async fn try_handshake_handle_err(
 // timeout instant.
 async fn try_handshake(
     tcp: TcpStream,
-    deadline: Instant,
+    deadline: TokioInstant,
     ws_shared: &Arc<WsShared>,
-) -> Result<WebSocketStream<TcpStream>, HandshakeError> {
+) -> Result<(WebSocketStream<TcpStream>, Instant), HandshakeError> {
     // try to do the websocket handshake, with timeout
     let ws_task = accept_async_with_config(
         tcp,
@@ -638,22 +670,52 @@ async fn try_handshake(
             ..Default::default()
         }),
     );
-    let mut ws = match timeout_at(deadline, ws_task).await {
+    let ws = match timeout_at(deadline, ws_task).await {
         Ok(Ok(ws)) => ws,
         Ok(Err(e)) => return Err(HandshakeError::Ws(e)),
         Err(_) => return Err(HandshakeError::Timeout(None)),
     };
 
-    // try to transmit the down handshake msg, with timeout
-    let send_task = ws.send(Message::Binary(ws_shared.down_handshake.clone()));
-    match timeout_at(deadline, send_task).await {
-        Ok(Ok(())) => (),
-        Ok(Err(e)) => return Err(HandshakeError::Ws(e)),
-        Err(_) => return Err(HandshakeError::Timeout(Some(ws))),
-    };
+    // ==== clock synchronization ====
 
-    // receive the first binary message from the other side
-    let received = loop {
+    // time-sensitive part
+    let (received, ws) = handshake_recv(ws, deadline).await?;
+    if received != WS_BINSCHEMA_CLIENT_HELLO_MAGIC_BYTES {
+        return Err(HandshakeError::WsBinschema { ws, reason: "wrong client hello msg" });
+    }
+    let server_t0 = Instant::now();
+    let ws = handshake_send(WS_BINSCHEMA_SERVER_HELLO_MAGIC_BYTES.into(), ws, deadline).await?;
+
+    // non time-sensitive part
+    let (received, ws) = handshake_recv(ws, deadline).await?;
+    if &received != CLOCK_SYNCHRONIZED_MSG {
+        return Err(HandshakeError::WsBinschema { ws, reason: "wrong synchronized msg" });
+    }
+
+    // ==== schema handshake ====
+
+    // try to transmit the down handshake msg, with timeout
+    let ws = handshake_send(ws_shared.down_handshake.clone(), ws, deadline).await?;
+
+    // receive the up schema-handshake message
+    let (received, ws) = handshake_recv(ws, deadline).await?;
+
+    // validate
+    if &received != &ws_shared.up_handshake {
+        return Err(HandshakeError::WsBinschema { ws, reason: "wrong up handshake msg" });
+    }
+
+    // done! :D
+    Ok((ws, server_t0))
+}
+
+// attempt to receive a binary ws message within the ws-binschema handshake
+async fn handshake_recv(
+    mut ws: WebSocketStream<TcpStream>,
+    deadline: TokioInstant,
+) -> Result<(Vec<u8>, WebSocketStream<TcpStream>), HandshakeError>
+{
+    Ok(loop {
         // receive message with timeout 
         let ws_msg = match timeout_at(deadline, ws.next()).await {
             // received message
@@ -669,7 +731,7 @@ async fn try_handshake(
         // branch on message type
         match ws_msg {
             // found binary message
-            Message::Binary(msg) => break msg,
+            Message::Binary(msg) => break (msg, ws),
             // try to respond to pings with pongs, with timeout
             Message::Ping(msg) => {
                 let send_task = ws.send(Message::Pong(msg));
@@ -686,15 +748,22 @@ async fn try_handshake(
             // count the receipt of other message types as a ws-binschema error
             _ => return Err(HandshakeError::WsBinschema { ws, reason: "invalid ws msg type" }),
         }
-    };
+    })
+}
 
-    // validate
-    if &received != &ws_shared.up_handshake {
-        return Err(HandshakeError::WsBinschema { ws, reason: "wrong up handshake msg" });
+// attempt to send a binary ws message within the ws-binschema handshake
+async fn handshake_send(
+    msg: Vec<u8>,
+    mut ws: WebSocketStream<TcpStream>,
+    deadline: TokioInstant,
+) -> Result<WebSocketStream<TcpStream>, HandshakeError>
+{
+    let send_task = ws.send(Message::Binary(msg));
+    match timeout_at(deadline, send_task).await {
+        Ok(Ok(())) => Ok(ws),
+        Ok(Err(e)) => Err(HandshakeError::Ws(e)),
+        Err(_) => Err(HandshakeError::Timeout(Some(ws))),
     }
-
-    // done! :D
-    Ok(ws)
 }
 
 // ways a handshake can fail

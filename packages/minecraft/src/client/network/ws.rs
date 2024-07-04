@@ -18,7 +18,7 @@ use crate::{
 use binschema::*;
 use std::{
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
     convert::Infallible,
     io::Cursor,
 };
@@ -33,13 +33,15 @@ use tokio::{
             Receiver,
             UnboundedSender,
             UnboundedReceiver,
-            channel,
             unbounded_channel,
+            channel,
         },
         Semaphore,
         Notify,
+        oneshot,
     },
     runtime::Handle,
+    time::sleep,
 };
 use tokio_tungstenite::{
     tungstenite::{
@@ -52,18 +54,28 @@ use tokio_tungstenite::{
 use futures::{
     stream::{Stream, StreamExt},
     sink::{Sink, SinkExt},
-    FutureExt,
+    FutureExt as _,
     select_biased,
 };
 use anyhow::{
     Error,
     bail,
     ensure,
+    anyhow,
 };
 
 
-// should be changed if meta-level things about how ws-binschema integration works changes  
-const WS_BINSCHEMA_MAGIC_BYTES: [u8; 4] = [0x1f, 0x1b, 0x08, 0x63];
+// should be changed if meta-level things about how ws-binschema integration works changes.
+const WS_BINSCHEMA_CLIENT_HELLO_MAGIC_BYTES: [u8; 4] = [0x2b, 0xc7, 0xa3, 0x41];
+
+// should be changed if meta-level things about how ws-binschema integration works changes.
+const WS_BINSCHEMA_SERVER_HELLO_MAGIC_BYTES: [u8; 4] = [0x62, 0xc2, 0xff, 0x90];
+
+// part of clock synchronization protocol.
+const CLOCK_SYNCHRONIZED_MSG: &[u8] = b"synchronized";
+
+// amount of time the client sleeps to let the connection quiesce before synchronizing clocks.
+const QUIESCE_BEFORE_SYNC_CLOCK: Duration = Duration::from_millis(100);
 
 // number of simultaneous ping pong messages the server will buffer for sending back in a response
 // before backpressure is triggered on receive from the websocket connection.
@@ -84,9 +96,14 @@ const SEND_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) struct Connection {
     // sender for queue of messages to be transmitted to server
     send_send: UnboundedSender<UpMsg>,
-    // connection-level shared state
-    shared: Arc<ConnShared>,
+    // client estimate of instant when server sampled server_t0
+    est_server_t0: Instant,
+    // ensures proper shutdown when Connection dropped
+    _shutdown_trigger: ConnectionShutdownTrigger,
 }
+
+// triggers connection shutdown when dropped
+struct ConnectionShutdownTrigger(Arc<ConnShared>);
 
 struct ConnShared {
     // tell the receive task to cleanly close the connection, can be called from anywhere.
@@ -100,14 +117,13 @@ struct ConnShared {
 
 
 impl Connection {
-    // initiate connection. returns immediately and has the connection initialize in the
-    // background, closing the connection if that process fails.
-    pub(super) fn connect(
+    // attempt to establish connection.
+    pub(super) async fn connect(
         url: &str,
         client_send: ClientSender,
         rt: &Handle,
         game: &Arc<GameData>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let (send_send, recv_send) = unbounded_channel();
         let shared_1 = Arc::new(ConnShared {
             shutdown_recv: Notify::new(),
@@ -115,8 +131,27 @@ impl Connection {
             game: Arc::clone(game),
         });
         let shared_2 = Arc::clone(&shared_1);
-        rt.spawn(recv_task(url.to_owned(), recv_send, client_send, rt.clone(), shared_1));
-        Connection { send_send, shared: shared_2 }
+        let (send_handshake_done, recv_handshake_done) = oneshot::channel();
+        rt.spawn(recv_task(
+            url.to_owned(),
+            recv_send,
+            client_send,
+            rt.clone(),
+            shared_1,
+            send_handshake_done,
+        ));
+        // create shutdown trigger now to make this method cancel/error-safe
+        let shutdown_trigger = ConnectionShutdownTrigger(shared_2);
+        let est_server_t0 = recv_handshake_done.await
+            .map_err(|_| {
+                // this _should_ never happen, but best to be defensive
+                anyhow!("unexpectedly dropped Connection handshake_done oneshot")
+            })??;
+        Ok(Connection {
+            send_send,
+            est_server_t0,
+            _shutdown_trigger: shutdown_trigger,
+        })
     }
 
     // see outer type
@@ -125,9 +160,9 @@ impl Connection {
     }
 }
 
-impl Drop for Connection {
+impl Drop for ConnectionShutdownTrigger {
     fn drop(&mut self) {
-        self.shared.shutdown_recv.notify_one();
+        self.0.shutdown_recv.notify_one();
     }
 }
 
@@ -138,20 +173,14 @@ async fn recv_task(
     client_send: ClientSender,
     rt: Handle,
     shared: Arc<ConnShared>,
+    send_handshake_done: oneshot::Sender<Result<Instant, Error>>,
 ) {
     // parse url
     let url = match parse_url(&url) {
         Ok(url) => url,
         Err(e) => {
             error!(%e, ?url, "error parsing url");
-            client_send.send(
-                ClientEvent::Network(NetworkEvent::Closed(Some(
-                    format!("invalid url: {}", e)
-                ))),
-                EventPriority::Network,
-                None,
-                None,
-            );
+            let _ = send_handshake_done.send(Err(anyhow!("invalid url: {}", e)));
             return;
         }
     };
@@ -179,14 +208,7 @@ async fn recv_task(
         Err(e) => {
             // close connection on failure
             error!(%e, "error establishing ws connection");
-            client_send.send(
-                ClientEvent::Network(NetworkEvent::Closed(Some(
-                    format!("unable to connect: {}", e)
-                ))),
-                EventPriority::Network,
-                None,
-                None,
-            );
+            let _ = send_handshake_done.send(Err(anyhow!("unable to connect: {}", e)));
             return;
         }
     };
@@ -195,28 +217,24 @@ async fn recv_task(
     let up_schema = UpMsg::schema(&shared.game);
     let down_schema = DownMsg::schema(&shared.game);
     let handshake = handshake(&mut ws, &up_schema, &down_schema);
-    let coder_state_alloc = select_biased! {
+    let (coder_state_alloc, est_server_t0) = select_biased! {
         _ = shared.shutdown_recv.notified().fuse() => {
             // abandon attempt if connection dropped by user
             trace!("abandoning ws-binschema handshake because connection closed");
             return;
         }
         result = handshake.fuse() => match result {
-            Ok(coder_state_alloc) => coder_state_alloc,
+            Ok(outcome) => outcome,
             Err(e) => {
                 // close connection _elegantly_ on failure
                 error!(%e, "error in ws-binschema handshake (closing connection)");
-                client_send.send(
-                    ClientEvent::Network(NetworkEvent::Closed(Some(e.to_string()))),
-                    EventPriority::Network,
-                    None,
-                    None,
-                );
+                let _ = send_handshake_done.send(Err(e));
                 try_close(ws, None, SEND_CLOSE_TIMEOUT).await;
                 return;
             }
         }
     };
+    let _ = send_handshake_done.send(Ok(est_server_t0));
     let (ws_send, mut ws_recv) = ws.split();
 
     // spawn the send task
@@ -256,22 +274,44 @@ async fn recv_task(
     }
 }
 
-// attempt to do the handshake
+// attempt to do the ws-binschema handshake
 async fn handshake<W>(
     ws: &mut W,
     up_schema: &Schema,
     down_schema: &Schema,
-) -> Result<CoderStateAlloc, Error>
+) -> Result<(CoderStateAlloc, Instant), Error>
 where
     W: Stream<Item=Result<Message, TungsteniteError>>
     + Sink<Message, Error=TungsteniteError> + Unpin,
 {
+    // ==== clock synchronization ====
+
+    // let it quiesce
+    sleep(QUIESCE_BEFORE_SYNC_CLOCK).await;
+
+    // time-sensitive part
+    let client_t0 = Instant::now();
+    ws.send(Message::Binary(WS_BINSCHEMA_CLIENT_HELLO_MAGIC_BYTES.into())).await?;
+    let received = handshake_recv(ws).await?;
+    let client_t1 = Instant::now();
+
+    // non time-sensitive part
+    ensure!(
+        received == WS_BINSCHEMA_SERVER_HELLO_MAGIC_BYTES,
+        "server ws-binschema msg has wrong ws-binschema server hello magic bytes",
+    );
+    ws.send(Message::Binary(CLOCK_SYNCHRONIZED_MSG.into())).await?;
+    let est_rtt = client_t1.duration_since(client_t0);
+    debug!("est rtt {:.6} ms", est_rtt.as_nanos() as f64 / 1_000_000.0);
+    let est_server_t0 = client_t0 + est_rtt / 2;
+
+    // ==== schema handshake ====
+
     // allocate state
     let mut buf = Vec::new();
     let mut coder_state_alloc = CoderStateAlloc::new();
 
     // form the up handshake msg
-    buf.extend(&WS_BINSCHEMA_MAGIC_BYTES);
     buf.extend(&Schema::schema_schema_magic_bytes());
     let schema_schema = Schema::schema_schema();
     for schema in [&up_schema, &down_schema] {
@@ -285,49 +325,20 @@ where
         coder_state_alloc = coder_state.into_alloc();
     }
 
-    // transmit the up handshake msg
+    // transmit the up schema-handshake msg
     ws.send(Message::Binary(buf.clone())).await?;
 
-    // receive the first binary message from the other side
-    let received = loop {
-        let item = ws.next().await;
-        match item {
-            // found binary message
-            Some(Ok(Message::Binary(msg))) => break msg,
-            Some(Ok(Message::Ping(msg))) => {
-                // respond to ping with pong and continue
-                ws.send(Message::Pong(msg)).await?;
-                continue;
-            }
-            Some(Ok(Message::Close(close_frame))) => {
-                // if connection closed on ws level, that's an error
-                if let Some(close_frame) = close_frame {
-                    trace!(?close_frame, "received close frame from server");
-                }
-                bail!("server closed connection");
-            }
-            // other message types are protocol errors
-            Some(Ok(_)) => bail!("server send invalid ws msg type"),
-            // errors are errors
-            Some(Err(e)) => Err(e)?,
-            // closing in this way is an error
-            None => bail!("ws connection closed"),
-        }
-    };
+    // receive the down schema-handshake message
+    let received = handshake_recv(ws).await?;
 
-    // now try to validate the server's handshake msg
-    let idx1 = WS_BINSCHEMA_MAGIC_BYTES.len();
-    let idx2 = idx1 + Schema::schema_schema_magic_bytes().len();
-    ensure!(received.len() >= idx2, "server ws-binschema handshake msg too short");
+    // now try to validate the server's schema-handshake msg
+    let idx1 = Schema::schema_schema_magic_bytes().len();
+    ensure!(received.len() >= idx1, "server ws-binschema handshake msg too short");
     ensure!(
-        &received[..idx1] == WS_BINSCHEMA_MAGIC_BYTES,
-        "server ws-binschema handshake msg has wrong ws-binschema magic bytes",
-    );
-    ensure!(
-        &received[idx1..idx2] == Schema::schema_schema_magic_bytes(),
+        &received[..idx1] == Schema::schema_schema_magic_bytes(),
         "server ws-binschema handshake msg has wrong schema schema magic bytes",
     );
-    let mut cursor = Cursor::new(&received[idx2..]);
+    let mut cursor = Cursor::new(&received[idx1..]);
     for (expected_schema, error_msg_name) in [
         (down_schema, "down schema"),
         (up_schema, "up schema"),
@@ -367,7 +378,41 @@ where
         "server ws-binschema handshake msg has extra bytes at end"
     );
 
-    Ok(coder_state_alloc)
+    Ok((coder_state_alloc, est_server_t0))
+}
+
+// attempt to receive a binary ws message within the ws-binschema handshake.
+// (distinct from after the handshake because the ws is not yet split).
+async fn handshake_recv<W>(ws: &mut W) -> Result<Vec<u8>, Error>
+where
+    W: Stream<Item=Result<Message, TungsteniteError>>
+    + Sink<Message, Error=TungsteniteError> + Unpin,
+{
+    Ok(loop {
+        let item = ws.next().await;
+        match item {
+            // found binary message
+            Some(Ok(Message::Binary(msg))) => break msg,
+            Some(Ok(Message::Ping(msg))) => {
+                // respond to ping with pong and continue
+                ws.send(Message::Pong(msg)).await?;
+                continue;
+            }
+            Some(Ok(Message::Close(close_frame))) => {
+                // if connection closed on ws level, that's an error
+                if let Some(close_frame) = close_frame {
+                    trace!(?close_frame, "received close frame from server");
+                }
+                bail!("server closed connection");
+            }
+            // other message types are protocol errors
+            Some(Ok(_)) => bail!("server send invalid ws msg type"),
+            // errors are errors
+            Some(Err(e)) => Err(e)?,
+            // closing in this way is an error
+            None => bail!("ws connection closed"),
+        }
+    })
 }
 
 // message receiving loop for the portion of recv task where the connection is alive
