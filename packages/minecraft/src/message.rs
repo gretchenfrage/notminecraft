@@ -171,11 +171,16 @@ pub enum PreJoinDownMsg {
         yaw: f32,
         pitch: f32,
     },
-    /*SetStevePosVel {
-        steve_idx: usize,
-        pos: Vec3<f32>,
-        vel: Vec3<f32>,
-    }*/
+    /// Apply an edit to an existing entity.
+    EditEntity {
+        /// Chunk that owns the entity.
+        chunk_idx: DownChunkIdx,
+        /// Index of the entity within the chunk's entity vector of the entity type that the edit
+        /// value applies to.
+        entity_idx: usize,
+        /// Edit to apply.
+        edit: EntityEdit,
+    },
 }
 
 /// Message that is only valid to send to client once it has fully joined the game.
@@ -253,6 +258,39 @@ pub struct DownEntity<T> {
     pub rel_pos: Vec3<f32>,
     /// Entity type-specific state.
     pub state: T,
+}
+
+/// Edit sent from server to client applicable to a single entity.
+///
+/// This value must convey the information of what type of entity this edit applies to.
+#[derive(Debug, GameBinschema)]
+pub enum EntityEdit {
+    SetStevePosVel(EntityEditSetStevePosVel),
+    SetSteveName(EntityEditSetSteveName),
+    SetPigPosVel(EntityEditSetPigPosVel),
+    SetPigColor(EntityEditSetPigColor),
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct EntityEditSetStevePosVel {
+    pub rel_pos: Vec3<f32>,
+    pub vel: Vec3<f32>,
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct EntityEditSetSteveName {
+    pub name: String,
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct EntityEditSetPigPosVel {
+    pub rel_pos: Vec3<f32>,
+    pub vel: Vec3<f32>,
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct EntityEditSetPigColor {
+    pub color: Rgb<f32>,
 }
 
 /// Remove a loaded chunk from the client.

@@ -204,7 +204,31 @@ fn request_load_spawn_chunks(server: &mut Server) {
 // do a tick of world simulation
 fn do_tick(server: &mut Server) {
     trace!("tick");
-    let mut _world = server.as_sync_world();
+    let world = server.as_sync_world();
+    for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
+        for (entity_idx, steve) in world.server_only.chunk_steves
+            .get_mut(cc, ci)
+            .iter_mut()
+            .enumerate()
+        {
+            steve.rel_pos += Vec3::from(0.05);
+            for pk in world.sync_ctx.conn_mgr.players().iter() {
+                if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
+                    world.sync_ctx.conn_mgr.send(
+                        pk,
+                        DownMsg::PreJoin(PreJoinDownMsg::EditEntity {
+                            chunk_idx: DownChunkIdx(clientside_ci),
+                            entity_idx,
+                            edit: EntityEdit::SetStevePosVel(EntityEditSetStevePosVel {
+                                rel_pos: steve.rel_pos,
+                                vel: Vec3::from(0.05 / 20.0),
+                            }),
+                        }),
+                    );
+                }
+            }
+        }
+    }
 }
 
 // do a save operation if appropriate to do so

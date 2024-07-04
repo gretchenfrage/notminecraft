@@ -5,7 +5,7 @@ use crate::{
     message::*,
 };
 use chunk_data::*;
-use anyhow::{Result, ensure};
+use anyhow::{Result, ensure, anyhow};
 
 
 /// Process a pre join msg received from the network. Error indicates server protocol violation.
@@ -160,11 +160,61 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw[pk] = yaw;
             client.player_pitch[pk] = pitch;
         }
-        /*PreJoinDownMsg::SetStevePosVel { steve_idx, pos, vel } => {
-            let steve = &mut client.steves[steve_idx];
-            steve.pos = pos;
-            steve.vel = vel;
-        }*/
+        // edit entity
+        PreJoinDownMsg::EditEntity { chunk_idx, entity_idx, edit } => {
+            let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
+            // TODO: refactor somehow
+            fn apply_edit<S, F: FnOnce(&mut EntityEntry<S>)>(
+                chunk_entities: &mut PerChunk<Vec<EntityEntry<S>>>,
+                cc: Vec3<i64>,
+                ci: usize,
+                entity_idx: usize,
+                f: F,
+            ) -> Result<()> {
+                let entity_vec = chunk_entities.get_mut(cc, ci);
+                let entity_entry = entity_vec
+                    .get_mut(entity_idx)
+                    .ok_or_else(|| anyhow!("entity_idx out of bounds"))?;
+                f(entity_entry);
+                Ok(())
+            }
+            match edit {
+                EntityEdit::SetStevePosVel(EntityEditSetStevePosVel { rel_pos, vel }) => {
+                    apply_edit(
+                        &mut client.chunk_steves, cc, ci, entity_idx,
+                        |steve| {
+                            steve.rel_pos = rel_pos;
+                            steve.state.vel = vel;
+                        }
+                    )
+                }
+                EntityEdit::SetSteveName(EntityEditSetSteveName { name }) => {
+                    apply_edit(
+                        &mut client.chunk_steves, cc, ci, entity_idx,
+                        |steve| {
+                            steve.state.name = name;
+                        }
+                    )
+                }
+                EntityEdit::SetPigPosVel(EntityEditSetPigPosVel { rel_pos, vel }) => {
+                    apply_edit(
+                        &mut client.chunk_pigs, cc, ci, entity_idx,
+                        |pig| {
+                            pig.rel_pos = rel_pos;
+                            pig.state.vel = vel;
+                        }
+                    )
+                }
+                EntityEdit::SetPigColor(EntityEditSetPigColor { color }) => {
+                    apply_edit(
+                        &mut client.chunk_pigs, cc, ci, entity_idx,
+                        |pig| {
+                            pig.state.color = color;
+                        }
+                    )
+                }
+            }?;
+        }
     }
     Ok(())
 }
