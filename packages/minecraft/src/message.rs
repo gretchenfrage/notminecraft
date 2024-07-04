@@ -7,8 +7,10 @@ use crate::{
     util_usize_lt::UsizeLt,
     util_time::ServerRelTime,
     item::*,
+    entity::*,
 };
 use chunk_data::*;
+use uuid::Uuid;
 use vek::*;
 
 
@@ -238,6 +240,19 @@ pub struct DownMsgAddChunk {
     pub chunk_idx: DownChunkIdx,
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
+    pub steves: Vec<DownEntity<SteveEntityState>>,
+    pub pigs: Vec<DownEntity<PigEntityState>>,
+}
+
+/// Entity state for tranmission in a down msg.
+#[derive(Debug, GameBinschema, Copy, Clone)]
+pub struct DownEntity<T> {
+    /// Entity's stable UUID.
+    pub entity_uuid: Uuid,
+    /// Entity's position relative to chunk that owns it.
+    pub rel_pos: Vec3<f32>,
+    /// Entity type-specific state.
+    pub state: T,
 }
 
 /// Remove a loaded chunk from the client.

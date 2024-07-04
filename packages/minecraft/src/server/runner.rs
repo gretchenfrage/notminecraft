@@ -588,12 +588,29 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             }
             // download chunk to client
             ChunkMgrEffect::AddChunkToClient { cc, ci, pk, clientside_ci } => {
+                // TODO: move elsewhere?
+                fn down_entities<S: Clone>(
+                    chunk_entities: &PerChunk<Vec<EntityEntry<S>>>,
+                    cc: Vec3<i64>,
+                    ci: usize,
+                ) -> Vec<DownEntity<S>> {
+                    chunk_entities.get(cc, ci).iter()
+                        .map(|entry| DownEntity {
+                            entity_uuid: entry.uuid,
+                            rel_pos: entry.rel_pos,
+                            state: entry.state.clone(),
+                        })
+                        .collect()
+                }
+
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::AddChunk(
                     DownMsgAddChunk {
                         chunk_idx: DownChunkIdx(clientside_ci),
                         cc,
                         chunk_tile_blocks: server.sync_ctx.game
                             .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
+                        steves: down_entities(&server.server_only.chunk_steves, cc, ci),
+                        pigs: down_entities(&server.server_only.chunk_pigs, cc, ci),
                     }
                 )));
             }

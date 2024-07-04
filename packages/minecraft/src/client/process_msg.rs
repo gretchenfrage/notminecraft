@@ -34,7 +34,13 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw.remove(pk);
         }
         // add chunk to world
-        PreJoinDownMsg::AddChunk(DownMsgAddChunk { chunk_idx, cc, chunk_tile_blocks }) => {
+        PreJoinDownMsg::AddChunk(DownMsgAddChunk {
+            chunk_idx,
+            cc,
+            chunk_tile_blocks,
+            steves,
+            pigs,
+        }) => {
             let (ci, _getter) = client.chunks.on_add_chunk(chunk_idx, cc)?.get(&client.chunks);
             client.tile_blocks.add(cc, ci, chunk_tile_blocks);
             client.chunk_mesh_mgr.add_chunk(cc, ci, &client.chunks, &client.tile_blocks);
