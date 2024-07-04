@@ -310,7 +310,7 @@ impl ChunkMgr {
             && self.player_add_chunk_mgr[pk].budget_full()
     }
 
-    /// Call upon the result of a previously triggered chunk loading oepration being ready, unless
+    /// Call upon the result of a previously triggered chunk loading operation being ready, unless
     /// aborted.
     pub fn on_chunk_ready(
         &mut self,

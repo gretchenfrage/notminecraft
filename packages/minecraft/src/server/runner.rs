@@ -93,6 +93,11 @@ pub fn run(
             player_yaw: Default::default(),
             player_pitch: Default::default(),
             player_open_sync_menu: Default::default(),
+
+            global_entity_hmap: Default::default(),
+            global_entity_slab: Default::default(),
+            chunk_steves: Default::default(),
+            chunk_pigs: Default::default(),
         },
         sync_ctx: ServerSyncCtx {
             game,
@@ -104,15 +109,6 @@ pub fn run(
         sync_state: ServerSyncState {
             tile_blocks: Default::default(),
             player_inventory_slots: Default::default(),
-            /*steves: {
-                let mut steves = <[sync_state_steve::Steve; sync_state_steve::NUM_STEVES]>::default();
-                for (i, steve) in steves.iter_mut().enumerate() {
-                    steve.pos = Vec3::new(16.0, 40.0, 16.0) + Vec3::from(1.0) * i as f32;
-                    steve.vel = Vec3::new(-1.0, -1.0, -1.0) * i as f32;
-                }
-                steves
-            },*/
-            //steves: Default::default(),
         },
     };
 
@@ -226,12 +222,51 @@ fn save(server: &mut Server) {
     let mut save_op = server.sync_ctx.save_mgr.begin_save();
     while let Some(should_save) = save_op.should_save.pop() {
         trace!(?should_save, "will save");
+
+        // TODO: move this somewhere else
+        fn entity_save_entries<ES, SS, F: FnMut(&ES) -> SS>(
+            chunk_entities: &PerChunk<Vec<EntityEntry<ES>>>,
+            cc: Vec3<i64>,
+            ci: usize,
+            mut entity_state_to_save_state: F,
+        ) -> Vec<EntitySaveEntry<SS>> {
+            chunk_entities.get(cc, ci).iter()
+                .map(|entry| {
+                    let &EntityEntry {
+                        uuid,
+                        global_idx: _,
+                        rel_pos,
+                        ref state,
+                    } = entry;
+                    EntitySaveEntry {
+                        entity_uuid: uuid,
+                        rel_pos,
+                        state: entity_state_to_save_state(state),
+                    }
+                })
+                .collect()
+        }
+
         save_op.will_save.push(match should_save {
             ShouldSave::Chunk { cc, ci } => SaveEntry::Chunk(
                 ChunkSaveKey { cc },
                 ChunkSaveVal {
                     chunk_tile_blocks: server.sync_ctx.game
-                        .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci))
+                        .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
+                    steves: entity_save_entries(
+                        &server.server_only.chunk_steves,
+                        cc,
+                        ci,
+                        |&SteveEntityState { vel: _, ref name }| SteveEntitySaveState {
+                            name: name.clone()
+                        },
+                    ),
+                    pigs: entity_save_entries(
+                        &server.server_only.chunk_pigs,
+                        cc,
+                        ci,
+                        |&PigEntityState { vel: _, color }| PigEntitySaveState { color },
+                    ),
                 },
             ),
             ShouldSave::Player { pk } => SaveEntry::Player(
@@ -412,14 +447,143 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             }
             // install loaded chunk into world
             ChunkMgrEffect::AddChunk { cc, ci, save_val, saved } => {
+                let ChunkSaveVal {
+                    chunk_tile_blocks,
+                    steves,
+                    pigs,
+                } = save_val;
                 server.sync_ctx.save_mgr.add_chunk(cc, ci, saved);
-                server.sync_state.tile_blocks.add(cc, ci, save_val.chunk_tile_blocks);
+                server.sync_state.tile_blocks.add(cc, ci, chunk_tile_blocks);
+
+                // TODO: put this somewhere else
+                fn install_entities<SS, ES, F: FnMut(SS) -> ES>(
+                    cc: Vec3<i64>,
+                    ci: usize,
+                    save_vec: Vec<EntitySaveEntry<SS>>,
+                    global_entity_hmap: &mut HashMap<Uuid, usize>,
+                    global_entity_slab: &mut Slab<GlobalEntityEntry>,
+                    chunk_entities: &mut PerChunk<Vec<EntityEntry<ES>>>,
+                    kind: EntityKind,
+                    mut save_state_to_entity_state: F,
+                ) {
+                    let server_vec = save_vec
+                        .into_iter()
+                        .enumerate()
+                        .map(|(vector_idx, save_entry)| {
+                            let EntitySaveEntry {
+                                entity_uuid: uuid,
+                                rel_pos,
+                                state,
+                            } = save_entry;
+
+                            let global_idx = global_entity_slab
+                                .insert(GlobalEntityEntry { uuid, kind, cc, ci, vector_idx });
+                            let collision = global_entity_hmap.insert(uuid, global_idx);
+                            debug_assert!(collision.is_none(), "entity UUID collision {}", uuid);
+
+                            EntityEntry {
+                                uuid,
+                                global_idx,
+                                rel_pos,
+                                state: save_state_to_entity_state(state),
+                            }
+                        })
+                        .collect();
+                    chunk_entities.add(cc, ci, server_vec);
+                }
+
+                install_entities(
+                    cc,
+                    ci,
+                    steves,
+                    &mut server.server_only.global_entity_hmap,
+                    &mut server.server_only.global_entity_slab,
+                    &mut server.server_only.chunk_steves,
+                    EntityKind::Steve,
+                    |SteveEntitySaveState { name }| SteveEntityState {
+                        vel: Default::default(),
+                        name,
+                    },
+                );
+                install_entities(
+                    cc,
+                    ci,
+                    pigs,
+                    &mut server.server_only.global_entity_hmap,
+                    &mut server.server_only.global_entity_slab,
+                    &mut server.server_only.chunk_pigs,
+                    EntityKind::Pig,
+                    |PigEntitySaveState { color }| PigEntityState {
+                        vel: Default::default(),
+                        color,
+                    },
+                );
+                
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {
                 let chunk_tile_blocks = server.sync_state.tile_blocks.remove(cc, ci);
+
+                // TODO move this elsewhere
+                fn remove_entities<ES, SS, F: FnMut(ES) -> SS>(
+                    chunk_entities: &mut PerChunk<Vec<EntityEntry<ES>>>,
+                    cc: Vec3<i64>,
+                    ci: usize,
+                    global_entity_hmap: &mut HashMap<Uuid, usize>,
+                    global_entity_slab: &mut Slab<GlobalEntityEntry>,
+                    kind: EntityKind,
+                    mut entity_state_to_save_state: F,
+                ) -> Vec<EntitySaveEntry<SS>> {
+                    chunk_entities.remove(cc, ci).into_iter()
+                        .enumerate()
+                        .map(|(vector_idx, entry)| {
+                            let EntityEntry { uuid, global_idx, rel_pos, state } = entry;
+
+                            let removed = global_entity_hmap.remove(&uuid);
+                            debug_assert_eq!(
+                                removed, Some(global_idx),
+                                "hmap desync detected removing entity {}", uuid,
+                            );
+                            let global_entry = global_entity_slab.remove(global_idx);
+                            debug_assert_eq!(
+                                global_entry, GlobalEntityEntry { uuid, kind, cc, ci, vector_idx },
+                                "global entry desync detected removing entity {}", uuid,
+                            );
+
+                            EntitySaveEntry {
+                                entity_uuid: uuid,
+                                rel_pos,
+                                state: entity_state_to_save_state(state),
+                            }
+                        })
+                        .collect()
+                }
+
                 server.sync_ctx.save_mgr.remove_chunk(
-                    cc, ci, ChunkSaveKey { cc }, ChunkSaveVal { chunk_tile_blocks }
+                    cc,
+                    ci,
+                    ChunkSaveKey { cc },
+                    ChunkSaveVal {
+                        chunk_tile_blocks,
+                        steves: remove_entities(
+                            &mut server.server_only.chunk_steves,
+                            cc,
+                            ci,
+                            &mut server.server_only.global_entity_hmap,
+                            &mut server.server_only.global_entity_slab,
+                            EntityKind::Steve,
+                            |SteveEntityState { vel: _, name }| SteveEntitySaveState { name },
+                        ),
+                        pigs: remove_entities(
+                            &mut server.server_only.chunk_pigs,
+                            cc,
+                            ci,
+                            &mut server.server_only.global_entity_hmap,
+                            &mut server.server_only.global_entity_slab,
+                            EntityKind::Pig,
+                            |PigEntityState { vel: _, color }| PigEntitySaveState { color },
+                        ),
+                    },
                 );
             }
             // download chunk to client

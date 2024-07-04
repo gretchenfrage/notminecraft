@@ -353,8 +353,19 @@ pub fn derive_game_binschema(input: TokenStream) -> TokenStream {
         &Data::Union(_) => panic!("cannot derive GameBinschema on a union")
     };
     
+    let mut generics = input.generics.clone();
+    let additional_where_predicates = generics
+        .type_params()
+        .map(|type_param| {
+            let ident = &type_param.ident;
+            parse_quote! { #ident: crate::game_binschema::GameBinschema }
+        })
+        .collect::<Vec<WherePredicate>>();
+    generics.make_where_clause().predicates.extend(additional_where_predicates);
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     quote! {
-        impl crate::game_binschema::GameBinschema for #name {
+        impl #impl_generics crate::game_binschema::GameBinschema for #name #ty_generics #where_clause {
             fn schema(game: &::std::sync::Arc<crate::game_data::GameData>) -> ::binschema::Schema {
                 ::binschema::schema!(#schema)
             }

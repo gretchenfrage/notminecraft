@@ -4,11 +4,13 @@ use crate::{
     game_data::GameData,
     game_binschema::GameBinschema,
     item::*,
+    entity::*,
 };
 use binschema::{*, error::Result};
 use chunk_data::*;
-use vek::*;
 use std::sync::Arc;
+use uuid::Uuid;
+use vek::*;
 
 
 // ==== schema definition ====
@@ -20,6 +22,7 @@ macro_rules! save_schema {
         $macro! {
             (0, Chunk, ChunkSaveKey, ChunkSaveVal)
             (1, Player, PlayerSaveKey, PlayerSaveVal)
+            (2, EntityLocation, EntityLocationSaveKey, EntityLocationSaveVal)
         }
     };
 }
@@ -33,7 +36,36 @@ pub struct ChunkSaveKey {
 /// Save file val schema for chunks.
 #[derive(Debug, GameBinschema)]
 pub struct ChunkSaveVal {
+    /// The chunk's blocks and block metadata.
     pub chunk_tile_blocks: ChunkBlocks,
+
+    // TODO: invert these for the save file so it's just one nice big (dynamic?) enum?
+
+    /// Steve entities in the chunk.
+    pub steves: Vec<EntitySaveEntry<SteveEntitySaveState>>,
+    /// Pig entities in the chunk.
+    pub pigs: Vec<EntitySaveEntry<PigEntitySaveState>>,
+}
+
+/// Save file schema for entry in one of a chunk's entity vectors.
+#[derive(Debug, GameBinschema)]
+pub struct EntitySaveEntry<T> {
+    /// Stable UUID of entity.
+    pub entity_uuid: Uuid,
+    /// Entity's spatial position relative to chunk.
+    pub rel_pos: Vec3<f32>,
+    /// Other entity-specific entity state
+    pub state: T,
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct SteveEntitySaveState {
+    pub name: String,
+}
+
+#[derive(Debug, GameBinschema)]
+pub struct PigEntitySaveState {
+    pub color: Rgb<f32>,
 }
 
 /// Save file key schema for players.
@@ -52,6 +84,25 @@ pub struct PlayerSaveVal {
     pub held_slot: Option<ItemStack>,
 }
 
+/// Save file key schema for entity location indexing.
+#[derive(Debug, GameBinschema, Clone, Eq, PartialEq, Hash)]
+pub struct EntityLocationSaveKey {
+    /// Stable UUID of entity.
+    pub entity_uuid: Uuid,
+}
+
+/// Save file val schema for entity location indexing.
+#[derive(Debug, GameBinschema)]
+pub struct EntityLocationSaveVal {
+    /// What type of entity it is.
+    pub entity_kind: EntityKind,
+    /// Chunk coord of chunk that owns the entity.
+    pub owning_cc: Vec3<i64>,
+    /// Entity index within its entity vector.
+    pub entity_idx: usize,
+    /// Entity's spatial position relative to the chunk.
+    pub rel_pos: Vec3<f32>,
+}
 
 // ==== transcoding stuff ====
 

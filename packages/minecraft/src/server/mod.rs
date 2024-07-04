@@ -41,10 +41,16 @@ use crate::{
     thread_pool::ThreadPool,
     sync_state_tile_blocks,
     sync_state_inventory_slots,
+    entity::*,
     //sync_state_steve,
 };
 use chunk_data::*;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    collections::HashMap,
+};
+use uuid::Uuid;
+use slab::Slab;
 use vek::*;
 
 
@@ -114,6 +120,43 @@ pub struct ServerOnlyState {
 
     //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
     //pub char_states: PerPlayer<CharState>,
+
+    // ==== entity stuff ====
+    // hmap from currently loaded stable entity UUID to global entity index
+    pub global_entity_hmap: HashMap<Uuid, usize>,
+    // slab representing the space of global entity indexes, which represents loaded entities
+    // and which are stable indexes for as long as that entity remains continuously loaded
+    pub global_entity_slab: Slab<GlobalEntityEntry>,
+
+    pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalEntityEntry {
+    // entity stable UUID
+    pub uuid: Uuid,
+    // entity type
+    pub kind: EntityKind,
+    // entity owning chunk cc
+    pub cc: Vec3<i64>,
+    // entity owning chunk ci
+    pub ci: usize,
+    // entity vector index.
+    // entity's currently location within the relevant entity vector of the owning chunk.
+    pub vector_idx: usize,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct EntityEntry<T> {
+    // entity stable UUID
+    pub uuid: Uuid,
+    // global entity index of this entity
+    pub global_idx: usize,
+    // spatial position of this entity relative to the chunk that owns it
+    pub rel_pos: Vec3<f32>,
+    // other entity type-specific entity state
+    pub state: T,
 }
 
 /// State for which `&mut` references get wrapped in auto-syncing wrappers before game logic gets

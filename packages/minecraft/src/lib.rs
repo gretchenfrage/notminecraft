@@ -51,7 +51,7 @@ pub mod sync_state_inventory_slots;
 pub mod sync_state_steve;
 #[cfg(feature = "client")]
 pub mod client;
-
+pub mod entity;
 
 
 

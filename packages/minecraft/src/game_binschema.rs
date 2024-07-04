@@ -17,6 +17,7 @@ use std::{
     hash::Hash,
     io::Cursor,
 };
+use uuid::Uuid;
 use vek::*;
 
 
@@ -522,5 +523,19 @@ impl GameBinschema for ItemStack {
         };
         decoder.finish_struct()?;
         Ok(val)
+    }
+}
+
+impl GameBinschema for Uuid {
+    fn schema(game: &Arc<GameData>) -> Schema {
+        <[u8; 16]>::schema(game)
+    }
+
+    fn encode(&self, encoder: &mut Encoder<Vec<u8>>, game: &Arc<GameData>) -> Result<()> {
+        <[u8; 16]>::encode(self.as_bytes(), encoder, game)
+    }
+
+    fn decode(decoder: &mut Decoder<Cursor<&[u8]>>, game: &Arc<GameData>) -> Result<Self> {
+        Ok(Self::from_bytes(<[u8; 16]>::decode(decoder, game)?))
     }
 }

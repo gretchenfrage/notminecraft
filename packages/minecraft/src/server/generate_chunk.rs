@@ -1,13 +1,16 @@
 //! Generating chunks of the world for the first time.
 
 use crate::{
-    server::save_content::ChunkSaveVal,
+    server::save_content::*,
     game_data::*,
 };
 use chunk_data::*;
 use std::sync::Arc;
-use vek::*;
 use bracket_noise::prelude::FastNoise;
+use rand_chacha::ChaCha8Rng;
+use uuid::Uuid;
+use vek::*;
+use rand::prelude::*;
 
 
 /// Generate a chunk of the world for the first time.
@@ -36,5 +39,41 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
             }
         }
     }
-    ChunkSaveVal { chunk_tile_blocks }
+
+    let mut hasher = hmac_sha256::Hash::new();
+    hasher.update(&cc.x.to_le_bytes());
+    hasher.update(&cc.y.to_le_bytes());
+    hasher.update(&cc.z.to_le_bytes());
+    let hash = hasher.finalize();
+    let mut rng = ChaCha8Rng::from_seed(hash);
+
+    let mut steves = Vec::new();
+
+    for i in 0..10 {
+        steves.push(EntitySaveEntry {
+            entity_uuid: Uuid::new_v4(),
+            rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
+            state: SteveEntitySaveState {
+                name: format!("steve #{}", i),
+            },
+        });
+    }
+
+    let mut pigs = Vec::new();
+
+    for _ in 0..10 {
+        pigs.push(EntitySaveEntry {
+            entity_uuid: Uuid::new_v4(),
+            rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
+            state: PigEntitySaveState {
+                color: Rgb::new(rng.gen(), rng.gen(), rng.gen()),
+            },
+        });
+    }
+
+    ChunkSaveVal {
+        chunk_tile_blocks,
+        steves,
+        pigs,
+    }
 }
