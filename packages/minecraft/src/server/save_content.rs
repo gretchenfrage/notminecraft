@@ -4,7 +4,6 @@ use crate::{
     game_data::GameData,
     game_binschema::GameBinschema,
     item::*,
-    entity::*,
 };
 use binschema::{*, error::Result};
 use chunk_data::*;
@@ -22,7 +21,8 @@ macro_rules! save_schema {
         $macro! {
             (0, Chunk, ChunkSaveKey, ChunkSaveVal)
             (1, Player, PlayerSaveKey, PlayerSaveVal)
-            (2, EntityLocation, EntityLocationSaveKey, EntityLocationSaveVal)
+            // TODO:
+            //(2, EntityLocation, EntityLocationSaveKey, EntityLocationSaveVal)
         }
     };
 }
@@ -84,6 +84,7 @@ pub struct PlayerSaveVal {
     pub held_slot: Option<ItemStack>,
 }
 
+/* TODO
 /// Save file key schema for entity location indexing.
 #[derive(Debug, GameBinschema, Clone, Eq, PartialEq, Hash)]
 pub struct EntityLocationSaveKey {
@@ -102,7 +103,7 @@ pub struct EntityLocationSaveVal {
     pub entity_idx: usize,
     /// Entity's spatial position relative to the chunk.
     pub rel_pos: Vec3<f32>,
-}
+}*/
 
 // ==== transcoding stuff ====
 
