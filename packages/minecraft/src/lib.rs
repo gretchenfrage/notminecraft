@@ -23,6 +23,7 @@ pub mod util_cos;
 pub mod util_net;
 pub mod util_callback_cell;
 pub mod util_usize_lt;
+pub mod util_time;
 pub mod util_erased_option_ref;
 pub mod block_update_queue;
 pub mod game_data;

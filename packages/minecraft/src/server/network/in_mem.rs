@@ -15,6 +15,7 @@ use crate::{
 use std::{
     sync::Arc,
     fmt::{self, Formatter, Debug},
+    time::Instant,
     write,
 };
 use parking_lot::Mutex;
@@ -25,13 +26,19 @@ use parking_lot::Mutex;
 pub(super) struct SlabEntry(Arc<Mutex<Option<AliveState>>>);
 
 // connection inner type for in-mem connections
-pub(super) struct Connection(Arc<Mutex<Option<AliveState>>>);
+pub(super) struct Connection {
+    alive: Arc<Mutex<Option<AliveState>>>,
+    // instant to relativize timestamps to, for consistency with when networked
+    server_t0: Instant,
+}
 
 /// Client connection to the network server that just sends messages over in-memory queues within
 /// the same process, avoiding both network and serialization costs.
 pub struct InMemClient {
     // shared state
     shared: Arc<Mutex<Option<AliveState>>>,
+    // instant to relativize timestamps to, for consistency with when networked
+    server_t0: Instant,
 }
 
 // shared lockable state that's kept iff the in-mem connection is alive
@@ -49,9 +56,14 @@ pub(super) fn create(
     ns_shared: &Arc<NetworkServerSharedState>,
     client_send: ClientSender,
 ) -> InMemClient {
+    let server_t0 = Instant::now();
+
     let shared = Arc::new(Mutex::new(None));
     let slab_entry = super::SlabEntry::InMem(SlabEntry(Arc::clone(&shared)));
-    let connection = super::Connection(ConnectionInner::InMem(Connection(Arc::clone(&shared))));
+    let connection = super::Connection(ConnectionInner::InMem(Connection {
+        alive: Arc::clone(&shared),
+        server_t0,
+    }));
     let conn_idx = create_conn(ns_shared, slab_entry, connection);
 
     if let Some(conn_idx) = conn_idx {
@@ -73,7 +85,7 @@ pub(super) fn create(
         );
     }
 
-    InMemClient { shared }
+    InMemClient { shared, server_t0 }
 }
 
 impl SlabEntry {
@@ -86,7 +98,7 @@ impl SlabEntry {
 impl Connection {
     // see outer type
     pub(super) fn send(&self, msg: DownMsg) {
-        let alive_lock = self.0.lock();
+        let alive_lock = self.alive.lock();
         if let &Some(ref alive_state) = &*alive_lock {
             alive_state.client_send.send(
                 ClientEvent::Network(ClientNetworkEvent::Received(msg)),
@@ -100,8 +112,13 @@ impl Connection {
     }
 
     // see outer type
+    pub(super) fn server_t0(&self) -> Instant {
+        self.server_t0
+    }
+
+    // see outer type
     pub(super) fn kill(&self) {
-        kill(&self.0, true, Some("connection closed by server"));
+        kill(&self.alive, true, Some("connection closed by server"));
     }
 }
 
@@ -117,6 +134,11 @@ impl InMemClient {
                 None,
             );
         }
+    }
+
+    /// See corresponding method on client `Connection`.
+    pub fn est_server_t0(&self) -> Instant {
+        self.server_t0
     }
 }
 
@@ -151,11 +173,12 @@ fn kill(
 
 impl Debug for Connection {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let conn_idx = self.0.lock().as_ref().map(|alive| alive.conn_idx);
+        let conn_idx = self.alive.lock().as_ref().map(|alive| alive.conn_idx);
         if let Some(conn_idx) = conn_idx {
-            write!(f, "conn_idx: {}", conn_idx)
+            write!(f, "conn_idx: {}", conn_idx)?;
         } else {
-            f.write_str("dead")
+            f.write_str("dead")?;
         }
+        write!(f, " server_t0: {:?}", self.server_t0)
     }
 }

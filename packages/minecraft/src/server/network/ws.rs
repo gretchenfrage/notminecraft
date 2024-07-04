@@ -242,6 +242,11 @@ impl Connection {
     }
 
     // see outer type
+    pub(super) fn server_t0(&self) -> Instant {
+        self.server_t0
+    }
+
+    // see outer type
     pub(super) fn kill(&self) {
         self.conn_shared.shutdown_recv.notify_one();
     }
@@ -783,18 +788,21 @@ enum HandshakeError {
 impl Debug for Connection {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         #[cfg(debug_assertions)]
-        if let Some(extra_debug) = self.conn_shared.extra_debug.lock().as_ref() {
-            write!(
-                f,
-                "conn_idx: {:?}, peer_addr: {:?}",
-                extra_debug.conn_idx,
-                extra_debug.peer_addr,
-            )
-        } else {
-            f.write_str("extra debug missing")
+        {
+            if let Some(extra_debug) = self.conn_shared.extra_debug.lock().as_ref() {
+                write!(
+                    f,
+                    "conn_idx: {:?}, peer_addr: {:?}",
+                    extra_debug.conn_idx,
+                    extra_debug.peer_addr,
+                )?;
+            } else {
+                f.write_str("extra debug missing")?;
+            }
+            write!(f, ", server_t0: {:?}", self.server_t0)
         }
 
         #[cfg(not(debug_assertions))]
-        f.write_str("..")
+        write!(f, "server_t0: {:?}, ..", self.server_t0)
     }
 }

@@ -158,6 +158,11 @@ impl Connection {
     pub(super) fn send(&self, msg: UpMsg) {
         let _ = self.send_send.send(msg);
     }
+
+    // see outer type
+    pub(super) fn est_server_t0(&self) -> Instant {
+        self.est_server_t0
+    }
 }
 
 impl Drop for ConnectionShutdownTrigger {

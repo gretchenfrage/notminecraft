@@ -10,11 +10,13 @@ use crate::{
         ClientSender,
         EventPriority,
     },
+    util_time::ServerRelTime,
 };
 use std::{
     sync::Arc,
     cell::Cell,
     fmt::{self, Formatter, Debug},
+    time::Instant,
 };
 use tokio::runtime::Handle;
 use anyhow::Error;
@@ -78,6 +80,35 @@ impl Connection {
             &ConnectionInner::InMem(ref inner) => inner.send(msg.into()),
         }
         self.last_up_msg_idx.get()
+    }
+
+    /// Estimated instant at which the server sampled its `server_t0` timestamp.
+    ///
+    /// Communicating real time timestamps with the server should be done by relativizing them
+    /// against `est_server_t0`, as this does not rely on either party's clocks being accurately
+    /// synchronized to Unix time.
+    pub fn est_server_t0(&self) -> Instant {
+        match &self.inner {
+            &ConnectionInner::Ws(ref inner) => inner.est_server_t0(),
+            &ConnectionInner::InMem(ref inner) => inner.est_server_t0(),
+        }
+    }
+
+    /// Relativize an instant against `est_server_t0`.
+    ///
+    /// Resultant `ServerRelTime` suitable for transmitting on this connection.
+    ///
+    /// Warns and saturates if called with instants ridiculously far before or after
+    /// `est_server_t0`.
+    pub fn rel_time(&self, instant: Instant) -> ServerRelTime {
+        ServerRelTime::new(instant, self.est_server_t0())
+    }
+
+    /// Derelativize an instant against `est_server_t0`.
+    ///
+    /// Suitable for `ServerRelTime` received from this connection.
+    pub fn derel_time(&self, rel_time: ServerRelTime) -> Instant {
+        rel_time.to_instant(self.est_server_t0())
     }
 }
 

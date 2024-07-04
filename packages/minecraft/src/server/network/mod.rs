@@ -6,6 +6,7 @@ use crate::{
         channel::*,
         ServerEvent,
     },
+    util_time::ServerRelTime,
     message::*,
 };
 #[cfg(feature = "client")]
@@ -13,6 +14,7 @@ use crate::client::channel::ClientSender;
 use std::{
     sync::Arc,
     fmt::Debug,
+    time::Instant,
 };
 use parking_lot::Mutex;
 use slab::Slab;
@@ -159,6 +161,37 @@ impl Connection {
             #[cfg(feature = "client")]
             &ConnectionInner::InMem(ref inner) => inner.send(msg),
         }
+    }
+
+    /// Our `server_t0` timestamp for this client connection.
+    ///
+    /// The client's `est_server_t0` should be an accurate estimate of this real time instant, but
+    /// in terms of the client's own monotonic clock, which may be different from ours.
+    /// Communicating real time timestamps with the client should be done by relativizing them
+    /// against `server_t0`, as this does not rely on either party's clocks being accurately
+    /// synchronized to Unix time.
+    pub fn server_t0(&self) -> Instant {
+        match &self.0 {
+            &ConnectionInner::Ws(ref inner) => inner.server_t0(),
+            #[cfg(feature = "client")]
+            &ConnectionInner::InMem(ref inner) => inner.server_t0(),
+        }
+    }
+
+    /// Relativize an instant against `server_t0`.
+    ///
+    /// Resultant `ServerRelTime` suitable for transmitting on this connection. Should not be
+    /// called with instants before this `Connection` was created, or ridiculously far into the
+    /// future.
+    pub fn rel_time(&self, instant: Instant) -> ServerRelTime {
+        ServerRelTime::new(instant, self.server_t0())
+    }
+
+    /// Relativize an instant against `server_t0`.
+    ///
+    /// Suitable for `ServerRelTime` received from this connection.
+    pub fn derel_time(&self, rel_time: ServerRelTime) -> Instant {
+        rel_time.to_instant(self.server_t0())
     }
 
     /// Kill and disconnect the network connection.

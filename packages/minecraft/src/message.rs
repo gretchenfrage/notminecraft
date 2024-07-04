@@ -5,6 +5,7 @@
 use crate::{
     game_binschema::GameBinschema,
     util_usize_lt::UsizeLt,
+    util_time::ServerRelTime,
     item::*,
 };
 use chunk_data::*;
@@ -59,7 +60,8 @@ pub enum PlayerMsg {
     /// Close the currently open sync menu.
     CloseSyncMenu(PlayerMsgCloseSyncMenu),
     /// Player message to be processed by the currently open sync menu.
-    SyncMenuMsg(SyncMenuMsg)
+    SyncMenuMsg(SyncMenuMsg),
+    ClockDebug(ServerRelTime),
 }
 
 /// Set own position and direction.

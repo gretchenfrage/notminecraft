@@ -204,6 +204,11 @@ impl GuiStateFrame for ClientGuiState {
             self.0.menu_mgr.set_menu(EscMenu::new(ctx.global()));
         } else if key == KeyCode::KeyE {
             self.0.menu_mgr.set_menu(InventoryMenu::new(ctx.global()));
+        } else if key == KeyCode::KeyT {
+            let now = Instant::now();
+            self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::ClockDebug(
+                self.0.pre_join.connection.rel_time(now)
+            )));
         }
     }
 

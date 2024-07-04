@@ -8,6 +8,7 @@ use crate::{
     },
     util_abort_handle::*,
     util_must_drain::MustDrain,
+    util_time::ServerRelTime,
     message::*,
 };
 use std::{
@@ -16,6 +17,7 @@ use std::{
         VecDeque,
     },
     mem::replace,
+    time::Instant,
 };
 use slab::Slab;
 use anyhow::*;
@@ -217,9 +219,33 @@ impl ConnMgr {
 
     /// Enqueue message to be transmitted to player client.
     ///
-    /// Never blocks or errors. See `Connection::send` for details.
+    /// Never blocks or errors. See [`Connection::send`][super::network::Connection::send] for
+    /// details.
     pub fn send<K: Into<PlayerKey>, M: Into<DownMsg>>(&self, pk: K, msg: M) {
         self.connections[self.player_conn_idx[pk.into()]].connection.send(msg.into());
+    }
+
+    /// Get `pk`'s `server_t0`.
+    ///
+    /// See [`Connection::server_t0`][super::network::Connection::server_t0].
+    pub fn server_t0<K: Into<PlayerKey>>(&self, pk: K) -> Instant {
+        self.connections[self.player_conn_idx[pk.into()]].connection.server_t0()
+    }
+
+    /// Relativize an instant against `pk`'s `server_t0`.
+    ///
+    /// Resultant `ServerRelTime` suitable for transmitting to `pk`.
+    ///
+    /// Warns and saturates if called with instants ridiculously far before or after `server_t0`.
+    pub fn rel_time<K: Into<PlayerKey>>(&self, pk: K, instant: Instant) -> ServerRelTime {
+        ServerRelTime::new(instant, self.server_t0(pk))
+    }
+
+    /// Derelativize an instant against `pk`'s `server_t0`.
+    ///
+    /// Suitable for `ServerRelTime` received from `pk`.
+    pub fn derel_time<K: Into<PlayerKey>>(&self, pk: K, rel_time: ServerRelTime) -> Instant {
+        rel_time.to_instant(self.server_t0(pk))
     }
 
     /// Close the player client connection and remove the player.

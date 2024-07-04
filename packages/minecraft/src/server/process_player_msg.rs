@@ -33,6 +33,14 @@ pub fn process_player_msg(world: &mut SyncWorld, pk: JoinedPlayerKey, msg: Playe
         PlayerMsg::OpenSyncMenu(inner) => inner.process(world, pk),
         PlayerMsg::CloseSyncMenu(inner) => inner.process(world, pk),
         PlayerMsg::SyncMenuMsg(inner) => inner.process(world, pk),
+        PlayerMsg::ClockDebug(time) => {
+            use std::time::Instant;
+            let now = Instant::now();
+            debug!(
+                "received message from(?) {:.6} ms ago",
+                now.saturating_duration_since(world.sync_ctx.conn_mgr.derel_time(pk, time)).as_nanos() as f64 / 1_000_000.0,
+            );
+        }
     }
 }
 
