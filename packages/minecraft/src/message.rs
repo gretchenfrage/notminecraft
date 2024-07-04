@@ -169,11 +169,11 @@ pub enum PreJoinDownMsg {
         yaw: f32,
         pitch: f32,
     },
-    SetStevePosVel {
+    /*SetStevePosVel {
         steve_idx: usize,
         pos: Vec3<f32>,
         vel: Vec3<f32>,
-    }
+    }*/
 }
 
 /// Message that is only valid to send to client once it has fully joined the game.

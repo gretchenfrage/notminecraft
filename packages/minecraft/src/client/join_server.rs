@@ -17,6 +17,7 @@ use crate::{
     gui::prelude::*,
     gui_state_loading::LoadingOneshot,
     gui_state_loading_failure::LoadingFailureMenu,
+    sync_state_steve,
 };
 use get_assets::DataDir;
 use std::{
@@ -225,7 +226,7 @@ fn construct_pre_join_client(
         player_pos: Default::default(),
         player_yaw: Default::default(),
         player_pitch: Default::default(),
-        steves: Default::default(),
+        //steves: Default::default(),
     }
 }
 

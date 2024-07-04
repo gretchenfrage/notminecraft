@@ -296,6 +296,8 @@ impl GuiEventLoop {
 	pub fn new(tokio: &Handle, thread_pool: ThreadPool) -> Self {
 		let event_loop = EventLoop::new()
 			.expect("failed to create event loop");
+		// TODO: fixing this requires separating windowed renderer from graphics context
+		#[allow(deprecated)]
 		let window = event_loop
 			.create_window(
 				Window::default_attributes()
@@ -359,7 +361,9 @@ impl GuiEventLoop {
 
 		let mut frame_is_happening = true;
 		let mut user_event_stop_at = Instant::now();
-		
+
+		// TODO: fixing this requires separating windowed renderer from graphics context
+		#[allow(deprecated)]		
 		let result = self.event_loop.run(move |event, target| {
 			trace!(?event, "winit event");
 

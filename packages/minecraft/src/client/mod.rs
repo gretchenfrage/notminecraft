@@ -37,7 +37,7 @@ use crate::{
         *,
     },
     sync_state_inventory_slots,
-    sync_state_steve,
+    //sync_state_steve,
 };
 use chunk_data::*;
 use graphics::prelude::*;
@@ -93,7 +93,7 @@ pub struct PreJoinClient {
     pub player_yaw: PerPlayer<f32>,
     pub player_pitch: PerPlayer<f32>,
 
-    pub steves: [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
+    //pub steves: [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
 }
 
 /// Client state once the client has joined the game.

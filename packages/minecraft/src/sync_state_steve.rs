@@ -1,14 +1,14 @@
 
-use crate::{
+/*use crate::{
     server::ServerSyncCtx,
     message::*,
 };
-use vek::*;
+use vek::*;*/
 
 pub const NUM_STEVES: usize = 10;
 pub const STEVE_HEIGHT: f32 = 1.8;
 pub const STEVE_WIDTH: f32 = 0.6;
-
+/*
 #[derive(Debug, Clone, Default)]
 pub struct Steve {
     pub pos: Vec3<f32>,
@@ -73,3 +73,4 @@ impl<'a> SyncWriteSteve<'a> {
         self.state.vel = vel;
     }
 }
+*/

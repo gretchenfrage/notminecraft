@@ -112,7 +112,7 @@ pub fn run(
                 }
                 steves
             },*/
-            steves: Default::default(),
+            //steves: Default::default(),
         },
     };
 
@@ -208,35 +208,7 @@ fn request_load_spawn_chunks(server: &mut Server) {
 // do a tick of world simulation
 fn do_tick(server: &mut Server) {
     trace!("tick");
-    let mut server = server.as_sync_world();
-    for steve_idx in 0..10 {
-        use crate::physics::prelude::*;
-        use crate::sync_state_steve::*;
-
-        let mut steve = server.steves.get(steve_idx);
-
-        let mut pos = steve.as_ref().pos;
-        let mut vel = steve.as_ref().vel;
-        pos.x -= STEVE_WIDTH / 2.0;
-        pos.z -= STEVE_WIDTH / 2.0;
-        do_physics(
-            crate::server::tick_mgr::TICK.as_secs_f32(),
-            &mut pos,
-            &mut vel,
-            &AaBoxCollisionObject {
-                ext: [STEVE_WIDTH, STEVE_HEIGHT, STEVE_WIDTH].into(),
-            },
-            &WorldPhysicsGeometry {
-                getter: &server.getter,
-                tile_blocks: server.tile_blocks.as_ref(),
-                game: &server.sync_ctx.game,
-            },
-        );
-        pos.x += STEVE_WIDTH / 2.0;
-        pos.z += STEVE_WIDTH / 2.0;
-
-        steve.set_pos_vel(pos, vel);
-    }
+    let mut _world = server.as_sync_world();
 }
 
 // do a save operation if appropriate to do so
@@ -442,13 +414,6 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             ChunkMgrEffect::AddChunk { cc, ci, save_val, saved } => {
                 server.sync_ctx.save_mgr.add_chunk(cc, ci, saved);
                 server.sync_state.tile_blocks.add(cc, ci, save_val.chunk_tile_blocks);
-
-                if cc == Vec3::new(0, 0, 0) {
-                    for (i, steve) in server.sync_state.steves.iter_mut().enumerate() {
-                        steve.pos = Vec3::new(16.0, 40.0, 16.0) + Vec3::from(1.0) * i as f32;
-                        steve.vel = Vec3::new(-1.0, -1.0, -1.0) * i as f32;
-                    }
-                }
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {

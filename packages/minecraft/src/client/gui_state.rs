@@ -13,7 +13,7 @@ use crate::{
         menu_inventory::InventoryMenu,
         *,
     },
-    sync_state_steve,
+    //sync_state_steve,
     message::*,
     physics::prelude::*,
     gui::prelude::*,
@@ -38,7 +38,7 @@ pub struct WorldGuiBlock<'a> {
     pub pos: Vec3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    pub steves: &'a [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
+    //pub steves: &'a [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
     pub steve_mesh: &'a Mesh,
 }
 
@@ -88,7 +88,7 @@ impl ClientGuiState {
                 pos: self.0.pos,
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
-                steves: &self.0.pre_join.steves,
+                //steves: &self.0.pre_join.steves,
                 steve_mesh: &self.0.steve_mesh,
             },
             self.0.menu_mgr.gui(ctx, MenuGuiClientBorrows {
@@ -284,11 +284,11 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .draw_mesh(mesh, &ctx.assets().blocks);
             }
         }
-        for steve in self.inner.steves {
+        /*for steve in self.inner.steves {
             canvas.reborrow()
                 .translate(steve.pos)
                 .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
-        }
+        }*/
     }
 }
 
