@@ -196,7 +196,10 @@ pub use self::{
         Getter,
         AddChunkError,
     },
-    per_chunk::PerChunk,
+    per_chunk::{
+        PerChunk,
+        PerChunkPartiallyBorrowed,
+    },
     block::{
         AIR,
         RawBlockId,

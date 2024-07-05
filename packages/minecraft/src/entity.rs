@@ -24,28 +24,29 @@ pub struct PigEntityState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalEntityEntry {
-    // entity stable UUID
+    /// Entity stable UUID.
     pub uuid: Uuid,
-    // entity type
+    /// Entity type.
     pub kind: EntityKind,
-    // entity owning chunk cc
+    /// Entity owning chunk cc.
     pub cc: Vec3<i64>,
-    // entity owning chunk ci
+    /// Entity owning chunk ci.
     pub ci: usize,
-    // entity vector index.
-    // entity's currently location within the relevant entity vector of the owning chunk.
+    /// Entity vector index.
+    ///
+    /// Entity's currently location within the relevant entity vector of the owning chunk.
     pub vector_idx: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct EntityEntry<T> {
-    // entity stable UUID
+    /// Entity stable UUID.
     pub uuid: Uuid,
-    // global entity index of this entity
+    /// Global entity index of this entity.
     pub global_idx: usize,
-    // spatial position of this entity relative to the chunk that owns it
+    /// Spatial position of this entity relative to the chunk that owns it.
     pub rel_pos: Vec3<f32>,
-    // other entity type-specific entity state
+    /// Other entity type-specific entity state.
     pub state: T,
 }
 

@@ -123,6 +123,7 @@ mod builder;
 use alloc::vec::{self, Vec};
 use core::iter::{self, FromIterator, FusedIterator};
 use core::{fmt, mem, ops, slice};
+use core::marker::PhantomData;
 
 /// Pre-allocated storage for a uniform data type
 ///
@@ -851,46 +852,6 @@ impl<T> Slab<T> {
         }
     }
 
-    /// Return two mutable references to the values associated with the two
-    /// given keys simultaneously without performing bounds checking and safety
-    /// condition checking.
-    ///
-    /// For a safe alternative see [`get2_mut`](Slab::get2_mut).
-    ///
-    /// This function should be used with care.
-    ///
-    /// # Safety
-    ///
-    /// - Both keys must be within bounds.
-    /// - The condition `key1 != key2` must hold.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use slab::*;
-    /// use std::mem;
-    ///
-    /// let mut slab = Slab::new();
-    /// let key1 = slab.insert(1);
-    /// let key2 = slab.insert(2);
-    /// let (value1, value2) = unsafe { slab.get2_unchecked_mut(key1, key2) };
-    /// mem::swap(value1, value2);
-    /// assert_eq!(slab[key1], 2);
-    /// assert_eq!(slab[key2], 1);
-    /// ```
-    pub unsafe fn get2_unchecked_mut(&mut self, key1: usize, key2: usize) -> (&mut T, &mut T) {
-        debug_assert_ne!(key1, key2);
-        let ptr = self.entries.as_mut_ptr();
-        let ptr1 = ptr.add(key1);
-        let ptr2 = ptr.add(key2);
-        match (&mut *ptr1, &mut *ptr2) {
-            (&mut Entry::Occupied(ref mut val1), &mut Entry::Occupied(ref mut val2)) => {
-                (val1, val2)
-            }
-            _ => unreachable!(),
-        }
-    }
-
     /// Get the key for an element in the slab.
     ///
     /// The reference must point to an element owned by the slab.
@@ -1218,6 +1179,16 @@ impl<T> Slab<T> {
                 .collect(),
             next: self.next,
             len: self.len,
+        }
+    }
+
+    /// Borrow as a `UnsafeSlabRef`, which allows entries to be borrowed such that the caller is
+    /// responsible for ensuring that concurrently borrowed keys are disjoint.
+    pub fn unsafe_slab_ref(&mut self) -> UnsafeSlabRef<'_, T> {
+        UnsafeSlabRef {
+            entries_ptr: self.entries.as_mut_ptr(),
+            num_entries: self.entries.len(),
+            _p: PhantomData,
         }
     }
 }
@@ -1609,3 +1580,35 @@ impl<T> ExactSizeIterator for Drain<'_, T> {
 }
 
 impl<T> FusedIterator for Drain<'_, T> {}
+
+// ===== raw =====
+
+/// Borrow of a slab which allows entries to be borrowed such that the caller is responsible for
+/// ensuring that concurrently borrowed keys are disjoint.
+pub struct UnsafeSlabRef<'a, T> {
+    entries_ptr: *mut Entry<T>,
+    num_entries: usize,
+    _p: PhantomData<&'a ()>,
+}
+
+impl<'a, T> UnsafeSlabRef<'a, T> {
+    /// Like [`Slab::get_mut`], except it is up to the caller to ensure that this is not called
+    /// or its value held for the same key multiple times simultaneously, or undefined behavior
+    /// occurs.
+    pub unsafe fn get_mut_unsafe(&self, key: usize) -> Option<&'a mut T> {
+        if key < self.num_entries {
+            match &mut *self.entries_ptr.add(key) {
+                &mut Entry::Occupied(ref mut val) => Some(val),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T> fmt::Debug for UnsafeSlabRef<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("UnsafeSlabRef { .. }")
+    }
+}

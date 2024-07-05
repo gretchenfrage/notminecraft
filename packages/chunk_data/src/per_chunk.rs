@@ -1,7 +1,7 @@
 
 use crate::CiGet;
 use std::ops::{Index, IndexMut};
-use slab::Slab;
+use slab::{Slab, UnsafeSlabRef};
 use vek::*;
 
 
@@ -60,6 +60,25 @@ impl<T> PerChunk<T> {
     pub fn get_mut_checkless(&mut self, ci: usize) -> &mut T {
         &mut self.0[ci].1
     }
+
+    /// Mutably get by ci, debug-assert cc is correct, and return a projection of self that lets
+    /// one mutably get a different entry in parallel.
+    pub fn get_mut_partially(
+        &mut self,
+        cc: Vec3<i64>,
+        ci: usize,
+    ) -> (&mut T, PerChunkPartiallyBorrowed<T>)
+    {
+        unsafe {
+            let entries_usr = self.0.unsafe_slab_ref();
+            let &mut (cc2, ref mut val) = entries_usr.get_mut_unsafe(ci).unwrap();
+            debug_assert_eq!(cc, cc2);
+            (val, PerChunkPartiallyBorrowed {
+                entries_usr,
+                borrowed_ci: ci,
+            })
+        }
+    }
 }
 
 impl<T> Default for PerChunk<T> {
@@ -98,3 +117,26 @@ impl<T> IndexMut<usize> for PerChunk<T> {
         &mut self.0[i].1
     }
 }
+
+/// Borrow of a `PerChunk<T>` in which one entry is already mutably borrowed.
+///
+/// Allows any one _other_ entry at a time to be borrowed simultaneously.
+pub struct PerChunkPartiallyBorrowed<'a, T> {
+    entries_usr: UnsafeSlabRef<'a, (Vec3<i64>, T)>,
+    borrowed_ci: usize,
+}
+
+impl<'a, T> PerChunkPartiallyBorrowed<'a, T> {
+    /// Mutably get by ci, debug-assert cc is correct. Panics if the provided ci is the ci that is
+    /// already borrowed.
+    pub fn get_mut(&mut self, cc: Vec3<i64>, ci: usize) -> &mut T {
+        assert!(ci != self.borrowed_ci, "PerChunkPartiallyBorrowed collision");
+        unsafe {
+            let &mut (cc2, ref mut val) = self.entries_usr.get_mut_unsafe(ci).unwrap();
+            debug_assert_eq!(cc, cc2);
+            val
+        }
+    }
+}
+
+

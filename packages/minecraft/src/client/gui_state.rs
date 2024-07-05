@@ -276,16 +276,14 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             let bbox_pos = (cc * CHUNK_EXTENT).map(|n| n as f32);
             let bbox_ext = CHUNK_EXTENT.map(|n| n as f32);
 
-            if !vp.is_volume_visible(bbox_pos, bbox_ext.into()) {
-                continue;
-            }
-
             let mut canvas = canvas.reborrow()
                 .translate(bbox_pos);
 
-            if let Some(mesh) = self.inner.chunk_mesh_mgr.chunk_mesh(cc, ci) {
-                canvas.reborrow()
-                    .draw_mesh(mesh, &ctx.assets().blocks);
+            if vp.is_volume_visible(bbox_pos, bbox_ext.into()) {
+                if let Some(mesh) = self.inner.chunk_mesh_mgr.chunk_mesh(cc, ci) {
+                    canvas.reborrow()
+                        .draw_mesh(mesh, &ctx.assets().blocks);
+                }
             }
 
             for steve in self.inner.chunk_steves.get(cc, ci) {

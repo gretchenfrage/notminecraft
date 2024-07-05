@@ -206,12 +206,105 @@ fn do_tick(server: &mut Server) {
     trace!("tick");
     let world = server.as_sync_world();
     for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
-        for (entity_idx, steve) in world.server_only.chunk_steves
-            .get_mut(cc, ci)
+        let (
+            steves,
+            mut other_chunk_steves,
+        ) = world.server_only.chunk_steves.get_mut_partially(cc, ci);
+
+        for steve_idx in (0..steves.len()).rev() {
+            let steve = &mut steves[steve_idx];
+
+            steve.rel_pos += Vec3::from(0.05);
+            steve.state.vel = Vec3::from(0.05 / 20.0);
+
+            for pk in world.sync_ctx.conn_mgr.players().iter() {
+                if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
+                    world.sync_ctx.conn_mgr.send(
+                        pk,
+                        DownMsg::PreJoin(PreJoinDownMsg::EditEntity {
+                            chunk_idx: DownChunkIdx(clientside_ci),
+                            entity_idx: steve_idx,
+                            edit: EntityEdit::SetStevePosVel(EntityEditSetStevePosVel {
+                                rel_pos: steve.rel_pos,
+                                vel: steve.state.vel,
+                            }),
+                        }),
+                    );
+                }
+            }
+
+            let rel_cc = (steve.rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
+            if rel_cc != Vec3::from(0) {
+                let new_cc = cc + rel_cc;
+                if let Some(new_ci) = world.getter.get(new_cc) {
+                    steve.rel_pos -= (rel_cc * CHUNK_EXTENT).map(|n| n as f32);
+                    let global_idx = steve.global_idx;
+                    let entity_uuid = steve.uuid;
+                    let rel_pos = steve.rel_pos;
+                    let owned_steve = steves.swap_remove(steve_idx);
+                    if let Some(displaced_steve) = steves.get(steve_idx) {
+                        world.server_only.global_entity_slab[displaced_steve.global_idx].vector_idx = steve_idx;
+                    }
+                    let steves2 = other_chunk_steves.get_mut(new_cc, new_ci);
+                    let new_steve_idx = steves2.len();
+                    steves2.push(owned_steve);
+                    let global_entry = &mut world.server_only.global_entity_slab[global_idx];
+                    global_entry.cc = new_cc;
+                    global_entry.ci = new_ci;
+                    global_entry.vector_idx = new_steve_idx;
+                    for pk in world.sync_ctx.conn_mgr.players().iter() {
+                        match (
+                            world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk),
+                            world.sync_ctx.chunk_mgr.chunk_to_clientside(new_cc, new_ci, pk),
+                        ) {
+                            (Some(old_clientside_ci), Some(new_clientside_ci)) => {
+                                world.sync_ctx.conn_mgr.send(
+                                    pk,
+                                    DownMsg::PreJoin(PreJoinDownMsg::ChangeEntityOwningChunk {
+                                        old_chunk_idx: DownChunkIdx(old_clientside_ci),
+                                        entity_kind: EntityKind::Steve,
+                                        entity_idx: steve_idx,
+                                        new_chunk_idx: DownChunkIdx(new_clientside_ci)
+                                    }),
+                                );
+                            }
+                            (Some(clientside_ci), None) => {
+                                world.sync_ctx.conn_mgr.send(
+                                    pk,
+                                    DownMsg::PreJoin(PreJoinDownMsg::RemoveEntity {
+                                        chunk_idx: DownChunkIdx(clientside_ci),
+                                        entity_kind: EntityKind::Steve,
+                                        entity_idx: steve_idx,
+                                    }),
+                                );
+                            }
+                            (None, Some(clientside_ci)) => {
+                                world.sync_ctx.conn_mgr.send(
+                                    pk,
+                                    DownMsg::PreJoin(PreJoinDownMsg::AddEntity {
+                                        chunk_idx: DownChunkIdx(clientside_ci),
+                                        entity: AnyDownEntity::Steve(DownEntity {
+                                            entity_uuid,
+                                            rel_pos,
+                                            state: steves2[new_steve_idx].state.clone(),
+                                        }),
+                                    }),
+                                );
+                            }
+                            (None, None) => (),
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        for (entity_idx, steve) in steves
             .iter_mut()
             .enumerate()
         {
             steve.rel_pos += Vec3::from(0.05);
+
             for pk in world.sync_ctx.conn_mgr.players().iter() {
                 if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
                     world.sync_ctx.conn_mgr.send(
@@ -227,7 +320,15 @@ fn do_tick(server: &mut Server) {
                     );
                 }
             }
-        }
+
+            let rel_cc = (steve.rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
+            if rel_cc != Vec3::from(0) {
+                let new_cc = cc + rel_cc;
+
+                let new_rel_pos = steve.rel_pos - (rel_cc * CHUNK_EXTENT).map(|n| n as f32);
+                //let entity = world.server_only.
+            }
+        }*/
     }
 }
 

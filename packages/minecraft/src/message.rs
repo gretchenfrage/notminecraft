@@ -171,6 +171,42 @@ pub enum PreJoinDownMsg {
         yaw: f32,
         pitch: f32,
     },
+    // TODO: factor these out
+
+    /// Add a new entity to a chunk.
+    ///
+    /// Should push the entity to the chunk's entity vector of the given entity's entity type.
+    AddEntity {
+        /// Chunk that shall own the entity.
+        chunk_idx: DownChunkIdx,
+        /// Entity to be added.
+        entity: AnyDownEntity,
+    },
+    /// Remove an existing entity.
+    ///
+    /// Should swap-remove the entity from the chunk's entity vector of the specified entity type.
+    RemoveEntity {
+        /// Chunk that owns the entity.
+        chunk_idx: DownChunkIdx,
+        /// Which entity vector the entity exists in.
+        entity_kind: EntityKind,
+        /// Index of the entity to remove within its vector.
+        entity_idx: usize,
+    },
+    /// Move an existing entity to a different chunk.
+    ///
+    /// Should swap-remove the entity from the old chunk's entity vector of the specified entity
+    /// type, then push it to the corresponding entity vector of the new chunk.
+    ChangeEntityOwningChunk {
+        /// Chunk that currently owns the entity.
+        old_chunk_idx: DownChunkIdx,
+        /// Which entity vector in the old and new chunk the entity exists in.
+        entity_kind: EntityKind,
+        /// Entity's current index in its old chunk's entity vector.
+        entity_idx: usize,
+        /// Chunk that the entity will be moved into.
+        new_chunk_idx: DownChunkIdx,
+    },
     /// Apply an edit to an existing entity.
     EditEntity {
         /// Chunk that owns the entity.
@@ -258,6 +294,14 @@ pub struct DownEntity<T> {
     pub rel_pos: Vec3<f32>,
     /// Entity type-specific state.
     pub state: T,
+}
+
+// TODO: generally speaking organize this better
+
+#[derive(Debug, GameBinschema)]
+pub enum AnyDownEntity {
+    Steve(DownEntity<SteveEntityState>),
+    Pig(DownEntity<PigEntityState>),
 }
 
 /// Edit sent from server to client applicable to a single entity.

@@ -160,6 +160,166 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw[pk] = yaw;
             client.player_pitch[pk] = pitch;
         }
+        PreJoinDownMsg::AddEntity { chunk_idx, entity } => {
+            let (cc, ci, _) = client.chunks.lookup(chunk_idx)?;
+            // TODO factor out?
+            fn add_entity<S>(
+                entity: DownEntity<S>,
+                cc: Vec3<i64>,
+                ci: usize,
+                chunk_entities: &mut PerChunk<Vec<EntityEntry<S>>>,
+                global_entity_hmap: &mut HashMap<Uuid, usize>,
+                global_entity_slab: &mut Slab<GlobalEntityEntry>,
+                kind: EntityKind,
+            ) -> Result<()> {
+                let DownEntity { entity_uuid: uuid, rel_pos, state } = entity;
+
+                let entity_vec = chunk_entities.get_mut(cc, ci);
+                let vector_idx = entity_vec.len();
+
+                let global_idx = global_entity_slab.insert(GlobalEntityEntry {
+                    uuid,
+                    kind,
+                    cc,
+                    ci,
+                    vector_idx,
+                });
+                let removed = global_entity_hmap.insert(uuid, global_idx);
+                ensure!(removed.is_none(), "entity uuid collision {}", uuid);
+
+                entity_vec.push(EntityEntry { uuid, global_idx, rel_pos, state });
+
+                Ok(())
+            }
+            match entity {
+                AnyDownEntity::Steve(steve) => add_entity(
+                    steve,
+                    cc,
+                    ci,
+                    &mut client.chunk_steves,
+                    &mut client.global_entity_hmap,
+                    &mut client.global_entity_slab,
+                    EntityKind::Steve,
+                ),
+                AnyDownEntity::Pig(pig) => add_entity(
+                    pig,
+                    cc,
+                    ci,
+                    &mut client.chunk_pigs,
+                    &mut client.global_entity_hmap,
+                    &mut client.global_entity_slab,
+                    EntityKind::Pig,
+                ),
+            }?;
+        }
+        PreJoinDownMsg::RemoveEntity { chunk_idx, entity_kind, entity_idx } => {
+            let (cc, ci, _) = client.chunks.lookup(chunk_idx)?;
+            fn remove_entity<S>(
+                cc: Vec3<i64>,
+                ci: usize,
+                entity_idx: usize,
+                chunk_entities: &mut PerChunk<Vec<EntityEntry<S>>>,
+                global_entity_hmap: &mut HashMap<Uuid, usize>,
+                global_entity_slab: &mut Slab<GlobalEntityEntry>,
+            ) -> Result<()> {
+                let entity_vec = chunk_entities.get_mut(cc, ci);
+                ensure!(entity_idx < entity_vec.len(), "remove entity index out of bounds");
+                let removed_entry = entity_vec.swap_remove(entity_idx);
+                let removed_hmap_entry = global_entity_hmap.remove(&removed_entry.uuid);
+                debug_assert!(removed_hmap_entry.is_some());
+                global_entity_slab.remove(removed_entry.global_idx);
+                if let Some(moved_entry) = entity_vec.get(entity_idx) {
+                    global_entity_slab[moved_entry.global_idx].vector_idx = entity_idx;
+                }
+                Ok(())
+            }
+            match entity_kind {
+                EntityKind::Steve => remove_entity(
+                    cc,
+                    ci,
+                    entity_idx,
+                    &mut client.chunk_steves,
+                    &mut client.global_entity_hmap,
+                    &mut client.global_entity_slab,
+                ),
+                EntityKind::Pig => remove_entity(
+                    cc,
+                    ci,
+                    entity_idx,
+                    &mut client.chunk_pigs,
+                    &mut client.global_entity_hmap,
+                    &mut client.global_entity_slab,
+                ),
+            }?;
+        }
+        PreJoinDownMsg::ChangeEntityOwningChunk {
+            old_chunk_idx,
+            entity_kind,
+            entity_idx,
+            new_chunk_idx,
+        } => {
+            let (old_cc, old_ci, _) = client.chunks.lookup(old_chunk_idx)?;
+            let (new_cc, new_ci, _) = client.chunks.lookup(new_chunk_idx)?;
+            fn move_entity<S>(
+                old_cc: Vec3<i64>,
+                old_ci: usize,
+                new_cc: Vec3<i64>,
+                new_ci: usize,
+                old_entity_idx: usize,
+                chunk_entities: &mut PerChunk<Vec<EntityEntry<S>>>,
+                global_entity_slab: &mut Slab<GlobalEntityEntry>,
+            ) -> Result<()> {
+                // remove from old
+                let old_entity_vec = chunk_entities.get_mut(old_cc, old_ci);
+                ensure!(
+                    old_entity_idx < old_entity_vec.len(),
+                    "change entity owning chunk index out of bounds",
+                );
+                let mut entry = old_entity_vec.swap_remove(old_entity_idx);
+                let global_idx = entry.global_idx;
+
+                // adjust relative position
+                entry.rel_pos -= ((new_cc - old_cc) * CHUNK_EXTENT).map(|n| n as f32);
+
+                // update backlink for displaced
+                if let Some(moved_entry) = old_entity_vec.get(old_entity_idx) {
+                    global_entity_slab[moved_entry.global_idx].vector_idx = old_entity_idx;
+                }
+
+                // add to new
+                let new_entity_vec = chunk_entities.get_mut(new_cc, new_ci);
+                let new_entity_idx = new_entity_vec.len();
+                new_entity_vec.push(entry);
+
+                // update backlink for moved
+                let global_entry = &mut global_entity_slab[global_idx];
+                global_entry.cc = new_cc;
+                global_entry.ci = new_ci;
+                global_entry.vector_idx = new_entity_idx;
+
+                Ok(())
+            }
+            match entity_kind {
+                EntityKind::Steve => move_entity(
+                    old_cc,
+                    old_ci,
+                    new_cc,
+                    new_ci,
+                    entity_idx,
+                    &mut client.chunk_steves,
+                    &mut client.global_entity_slab,
+                ),
+                EntityKind::Pig => move_entity(
+                    old_cc,
+                    old_ci,
+                    new_cc,
+                    new_ci,
+                    entity_idx,
+                    &mut client.chunk_pigs,
+                    &mut client.global_entity_slab,
+                ),
+            }?
+        }
         // edit entity
         PreJoinDownMsg::EditEntity { chunk_idx, entity_idx, edit } => {
             let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
