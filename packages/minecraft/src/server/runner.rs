@@ -217,6 +217,8 @@ fn do_tick(server: &mut Server) {
             steve.rel_pos += Vec3::from(0.05);
             steve.state.vel = Vec3::from(0.05 / 20.0);
 
+            world.sync_ctx.save_mgr.mark_chunk_unsaved(cc, ci);
+
             for pk in world.sync_ctx.conn_mgr.players().iter() {
                 if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
                     world.sync_ctx.conn_mgr.send(

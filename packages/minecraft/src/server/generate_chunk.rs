@@ -49,7 +49,7 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
 
     let mut steves = Vec::new();
 
-    for i in 0..10 {
+    for i in 0..1 {
         steves.push(EntitySaveEntry {
             entity_uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
@@ -61,7 +61,7 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
 
     let mut pigs = Vec::new();
 
-    for _ in 0..10 {
+    for _ in 0..1 {
         pigs.push(EntitySaveEntry {
             entity_uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
