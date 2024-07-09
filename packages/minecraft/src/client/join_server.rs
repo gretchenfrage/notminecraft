@@ -227,10 +227,10 @@ fn construct_pre_join_client(
         player_yaw: Default::default(),
         player_pitch: Default::default(),
 
-        global_entity_hmap: Default::default(),
+        /*global_entity_hmap: Default::default(),
         global_entity_slab: Default::default(),
         chunk_steves: Default::default(),
-        chunk_pigs: Default::default(),
+        chunk_pigs: Default::default(),*/
         //steves: Default::default(),
     }
 }

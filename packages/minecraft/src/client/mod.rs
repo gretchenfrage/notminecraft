@@ -37,7 +37,6 @@ use crate::{
         *,
     },
     sync_state_inventory_slots,
-    entity::*,
 };
 use chunk_data::*;
 use graphics::prelude::*;
@@ -100,12 +99,12 @@ pub struct PreJoinClient {
 
     // ==== entity stuff ====
 
-    // TODO: this all is duplicated with the server
+    /*// TODO: this all is duplicated with the server
     pub global_entity_hmap: HashMap<Uuid, usize>,
     pub global_entity_slab: Slab<GlobalEntityEntry>,
     
     pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
-    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
 }
 
 /// Client state once the client has joined the game.

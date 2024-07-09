@@ -38,13 +38,13 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             chunk_idx,
             cc,
             chunk_tile_blocks,
-            steves,
-            pigs,
+            //steves,
+            //pigs,
         }) => {
             let (ci, _getter) = client.chunks.on_add_chunk(chunk_idx, cc)?.get(&client.chunks);
             client.tile_blocks.add(cc, ci, chunk_tile_blocks);
             client.chunk_mesh_mgr.add_chunk(cc, ci, &client.chunks, &client.tile_blocks);
-
+            /*
             // TODO: put this somewhere else
             // TODO: also, this is largely duplicated with the server
             fn install_entities<S>(
@@ -96,13 +96,14 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 &mut client.chunk_pigs,
                 EntityKind::Pig,
             )?;
+            */
         }
         // remove chunk from world
         PreJoinDownMsg::RemoveChunk(DownMsgRemoveChunk { chunk_idx }) => {
             let (cc, ci) = client.chunks.on_remove_chunk(chunk_idx)?;
             client.tile_blocks.remove(cc, ci);
             client.chunk_mesh_mgr.remove_chunk(cc, ci);
-
+            /*
             // TODO move this elsewhere
             // TODO: this is mostly duplicated with server
             fn remove_entities<S>(
@@ -145,6 +146,7 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 &mut client.global_entity_slab,
                 EntityKind::Pig,
             );
+            */
         }
         // set tile block
         PreJoinDownMsg::SetTileBlock { chunk_idx, lti, bid_meta } => {
@@ -160,6 +162,11 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw[pk] = yaw;
             client.player_pitch[pk] = pitch;
         }
+        PreJoinDownMsg::AddEntity { .. } => todo!(),
+        PreJoinDownMsg::RemoveEntity { .. } => todo!(),
+        PreJoinDownMsg::ChangeEntityOwningChunk { .. } => todo!(),
+        PreJoinDownMsg::EditEntity { .. } => todo!(),
+        /*
         PreJoinDownMsg::AddEntity { chunk_idx, entity } => {
             let (cc, ci, _) = client.chunks.lookup(chunk_idx)?;
             // TODO factor out?
@@ -374,7 +381,7 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                     )
                 }
             }?;
-        }
+        }*/
     }
     Ok(())
 }

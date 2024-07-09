@@ -49,9 +49,10 @@ pub mod message;
 pub mod sync_state_tile_blocks;
 pub mod sync_state_inventory_slots;
 pub mod sync_state_steve;
+pub mod sync_state_entities;
 #[cfg(feature = "client")]
 pub mod client;
-pub mod entity;
+//pub mod entity;
 
 
 

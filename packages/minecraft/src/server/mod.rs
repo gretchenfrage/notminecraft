@@ -41,7 +41,7 @@ use crate::{
     thread_pool::ThreadPool,
     sync_state_tile_blocks,
     sync_state_inventory_slots,
-    entity::*,
+    sync_state_entities,
     //sync_state_steve,
 };
 use chunk_data::*;
@@ -121,6 +121,7 @@ pub struct ServerOnlyState {
     //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
     //pub char_states: PerPlayer<CharState>,
 
+    /*
     // ==== entity stuff ====
     // hmap from currently loaded stable entity UUID to global entity index
     pub global_entity_hmap: HashMap<Uuid, usize>,
@@ -129,7 +130,7 @@ pub struct ServerOnlyState {
     pub global_entity_slab: Slab<GlobalEntityEntry>,
 
     pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
-    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
 }
 
 /// State for which `&mut` references get wrapped in auto-syncing wrappers before game logic gets
@@ -155,6 +156,8 @@ pub struct ServerSyncCtx {
     pub save_mgr: SaveMgr,
     /// Manages clients and their joining and leaving. See type docs.
     pub conn_mgr: ConnMgr,
+    /// Sync write ctx for entities.
+    pub entities: sync_state_entities::ServerEntitiesCtx,
 }
 
 /// Projection of `&mut Server` that game logic gets access to. Designed to automatically keep

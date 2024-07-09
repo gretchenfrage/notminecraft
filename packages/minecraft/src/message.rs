@@ -7,7 +7,7 @@ use crate::{
     util_usize_lt::UsizeLt,
     util_time::ServerRelTime,
     item::*,
-    entity::*,
+    sync_state_entities::*,
 };
 use chunk_data::*;
 use uuid::Uuid;
@@ -171,8 +171,6 @@ pub enum PreJoinDownMsg {
         yaw: f32,
         pitch: f32,
     },
-    // TODO: factor these out
-
     /// Add a new entity to a chunk.
     ///
     /// Should push the entity to the chunk's entity vector of the given entity's entity type.
@@ -180,7 +178,7 @@ pub enum PreJoinDownMsg {
         /// Chunk that shall own the entity.
         chunk_idx: DownChunkIdx,
         /// Entity to be added.
-        entity: AnyDownEntity,
+        entity: EntityData<AnyEntityState>,
     },
     /// Remove an existing entity.
     ///
@@ -189,9 +187,9 @@ pub enum PreJoinDownMsg {
         /// Chunk that owns the entity.
         chunk_idx: DownChunkIdx,
         /// Which entity vector the entity exists in.
-        entity_kind: EntityKind,
+        entity_type: EntityType,
         /// Index of the entity to remove within its vector.
-        entity_idx: usize,
+        vector_idx: usize,
     },
     /// Move an existing entity to a different chunk.
     ///
@@ -201,9 +199,9 @@ pub enum PreJoinDownMsg {
         /// Chunk that currently owns the entity.
         old_chunk_idx: DownChunkIdx,
         /// Which entity vector in the old and new chunk the entity exists in.
-        entity_kind: EntityKind,
+        entity_type: EntityType,
         /// Entity's current index in its old chunk's entity vector.
-        entity_idx: usize,
+        vector_idx: usize,
         /// Chunk that the entity will be moved into.
         new_chunk_idx: DownChunkIdx,
     },
@@ -213,9 +211,9 @@ pub enum PreJoinDownMsg {
         chunk_idx: DownChunkIdx,
         /// Index of the entity within the chunk's entity vector of the entity type that the edit
         /// value applies to.
-        entity_idx: usize,
+        vector_idx: usize,
         /// Edit to apply.
-        edit: EntityEdit,
+        edit: AnyEntityEdit,
     },
 }
 
@@ -281,10 +279,10 @@ pub struct DownMsgAddChunk {
     pub chunk_idx: DownChunkIdx,
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
-    pub steves: Vec<DownEntity<SteveEntityState>>,
-    pub pigs: Vec<DownEntity<PigEntityState>>,
+    //pub steves: Vec<DownEntity<SteveEntityState>>,
+    //pub pigs: Vec<DownEntity<PigEntityState>>,
 }
-
+/*
 /// Entity state for tranmission in a down msg.
 #[derive(Debug, GameBinschema, Copy, Clone)]
 pub struct DownEntity<T> {
@@ -336,7 +334,7 @@ pub struct EntityEditSetPigPosVel {
 pub struct EntityEditSetPigColor {
     pub color: Rgb<f32>,
 }
-
+*/
 /// Remove a loaded chunk from the client.
 #[derive(Debug, GameBinschema)]
 pub struct DownMsgRemoveChunk {

@@ -46,7 +46,7 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
     hasher.update(&cc.z.to_le_bytes());
     let hash = hasher.finalize();
     let mut rng = ChaCha8Rng::from_seed(hash);
-
+    /*
     let mut steves = Vec::new();
 
     for i in 0..1 {
@@ -69,11 +69,11 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
                 color: Rgb::new(rng.gen(), rng.gen(), rng.gen()),
             },
         });
-    }
+    }*/
 
     ChunkSaveVal {
         chunk_tile_blocks,
-        steves,
-        pigs,
+        //steves,
+        //pigs,
     }
 }

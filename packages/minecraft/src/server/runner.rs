@@ -94,10 +94,10 @@ pub fn run(
             player_pitch: Default::default(),
             player_open_sync_menu: Default::default(),
 
-            global_entity_hmap: Default::default(),
+            /*global_entity_hmap: Default::default(),
             global_entity_slab: Default::default(),
             chunk_steves: Default::default(),
-            chunk_pigs: Default::default(),
+            chunk_pigs: Default::default(),*/
         },
         sync_ctx: ServerSyncCtx {
             game,
@@ -105,6 +105,7 @@ pub fn run(
             chunk_mgr: Default::default(),
             save_mgr: SaveMgr::new(server_send, save_db, thread_pool),
             conn_mgr: Default::default(),
+            entities: Default::default(),
         },
         sync_state: ServerSyncState {
             tile_blocks: Default::default(),
@@ -205,6 +206,7 @@ fn request_load_spawn_chunks(server: &mut Server) {
 fn do_tick(server: &mut Server) {
     trace!("tick");
     let world = server.as_sync_world();
+    /*
     for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
         let (
             steves,
@@ -331,7 +333,7 @@ fn do_tick(server: &mut Server) {
                 //let entity = world.server_only.
             }
         }*/
-    }
+    }*/
 }
 
 // do a save operation if appropriate to do so
@@ -349,7 +351,7 @@ fn save(server: &mut Server) {
     let mut save_op = server.sync_ctx.save_mgr.begin_save();
     while let Some(should_save) = save_op.should_save.pop() {
         trace!(?should_save, "will save");
-
+        /*
         // TODO: move this somewhere else
         fn entity_save_entries<ES, SS, F: FnMut(&ES) -> SS>(
             chunk_entities: &PerChunk<Vec<EntityEntry<ES>>>,
@@ -373,14 +375,14 @@ fn save(server: &mut Server) {
                 })
                 .collect()
         }
-
+        */
         save_op.will_save.push(match should_save {
             ShouldSave::Chunk { cc, ci } => SaveEntry::Chunk(
                 ChunkSaveKey { cc },
                 ChunkSaveVal {
                     chunk_tile_blocks: server.sync_ctx.game
                         .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
-                    steves: entity_save_entries(
+                    /*steves: entity_save_entries(
                         &server.server_only.chunk_steves,
                         cc,
                         ci,
@@ -393,7 +395,7 @@ fn save(server: &mut Server) {
                         cc,
                         ci,
                         |&PigEntityState { vel: _, color }| PigEntitySaveState { color },
-                    ),
+                    ),*/
                 },
             ),
             ShouldSave::Player { pk } => SaveEntry::Player(
@@ -576,12 +578,12 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             ChunkMgrEffect::AddChunk { cc, ci, save_val, saved } => {
                 let ChunkSaveVal {
                     chunk_tile_blocks,
-                    steves,
-                    pigs,
+                    //steves,
+                    //pigs,
                 } = save_val;
                 server.sync_ctx.save_mgr.add_chunk(cc, ci, saved);
                 server.sync_state.tile_blocks.add(cc, ci, chunk_tile_blocks);
-
+                /*
                 // TODO: put this somewhere else
                 fn install_entities<SS, ES, F: FnMut(SS) -> ES>(
                     cc: Vec3<i64>,
@@ -644,12 +646,13 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         vel: Default::default(),
                         color,
                     },
-                );                
+                );   
+                */             
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {
                 let chunk_tile_blocks = server.sync_state.tile_blocks.remove(cc, ci);
-
+                /*
                 // TODO move this elsewhere
                 fn remove_entities<ES, SS, F: FnMut(ES) -> SS>(
                     chunk_entities: &mut PerChunk<Vec<EntityEntry<ES>>>,
@@ -684,13 +687,14 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         })
                         .collect()
                 }
-
+                */
                 server.sync_ctx.save_mgr.remove_chunk(
                     cc,
                     ci,
                     ChunkSaveKey { cc },
                     ChunkSaveVal {
                         chunk_tile_blocks,
+                        /*
                         steves: remove_entities(
                             &mut server.server_only.chunk_steves,
                             cc,
@@ -709,11 +713,13 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                             EntityKind::Pig,
                             |PigEntityState { vel: _, color }| PigEntitySaveState { color },
                         ),
+                        */
                     },
                 );
             }
             // download chunk to client
             ChunkMgrEffect::AddChunkToClient { cc, ci, pk, clientside_ci } => {
+                /*
                 // TODO: move elsewhere?
                 fn down_entities<S: Clone>(
                     chunk_entities: &PerChunk<Vec<EntityEntry<S>>>,
@@ -727,7 +733,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                             state: entry.state.clone(),
                         })
                         .collect()
-                }
+                }*/
 
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::AddChunk(
                     DownMsgAddChunk {
@@ -735,8 +741,8 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         cc,
                         chunk_tile_blocks: server.sync_ctx.game
                             .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
-                        steves: down_entities(&server.server_only.chunk_steves, cc, ci),
-                        pigs: down_entities(&server.server_only.chunk_pigs, cc, ci),
+                        //steves: down_entities(&server.server_only.chunk_steves, cc, ci),
+                        //pigs: down_entities(&server.server_only.chunk_pigs, cc, ci),
                     }
                 )));
             }

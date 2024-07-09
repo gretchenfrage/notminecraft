@@ -41,10 +41,10 @@ pub struct ChunkSaveVal {
 
     // TODO: invert these for the save file so it's just one nice big (dynamic?) enum?
 
-    /// Steve entities in the chunk.
+    /*/// Steve entities in the chunk.
     pub steves: Vec<EntitySaveEntry<SteveEntitySaveState>>,
     /// Pig entities in the chunk.
-    pub pigs: Vec<EntitySaveEntry<PigEntitySaveState>>,
+    pub pigs: Vec<EntitySaveEntry<PigEntitySaveState>>,*/
 }
 
 /// Save file schema for entry in one of a chunk's entity vectors.

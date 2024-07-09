@@ -39,8 +39,8 @@ pub struct WorldGuiBlock<'a> {
     pub yaw: f32,
     pub pitch: f32,
     pub steve_mesh: &'a Mesh,
-    pub chunk_steves: &'a PerChunk<Vec<EntityEntry<SteveEntityState>>>,
-    pub chunk_pigs: &'a PerChunk<Vec<EntityEntry<PigEntityState>>>,
+    //pub chunk_steves: &'a PerChunk<Vec<EntityEntry<SteveEntityState>>>,
+    //pub chunk_pigs: &'a PerChunk<Vec<EntityEntry<PigEntityState>>>,
 }
 
 impl ClientGuiState {
@@ -90,8 +90,8 @@ impl ClientGuiState {
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
                 steve_mesh: &self.0.steve_mesh,
-                chunk_steves: &self.0.pre_join.chunk_steves,
-                chunk_pigs: &self.0.pre_join.chunk_pigs,
+                //chunk_steves: &self.0.pre_join.chunk_steves,
+                //chunk_pigs: &self.0.pre_join.chunk_pigs,
             },
             self.0.menu_mgr.gui(ctx, MenuGuiClientBorrows {
                 connection: &self.0.pre_join.connection,
@@ -285,7 +285,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                         .draw_mesh(mesh, &ctx.assets().blocks);
                 }
             }
-
+            /*
             for steve in self.inner.chunk_steves.get(cc, ci) {
                 canvas.reborrow()
                     .translate(steve.rel_pos)
@@ -298,7 +298,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .scale([1.0, 0.5, 1.0])
                     .color(pig.state.color)
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
-            }
+            }*/
         }
     }
 }
