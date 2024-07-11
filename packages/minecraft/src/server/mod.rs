@@ -41,13 +41,14 @@ use crate::{
     thread_pool::ThreadPool,
     sync_state_tile_blocks,
     sync_state_inventory_slots,
-    sync_state_entities,
+    sync_state_entities::{self, LoadedEntities},
     //sync_state_steve,
 };
 use chunk_data::*;
 use std::{
     sync::Arc,
     collections::HashMap,
+    cell::RefCell,
 };
 use uuid::Uuid;
 use slab::Slab;
@@ -157,7 +158,7 @@ pub struct ServerSyncCtx {
     /// Manages clients and their joining and leaving. See type docs.
     pub conn_mgr: ConnMgr,
     /// Sync write ctx for entities.
-    pub entities: sync_state_entities::ServerEntitiesCtx,
+    pub entities: RefCell<LoadedEntities>,
 }
 
 /// Projection of `&mut Server` that game logic gets access to. Designed to automatically keep

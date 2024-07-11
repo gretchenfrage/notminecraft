@@ -26,17 +26,9 @@ use vek::*;
 pub trait EntityState: Clone {
     const ENTITY_TYPE: EntityType;
 
-    //type Edit: EntityEdit<Self>;
-
     fn into_any(self) -> AnyEntityState;
 }
 
-
-/*
-pub trait EntityEdit<S>: Into<AnyEntityState> {
-    fn apply(self, entity: &mut EntityData<S>);
-}
-*/
 #[derive(Debug, Clone, GameBinschema)]
 pub struct SteveEntityState {
     pub vel: Vec3<f32>,
@@ -48,17 +40,7 @@ pub enum SteveEntityEdit {
     SetVel(Vec3<f32>),
     SetName(String),
 }
-/*
-impl EntityEdit<SteveEntityState> for SteveEntityEdit {
-    fn apply(self, entity: &mut EntityData<SteveEntityState>) {
-        match self {
-            SteveEntityEdit::SetRelPos(rel_pos) => entity.rel_pos = rel_pos,
-            SteveEntityEdit::SetVal(vel) => entity.state.vel = vel,
-            SteveEntityEdit::SetName(name) => entity.state.name = name,
-        }
-    }
-}
-*/
+
 #[derive(Debug, Copy, Clone, GameBinschema)]
 pub struct PigEntityState {
     pub vel: Vec3<f32>,
@@ -70,17 +52,7 @@ pub enum PigEntityEdit {
     SetVel(Vec3<f32>),
     SetColor(Rgb<f32>),
 }
-/*
-impl EntityEdit<PigEntityState> for PigEntityEdit {
-    fn apply(self, entity: &mut EntityData<PigEntityState>) {
-        match self {
-            PigEntityEdit::SetRelPos(rel_pos) => entity.rel_pos = rel_pos,
-            PigEntityEdit::SetVel(vel) => entity.state.vel = vel,
-            PigEntityEdit::SetColor(color) => entity.state.color = color,
-        }
-    }
-}
-*/
+
 macro_rules! entity_types {
     ($( $name:ident($state:ty, $edit:ty), )*)=>{
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, GameBinschema)]
@@ -91,8 +63,6 @@ macro_rules! entity_types {
         $(
             impl EntityState for $state {
                 const ENTITY_TYPE: EntityType = EntityType::$name;
-
-                //type Edit = $edit;
 
                 fn into_any(self) -> AnyEntityState {
                     AnyEntityState::$name(self)
@@ -148,6 +118,8 @@ impl<S> EntityData<S> {
         }
     }
 }
+
+// TODO: rename to EntityTracker?
 
 /// Client/server global tracking state for all entities loaded into world.
 #[derive(Default, Debug, Clone)]
@@ -322,13 +294,21 @@ impl LoadedEntities {
     }
 }
 
-#[derive(Debug, Default)]
+/*#[derive(Debug, Default)]
 pub struct ServerEntitiesCtx {
     entities: RefCell<LoadedEntities>,
-}
-
+}*/
+/*
 pub struct ServerState<S> {
     chunk_entities: PerChunk<Vec<ChunkEntityEntry<S>>>,
+    iter_move_batch_to_move: Vec<EntityToMove>,
+    #[cfg(debug_assertions)]
+    iter_move_batch_chunk_touched: PerChunk<bool>,
+    #[cfg(debug_assertions)]
+    iter_move_batch_touched_chunks: Vec<(Vec3<i64>, usize)>,
+}*/
+#[derive(Debug, Default)]
+pub struct SyncWriteBufs {
     iter_move_batch_to_move: Vec<EntityToMove>,
     #[cfg(debug_assertions)]
     iter_move_batch_chunk_touched: PerChunk<bool>,
@@ -352,7 +332,7 @@ pub struct UuidCollision;
 
 #[derive(Debug)]
 pub struct VectorIdxOutOfBounds;
-
+/*
 pub fn sync_move_entity<S: EntityState>(
     ctx: &ServerSyncCtx,
     state: &mut ServerState<S>,
@@ -414,7 +394,232 @@ pub fn sync_move_entity<S: EntityState>(
         }
     }
 }
+*/
+pub struct SyncWrite<'a, S, W> {
+    ctx: &'a ServerSyncCtx,
+    state: &'a mut PerChunk<Vec<ChunkEntityEntry<S>>>,
+    bufs: &'a mut SyncWriteBufs,
+    _p: PhantomData<W>,
+}
 
+impl<'a, S, W> SyncWrite<'a, S, W> {
+    pub fn new_manual(
+        ctx: &'a ServerSyncCtx,
+        state: &'a mut PerChunk<Vec<ChunkEntityEntry<S>>>,
+        bufs: &'a mut SyncWriteBufs,
+    ) -> Self {
+        SyncWrite { ctx, state, bufs, _p: PhantomData }
+    }
+
+    pub fn as_ref(&self) -> &PerChunk<Vec<ChunkEntityEntry<S>>> {
+        &self.state
+    }
+
+    pub fn get(&mut self, cc: Vec3<i64>, ci: usize) -> SyncWriteChunk<S, W> {
+        SyncWriteChunk {
+            ctx: self.ctx,
+            state: self.state.get_mut(cc, ci),
+            cc,
+            ci,
+            _p: PhantomData,
+        }
+    }
+}
+
+impl<'a, S: EntityState, W> SyncWrite<'a, S, W> {
+    pub fn move_entity(
+        &mut self,
+        old_cc: Vec3<i64>,
+        old_ci: usize,
+        new_cc: Vec3<i64>,
+        new_ci: usize,
+        old_vector_idx: usize,
+    ) {
+        // move it
+        // unwrap safety: that returning an error is meant for the client to deal with server protocol
+        //                violations. but this is to be called in the server.
+        let new_vector_idx = self.ctx.entities.borrow_mut().move_entity(
+            &mut self.state,
+            old_cc,
+            old_ci,
+            new_cc,
+            new_ci,
+            old_vector_idx,
+        ).unwrap();
+
+        // mark both chunks as unsaved
+        self.ctx.save_mgr.mark_chunk_unsaved(old_cc, old_ci);
+        self.ctx.save_mgr.mark_chunk_unsaved(new_cc, new_ci);
+
+        // send messages to clients
+        for pk in self.ctx.conn_mgr.players().iter() {
+            let msg = match (
+                self.ctx.chunk_mgr.chunk_to_clientside(old_cc, old_ci, pk).map(DownChunkIdx),
+                self.ctx.chunk_mgr.chunk_to_clientside(new_cc, new_ci, pk).map(DownChunkIdx),
+            ) {
+                (Some(old_chunk_idx), Some(new_chunk_idx)) => Some(
+                    PreJoinDownMsg::ChangeEntityOwningChunk {
+                        old_chunk_idx,
+                        entity_type: S::ENTITY_TYPE,
+                        vector_idx: old_vector_idx,
+                        new_chunk_idx,
+                    }
+                ),
+                (Some(chunk_idx), None) => Some(
+                    PreJoinDownMsg::RemoveEntity {
+                        chunk_idx,
+                        entity_type: S::ENTITY_TYPE,
+                        vector_idx: old_vector_idx,
+                    }
+                ),
+                (None, Some(chunk_idx)) => Some(
+                    PreJoinDownMsg::AddEntity {
+                        chunk_idx,
+                        entity: self.state.get(new_cc, new_ci)[new_vector_idx].entity
+                            .clone()
+                            .map_state(S::into_any),
+                    }
+                ),
+                (None, None) => None,
+            };
+            if let Some(msg) = msg {
+                self.ctx.conn_mgr.send(pk, DownMsg::PreJoin(msg));
+            }
+        }
+    }
+}
+
+pub struct SyncWriteChunk<'a, S, W> {
+    ctx: &'a ServerSyncCtx,
+    state: &'a mut Vec<ChunkEntityEntry<S>>,
+    cc: Vec3<i64>,
+    ci: usize,
+    _p: PhantomData<W>
+}
+
+impl<'a, S, W> SyncWriteChunk<'a, S, W> {
+    pub fn reborrow<'a2>(&'a2 mut self) -> SyncWriteChunk<'a2, S, W> {
+        SyncWriteChunk {
+            ctx: &self.ctx,
+            state: &mut self.state,
+            cc: self.cc,
+            ci: self.ci,
+            _p: PhantomData,
+        }
+    }
+
+    pub fn as_ref(&self) -> &Vec<ChunkEntityEntry<S>> {
+        &self.state
+    }
+}
+
+impl<'a, S, W: SyncWriteEntityLogic<'a, S>> SyncWriteChunk<'a, S, W> {
+    pub fn get(self, vector_idx: usize) -> W::SyncWriteEntity {
+        W::wrap(SyncWriteEntityInner {
+            ctx: self.ctx,
+            state: &mut self.state[vector_idx].entity,
+            cc: self.cc,
+            ci: self.ci,
+            vector_idx,
+        })
+    }
+}
+
+pub struct SyncWriteEntityInner<'a, S> {
+    ctx: &'a ServerSyncCtx,
+    state: &'a mut EntityData<S>,
+    cc: Vec3<i64>,
+    ci: usize,
+    vector_idx: usize,
+}
+
+impl<'a, S> SyncWriteEntityInner<'a, S> {
+    pub fn reborrow<'a2>(&'a2 mut self) -> SyncWriteEntityInner<'a2, S> {
+        SyncWriteEntityInner {
+            ctx: &self.ctx,
+            state: &mut self.state,
+            cc: self.cc,
+            ci: self.ci,
+            vector_idx: self.vector_idx,
+        }
+    }
+
+    pub fn as_ref(&self) -> &EntityData<S> {
+        &self.state
+    }
+
+    pub fn entity_state_mut(&mut self) -> &mut S {
+        &mut self.state.state
+    }
+
+    pub fn mark_unsaved(&self) {
+        self.ctx.save_mgr.mark_chunk_unsaved(self.cc, self.ci);
+    }
+
+    pub fn ctx(&self) -> &ServerSyncCtx {
+        &self.ctx
+    }
+
+    pub fn broadcast<F, M>(&self, mut f: F)
+    where
+        F: FnMut(PlayerKey, DownChunkIdx) -> M,
+        M: Into<PreJoinDownMsg>,
+    {
+        for pk in self.ctx.conn_mgr.players().iter() {
+            if let Some(clientside_ci) =
+                self.ctx.chunk_mgr.chunk_to_clientside(self.cc, self.ci, pk)
+            {
+                let msg = f(pk, DownChunkIdx(clientside_ci));
+                self.ctx.conn_mgr.send(pk, DownMsg::PreJoin(msg.into()));
+            }
+        }
+    }
+
+    pub fn broadcast_edit<F, E>(&self, mut f: F)
+    where
+        F: FnMut(PlayerKey, DownChunkIdx) -> E,
+        E: Into<AnyEntityEdit>,
+    {
+        self.broadcast(|pk, down_chunk_idx| PreJoinDownMsg::EditEntity {
+            chunk_idx: down_chunk_idx,
+            vector_idx: self.vector_idx,
+            edit: f(pk, down_chunk_idx).into(),
+        });
+    }
+}
+
+pub trait SyncWriteEntityLogic<'a, S> {
+    type SyncWriteEntity;
+
+    fn wrap(inner: SyncWriteEntityInner<'a, S>) -> Self::SyncWriteEntity;
+}
+
+pub struct IterMoveBatch<'a, S, W> {
+    inner: SyncWrite<'a, S, W>,
+}
+
+impl<'a, S, W> IterMoveBatch<'a, S, W> {
+    /*
+    pub fn as_write(&mut self) -> &mut SyncWrite {
+        &mut self.sync_write
+    }
+
+    pub fn visit_chunk*/
+}
+
+pub struct IterMoveChunk<'a, S, W> {
+    inner: SyncWriteChunk<'a, S, W>,
+    next_vector_idx: usize,
+    iter_move_batch_to_move: &'a mut Vec<EntityToMove>,
+}
+
+pub struct IterMoveEntity<'a, S, W> {
+    inner: SyncWriteEntityInner<'a, S>,
+    iter_move_batch_to_move: &'a mut Vec<EntityToMove>,
+    _p: PhantomData<W>,
+}
+
+/*
 macro_rules! sync_write_types {
     ($state:ty)=>{
         pub struct SyncWrite<'a> {
@@ -738,7 +943,7 @@ pub mod pig {
         set_vel(vel: Vec3<f32>) SetVel,
         set_color(color: Rgb<f32>) SetColor,
     ));
-}
+}*/
 
 /*
 pub struct SyncWrite<'a, S> {
