@@ -108,8 +108,8 @@ pub struct PreJoinClient {
     pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
 
     pub entities: LoadedEntities,
-    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState>>>,
-    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState>>>,
+    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState, sync_state_entities::SteveEntityClientState>>>,
+    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState, sync_state_entities::PigEntityClientState>>>,
 }
 
 /// Client state once the client has joined the game.

@@ -40,8 +40,8 @@ pub struct WorldGuiBlock<'a> {
     pub yaw: f32,
     pub pitch: f32,
     pub steve_mesh: &'a Mesh,
-    pub chunk_steves: &'a PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState>>>,
-    pub chunk_pigs: &'a PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState>>>,
+    pub chunk_steves: &'a PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState, sync_state_entities::SteveEntityClientState>>>,
+    pub chunk_pigs: &'a PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState, sync_state_entities::PigEntityClientState>>>,
 }
 
 impl ClientGuiState {
@@ -290,6 +290,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             for steve in self.inner.chunk_steves.get(cc, ci) {
                 canvas.reborrow()
                     .translate(steve.entity.rel_pos)
+                    .color([0.8, 0.8, 0.8, 1.0])
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
             }
 

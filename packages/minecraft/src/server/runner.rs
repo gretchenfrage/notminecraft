@@ -12,6 +12,7 @@ use crate::{
         save_mgr::{SaveMgr, ShouldSave},
         conn_mgr::ConnMgrEffect,
         chunk_mgr::ChunkMgrEffect,
+        tick_mgr::TICK,
         process_player_msg::process_player_msg,
         *,
     },
@@ -19,6 +20,7 @@ use crate::{
     thread_pool::ThreadPool,
     util_must_drain::MustDrain,
     util_array::*,
+    sync_state_entities,
 };
 use std::{
     sync::Arc,
@@ -221,16 +223,38 @@ fn do_tick(server: &mut Server) {
         let mut steves = chunk_steves.get(cc, ci);
         while let Some(mut steve) = steves.next() {
             let mut rel_pos = steve.as_write().as_ref().rel_pos;
-            rel_pos += Vec3::from(0.05);
+            let mut vel = steve.as_write().as_ref().state.vel;
+            
+            //rel_pos += Vec3::from(0.05);
+            /*
+            vel -= GRAVITY_ACCEL * dt;
+            do_physics(
+                TICK.as_secs_f32(),
+                &mut rel_pos,
+                &mut vel,
+
+            )*/
+            sync_state_entities::do_steve_physics(
+                TICK.as_secs_f32(),
+                cc,
+                &mut rel_pos,
+                &mut vel,
+                &world.getter,
+                world.tile_blocks.as_ref(),
+                &world.sync_ctx.game,
+                Some(steve.as_write().extra_mut()),
+            );
 
             let rel_cc_after = (rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(f32::floor);
             if rel_cc_after != Vec3::from(0.0) {
                 let cc_after = cc + rel_cc_after.map(|n| n as i64);
                 if world.getter.get(cc_after).is_none() {
+                    // TODO: handle this better
                     continue;
                 }
             }
 
+            steve.as_write().set_vel(vel);
             steve.set_rel_pos(rel_pos);
         }
 
@@ -626,10 +650,18 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                 server.sync_state.tile_blocks.add(cc, ci, chunk_tile_blocks);
                 // TODO: we actually should deal with UUID collisions here
                 server.sync_ctx.entities.borrow_mut()
-                    .add_chunk(&mut server.sync_state.chunk_steves, cc, ci, steves).unwrap();
+                    .add_chunk(
+                        &mut server.sync_state.chunk_steves,
+                        cc, ci,
+                        steves.into_iter().map(|entity| (entity, Default::default())),
+                    ).unwrap();
                 server.sync_state.sw_bufs_steves.add_chunk(cc, ci);
                 server.sync_ctx.entities.borrow_mut()
-                    .add_chunk(&mut server.sync_state.chunk_pigs, cc, ci, pigs).unwrap();
+                    .add_chunk(
+                        &mut server.sync_state.chunk_pigs,
+                        cc, ci,
+                        pigs.into_iter().map(|entity| (entity, Default::default())),
+                    ).unwrap();
                 server.sync_state.sw_bufs_pigs.add_chunk(cc, ci);
                 /*
                 // TODO: put this somewhere else

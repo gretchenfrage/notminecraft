@@ -6,12 +6,7 @@ use crate::game_data::{
     physics_logic::BlockPhysicsLogic,
     hitscan_logic::BlockHitscanLogic,
 };
-use chunk_data::{
-    Getter,
-    PerChunk,
-    ChunkBlocks,
-    TileKey,
-};
+use chunk_data::*;
 use vek::*;
 
 
@@ -79,6 +74,7 @@ pub struct WorldPhysicsGeometry<'a> {
     pub getter: &'a Getter<'a>,
     pub tile_blocks: &'a PerChunk<ChunkBlocks>,
     pub game: &'a GameData,
+    pub cc_rel_to: Vec3<i64>,
 }
 
 impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
@@ -90,7 +86,7 @@ impl<'a> WorldGeometry for WorldPhysicsGeometry<'a> {
         mut visit: V,
     ) {
         let physics_logic = self.getter
-            .gtc_get(gtc)
+            .gtc_get(self.cc_rel_to * CHUNK_EXTENT + gtc)
             .map(|tile| {
                 let bid = tile.get(self.tile_blocks).get();
                 self.game.blocks_physics_logic.get(bid)

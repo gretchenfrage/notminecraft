@@ -118,20 +118,6 @@ pub struct ServerOnlyState {
     pub player_pitch: PerJoinedPlayer<f32>,
 
     pub player_open_sync_menu: PerJoinedPlayer<Option<process_player_msg::PlayerOpenSyncMenu>>,
-
-    //pub open_game_menu: PerPlayer<Option<OpenGameMenu>>,
-    //pub char_states: PerPlayer<CharState>,
-
-    /*
-    // ==== entity stuff ====
-    // hmap from currently loaded stable entity UUID to global entity index
-    pub global_entity_hmap: HashMap<Uuid, usize>,
-    // slab representing the space of global entity indexes, which represents loaded entities
-    // and which are stable indexes for as long as that entity remains continuously loaded
-    pub global_entity_slab: Slab<GlobalEntityEntry>,
-
-    pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
-    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
 }
 
 /// State for which `&mut` references get wrapped in auto-syncing wrappers before game logic gets
@@ -140,10 +126,9 @@ pub struct ServerOnlyState {
 pub struct ServerSyncState {
     pub tile_blocks: PerChunk<ChunkBlocks>,
     pub player_inventory_slots: PerJoinedPlayer<sync_state_inventory_slots::PlayerInventorySlots>,
-    //pub steves: [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
-    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState>>>,
+    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState, sync_state_entities::SteveEntityServerState>>>,
     pub sw_bufs_steves: sync_state_entities::SyncWriteBufs,
-    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState, sync_state_entities::PigEntityServerState>>>,
     pub sw_bufs_pigs: sync_state_entities::SyncWriteBufs,
 }
 
@@ -180,9 +165,8 @@ pub struct SyncWorld<'a> {
 
     pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
     pub player_inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
-    pub chunk_steves: sync_state_entities::SyncWrite<'a, sync_state_entities::SteveEntityState, sync_state_entities::SyncWriteSteveLogic>,
-    pub chunk_pigs: sync_state_entities::SyncWrite<'a, sync_state_entities::PigEntityState, sync_state_entities::SyncWritePigLogic>,
-    //pub steves: sync_state_steve::SyncWrite<'a>,
+    pub chunk_steves: sync_state_entities::SyncWrite<'a, sync_state_entities::SteveEntityState, sync_state_entities::SteveEntityServerState, sync_state_entities::SyncWriteSteveLogic>,
+    pub chunk_pigs: sync_state_entities::SyncWrite<'a, sync_state_entities::PigEntityState, sync_state_entities::PigEntityServerState, sync_state_entities::SyncWritePigLogic>,
 }
 
 

@@ -45,9 +45,19 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             let (ci, _getter) = client.chunks.on_add_chunk(chunk_idx, cc)?.get(&client.chunks);
             client.tile_blocks.add(cc, ci, chunk_tile_blocks);
             client.chunk_mesh_mgr.add_chunk(cc, ci, &client.chunks, &client.tile_blocks);
-            client.entities.add_chunk(&mut client.chunk_steves, cc, ci, steves)
+            client.entities
+                .add_chunk(
+                    &mut client.chunk_steves,
+                    cc, ci,
+                    steves.into_iter().map(|entity| (entity, Default::default())),
+                )
                 .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
-            client.entities.add_chunk(&mut client.chunk_pigs, cc, ci, pigs)
+            client.entities
+                .add_chunk(
+                    &mut client.chunk_pigs,
+                    cc, ci,
+                    pigs.into_iter().map(|entity| (entity, Default::default())),
+                )
                 .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
             /*
             // TODO: put this somewhere else
@@ -174,11 +184,13 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 AnyEntityState::Steve(state) => client.entities.add_entity(
                     &mut client.chunk_steves,
                     EntityData { uuid, rel_pos, state },
+                    Default::default(),
                     cc, ci,
                 ),
                 AnyEntityState::Pig(state) => client.entities.add_entity(
                     &mut client.chunk_pigs,
                     EntityData { uuid, rel_pos, state },
+                    Default::default(),
                     cc, ci,
                 ),
             }.map_err(|sync_state_entities::UuidCollision|
@@ -216,8 +228,8 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             )?;
         },
         PreJoinDownMsg::EditEntity { chunk_idx, vector_idx, edit } => {
-            fn edit_entity<S, F: FnOnce(&mut EntityData<S>)>(
-                chunk_entities: &mut PerChunk<Vec<sync_state_entities::ChunkEntityEntry<S>>>,
+            fn edit_entity<S, E, F: FnOnce(&mut EntityData<S>, &mut E)>(
+                chunk_entities: &mut PerChunk<Vec<sync_state_entities::ChunkEntityEntry<S, E>>>,
                 cc: Vec3<i64>,
                 ci: usize,
                 vector_idx: usize,
@@ -225,7 +237,7 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             ) -> Result<()> {
                 let entry = chunk_entities.get_mut(cc, ci).get_mut(vector_idx)
                     .ok_or_else(|| anyhow!("server edited entity with out of bounds index"))?;
-                edit(&mut entry.entity);
+                edit(&mut entry.entity, &mut entry.extra);
                 Ok(())
             }
 
@@ -233,20 +245,20 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             match edit {
                 AnyEntityEdit::SetRelPos { entity_type, rel_pos } => match entity_type {
                     EntityType::Steve => edit_entity(
-                        &mut client.chunk_steves, cc, ci, vector_idx, |e| e.rel_pos = rel_pos
+                        &mut client.chunk_steves, cc, ci, vector_idx, |e, _| e.rel_pos = rel_pos
                     ),
                     EntityType::Pig => edit_entity(
-                        &mut client.chunk_pigs, cc, ci, vector_idx, |e| e.rel_pos = rel_pos
+                        &mut client.chunk_pigs, cc, ci, vector_idx, |e, _| e.rel_pos = rel_pos
                     ),
                 },
                 AnyEntityEdit::Steve(edit) => edit_entity(
-                    &mut client.chunk_steves, cc, ci, vector_idx, |e| match edit {
+                    &mut client.chunk_steves, cc, ci, vector_idx, |e, _| match edit {
                         SteveEntityEdit::SetVel(v) => e.state.vel = v,
                         SteveEntityEdit::SetName(v) => e.state.name = v,
                     }
                 ),
                 AnyEntityEdit::Pig(edit) => edit_entity(
-                    &mut client.chunk_pigs, cc, ci, vector_idx, |e| match edit {
+                    &mut client.chunk_pigs, cc, ci, vector_idx, |e, _| match edit {
                         PigEntityEdit::SetVel(v) => e.state.vel = v,
                         PigEntityEdit::SetColor(v) => e.state.color = v,
                     }

@@ -57,6 +57,7 @@ use crate::{
 /// Common re-exports for content modules.
 pub mod content_module_prelude {
     pub use super::{
+        GameData,
         GameDataBuilder,
         per_block::PerBlock,
         hitscan_logic::BlockHitscanLogic,
@@ -90,6 +91,7 @@ pub mod content_module_prelude {
     pub use mesh_data::*;
     pub use graphics::prelude::*;
     pub use game_binschema_derive::GameBinschema;
+    pub use std::sync::Arc;
     pub use vek::*;
 }
 
