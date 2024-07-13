@@ -3,6 +3,7 @@
 use crate::{
     game_data::GameData,
     game_binschema::GameBinschema,
+    sync_state_entities,
     item::*,
 };
 use binschema::{*, error::Result};
@@ -39,6 +40,8 @@ pub struct ChunkSaveVal {
     /// The chunk's blocks and block metadata.
     pub chunk_tile_blocks: ChunkBlocks,
 
+    pub steves: Vec<sync_state_entities::EntityData<sync_state_entities::SteveEntityState>>,
+    pub pigs: Vec<sync_state_entities::EntityData<sync_state_entities::PigEntityState>>,
     // TODO: invert these for the save file so it's just one nice big (dynamic?) enum?
 
     /*/// Steve entities in the chunk.
@@ -46,7 +49,7 @@ pub struct ChunkSaveVal {
     /// Pig entities in the chunk.
     pub pigs: Vec<EntitySaveEntry<PigEntitySaveState>>,*/
 }
-
+/*
 /// Save file schema for entry in one of a chunk's entity vectors.
 #[derive(Debug, GameBinschema)]
 pub struct EntitySaveEntry<T> {
@@ -57,7 +60,7 @@ pub struct EntitySaveEntry<T> {
     /// Other entity-specific entity state
     pub state: T,
 }
-
+*/
 #[derive(Debug, GameBinschema)]
 pub struct SteveEntitySaveState {
     pub name: String,

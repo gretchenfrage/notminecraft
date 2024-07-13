@@ -37,6 +37,7 @@ use crate::{
         *,
     },
     sync_state_inventory_slots,
+    sync_state_entities::{self, LoadedEntities},
 };
 use chunk_data::*;
 use graphics::prelude::*;
@@ -105,6 +106,10 @@ pub struct PreJoinClient {
     
     pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
     pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
+
+    pub entities: LoadedEntities,
+    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState>>>,
+    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState>>>,
 }
 
 /// Client state once the client has joined the game.

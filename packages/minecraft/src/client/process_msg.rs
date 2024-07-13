@@ -3,6 +3,7 @@
 use crate::{
     client::*,
     message::*,
+    sync_state_entities::*,
 };
 use chunk_data::*;
 use anyhow::{Result, ensure, anyhow};
@@ -38,12 +39,16 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             chunk_idx,
             cc,
             chunk_tile_blocks,
-            //steves,
-            //pigs,
+            steves,
+            pigs,
         }) => {
             let (ci, _getter) = client.chunks.on_add_chunk(chunk_idx, cc)?.get(&client.chunks);
             client.tile_blocks.add(cc, ci, chunk_tile_blocks);
             client.chunk_mesh_mgr.add_chunk(cc, ci, &client.chunks, &client.tile_blocks);
+            client.entities.add_chunk(&mut client.chunk_steves, cc, ci, steves)
+                .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
+            client.entities.add_chunk(&mut client.chunk_pigs, cc, ci, pigs)
+                .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
             /*
             // TODO: put this somewhere else
             // TODO: also, this is largely duplicated with the server
@@ -162,10 +167,92 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             client.player_yaw[pk] = yaw;
             client.player_pitch[pk] = pitch;
         }
-        PreJoinDownMsg::AddEntity { .. } => todo!(),
-        PreJoinDownMsg::RemoveEntity { .. } => todo!(),
-        PreJoinDownMsg::ChangeEntityOwningChunk { .. } => todo!(),
-        PreJoinDownMsg::EditEntity { .. } => todo!(),
+        PreJoinDownMsg::AddEntity { chunk_idx, entity } => {
+            let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
+            let EntityData { uuid, rel_pos, state } = entity;
+            match state {
+                AnyEntityState::Steve(state) => client.entities.add_entity(
+                    &mut client.chunk_steves,
+                    EntityData { uuid, rel_pos, state },
+                    cc, ci,
+                ),
+                AnyEntityState::Pig(state) => client.entities.add_entity(
+                    &mut client.chunk_pigs,
+                    EntityData { uuid, rel_pos, state },
+                    cc, ci,
+                ),
+            }.map_err(|sync_state_entities::UuidCollision|
+                anyhow!("server added entity with duplicate uuid")
+            )?;
+        }
+        PreJoinDownMsg::RemoveEntity { chunk_idx, entity_type, vector_idx } => {
+            let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
+            match entity_type {
+                EntityType::Steve => client.entities
+                    .remove_entity(&mut client.chunk_steves, cc, ci, vector_idx),
+                EntityType::Pig => client.entities
+                    .remove_entity(&mut client.chunk_pigs, cc, ci, vector_idx),
+            }.map_err(|sync_state_entities::VectorIdxOutOfBounds|
+                anyhow!("server removed entity with out of bounds index")
+            )?;
+        },
+        PreJoinDownMsg::ChangeEntityOwningChunk {
+            old_chunk_idx,
+            entity_type,
+            vector_idx,
+            new_chunk_idx,
+        } => {
+            let (old_cc, old_ci, _) = client.chunks.lookup(old_chunk_idx)?;
+            let (new_cc, new_ci, _) = client.chunks.lookup(new_chunk_idx)?;
+            match entity_type {
+                EntityType::Steve => client.entities.move_entity(
+                    &mut client.chunk_steves, old_cc, old_ci, new_cc, new_ci, vector_idx,
+                ),
+                EntityType::Pig => client.entities.move_entity(
+                    &mut client.chunk_pigs, old_cc, old_ci, new_cc, new_ci, vector_idx,
+                ),
+            }.map_err(|sync_state_entities::VectorIdxOutOfBounds|
+                anyhow!("server moved entity with out of bounds index")
+            )?;
+        },
+        PreJoinDownMsg::EditEntity { chunk_idx, vector_idx, edit } => {
+            fn edit_entity<S, F: FnOnce(&mut EntityData<S>)>(
+                chunk_entities: &mut PerChunk<Vec<sync_state_entities::ChunkEntityEntry<S>>>,
+                cc: Vec3<i64>,
+                ci: usize,
+                vector_idx: usize,
+                edit: F,
+            ) -> Result<()> {
+                let entry = chunk_entities.get_mut(cc, ci).get_mut(vector_idx)
+                    .ok_or_else(|| anyhow!("server edited entity with out of bounds index"))?;
+                edit(&mut entry.entity);
+                Ok(())
+            }
+
+            let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
+            match edit {
+                AnyEntityEdit::SetRelPos { entity_type, rel_pos } => match entity_type {
+                    EntityType::Steve => edit_entity(
+                        &mut client.chunk_steves, cc, ci, vector_idx, |e| e.rel_pos = rel_pos
+                    ),
+                    EntityType::Pig => edit_entity(
+                        &mut client.chunk_pigs, cc, ci, vector_idx, |e| e.rel_pos = rel_pos
+                    ),
+                },
+                AnyEntityEdit::Steve(edit) => edit_entity(
+                    &mut client.chunk_steves, cc, ci, vector_idx, |e| match edit {
+                        SteveEntityEdit::SetVel(v) => e.state.vel = v,
+                        SteveEntityEdit::SetName(v) => e.state.name = v,
+                    }
+                ),
+                AnyEntityEdit::Pig(edit) => edit_entity(
+                    &mut client.chunk_pigs, cc, ci, vector_idx, |e| match edit {
+                        PigEntityEdit::SetVel(v) => e.state.vel = v,
+                        PigEntityEdit::SetColor(v) => e.state.color = v,
+                    }
+                ),
+            }?;
+        },
         /*
         PreJoinDownMsg::AddEntity { chunk_idx, entity } => {
             let (cc, ci, _) = client.chunks.lookup(chunk_idx)?;

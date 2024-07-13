@@ -3,6 +3,7 @@
 use crate::{
     server::save_content::*,
     game_data::*,
+    sync_state_entities::*,
 };
 use chunk_data::*;
 use std::sync::Arc;
@@ -46,15 +47,16 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
     hasher.update(&cc.z.to_le_bytes());
     let hash = hasher.finalize();
     let mut rng = ChaCha8Rng::from_seed(hash);
-    /*
+    
     let mut steves = Vec::new();
 
     for i in 0..1 {
-        steves.push(EntitySaveEntry {
-            entity_uuid: Uuid::new_v4(),
+        steves.push(EntityData {
+            uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
-            state: SteveEntitySaveState {
+            state: SteveEntityState {
                 name: format!("steve #{}", i),
+                vel: Default::default(),
             },
         });
     }
@@ -62,18 +64,19 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
     let mut pigs = Vec::new();
 
     for _ in 0..1 {
-        pigs.push(EntitySaveEntry {
-            entity_uuid: Uuid::new_v4(),
+        pigs.push(EntityData {
+            uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
-            state: PigEntitySaveState {
+            state: PigEntityState {
                 color: Rgb::new(rng.gen(), rng.gen(), rng.gen()),
+                vel: Default::default(),
             },
         });
-    }*/
+    }
 
     ChunkSaveVal {
         chunk_tile_blocks,
-        //steves,
-        //pigs,
+        steves,
+        pigs,
     }
 }

@@ -41,6 +41,52 @@ pub enum SteveEntityEdit {
     SetName(String),
 }
 
+macro_rules! sync_write_entity_type {
+    ($sync_write_entity_logic:ident, $sync_write_entity:ident, $entity_state:ty)=>{
+        pub struct $sync_write_entity<'a>($crate::sync_state_entities::SyncWriteEntityInner<'a, $entity_state>);
+
+        impl<'a> $sync_write_entity<'a> {
+            pub fn reborrow<'a2: 'a>(&'a2 mut self) -> $sync_write_entity<'a2> {
+                Self(self.0.reborrow())
+            }
+
+            pub fn as_ref(&self) -> &EntityData<$entity_state> {
+                self.0.as_ref()
+            }
+        }
+
+        pub enum $sync_write_entity_logic {}
+
+        impl<'a> $crate::sync_state_entities::SyncWriteEntityLogic<'a, $entity_state> for $sync_write_entity_logic {
+            type SyncWriteEntity = $sync_write_entity<'a>;
+
+            fn wrap(inner: $crate::sync_state_entities::SyncWriteEntityInner<'a, $entity_state>) -> Self::SyncWriteEntity {
+                $sync_write_entity(inner)
+            }
+        }
+    };
+}
+
+macro_rules! sync_write_entity_field_setters {
+    ($sync_write_entity:ident, $edit_enum:ident, ($(
+        $set_field:ident($field:ident: $t:ty) $edit_variant:ident,
+    )*))=>{
+        impl<'a> $sync_write_entity<'a> {$(
+            pub fn $set_field(&mut self, $field: $t) {
+                self.0.broadcast_edit(|_, _| $edit_enum::$edit_variant(<$t as Clone>::clone(&$field)));
+                self.0.mark_unsaved();
+                self.0.entity_state_mut().$field = $field;
+            }
+        )*}
+    };
+}
+
+sync_write_entity_type!(SyncWriteSteveLogic, SyncWriteSteve, SteveEntityState);
+sync_write_entity_field_setters!(SyncWriteSteve, SteveEntityEdit, (
+    set_vel(vel: Vec3<f32>) SetVel,
+    set_name(name: String) SetName,
+));
+
 #[derive(Debug, Copy, Clone, GameBinschema)]
 pub struct PigEntityState {
     pub vel: Vec3<f32>,
@@ -52,6 +98,12 @@ pub enum PigEntityEdit {
     SetVel(Vec3<f32>),
     SetColor(Rgb<f32>),
 }
+
+sync_write_entity_type!(SyncWritePigLogic, SyncWritePig, PigEntityState);
+sync_write_entity_field_setters!(SyncWritePig, PigEntityEdit, (
+    set_vel(vel: Vec3<f32>) SetVel,
+    set_color(color: Rgb<f32>) SetColor,
+));
 
 macro_rules! entity_types {
     ($( $name:ident($state:ty, $edit:ty), )*)=>{
@@ -309,15 +361,30 @@ pub struct ServerState<S> {
 }*/
 #[derive(Debug, Default)]
 pub struct SyncWriteBufs {
-    iter_move_batch_to_move: Vec<EntityToMove>,
+    iter_move_batch_move_ops: Vec<EntityMoveOp>,
     #[cfg(debug_assertions)]
     iter_move_batch_chunk_touched: PerChunk<bool>,
     #[cfg(debug_assertions)]
     iter_move_batch_touched_chunks: Vec<(Vec3<i64>, usize)>,
 }
 
+impl SyncWriteBufs {
+    pub fn add_chunk(&mut self, cc: Vec3<i64>, ci: usize) {
+        #[cfg(debug_assertions)]
+        self.iter_move_batch_chunk_touched.add(cc, ci, false);
+        let _ = (cc, ci);
+    }
+
+    pub fn remove_chunk(&mut self, cc: Vec3<i64>, ci: usize) {
+        #[cfg(debug_assertions)]
+        self.iter_move_batch_chunk_touched.remove(cc, ci);
+        let _ = (cc, ci);
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
-struct EntityToMove {
+struct EntityMoveOp {
+    op_type: EntityMoveOpType,
     ci: usize,
     vector_idx: usize,
 
@@ -325,6 +392,12 @@ struct EntityToMove {
     cc: Vec3<i64>,
     #[cfg(debug_assertions)]
     uuid: Uuid,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum EntityMoveOpType {
+    Move,
+    Delete,
 }
 
 #[derive(Debug)]
@@ -427,6 +500,42 @@ impl<'a, S, W> SyncWrite<'a, S, W> {
 }
 
 impl<'a, S: EntityState, W> SyncWrite<'a, S, W> {
+    pub fn create_entity(
+        &mut self,
+        cc: Vec3<i64>,
+        ci: usize,
+        state: S,
+        rel_pos: Vec3<f32>,
+    ) {
+        // generate uuid
+        let uuid = Uuid::new_v4();
+
+        // send messages to clients
+        for pk in self.ctx.conn_mgr.players().iter() {
+            let clientside_ci = self.ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk);
+            if let Some(clientside_ci) = clientside_ci {
+                let state = state.clone().into_any();
+                self.ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::AddEntity {
+                    chunk_idx: DownChunkIdx(clientside_ci),
+                    entity: EntityData { uuid, rel_pos, state },
+                }));
+            }
+        }
+
+        // mark chunk as unsaved
+        self.ctx.save_mgr.mark_chunk_unsaved(cc, ci);
+
+        // add it
+        // unwrap safety: we are randomly generating a Uuid here, so there should not be a
+        //                collision.
+        self.ctx.entities.borrow_mut().add_entity(
+            self.state,
+            EntityData { uuid, rel_pos, state },
+            cc,
+            ci,
+        ).unwrap();
+    }
+
     pub fn move_entity(
         &mut self,
         old_cc: Vec3<i64>,
@@ -487,6 +596,39 @@ impl<'a, S: EntityState, W> SyncWrite<'a, S, W> {
             }
         }
     }
+
+    pub fn delete_entity(&mut self, cc: Vec3<i64>, ci: usize, vector_idx: usize) {
+        // remove it
+        // unwrap safety: that returning an error is meant for the client to deal with server protocol
+        //                violations. but this is to be called in the server.
+        self.ctx.entities.borrow_mut().remove_entity(&mut self.state, cc, ci, vector_idx)
+            .unwrap();
+
+        // mark chunk as unsaved
+        self.ctx.save_mgr.mark_chunk_unsaved(cc, ci);
+
+        // send messages to clients
+        for pk in self.ctx.conn_mgr.players().iter() {
+            if let Some(clientside_ci) = self.ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
+                self.ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::RemoveEntity {
+                    chunk_idx: DownChunkIdx(clientside_ci),
+                    entity_type: S::ENTITY_TYPE,
+                    vector_idx,
+                }));
+            }
+        }
+    }
+
+    pub fn iter_move_batch(&mut self) -> IterMoveBatch<S, W> {
+        IterMoveBatch {
+            inner: SyncWrite {
+                ctx: &self.ctx,
+                state: &mut self.state,
+                bufs: &mut self.bufs,
+                _p: PhantomData,
+            },
+        }
+    }
 }
 
 pub struct SyncWriteChunk<'a, S, W> {
@@ -513,7 +655,7 @@ impl<'a, S, W> SyncWriteChunk<'a, S, W> {
     }
 }
 
-impl<'a, S, W: SyncWriteEntityLogic<'a, S>> SyncWriteChunk<'a, S, W> {
+impl<'a, S: EntityState, W: SyncWriteEntityLogic<'a, S>> SyncWriteChunk<'a, S, W> {
     pub fn get(self, vector_idx: usize) -> W::SyncWriteEntity {
         W::wrap(SyncWriteEntityInner {
             ctx: self.ctx,
@@ -594,30 +736,181 @@ pub trait SyncWriteEntityLogic<'a, S> {
     fn wrap(inner: SyncWriteEntityInner<'a, S>) -> Self::SyncWriteEntity;
 }
 
-pub struct IterMoveBatch<'a, S, W> {
+pub struct IterMoveBatch<'a, S: EntityState, W> {
     inner: SyncWrite<'a, S, W>,
 }
 
-impl<'a, S, W> IterMoveBatch<'a, S, W> {
-    /*
-    pub fn as_write(&mut self) -> &mut SyncWrite {
-        &mut self.sync_write
+impl<'a, S: EntityState, W> IterMoveBatch<'a, S, W> {
+    pub fn get(&mut self, cc: Vec3<i64>, ci: usize) -> IterMoveChunk<S, W> {
+        #[cfg(debug_assertions)]
+        {
+            let touched = self.inner.bufs.iter_move_batch_chunk_touched.get_mut(cc, ci);
+            assert!(!*touched, "chunk visited more than once in iter move batch");
+            *touched = true;
+            self.inner.bufs.iter_move_batch_touched_chunks.push((cc, ci));
+        }
+        IterMoveChunk {
+            inner: SyncWriteChunk {
+                ctx: self.inner.ctx,
+                state: self.inner.state.get_mut(cc, ci),
+                cc,
+                ci,
+                _p: PhantomData,
+            },
+            next_vector_idx: 0,
+            iter_move_batch_move_ops: &mut self.inner.bufs.iter_move_batch_move_ops,
+        }
     }
 
-    pub fn visit_chunk*/
+    pub fn do_movements(self) {
+        drop(self);
+    }
+}
+
+impl<'a, S: EntityState, W> Drop for IterMoveBatch<'a, S, W> {
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        for (cc, ci) in self.inner.bufs.iter_move_batch_touched_chunks.drain(..) {
+            *self.inner.bufs.iter_move_batch_chunk_touched.get_mut(cc, ci) = false;
+        }
+        while let Some(move_op) = self.inner.bufs.iter_move_batch_move_ops.pop() {
+            match move_op.op_type {
+                EntityMoveOpType::Move => {
+                    let old_ci = move_op.ci;
+                    let old_cc = self.inner.ctx.chunk_mgr.chunks().ci_to_cc(old_ci).unwrap();
+                    #[cfg(debug_assertions)]
+                    assert_eq!(old_cc, move_op.cc);
+                    let old_vector_idx = move_op.vector_idx;
+                    let entity = &self.inner.state.get(old_cc, old_ci)[old_vector_idx].entity;
+                    #[cfg(debug_assertions)]
+                    assert_eq!(entity.uuid, move_op.uuid);
+                    let rel_cc = (entity.rel_pos / CHUNK_EXTENT.map(|n| n as f32))
+                        .map(|n| n.floor() as i64);
+                    let new_cc = old_cc + rel_cc;
+                    let getter = self.inner.ctx.chunk_mgr.chunks().getter_pre_cached(old_cc, old_ci);
+                    let new_ci = getter.get(new_cc);
+                    let new_ci = match new_ci {
+                        Some(new_ci) => new_ci,
+                        None => {
+                            // TODO: come up with an actual way of dealing with this
+                            warn!("entity tried to move into not-loaded chunk!");
+                            continue;
+                        }
+                    };
+                    self.inner.move_entity(
+                        old_cc,
+                        old_ci,
+                        new_cc,
+                        new_ci,
+                        old_vector_idx,
+                    );
+                }
+                EntityMoveOpType::Delete => {
+                    let ci = move_op.ci;
+                    let cc = self.inner.ctx.chunk_mgr.chunks().ci_to_cc(ci).unwrap();
+                    #[cfg(debug_assertions)]
+                    {
+                        assert_eq!(cc, move_op.cc);
+                        assert_eq!(self.inner.state.get(cc, ci)[move_op.vector_idx].entity.uuid, move_op.uuid);
+                    }
+                    self.inner.delete_entity(cc, ci, move_op.vector_idx);
+                }
+            }
+        }
+    }
 }
 
 pub struct IterMoveChunk<'a, S, W> {
     inner: SyncWriteChunk<'a, S, W>,
     next_vector_idx: usize,
-    iter_move_batch_to_move: &'a mut Vec<EntityToMove>,
+    iter_move_batch_move_ops: &'a mut Vec<EntityMoveOp>,
+}
+
+impl<'a, S, W> IterMoveChunk<'a, S, W> {
+    pub fn as_write(&mut self) -> &mut SyncWriteChunk<'a, S, W> {
+        &mut self.inner
+    }
+
+    pub fn next(&mut self) -> Option<IterMoveEntity<S, W>> {
+        if self.next_vector_idx < self.inner.state.len() {
+            let vector_idx = self.next_vector_idx;
+            self.next_vector_idx += 1;
+            Some(IterMoveEntity {
+                inner: SyncWriteEntityInner {
+                    ctx: self.inner.ctx,
+                    state: &mut self.inner.state[vector_idx].entity,
+                    cc: self.inner.cc,
+                    ci: self.inner.ci,
+                    vector_idx,
+                },
+                iter_move_batch_move_ops: &mut self.iter_move_batch_move_ops,
+                _p: PhantomData,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 pub struct IterMoveEntity<'a, S, W> {
     inner: SyncWriteEntityInner<'a, S>,
-    iter_move_batch_to_move: &'a mut Vec<EntityToMove>,
+    iter_move_batch_move_ops: &'a mut Vec<EntityMoveOp>,
     _p: PhantomData<W>,
 }
+
+impl<'a, S, W> IterMoveEntity<'a, S, W> {
+    pub fn as_write<'s>(&'s mut self) -> W::SyncWriteEntity
+    where
+        W: SyncWriteEntityLogic<'s, S>
+    {
+        W::wrap(SyncWriteEntityInner {
+            ctx: self.inner.ctx,
+            state: &mut self.inner.state,
+            cc: self.inner.cc,
+            ci: self.inner.ci,
+            vector_idx: self.inner.vector_idx,
+        })
+    }
+}
+
+impl<'a, S: EntityState, W> IterMoveEntity<'a, S, W> {
+    pub fn set_rel_pos(self, rel_pos: Vec3<f32>) {
+        self.inner.state.rel_pos = rel_pos;
+        self.inner.mark_unsaved();
+        self.inner.broadcast_edit(|_, _| AnyEntityEdit::SetRelPos {
+            entity_type: S::ENTITY_TYPE,
+            rel_pos,
+        });
+
+        let rel_cc = (rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor());
+        if rel_cc != Vec3::from(0.0) {
+            self.iter_move_batch_move_ops.push(EntityMoveOp {
+                op_type: EntityMoveOpType::Move,
+                ci: self.inner.ci,
+                vector_idx: self.inner.vector_idx,
+                #[cfg(debug_assertions)]
+                cc: self.inner.cc,
+                #[cfg(debug_assertions)]
+                uuid: self.inner.state.uuid,
+            });
+        }
+    }
+
+    pub fn delete(self) {
+        self.inner.mark_unsaved();
+        self.iter_move_batch_move_ops.push(EntityMoveOp {
+            op_type: EntityMoveOpType::Delete,
+            ci: self.inner.ci,
+            vector_idx: self.inner.vector_idx,
+            #[cfg(debug_assertions)]
+            cc: self.inner.cc,
+            #[cfg(debug_assertions)]
+            uuid: self.inner.state.uuid,
+        });
+    }
+}
+
+
 
 /*
 macro_rules! sync_write_types {
@@ -1058,7 +1351,7 @@ impl<'a, S> SyncWriteEntity<'a, S> {
 /// As such, each entity has three forms of location / identification:
 ///
 /// 1. The entity UUID, a permanently stable identifier for that entity that stays the same even
-///    after being pushed to the save file then loaded back from it. Both the client and server
+///    after being offloaded to the save file then loaded back from it. Both the client and server
 ///    maintain a hash map from entity UUID to global index.
 /// 2. The entity's global index, as mentioned above, which can be used to efficiently find the
 ///    entity's current storage location for as long as the entity remains continuously loaded in

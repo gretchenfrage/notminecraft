@@ -279,8 +279,8 @@ pub struct DownMsgAddChunk {
     pub chunk_idx: DownChunkIdx,
     pub cc: Vec3<i64>,
     pub chunk_tile_blocks: ChunkBlocks,
-    //pub steves: Vec<DownEntity<SteveEntityState>>,
-    //pub pigs: Vec<DownEntity<PigEntityState>>,
+    pub steves: Vec<EntityData<SteveEntityState>>,
+    pub pigs: Vec<EntityData<PigEntityState>>,
 }
 /*
 /// Entity state for tranmission in a down msg.

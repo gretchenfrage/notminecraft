@@ -110,6 +110,10 @@ pub fn run(
         sync_state: ServerSyncState {
             tile_blocks: Default::default(),
             player_inventory_slots: Default::default(),
+            chunk_steves: Default::default(),
+            sw_bufs_steves: Default::default(),
+            chunk_pigs: Default::default(),
+            sw_bufs_pigs: Default::default(),
         },
     };
 
@@ -205,7 +209,41 @@ fn request_load_spawn_chunks(server: &mut Server) {
 // do a tick of world simulation
 fn do_tick(server: &mut Server) {
     trace!("tick");
-    let world = server.as_sync_world();
+    let mut world = server.as_sync_world();
+
+    let mut chunk_steves = world.chunk_steves.iter_move_batch();
+    let mut chunk_pigs = world.chunk_pigs.iter_move_batch();
+
+    //let (cc, ci) = world.sync_ctx.chunk_mgr.chunks().iter().next().unwrap();
+    //chunk_steves.get(cc, ci);
+
+    for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
+        let mut steves = chunk_steves.get(cc, ci);
+        while let Some(mut steve) = steves.next() {
+            let mut rel_pos = steve.as_write().as_ref().rel_pos;
+            rel_pos += Vec3::from(0.05);
+
+            let rel_cc_after = (rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(f32::floor);
+            if rel_cc_after != Vec3::from(0.0) {
+                let cc_after = cc + rel_cc_after.map(|n| n as i64);
+                if world.getter.get(cc_after).is_none() {
+                    continue;
+                }
+            }
+
+            steve.set_rel_pos(rel_pos);
+        }
+
+        let mut pigs = chunk_pigs.get(cc, ci);
+        while let Some(mut pig) = pigs.next() {
+            let mut color = pig.as_write().as_ref().state.color;
+            color += Rgb::from(0.05);
+            color %= Rgb::from(1.0);
+            //pig.set_color(color);
+        }
+    }
+
+
     /*
     for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
         let (
@@ -382,6 +420,9 @@ fn save(server: &mut Server) {
                 ChunkSaveVal {
                     chunk_tile_blocks: server.sync_ctx.game
                         .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
+                    // TODO factor out somehow
+                    steves: server.sync_state.chunk_steves.get(cc, ci).iter().map(|entry| entry.entity.clone()).collect(),
+                    pigs: server.sync_state.chunk_pigs.get(cc, ci).iter().map(|entry| entry.entity.clone()).collect(),
                     /*steves: entity_save_entries(
                         &server.server_only.chunk_steves,
                         cc,
@@ -578,11 +619,18 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             ChunkMgrEffect::AddChunk { cc, ci, save_val, saved } => {
                 let ChunkSaveVal {
                     chunk_tile_blocks,
-                    //steves,
-                    //pigs,
+                    steves,
+                    pigs,
                 } = save_val;
                 server.sync_ctx.save_mgr.add_chunk(cc, ci, saved);
                 server.sync_state.tile_blocks.add(cc, ci, chunk_tile_blocks);
+                // TODO: we actually should deal with UUID collisions here
+                server.sync_ctx.entities.borrow_mut()
+                    .add_chunk(&mut server.sync_state.chunk_steves, cc, ci, steves).unwrap();
+                server.sync_state.sw_bufs_steves.add_chunk(cc, ci);
+                server.sync_ctx.entities.borrow_mut()
+                    .add_chunk(&mut server.sync_state.chunk_pigs, cc, ci, pigs).unwrap();
+                server.sync_state.sw_bufs_pigs.add_chunk(cc, ci);
                 /*
                 // TODO: put this somewhere else
                 fn install_entities<SS, ES, F: FnMut(SS) -> ES>(
@@ -652,6 +700,14 @@ fn process_chunk_mgr_effects(server: &mut Server) {
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {
                 let chunk_tile_blocks = server.sync_state.tile_blocks.remove(cc, ci);
+                let steves = server.sync_ctx.entities.borrow_mut()
+                    .remove_chunk(&mut server.sync_state.chunk_steves, cc, ci)
+                    .into_iter().map(|entry| entry.entity).collect();
+                server.sync_state.sw_bufs_steves.remove_chunk(cc, ci);
+                let pigs = server.sync_ctx.entities.borrow_mut()
+                    .remove_chunk(&mut server.sync_state.chunk_pigs, cc, ci)
+                    .into_iter().map(|entry| entry.entity).collect();
+                server.sync_state.sw_bufs_pigs.remove_chunk(cc, ci);
                 /*
                 // TODO move this elsewhere
                 fn remove_entities<ES, SS, F: FnMut(ES) -> SS>(
@@ -694,6 +750,8 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                     ChunkSaveKey { cc },
                     ChunkSaveVal {
                         chunk_tile_blocks,
+                        steves,
+                        pigs,
                         /*
                         steves: remove_entities(
                             &mut server.server_only.chunk_steves,
@@ -741,6 +799,10 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         cc,
                         chunk_tile_blocks: server.sync_ctx.game
                             .clone_chunk_blocks(server.sync_state.tile_blocks.get(cc, ci)),
+                        steves: server.sync_state.chunk_steves.get(cc, ci)
+                            .iter().map(|entry| entry.entity.clone()).collect(),
+                        pigs: server.sync_state.chunk_pigs.get(cc, ci)
+                            .iter().map(|entry| entry.entity.clone()).collect(),
                         //steves: down_entities(&server.server_only.chunk_steves, cc, ci),
                         //pigs: down_entities(&server.server_only.chunk_pigs, cc, ci),
                     }

@@ -141,6 +141,10 @@ pub struct ServerSyncState {
     pub tile_blocks: PerChunk<ChunkBlocks>,
     pub player_inventory_slots: PerJoinedPlayer<sync_state_inventory_slots::PlayerInventorySlots>,
     //pub steves: [sync_state_steve::Steve; sync_state_steve::NUM_STEVES],
+    pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState>>>,
+    pub sw_bufs_steves: sync_state_entities::SyncWriteBufs,
+    pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState>>>,
+    pub sw_bufs_pigs: sync_state_entities::SyncWriteBufs,
 }
 
 /// State which game logic gets only shared references to. Often this is because the state is
@@ -176,6 +180,8 @@ pub struct SyncWorld<'a> {
 
     pub tile_blocks: sync_state_tile_blocks::SyncWrite<'a>,
     pub player_inventory_slots: sync_state_inventory_slots::SyncWrite<'a>,
+    pub chunk_steves: sync_state_entities::SyncWrite<'a, sync_state_entities::SteveEntityState, sync_state_entities::SyncWriteSteveLogic>,
+    pub chunk_pigs: sync_state_entities::SyncWrite<'a, sync_state_entities::PigEntityState, sync_state_entities::SyncWritePigLogic>,
     //pub steves: sync_state_steve::SyncWrite<'a>,
 }
 
@@ -197,6 +203,10 @@ impl<'a> SyncWorld<'a> {
         let &mut ServerSyncState {
             ref mut tile_blocks,
             ref mut player_inventory_slots,
+            ref mut chunk_steves,
+            ref mut sw_bufs_steves,
+            ref mut chunk_pigs,
+            ref mut sw_bufs_pigs,
             //ref mut steves,
         } = sync_state;
         SyncWorld {
@@ -207,6 +217,8 @@ impl<'a> SyncWorld<'a> {
 
             tile_blocks: sync_state_tile_blocks::SyncWrite::new_manual(sync_ctx, tile_blocks),
             player_inventory_slots: sync_state_inventory_slots::SyncWrite::new_manual(sync_ctx, player_inventory_slots),
+            chunk_steves: sync_state_entities::SyncWrite::new_manual(sync_ctx, chunk_steves, sw_bufs_steves),
+            chunk_pigs: sync_state_entities::SyncWrite::new_manual(sync_ctx, chunk_pigs, sw_bufs_pigs),
             //steves: sync_state_steve::SyncWrite::new_manual(sync_ctx, steves),
         }
     }

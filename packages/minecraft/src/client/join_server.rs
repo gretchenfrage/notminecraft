@@ -232,6 +232,9 @@ fn construct_pre_join_client(
         chunk_steves: Default::default(),
         chunk_pigs: Default::default(),*/
         //steves: Default::default(),
+        entities: Default::default(),
+        chunk_steves: Default::default(),
+        chunk_pigs: Default::default(),
     }
 }
 
