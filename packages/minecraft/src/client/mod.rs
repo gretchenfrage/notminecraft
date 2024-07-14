@@ -98,15 +98,7 @@ pub struct PreJoinClient {
     pub player_yaw: PerPlayer<f32>,
     pub player_pitch: PerPlayer<f32>,
 
-    // ==== entity stuff ====
-
-    /*// TODO: this all is duplicated with the server
-    pub global_entity_hmap: HashMap<Uuid, usize>,
-    pub global_entity_slab: Slab<GlobalEntityEntry>,
-    
-    pub chunk_steves: PerChunk<Vec<EntityEntry<SteveEntityState>>>,
-    pub chunk_pigs: PerChunk<Vec<EntityEntry<PigEntityState>>>,*/
-
+    /// Client-side space of entities.
     pub entities: LoadedEntities,
     pub chunk_steves: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::SteveEntityState, sync_state_entities::SteveEntityClientState>>>,
     pub chunk_pigs: PerChunk<Vec<sync_state_entities::ChunkEntityEntry<sync_state_entities::PigEntityState, sync_state_entities::PigEntityClientState>>>,

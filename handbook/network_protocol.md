@@ -1,5 +1,8 @@
 # Network Protocol
 
+**Note: Much of the stuff in this file is true, but some is outdated and no
+longer true.**
+
 ### Transport
 
 The network protocol is binschema messages sent over a websocket connection.
