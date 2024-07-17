@@ -262,135 +262,6 @@ fn do_tick(server: &mut Server) {
         }
     }
 
-
-    /*
-    for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
-        let (
-            steves,
-            mut other_chunk_steves,
-        ) = world.server_only.chunk_steves.get_mut_partially(cc, ci);
-
-        for steve_idx in (0..steves.len()).rev() {
-            let steve = &mut steves[steve_idx];
-
-            steve.rel_pos += Vec3::from(0.05);
-            steve.state.vel = Vec3::from(0.05 / 20.0);
-
-            world.sync_ctx.save_mgr.mark_chunk_unsaved(cc, ci);
-
-            for pk in world.sync_ctx.conn_mgr.players().iter() {
-                if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
-                    world.sync_ctx.conn_mgr.send(
-                        pk,
-                        DownMsg::PreJoin(PreJoinDownMsg::EditEntity {
-                            chunk_idx: DownChunkIdx(clientside_ci),
-                            entity_idx: steve_idx,
-                            edit: EntityEdit::SetStevePosVel(EntityEditSetStevePosVel {
-                                rel_pos: steve.rel_pos,
-                                vel: steve.state.vel,
-                            }),
-                        }),
-                    );
-                }
-            }
-
-            let rel_cc = (steve.rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
-            if rel_cc != Vec3::from(0) {
-                let new_cc = cc + rel_cc;
-                if let Some(new_ci) = world.getter.get(new_cc) {
-                    steve.rel_pos -= (rel_cc * CHUNK_EXTENT).map(|n| n as f32);
-                    let global_idx = steve.global_idx;
-                    let entity_uuid = steve.uuid;
-                    let rel_pos = steve.rel_pos;
-                    let owned_steve = steves.swap_remove(steve_idx);
-                    if let Some(displaced_steve) = steves.get(steve_idx) {
-                        world.server_only.global_entity_slab[displaced_steve.global_idx].vector_idx = steve_idx;
-                    }
-                    let steves2 = other_chunk_steves.get_mut(new_cc, new_ci);
-                    let new_steve_idx = steves2.len();
-                    steves2.push(owned_steve);
-                    let global_entry = &mut world.server_only.global_entity_slab[global_idx];
-                    global_entry.cc = new_cc;
-                    global_entry.ci = new_ci;
-                    global_entry.vector_idx = new_steve_idx;
-                    for pk in world.sync_ctx.conn_mgr.players().iter() {
-                        match (
-                            world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk),
-                            world.sync_ctx.chunk_mgr.chunk_to_clientside(new_cc, new_ci, pk),
-                        ) {
-                            (Some(old_clientside_ci), Some(new_clientside_ci)) => {
-                                world.sync_ctx.conn_mgr.send(
-                                    pk,
-                                    DownMsg::PreJoin(PreJoinDownMsg::ChangeEntityOwningChunk {
-                                        old_chunk_idx: DownChunkIdx(old_clientside_ci),
-                                        entity_kind: EntityKind::Steve,
-                                        entity_idx: steve_idx,
-                                        new_chunk_idx: DownChunkIdx(new_clientside_ci)
-                                    }),
-                                );
-                            }
-                            (Some(clientside_ci), None) => {
-                                world.sync_ctx.conn_mgr.send(
-                                    pk,
-                                    DownMsg::PreJoin(PreJoinDownMsg::RemoveEntity {
-                                        chunk_idx: DownChunkIdx(clientside_ci),
-                                        entity_kind: EntityKind::Steve,
-                                        entity_idx: steve_idx,
-                                    }),
-                                );
-                            }
-                            (None, Some(clientside_ci)) => {
-                                world.sync_ctx.conn_mgr.send(
-                                    pk,
-                                    DownMsg::PreJoin(PreJoinDownMsg::AddEntity {
-                                        chunk_idx: DownChunkIdx(clientside_ci),
-                                        entity: AnyDownEntity::Steve(DownEntity {
-                                            entity_uuid,
-                                            rel_pos,
-                                            state: steves2[new_steve_idx].state.clone(),
-                                        }),
-                                    }),
-                                );
-                            }
-                            (None, None) => (),
-                        }
-                    }
-                }
-            }
-        }
-
-        /*
-        for (entity_idx, steve) in steves
-            .iter_mut()
-            .enumerate()
-        {
-            steve.rel_pos += Vec3::from(0.05);
-
-            for pk in world.sync_ctx.conn_mgr.players().iter() {
-                if let Some(clientside_ci) = world.sync_ctx.chunk_mgr.chunk_to_clientside(cc, ci, pk) {
-                    world.sync_ctx.conn_mgr.send(
-                        pk,
-                        DownMsg::PreJoin(PreJoinDownMsg::EditEntity {
-                            chunk_idx: DownChunkIdx(clientside_ci),
-                            entity_idx,
-                            edit: EntityEdit::SetStevePosVel(EntityEditSetStevePosVel {
-                                rel_pos: steve.rel_pos,
-                                vel: Vec3::from(0.05 / 20.0),
-                            }),
-                        }),
-                    );
-                }
-            }
-
-            let rel_cc = (steve.rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
-            if rel_cc != Vec3::from(0) {
-                let new_cc = cc + rel_cc;
-
-                let new_rel_pos = steve.rel_pos - (rel_cc * CHUNK_EXTENT).map(|n| n as f32);
-                //let entity = world.server_only.
-            }
-        }*/
-    }*/
 }
 
 // do a save operation if appropriate to do so
@@ -408,31 +279,6 @@ fn save(server: &mut Server) {
     let mut save_op = server.sync_ctx.save_mgr.begin_save();
     while let Some(should_save) = save_op.should_save.pop() {
         trace!(?should_save, "will save");
-        /*
-        // TODO: move this somewhere else
-        fn entity_save_entries<ES, SS, F: FnMut(&ES) -> SS>(
-            chunk_entities: &PerChunk<Vec<EntityEntry<ES>>>,
-            cc: Vec3<i64>,
-            ci: usize,
-            mut entity_state_to_save_state: F,
-        ) -> Vec<EntitySaveEntry<SS>> {
-            chunk_entities.get(cc, ci).iter()
-                .map(|entry| {
-                    let &EntityEntry {
-                        uuid,
-                        global_idx: _,
-                        rel_pos,
-                        ref state,
-                    } = entry;
-                    EntitySaveEntry {
-                        entity_uuid: uuid,
-                        rel_pos,
-                        state: entity_state_to_save_state(state),
-                    }
-                })
-                .collect()
-        }
-        */
         save_op.will_save.push(match should_save {
             ShouldSave::Chunk { cc, ci } => SaveEntry::Chunk(
                 ChunkSaveKey { cc },
@@ -442,20 +288,6 @@ fn save(server: &mut Server) {
                     // TODO factor out somehow
                     steves: server.sync_state.chunk_steves.get(cc, ci).iter().map(|entry| entry.entity.clone()).collect(),
                     pigs: server.sync_state.chunk_pigs.get(cc, ci).iter().map(|entry| entry.entity.clone()).collect(),
-                    /*steves: entity_save_entries(
-                        &server.server_only.chunk_steves,
-                        cc,
-                        ci,
-                        |&SteveEntityState { vel: _, ref name }| SteveEntitySaveState {
-                            name: name.clone()
-                        },
-                    ),
-                    pigs: entity_save_entries(
-                        &server.server_only.chunk_pigs,
-                        cc,
-                        ci,
-                        |&PigEntityState { vel: _, color }| PigEntitySaveState { color },
-                    ),*/
                 },
             ),
             ShouldSave::Player { pk } => SaveEntry::Player(
@@ -666,72 +498,7 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         cc, ci,
                         pigs.into_iter().map(|entity| (entity, Default::default())),
                     ).unwrap();
-                server.sync_state.sw_bufs_pigs.add_chunk(cc, ci);
-                /*
-                // TODO: put this somewhere else
-                fn install_entities<SS, ES, F: FnMut(SS) -> ES>(
-                    cc: Vec3<i64>,
-                    ci: usize,
-                    save_vec: Vec<EntitySaveEntry<SS>>,
-                    global_entity_hmap: &mut HashMap<Uuid, usize>,
-                    global_entity_slab: &mut Slab<GlobalEntityEntry>,
-                    chunk_entities: &mut PerChunk<Vec<EntityEntry<ES>>>,
-                    kind: EntityKind,
-                    mut save_state_to_entity_state: F,
-                ) {
-                    let server_vec = save_vec
-                        .into_iter()
-                        .enumerate()
-                        .map(|(vector_idx, save_entry)| {
-                            let EntitySaveEntry {
-                                entity_uuid: uuid,
-                                rel_pos,
-                                state,
-                            } = save_entry;
-
-                            let global_idx = global_entity_slab
-                                .insert(GlobalEntityEntry { uuid, kind, cc, ci, vector_idx });
-                            let collision = global_entity_hmap.insert(uuid, global_idx);
-                            debug_assert!(collision.is_none(), "entity UUID collision {}", uuid);
-
-                            EntityEntry {
-                                uuid,
-                                global_idx,
-                                rel_pos,
-                                state: save_state_to_entity_state(state),
-                            }
-                        })
-                        .collect();
-                    chunk_entities.add(cc, ci, server_vec);
-                }
-
-                install_entities(
-                    cc,
-                    ci,
-                    steves,
-                    &mut server.server_only.global_entity_hmap,
-                    &mut server.server_only.global_entity_slab,
-                    &mut server.server_only.chunk_steves,
-                    EntityKind::Steve,
-                    |SteveEntitySaveState { name }| SteveEntityState {
-                        vel: Default::default(),
-                        name,
-                    },
-                );
-                install_entities(
-                    cc,
-                    ci,
-                    pigs,
-                    &mut server.server_only.global_entity_hmap,
-                    &mut server.server_only.global_entity_slab,
-                    &mut server.server_only.chunk_pigs,
-                    EntityKind::Pig,
-                    |PigEntitySaveState { color }| PigEntityState {
-                        vel: Default::default(),
-                        color,
-                    },
-                );   
-                */             
+                server.sync_state.sw_bufs_pigs.add_chunk(cc, ci); 
             }
             // remove chunk from the world
             ChunkMgrEffect::RemoveChunk { cc, ci } => {
@@ -744,42 +511,6 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                     .remove_chunk(&mut server.sync_state.chunk_pigs, cc, ci)
                     .into_iter().map(|entry| entry.entity).collect();
                 server.sync_state.sw_bufs_pigs.remove_chunk(cc, ci);
-                /*
-                // TODO move this elsewhere
-                fn remove_entities<ES, SS, F: FnMut(ES) -> SS>(
-                    chunk_entities: &mut PerChunk<Vec<EntityEntry<ES>>>,
-                    cc: Vec3<i64>,
-                    ci: usize,
-                    global_entity_hmap: &mut HashMap<Uuid, usize>,
-                    global_entity_slab: &mut Slab<GlobalEntityEntry>,
-                    kind: EntityKind,
-                    mut entity_state_to_save_state: F,
-                ) -> Vec<EntitySaveEntry<SS>> {
-                    chunk_entities.remove(cc, ci).into_iter()
-                        .enumerate()
-                        .map(|(vector_idx, entry)| {
-                            let EntityEntry { uuid, global_idx, rel_pos, state } = entry;
-
-                            let removed = global_entity_hmap.remove(&uuid);
-                            debug_assert_eq!(
-                                removed, Some(global_idx),
-                                "hmap desync detected removing entity {}", uuid,
-                            );
-                            let global_entry = global_entity_slab.remove(global_idx);
-                            debug_assert_eq!(
-                                global_entry, GlobalEntityEntry { uuid, kind, cc, ci, vector_idx },
-                                "global entry desync detected removing entity {}", uuid,
-                            );
-
-                            EntitySaveEntry {
-                                entity_uuid: uuid,
-                                rel_pos,
-                                state: entity_state_to_save_state(state),
-                            }
-                        })
-                        .collect()
-                }
-                */
                 server.sync_ctx.save_mgr.remove_chunk(
                     cc,
                     ci,
@@ -788,47 +519,11 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                         chunk_tile_blocks,
                         steves,
                         pigs,
-                        /*
-                        steves: remove_entities(
-                            &mut server.server_only.chunk_steves,
-                            cc,
-                            ci,
-                            &mut server.server_only.global_entity_hmap,
-                            &mut server.server_only.global_entity_slab,
-                            EntityKind::Steve,
-                            |SteveEntityState { vel: _, name }| SteveEntitySaveState { name },
-                        ),
-                        pigs: remove_entities(
-                            &mut server.server_only.chunk_pigs,
-                            cc,
-                            ci,
-                            &mut server.server_only.global_entity_hmap,
-                            &mut server.server_only.global_entity_slab,
-                            EntityKind::Pig,
-                            |PigEntityState { vel: _, color }| PigEntitySaveState { color },
-                        ),
-                        */
                     },
                 );
             }
             // download chunk to client
             ChunkMgrEffect::AddChunkToClient { cc, ci, pk, clientside_ci } => {
-                /*
-                // TODO: move elsewhere?
-                fn down_entities<S: Clone>(
-                    chunk_entities: &PerChunk<Vec<EntityEntry<S>>>,
-                    cc: Vec3<i64>,
-                    ci: usize,
-                ) -> Vec<DownEntity<S>> {
-                    chunk_entities.get(cc, ci).iter()
-                        .map(|entry| DownEntity {
-                            entity_uuid: entry.uuid,
-                            rel_pos: entry.rel_pos,
-                            state: entry.state.clone(),
-                        })
-                        .collect()
-                }*/
-
                 server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::AddChunk(
                     DownMsgAddChunk {
                         chunk_idx: DownChunkIdx(clientside_ci),
@@ -839,8 +534,6 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                             .iter().map(|entry| entry.entity.clone()).collect(),
                         pigs: server.sync_state.chunk_pigs.get(cc, ci)
                             .iter().map(|entry| entry.entity.clone()).collect(),
-                        //steves: down_entities(&server.server_only.chunk_steves, cc, ci),
-                        //pigs: down_entities(&server.server_only.chunk_pigs, cc, ci),
                     }
                 )));
             }
