@@ -43,11 +43,8 @@ use chunk_data::*;
 use graphics::prelude::*;
 use std::{
     sync::Arc,
-    collections::HashMap,
     time::Instant,
 };
-use uuid::Uuid;
-use slab::Slab;
 use vek::*;
 
 

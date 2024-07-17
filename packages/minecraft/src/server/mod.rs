@@ -47,11 +47,8 @@ use crate::{
 use chunk_data::*;
 use std::{
     sync::Arc,
-    collections::HashMap,
     cell::RefCell,
 };
-use uuid::Uuid;
-use slab::Slab;
 use vek::*;
 
 

@@ -9,7 +9,6 @@ use crate::{
 use binschema::{*, error::Result};
 use chunk_data::*;
 use std::sync::Arc;
-use uuid::Uuid;
 use vek::*;
 
 

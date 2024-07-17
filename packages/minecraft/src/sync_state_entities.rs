@@ -15,7 +15,6 @@ use std::{
         HashMap,
         hash_map,
     },
-    cell::RefCell,
 };
 use chunk_data::*;
 use uuid::Uuid;
@@ -40,7 +39,7 @@ pub fn do_steve_physics(
     mut server: Option<&mut SteveEntityServerState>,
 ) {
     const GRAVITY_ACCEL: f32 = 32.0;
-    const FALL_SPEED_DECAY: f32 = 0.98;
+    //const FALL_SPEED_DECAY: f32 = 0.98;
     const WALK_DECEL: f32 = 30.0;
     const GROUND_DETECTION_PERIOD: f32 = 1.0 / 20.0;
 

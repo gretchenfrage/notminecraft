@@ -10,7 +10,6 @@ use crate::{
     sync_state_entities::*,
 };
 use chunk_data::*;
-use uuid::Uuid;
 use vek::*;
 
 
