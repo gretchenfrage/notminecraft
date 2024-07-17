@@ -128,7 +128,7 @@ pub fn run(
         
         // process events between ticks
         while let Some(event) = server.server_only.server_recv
-            .recv(Some(server.sync_ctx.tick_mgr.next_tick()), None)
+            .recv(Some(server.sync_ctx.tick_mgr.tick_instant()), None)
         {
             trace!(?event, "server event");
             match event {
@@ -165,7 +165,7 @@ pub fn run(
                 }
                 // save operation done
                 ServerEvent::SaveOpDone => {
-                    server.sync_ctx.save_mgr.on_save_op_done(server.sync_ctx.tick_mgr.tick());
+                    server.sync_ctx.save_mgr.on_save_op_done(server.sync_ctx.tick_mgr.tick_num());
                 }
             }
         }
@@ -396,7 +396,7 @@ fn do_tick(server: &mut Server) {
 // do a save operation if appropriate to do so
 fn maybe_save(server: &mut Server) {
     // ask whether should save
-    if server.sync_ctx.save_mgr.should_save(server.sync_ctx.tick_mgr.tick()) {
+    if server.sync_ctx.save_mgr.should_save(server.sync_ctx.tick_mgr.tick_num()) {
         save(server);
     }
 }
@@ -483,8 +483,17 @@ fn process_conn_mgr_effects(server: &mut Server) {
     while let Some(effect) = server.sync_ctx.conn_mgr.effects.pop_front() {
         trace!(?effect, "conn mgr effect");
         match effect {
-            // initialize new player key, begin loading save state
-            ConnMgrEffect::AddPlayerRequestLoad { pk, save_key, aborted } => {
+            // send AcceptLogIn, initialize new player key, begin loading save state
+            ConnMgrEffect::InitPlayer { pk, save_key, aborted } => {
+                // send AcceptLogIn, enabling the client to process pre-join messages
+                server.sync_ctx.conn_mgr.send(pk, DownMsg::AcceptLogIn(DownMsgAcceptLogIn {
+                    next_tick_num: server.sync_ctx.tick_mgr.tick_num(),
+                    next_tick_instant: server.sync_ctx.conn_mgr.rel_time(
+                        pk,
+                        server.sync_ctx.tick_mgr.tick_instant()
+                    ),
+                }));
+
                 // add player
                 server.sync_ctx.chunk_mgr.add_player(pk);
                 for cc in spawn_chunks() {
@@ -873,7 +882,7 @@ fn stop(mut server: Server) {
             ServerEvent::Network(NetworkEvent::AddConnection(_, conn)) => conn.kill(),
             // loop will exit after receiving this 0, 1, or 2 times
             ServerEvent::SaveOpDone => {
-                server.sync_ctx.save_mgr.on_save_op_done(server.sync_ctx.tick_mgr.tick());
+                server.sync_ctx.save_mgr.on_save_op_done(server.sync_ctx.tick_mgr.tick_num());
             }
             // everything else just ignore
             _ => (),

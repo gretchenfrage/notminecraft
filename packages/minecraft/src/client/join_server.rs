@@ -126,8 +126,9 @@ fn join_server(
 ) -> Result<Client> {
     let (connection, server) =
         connect_to_server(server_location, &game, &thread_pool, &client_send, cancel_connect)?;
-    log_in(&connection, &client_recv, log_in_msg)?;
+    let msg = log_in(&connection, &client_recv, log_in_msg)?;
     let mut client = construct_pre_join_client(
+        msg,
         game,
         client_send,
         client_recv,
@@ -179,7 +180,7 @@ fn log_in(
     connection: &Connection,
     client_recv: &ClientReceiver,
     log_in_msg: UpMsgLogIn,
-) -> Result<()> {
+) -> Result<DownMsgAcceptLogIn> {
     info!("logging in");
     connection.send(UpMsg::LogIn(log_in_msg));
     Ok(loop {
@@ -189,7 +190,7 @@ fn log_in(
             ClientEvent::AbortInit => bail!("client initialization aborted"),
             ClientEvent::Network(event) => match event {
                 NetworkEvent::Received(msg) => match msg {
-                    DownMsg::AcceptLogIn => break, 
+                    DownMsg::AcceptLogIn(msg) => break msg, 
                     _ => bail!("server protocol violation"),
                 }
                 NetworkEvent::Closed(msg) => bail!("server connection closed: {:?}", msg),
@@ -201,6 +202,7 @@ fn log_in(
 
 // construct a pre-join client in the starting state
 fn construct_pre_join_client(
+    msg: DownMsgAcceptLogIn,
     game: Arc<GameData>,
     client_send: ClientSender,
     client_recv: ClientReceiver,
@@ -209,6 +211,8 @@ fn construct_pre_join_client(
     thread_pool: ThreadPool,
     gpu_vec_ctx: AsyncGpuVecContext,
 ) -> PreJoinClient {
+    let DownMsgAcceptLogIn { next_tick_num, next_tick_instant } = msg;
+    let next_tick_instant = connection.derel_time(next_tick_instant);
     PreJoinClient {
         game: Arc::clone(&game),
         client_send: client_send.clone(),
@@ -217,6 +221,8 @@ fn construct_pre_join_client(
         server,
         thread_pool: thread_pool.clone(),
         gpu_vec_ctx: gpu_vec_ctx.clone(),
+        next_tick_num,
+        next_tick_instant,
         item_mesh: create_item_meshes(&game, &gpu_vec_ctx),
         chunks: Default::default(),
         tile_blocks: Default::default(),
@@ -226,12 +232,6 @@ fn construct_pre_join_client(
         player_pos: Default::default(),
         player_yaw: Default::default(),
         player_pitch: Default::default(),
-
-        /*global_entity_hmap: Default::default(),
-        global_entity_slab: Default::default(),
-        chunk_steves: Default::default(),
-        chunk_pigs: Default::default(),*/
-        //steves: Default::default(),
         entities: Default::default(),
         chunk_steves: Default::default(),
         chunk_pigs: Default::default(),

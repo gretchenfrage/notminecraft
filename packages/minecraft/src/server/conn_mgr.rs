@@ -148,10 +148,13 @@ enum PlayerLoadSaveStateState {
 /// Effect flowing from the `ConnMgr` to the rest of the server.
 #[derive(Debug)]
 pub enum ConnMgrEffect {
-    /// A new player was connected. Initialize it in `PerPlayer` structures. Also, set in motion
-    /// the process of loading the player's save state, so that `on_player_save_state_ready` is
-    /// called in the future, unless aborted.
-    AddPlayerRequestLoad {
+    /// A new player was connected. The rest of the server should:
+    ///
+    /// 1. Send the player an `AcceptLogIn` message.
+    /// 2. Initialize the player in `PerPlayer` structures.
+    /// 3. Set in motion the process of loading the player's save state, so that
+    ///    `on_player_save_state_ready` is called in the future, unless aborted.
+    InitPlayer {
         pk: PlayerKey,
         save_key: PlayerSaveKey,
         aborted: AbortHandle,
@@ -368,9 +371,6 @@ impl ConnMgr {
 
         // uniqueify username
         let username = uniqueify_username(username, &self.username_player);
-
-        // transmit AcceptLogIn to client
-        self.connections[conn_idx].connection.send(DownMsg::AcceptLogIn);
         
         // initialize player key
         let pk = self.players.add();
@@ -386,8 +386,9 @@ impl ConnMgr {
         let aborted_2 = aborted_1.new_handle();
         self.player_load_save_state_state.insert(pk, PlayerLoadSaveStateState::Loading(aborted_1));
 
-        // add the player to the rest of the server and trigger its loading from the save file
-        self.effects.push_back(ConnMgrEffect::AddPlayerRequestLoad {
+        // transmit AcceptLogIn to client, add the player to the rest of the server, and trigger
+        // its loading from the save file
+        self.effects.push_back(ConnMgrEffect::InitPlayer {
             pk,
             save_key: PlayerSaveKey { username: username.clone() },
             aborted: aborted_2,

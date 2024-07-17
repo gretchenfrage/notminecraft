@@ -162,3 +162,9 @@ upwards. After the server messages processing a message from a client, it
 sends that client a message acknowledging the up message index of the message
 it just processed, whether or not the server sent any other messages to that
 client in the course of processing the message.
+
+
+TODO:
+
+- note that client does the same sort of thing with instants
+- note on how client can't really queue window and device events

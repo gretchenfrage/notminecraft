@@ -17,7 +17,7 @@ pub struct TickMgr {
 }
 
 impl TickMgr {
-    /// Construct with defaults.
+    /// Construct with defaults: tick number 0, scheduled to happen now.
     pub fn new() -> Self {
         TickMgr {
             tick: 0,
@@ -25,23 +25,29 @@ impl TickMgr {
         }
     }
 
-    /// Get the number of the current tick.
-    pub fn tick(&self) -> u64 {
+    /// Get the number of the currently scheduled tick.
+    ///
+    /// If currently doing a tick, this refers to the current tick.
+    pub fn tick_num(&self) -> u64 {
         self.tick
     }
 
-    /// Get the time that the next tick is scheduled to occur ideally.
+    /// Get the time that the currently scheduled tick is scheduled to occur.
+    ///
+    /// If currently doing a tick, this refers to the current tick.
     ///
     /// The tick "occurring" refers to the tick computations beginning. Ideally, inputs available
     /// to the game logic thread temporally before this instant should be avilable to the game
     /// logic when the next tick occurs.
-    pub fn next_tick(&self) -> Instant {
+    pub fn tick_instant(&self) -> Instant {
         self.next_tick
     }
 
     /// Call this after doing a tick, so as to update timing information and schedule the next
     /// tick.
-    pub fn on_tick_done(&mut self) {
+    ///
+    /// Returns the number of tick instants that will be skipped.
+    pub fn on_tick_done(&mut self) -> u32 {
         self.tick += 1;
 
         self.next_tick += TICK;
@@ -56,6 +62,9 @@ impl TickMgr {
             let behind_ticks = u32::try_from(behind_ticks).expect("time broke");
             warn!("running too slow, skipping {} ticks", behind_ticks);
             self.next_tick += TICK * behind_ticks;
+            behind_ticks
+        } else {
+            0
         }
     }
 }

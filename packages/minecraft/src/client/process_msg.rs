@@ -4,6 +4,7 @@ use crate::{
     client::*,
     message::*,
     sync_state_entities::*,
+    server::tick_mgr::TICK,
 };
 use chunk_data::*;
 use anyhow::{Result, ensure, anyhow};
@@ -12,6 +13,19 @@ use anyhow::{Result, ensure, anyhow};
 /// Process a pre join msg received from the network. Error indicates server protocol violation.
 pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> Result<()> {
     match msg {
+        // finalize tick
+        PreJoinDownMsg::TickDone { next_tick_num, skip_next } => {
+            // update next tick tracking
+            client.next_tick_num = client.next_tick_num.checked_add(1)
+                .ok_or_else(|| anyhow!("tick num overflowed"))?;
+            ensure!(client.next_tick_num == next_tick_num, "unexpected tick num");
+            client.next_tick_instant = skip_next
+                .checked_add(1)
+                .and_then(|i| u32::try_from(i).ok())
+                .and_then(|i| TICK.checked_mul(i))
+                .and_then(|d| client.next_tick_instant.checked_add(d))
+                .ok_or_else(|| anyhow!("tick instant overflowed"))?;
+        },
         // add player to world
         PreJoinDownMsg::AddPlayer(DownMsgAddPlayer {
             player_idx,

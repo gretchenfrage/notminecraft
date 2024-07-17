@@ -44,6 +44,7 @@ use graphics::prelude::*;
 use std::{
     sync::Arc,
     collections::HashMap,
+    time::Instant,
 };
 use uuid::Uuid;
 use slab::Slab;
@@ -84,6 +85,12 @@ pub struct PreJoinClient {
     /// Handle for uploading data to the GPU asynchronously.
     pub gpu_vec_ctx: AsyncGpuVecContext,
 
+    /// Tick number of next tick that the server will complete.
+    pub next_tick_num: u64,
+    /// Scheduled start instant of next tick that the server will complete.
+    pub next_tick_instant: Instant,
+
+    // TODO: factor out these meshing things
     pub item_mesh: PerItem<Mesh>,
 
     /// Client-side space of chunks.
@@ -113,5 +120,6 @@ pub struct Client {
     pub pitch: f32,
     pub menu_mgr: MenuMgr,
     pub inventory_slots: sync_state_inventory_slots::PlayerInventorySlots,
+    // TODO: factor out these meshing things
     pub steve_mesh: Mesh,
 }

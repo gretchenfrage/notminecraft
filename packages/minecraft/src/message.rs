@@ -132,7 +132,7 @@ pub enum DownMsg {
     /// This places the client into a state of preparing to join the world. It will begin receiving
     /// messages to load parts of the world into the client. Once enough of the world is loaded,
     /// the client will receive a `ShouldJoinGame` message.
-    AcceptLogIn,
+    AcceptLogIn(DownMsgAcceptLogIn),
     /// Message that client can process once logged in but possibly still before joining game.
     PreJoin(PreJoinDownMsg),
     /// Part of connection initialization flow.
@@ -149,9 +149,31 @@ pub enum DownMsg {
     PostJoin(PostJoinDownMsg),
 }
 
+/// Part of connection initialization flow.
+///
+/// Contains state client needs to process pre-join messages.
+#[derive(Debug, GameBinschema)]
+pub struct DownMsgAcceptLogIn {
+    /// Tick number of next tick that's scheduled to occur.
+    pub next_tick_num: u64,
+    /// Time that next tick is scheduled to occur.
+    pub next_tick_instant: ServerRelTime,
+}
+
 /// Message that client can process once logged in but possibly still before joining game.
 #[derive(Debug, GameBinschema)]
 pub enum PreJoinDownMsg {
+    /// Send to client to indicate a tick and its associated edits being finished.
+    TickDone {
+        /// Tick number of next tick that's scheduled to occur.
+        ///
+        /// Must increase by exactly 1.
+        next_tick_num: u64,
+        /// Number of tick instants to skip between the one that's finished and the next one.
+        ///
+        /// Next tick instant increases by (1 + skip_next) x 50.
+        skip_next: u64,
+    },
     /// Load a player into the client.
     AddPlayer(DownMsgAddPlayer),
     /// Remove a loaded player from the client.
@@ -282,59 +304,7 @@ pub struct DownMsgAddChunk {
     pub steves: Vec<EntityData<SteveEntityState>>,
     pub pigs: Vec<EntityData<PigEntityState>>,
 }
-/*
-/// Entity state for tranmission in a down msg.
-#[derive(Debug, GameBinschema, Copy, Clone)]
-pub struct DownEntity<T> {
-    /// Entity's stable UUID.
-    pub entity_uuid: Uuid,
-    /// Entity's position relative to chunk that owns it.
-    pub rel_pos: Vec3<f32>,
-    /// Entity type-specific state.
-    pub state: T,
-}
 
-// TODO: generally speaking organize this better
-
-#[derive(Debug, GameBinschema)]
-pub enum AnyDownEntity {
-    Steve(DownEntity<SteveEntityState>),
-    Pig(DownEntity<PigEntityState>),
-}
-
-/// Edit sent from server to client applicable to a single entity.
-///
-/// This value must convey the information of what type of entity this edit applies to.
-#[derive(Debug, GameBinschema)]
-pub enum EntityEdit {
-    SetStevePosVel(EntityEditSetStevePosVel),
-    SetSteveName(EntityEditSetSteveName),
-    SetPigPosVel(EntityEditSetPigPosVel),
-    SetPigColor(EntityEditSetPigColor),
-}
-
-#[derive(Debug, GameBinschema)]
-pub struct EntityEditSetStevePosVel {
-    pub rel_pos: Vec3<f32>,
-    pub vel: Vec3<f32>,
-}
-
-#[derive(Debug, GameBinschema)]
-pub struct EntityEditSetSteveName {
-    pub name: String,
-}
-
-#[derive(Debug, GameBinschema)]
-pub struct EntityEditSetPigPosVel {
-    pub rel_pos: Vec3<f32>,
-    pub vel: Vec3<f32>,
-}
-
-#[derive(Debug, GameBinschema)]
-pub struct EntityEditSetPigColor {
-    pub color: Rgb<f32>,
-}
-*/
 /// Remove a loaded chunk from the client.
 #[derive(Debug, GameBinschema)]
 pub struct DownMsgRemoveChunk {

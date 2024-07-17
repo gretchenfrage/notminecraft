@@ -54,7 +54,7 @@ impl ClientGuiState {
             // network event
             ClientEvent::Network(event) => match event {
                 NetworkEvent::Received(msg) => match msg {
-                    DownMsg::AcceptLogIn => bail!("server protocol violation"),
+                    DownMsg::AcceptLogIn(_) => bail!("server protocol violation"),
                     DownMsg::PreJoin(msg) => process_pre_join_msg(&mut self.0.pre_join, msg)?,
                     DownMsg::ShouldJoinGame => bail!("server protocol violation"),
                     DownMsg::FinalizeJoinGame(_) => bail!("server protocol violation"),
