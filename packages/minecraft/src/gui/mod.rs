@@ -57,6 +57,7 @@ pub mod prelude {
         never_blocks_cursor_impl,
     };
     pub use graphics::frame_content::{HAlign, VAlign};
+    pub use std::time::Instant;
 }
 
 pub use self::{

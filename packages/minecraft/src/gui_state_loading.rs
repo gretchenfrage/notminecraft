@@ -66,7 +66,7 @@ impl LoadingMenu {
 impl GuiStateFrame for LoadingMenu {
     impl_visit_nodes!();
 
-    fn update(&mut self, ctx: &GuiWindowContext, _: f32) {
+    fn update(&mut self, ctx: &GuiWindowContext, _: f32, _: Instant) {
         if let Some(loaded) = self.oneshot.poll(ctx.global()) {
             ctx.global().pop_state_frame();
             ctx.global().push_state_frame_obj(loaded);

@@ -15,7 +15,8 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
     match msg {
         // finalize tick
         PreJoinDownMsg::TickDone { next_tick_num, skip_next } => {
-            // update next tick tracking
+            client.just_finished_tick = Some(client.next_tick_instant);
+
             client.next_tick_num = client.next_tick_num.checked_add(1)
                 .ok_or_else(|| anyhow!("tick num overflowed"))?;
             ensure!(client.next_tick_num == next_tick_num, "unexpected tick num");
@@ -63,14 +64,16 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 .add_chunk(
                     &mut client.chunk_steves,
                     cc, ci,
-                    steves.into_iter().map(|entity| (entity, Default::default())),
+                    steves.into_iter()
+                        .map(|entity| (SteveEntityClientState::new(cc, &entity), entity)),
                 )
                 .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
             client.entities
                 .add_chunk(
                     &mut client.chunk_pigs,
                     cc, ci,
-                    pigs.into_iter().map(|entity| (entity, Default::default())),
+                    pigs.into_iter()
+                        .map(|entity| (PigEntityClientState::new(cc, &entity), entity)),
                 )
                 .map_err(|_| anyhow!("server inserted entities with colliding uuids"))?;
         }
@@ -98,18 +101,24 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             let (cc, ci, _getter) = client.chunks.lookup(chunk_idx)?;
             let EntityData { uuid, rel_pos, state } = entity;
             match state {
-                AnyEntityState::Steve(state) => client.entities.add_entity(
-                    &mut client.chunk_steves,
-                    EntityData { uuid, rel_pos, state },
-                    Default::default(),
-                    cc, ci,
-                ),
-                AnyEntityState::Pig(state) => client.entities.add_entity(
-                    &mut client.chunk_pigs,
-                    EntityData { uuid, rel_pos, state },
-                    Default::default(),
-                    cc, ci,
-                ),
+                AnyEntityState::Steve(state) => {
+                    let entity = EntityData { uuid, rel_pos, state };
+                    client.entities.add_entity(
+                        &mut client.chunk_steves,
+                        SteveEntityClientState::new(cc, &entity),
+                        entity,
+                        cc, ci,
+                    )
+                },
+                AnyEntityState::Pig(state) => {
+                    let entity = EntityData { uuid, rel_pos, state };
+                    client.entities.add_entity(
+                        &mut client.chunk_pigs,
+                        PigEntityClientState::new(cc, &entity),
+                        entity,
+                        cc, ci,
+                    )
+                },
             }.map_err(|sync_state_entities::UuidCollision|
                 anyhow!("server added entity with duplicate uuid")
             )?;

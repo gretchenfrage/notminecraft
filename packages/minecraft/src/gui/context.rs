@@ -44,9 +44,6 @@ pub struct GuiGlobalContext<'c> {
     /// Queue of store side effects to be executed by gui event loop once
     /// gui state frame method returns.
     pub event_loop: &'c RefCell<EventLoopEffectQueue>, // TODO: these ref cells are ugly
-    /// Time since the unix epoch. Monotonically increasing--calibrated once at
-    /// start up. Updated upon call to gui state frame.
-    pub time_since_epoch: Duration,
     /// Gui event loop's goal for time between frames occuring. Inverse of target FPS.
     pub frame_duration_target: Duration,
     /// Gui event loop's goal for when it wants the next frame to occur.

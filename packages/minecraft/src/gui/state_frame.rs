@@ -60,9 +60,14 @@ pub trait GuiStateFrame: Debug {
     /// seconds since this was last called.
     ///
     /// The exception to this is that the first draw call will not be preceded
-    /// by a call to `update`.
+    /// by a call to `update`. The first call to `update`, corresponding to the
+    /// second time drawing, will have its `elapsed` parameter hold the number
+    /// of seconds since the first time drawing.
+    ///
+    /// The instants passed in `now` are consistent with the differences
+    /// between instants expressed in `elapsed`.
     #[allow(unused_variables)]
-    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {}
+    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32, now: Instant) {}
 
     /// The gui should enter a loop of polling for and processing user events.
     ///

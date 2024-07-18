@@ -153,7 +153,7 @@ impl GuiStateFrame for MultiplayerMenu {
         }
     }
 
-    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32) {
+    fn update(&mut self, ctx: &GuiWindowContext, elapsed: f32, _: Instant) {
         const BLINKEY: f32 = 1.0 / 3.0;
 
         self.address_blinker_time += elapsed;

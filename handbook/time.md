@@ -98,7 +98,7 @@ This gives it the following ways of responding to system stress:
   events. A backlog of queued events may form.
 
 
-# Time-like things
+# ~~Time-like things~~ Warning: This Is All Wrong
 
 The multiplayer protocol deals with 3 different time-like things:
 

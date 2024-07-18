@@ -223,6 +223,7 @@ fn construct_pre_join_client(
         gpu_vec_ctx: gpu_vec_ctx.clone(),
         next_tick_num,
         next_tick_instant,
+        just_finished_tick: None,
         item_mesh: create_item_meshes(&game, &gpu_vec_ctx),
         chunks: Default::default(),
         tile_blocks: Default::default(),

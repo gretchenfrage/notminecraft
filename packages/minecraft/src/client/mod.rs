@@ -86,6 +86,9 @@ pub struct PreJoinClient {
     pub next_tick_num: u64,
     /// Scheduled start instant of next tick that the server will complete.
     pub next_tick_instant: Instant,
+    /// Scheduled start instant of tick most recently completed by server, if exists and if update
+    /// has not occurred more recently than that.
+    pub just_finished_tick: Option<Instant>,
 
     // TODO: factor out these meshing things
     pub item_mesh: PerItem<Mesh>,

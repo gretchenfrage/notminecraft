@@ -131,9 +131,23 @@ impl Default for SteveEntityServerState {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SteveEntityClientState {
+    pub predicted_cc: Vec3<i64>, // TODO: predicted_cc is hacky
+    pub predicted_rel_pos: Vec3<f32>,
+    pub predicted_vel: Vec3<f32>,
     pub pos_display_offset: Vec3<f32>,
+}
+
+impl SteveEntityClientState {
+    pub fn new(cc: Vec3<i64>, entity: &EntityData<SteveEntityState>) -> Self {
+        Self {
+            predicted_cc: cc,
+            predicted_rel_pos: entity.rel_pos,
+            predicted_vel: entity.state.vel,
+            pos_display_offset: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, GameBinschema)]
@@ -221,9 +235,24 @@ impl Default for PigEntityServerState {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PigEntityClientState {
+    // TODO: predicted_cc is kind of hacky
+    pub predicted_cc: Vec3<i64>,
+    pub predicted_rel_pos: Vec3<f32>,
+    pub predicted_vel: Vec3<f32>,
     pub pos_display_offset: Vec3<f32>,
+}
+
+impl PigEntityClientState {
+    pub fn new(cc: Vec3<i64>, entity: &EntityData<PigEntityState>) -> Self {
+        Self {
+            predicted_cc: cc,
+            predicted_rel_pos: entity.rel_pos,
+            predicted_vel: entity.state.vel,
+            pos_display_offset: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, GameBinschema)]
@@ -354,11 +383,11 @@ impl LoadedEntities {
     ) -> Result<(), UuidCollision>
     where
         S: EntityState,
-        I: IntoIterator<Item=(EntityData<S>, E)>,
+        I: IntoIterator<Item=(E, EntityData<S>)>,
     {
         let entities = entities.into_iter()
             .enumerate()
-            .map(|(vector_idx, (entity, extra))| {
+            .map(|(vector_idx, (extra, entity))| {
                 let hmap_entry = match self.hmap.entry(entity.uuid) {
                     hash_map::Entry::Occupied(_) => return Err(UuidCollision),
                     hash_map::Entry::Vacant(entry) => entry,
@@ -400,8 +429,8 @@ impl LoadedEntities {
     pub fn add_entity<S: EntityState, E>(
         &mut self,
         chunk_entities: &mut PerChunk<Vec<ChunkEntityEntry<S, E>>>,
-        entity: EntityData<S>,
         extra: E,
+        entity: EntityData<S>,
         cc: Vec3<i64>,
         ci: usize,
     ) -> Result<(), UuidCollision> {
@@ -591,8 +620,8 @@ impl<'a, S: EntityState, E, W> SyncWrite<'a, S, E, W> {
         //                collision.
         self.ctx.entities.borrow_mut().add_entity(
             self.state,
-            EntityData { uuid, rel_pos, state },
             extra,
+            EntityData { uuid, rel_pos, state },
             cc,
             ci,
         ).unwrap();

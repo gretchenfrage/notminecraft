@@ -137,7 +137,7 @@ impl MainMenu {
 impl GuiStateFrame for MainMenu {
 	impl_visit_nodes!();
 
-    fn update(&mut self, _: &GuiWindowContext, elapsed: f32) {
+    fn update(&mut self, _: &GuiWindowContext, elapsed: f32, _: Instant) {
         self.title.update(elapsed);
         self.splash_text.update(elapsed);
     }

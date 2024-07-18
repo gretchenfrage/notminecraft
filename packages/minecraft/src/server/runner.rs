@@ -123,8 +123,14 @@ pub fn run(
     loop {
         // do tick
         do_tick(&mut server);
+        let skip_next = server.sync_ctx.tick_mgr.on_tick_done();
+        for pk in server.sync_ctx.conn_mgr.players().iter() {
+            server.sync_ctx.conn_mgr.send(pk, DownMsg::PreJoin(PreJoinDownMsg::TickDone {
+                next_tick_num: server.sync_ctx.tick_mgr.tick_num(),
+                skip_next: skip_next.into(),
+            }));
+        }
         maybe_save(&mut server);
-        server.sync_ctx.tick_mgr.on_tick_done();
         
         // process events between ticks
         while let Some(event) = server.server_only.server_recv
@@ -489,14 +495,14 @@ fn process_chunk_mgr_effects(server: &mut Server) {
                     .add_chunk(
                         &mut server.sync_state.chunk_steves,
                         cc, ci,
-                        steves.into_iter().map(|entity| (entity, Default::default())),
+                        steves.into_iter().map(|entity| (Default::default(), entity)),
                     ).unwrap();
                 server.sync_state.sw_bufs_steves.add_chunk(cc, ci);
                 server.sync_ctx.entities.borrow_mut()
                     .add_chunk(
                         &mut server.sync_state.chunk_pigs,
                         cc, ci,
-                        pigs.into_iter().map(|entity| (entity, Default::default())),
+                        pigs.into_iter().map(|entity| (Default::default(), entity)),
                     ).unwrap();
                 server.sync_state.sw_bufs_pigs.add_chunk(cc, ci); 
             }

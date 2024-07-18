@@ -13,7 +13,7 @@ use crate::{
         menu_inventory::InventoryMenu,
         *,
     },
-    //sync_state_steve,
+    sync_state_entities::do_steve_physics,
     message::*,
     physics::prelude::*,
     gui::prelude::*,
@@ -23,10 +23,14 @@ use graphics::prelude::*;
 use chunk_data::*;
 use std::{
     fmt::{self, Formatter, Debug},
-    time::Instant,
+    time::{Instant, Duration},
+    cmp::min,
 };
 use vek::*;
 use anyhow::*;
+
+
+pub const MAX_CATCHUP: Duration = Duration::from_millis(30);
 
 
 /// Wrapper around client that implements `GuiStateFrame`.
@@ -106,9 +110,54 @@ impl ClientGuiState {
 impl GuiStateFrame for ClientGuiState {
     impl_visit_nodes!();
 
-    fn update(&mut self, ctx: &GuiWindowContext<'_>, elapsed: f32) {
+    fn update(&mut self, ctx: &GuiWindowContext<'_>, elapsed: f32, now: Instant) {
         // do a client game logic tick basically
         trace!("client tick");
+
+        // client-side prediction
+        let tick_catchup = self.0.pre_join.just_finished_tick.take()
+            .map(|tick_start| {
+                let delta = now.checked_duration_since(tick_start).unwrap_or(Duration::ZERO);
+                min(delta, MAX_CATCHUP).as_secs_f32()
+            });
+
+        for (cc, ci, getter) in self.0.pre_join.chunks.iter() {
+            for steve in self.0.pre_join.chunk_steves.get_mut(cc, ci) {
+                if tick_catchup.is_some() {
+                    steve.extra.predicted_cc = cc;
+                    steve.extra.predicted_rel_pos = steve.entity.rel_pos;
+                    steve.extra.predicted_vel = steve.entity.state.vel;
+                }
+                do_steve_physics(
+                    tick_catchup.unwrap_or(elapsed), // TODO: more complete prediction limiting
+                    cc,
+                    &mut steve.extra.predicted_rel_pos,
+                    &mut steve.extra.predicted_vel,
+                    &getter,
+                    &self.0.pre_join.tile_blocks,
+                    &self.0.pre_join.game,
+                    None,
+                );
+            }
+
+            for pig in self.0.pre_join.chunk_pigs.get_mut(cc, ci) {
+                if tick_catchup.is_some() {
+                    pig.extra.predicted_cc = cc;
+                    pig.extra.predicted_rel_pos = pig.entity.rel_pos;
+                    pig.extra.predicted_vel = pig.entity.state.vel;
+                }
+                do_steve_physics(
+                    tick_catchup.unwrap_or(elapsed),
+                    cc,
+                    &mut pig.extra.predicted_rel_pos,
+                    &mut pig.extra.predicted_vel,
+                    &getter,
+                    &self.0.pre_join.tile_blocks,
+                    &self.0.pre_join.game,
+                    None,
+                );
+            }
+        }
         
         // super basic movement logic
         if !self.0.menu_mgr.is_open_menu() {
@@ -277,10 +326,10 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             let bbox_pos = (cc * CHUNK_EXTENT).map(|n| n as f32);
             let bbox_ext = CHUNK_EXTENT.map(|n| n as f32);
 
-            let mut canvas = canvas.reborrow()
-                .translate(bbox_pos);
-
             if vp.is_volume_visible(bbox_pos, bbox_ext.into()) {
+                let mut canvas = canvas.reborrow()
+                    .translate(bbox_pos);
+
                 if let Some(mesh) = self.inner.chunk_mesh_mgr.chunk_mesh(cc, ci) {
                     canvas.reborrow()
                         .draw_mesh(mesh, &ctx.assets().blocks);
@@ -289,14 +338,16 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             
             for steve in self.inner.chunk_steves.get(cc, ci) {
                 canvas.reborrow()
-                    .translate(steve.entity.rel_pos)
+                    .translate((steve.extra.predicted_cc * CHUNK_EXTENT).map(|n| n as f32))
+                    .translate(steve.extra.predicted_rel_pos)
                     .color([0.8, 0.8, 0.8, 1.0])
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
             }
 
             for pig in self.inner.chunk_pigs.get(cc, ci) {
                 canvas.reborrow()
-                    .translate(pig.entity.rel_pos)
+                    .translate((pig.extra.predicted_cc * CHUNK_EXTENT).map(|n| n as f32))
+                    .translate(pig.extra.predicted_rel_pos)
                     .scale([1.0, 0.5, 1.0])
                     .color(pig.entity.state.color)
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
