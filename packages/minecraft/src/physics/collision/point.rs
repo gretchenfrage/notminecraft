@@ -70,12 +70,12 @@ impl CollisionObject for PointCollisionObject {
                         );
 
                     // see if collides along this axis
-                    if let Some(dt) = obj_barrier_collision_dt(
+                    if let Some(dt2) = obj_barrier_collision_dt(
                         pos[axis as usize],
                         obj_other_axes_pos,
                         barrier_face_rect,
-                        min_dt,
-                        max_dt,
+                        min_dt - dt,
+                        max_dt - dt,
                         vel[axis as usize],
                         other_axes_vel,
                     ) {
@@ -86,7 +86,7 @@ impl CollisionObject for PointCollisionObject {
                             .unwrap_or(true)
                         {
                             first = Some(Collision {
-                                dt,
+                                dt: dt + dt2,
                                 barrier_face,
                                 barrier_id: barrier_id.clone(),
                             });

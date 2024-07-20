@@ -3,6 +3,7 @@
 use crate::{
     game_binschema::GameBinschema,
     server::{
+        tick_mgr::TICK,
         per_player::PlayerKey,
         ServerSyncCtx,
     },
@@ -28,8 +29,12 @@ use crate::{
     physics::prelude::*,
     sync_state_steve::*,
 };
+
+/// tick_dst should be a number of seconds between the present and the instant
+/// that _any_ tick occurs (ticks occur on a regular 20 Hz interval).
 pub fn do_steve_physics(
-    dt: f32,
+    mut dt: f32,
+    mut tick_dst: f32,
     cc: Vec3<i64>,
     rel_pos: &mut Vec3<f32>,
     vel: &mut Vec3<f32>,
@@ -62,42 +67,64 @@ pub fn do_steve_physics(
         server.time_since_ground += dt;
     }
 
-    // gravity
-    vel.y -= GRAVITY_ACCEL * dt;
-    //steve.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * dt);
-
-    // friction
-    let mut vel_xz = Vec2::new(vel.x, vel.z);
-    let vel_xz_mag = vel_xz.magnitude();
-    let max_delta_vel_xz_mag = WALK_DECEL * dt;
-    if max_delta_vel_xz_mag > vel_xz_mag {
-        vel_xz = Vec2::from(0.0);
-    } else {
-        vel_xz -= vel_xz / vel_xz_mag * max_delta_vel_xz_mag;
+    // set tick_dst to when the next tick will occur
+    //debug!("pre-mod tick_dst={}", tick_dst);
+    tick_dst = ((tick_dst % TICK.as_secs_f32()) +  TICK.as_secs_f32()) % TICK.as_secs_f32();
+    if tick_dst == 0.0 {
+        tick_dst = TICK.as_secs_f32(); // TODO: this is all horribly messy
     }
-    vel.x = vel_xz.x;
-    vel.z = vel_xz.y;
 
-    // movement
-    rel_pos.x -= STEVE_WIDTH / 2.0;
-    rel_pos.z -= STEVE_WIDTH / 2.0;
-    let did_physics = do_physics(
-        dt,
-        rel_pos,
-        vel,
-        &AaBoxCollisionObject {
-            ext: [STEVE_WIDTH, STEVE_HEIGHT, STEVE_WIDTH].into(),
-        },
-        &WorldPhysicsGeometry { getter, tile_blocks, game, cc_rel_to: cc },
-    );
-    rel_pos.x += STEVE_WIDTH / 2.0;
-    rel_pos.z += STEVE_WIDTH / 2.0;
+    //debug!("entering steve loop");
+    while dt > 0.0 {
+        let sub_dt = dt.min(tick_dst);
 
-    // server state updating
-    if let Some(ref mut server) = server {
-        if did_physics.on_ground.is_some() {
-            server.time_since_ground = 0.0;
+        if sub_dt > 0.0 {
+            // movement
+            rel_pos.x -= STEVE_WIDTH / 2.0;
+            rel_pos.z -= STEVE_WIDTH / 2.0;
+            let did_physics = do_physics(
+                sub_dt,
+                rel_pos,
+                vel,
+                &AaBoxCollisionObject {
+                    ext: [STEVE_WIDTH, STEVE_HEIGHT, STEVE_WIDTH].into(),
+                },
+                &WorldPhysicsGeometry { getter, tile_blocks, game, cc_rel_to: cc },
+            );
+            rel_pos.x += STEVE_WIDTH / 2.0;
+            rel_pos.z += STEVE_WIDTH / 2.0;
+
+            // server state updating
+            if let Some(ref mut server) = server {
+                if did_physics.on_ground.is_some() {
+                    server.time_since_ground = 0.0;
+                }
+            }
         }
+
+        if tick_dst > 0.0 && tick_dst <= dt /*&& server.is_some()*/ {
+            //debug!(?tick_dst, "doing discrete stuff");
+            // gravity
+            vel.y -= GRAVITY_ACCEL * TICK.as_secs_f32();
+            //steve.vel.y *= f32::exp(20.0 * f32::ln(FALL_SPEED_DECAY) * dt);
+
+            // friction
+            let mut vel_xz = Vec2::new(vel.x, vel.z);
+            let vel_xz_mag = vel_xz.magnitude();
+            let max_delta_vel_xz_mag = WALK_DECEL * TICK.as_secs_f32();
+            if max_delta_vel_xz_mag > vel_xz_mag {
+                vel_xz = Vec2::from(0.0);
+            } else {
+                vel_xz -= vel_xz / vel_xz_mag * max_delta_vel_xz_mag;
+            }
+            vel.x = vel_xz.x;
+            vel.z = vel_xz.y;
+        
+            tick_dst += TICK.as_secs_f32();
+        }
+
+
+        dt -= sub_dt;
     }
 }
 
@@ -116,10 +143,11 @@ pub struct SteveEntityState {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SteveEntityServerState {
     pub time_since_jumped: f32,
-    pub time_since_ground: f32,    
+    pub time_since_ground: f32,
+    pub file: std::fs::File,
 }
 
 impl Default for SteveEntityServerState {
@@ -127,16 +155,18 @@ impl Default for SteveEntityServerState {
         SteveEntityServerState {
             time_since_jumped: f32::INFINITY,
             time_since_ground: f32::INFINITY,
+            file: std::fs::File::create("steve-server.csv").unwrap(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SteveEntityClientState {
     pub predicted_cc: Vec3<i64>, // TODO: predicted_cc is hacky
     pub predicted_rel_pos: Vec3<f32>,
     pub predicted_vel: Vec3<f32>,
     pub pos_display_offset: Vec3<f32>,
+    pub file: std::fs::File,
 }
 
 impl SteveEntityClientState {
@@ -146,6 +176,7 @@ impl SteveEntityClientState {
             predicted_rel_pos: entity.rel_pos,
             predicted_vel: entity.state.vel,
             pos_display_offset: Default::default(),
+            file: std::fs::File::create("steve-client.csv").unwrap(),
         }
     }
 }

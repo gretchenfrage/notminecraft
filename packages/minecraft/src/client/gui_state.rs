@@ -40,6 +40,7 @@ pub struct ClientGuiState(pub Client);
 pub struct WorldGuiBlock<'a> {
     pub chunks: &'a ClientLoadedChunks,
     pub chunk_mesh_mgr: &'a ChunkMeshMgr,
+    pub tile_blocks: &'a PerChunk<ChunkBlocks>,
     pub pos: Vec3<f32>,
     pub yaw: f32,
     pub pitch: f32,
@@ -91,6 +92,7 @@ impl ClientGuiState {
             WorldGuiBlock {
                 chunks: &self.0.pre_join.chunks,
                 chunk_mesh_mgr: &self.0.pre_join.chunk_mesh_mgr,
+                tile_blocks: &self.0.pre_join.tile_blocks,
                 pos: self.0.pos,
                 yaw: self.0.yaw,
                 pitch: self.0.pitch,
@@ -118,8 +120,17 @@ impl GuiStateFrame for ClientGuiState {
         let tick_catchup = self.0.pre_join.just_finished_tick.take()
             .map(|tick_start| {
                 let delta = now.checked_duration_since(tick_start).unwrap_or(Duration::ZERO);
-                min(delta, MAX_CATCHUP).as_secs_f32()
+                delta.as_secs_f32()// + elapsed
+                //min(delta, MAX_CATCHUP).as_secs_f32()
             });
+
+        let tdi = self.0.pre_join.next_tick_instant + Duration::from_secs_f32(tick_catchup.unwrap_or(elapsed));
+        let tick_dst =
+            if now > tdi {
+                now.duration_since(tdi).as_secs_f32()
+            } else {
+                -tdi.duration_since(now).as_secs_f32()
+            } - 0.000001;
 
         for (cc, ci, getter) in self.0.pre_join.chunks.iter() {
             for steve in self.0.pre_join.chunk_steves.get_mut(cc, ci) {
@@ -130,6 +141,7 @@ impl GuiStateFrame for ClientGuiState {
                 }
                 do_steve_physics(
                     tick_catchup.unwrap_or(elapsed), // TODO: more complete prediction limiting
+                    tick_dst,
                     cc,
                     &mut steve.extra.predicted_rel_pos,
                     &mut steve.extra.predicted_vel,
@@ -138,6 +150,17 @@ impl GuiStateFrame for ClientGuiState {
                     &self.0.pre_join.game,
                     None,
                 );
+
+                use std::io::Write as _;
+                std::writeln!(
+                    &mut steve.extra.file,
+                    "{}, {}, {}, {}, {}",
+                    std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_micros(),
+                    (cc.y * CHUNK_EXTENT.y) as f32 + steve.extra.predicted_rel_pos.y,
+                    (cc.y * CHUNK_EXTENT.y) as f32 + steve.entity.rel_pos.y,
+                    steve.extra.predicted_vel.y,
+                    steve.entity.state.vel.y,
+                ).unwrap();
             }
 
             for pig in self.0.pre_join.chunk_pigs.get_mut(cc, ci) {
@@ -148,6 +171,7 @@ impl GuiStateFrame for ClientGuiState {
                 }
                 do_steve_physics(
                     tick_catchup.unwrap_or(elapsed),
+                    tick_dst,
                     cc,
                     &mut pig.extra.predicted_rel_pos,
                     &mut pig.extra.predicted_vel,
@@ -223,7 +247,7 @@ impl GuiStateFrame for ClientGuiState {
             // have menu handle
             self.0.menu_mgr.on_key_press(ctx, key, typing);
             return;
-        } else if key == KeyCode::KeyP || key == KeyCode::KeyL {
+        } else if key == KeyCode::KeyP || key == KeyCode::KeyL || key == KeyCode::KeyO {
             let getter = self.0.pre_join.chunks.getter();
             let rot = Quaternion::rotation_y(self.0.yaw) * Quaternion::rotation_x(self.0.pitch);
             let looking_at = compute_looking_at(
@@ -235,23 +259,32 @@ impl GuiStateFrame for ClientGuiState {
                 &self.0.pre_join.game,
             );
             if let Some(looking_at) = looking_at {
-                let (gtc, bid_meta) =
-                    if key == KeyCode::KeyP {
-                        (
-                            looking_at.tile.gtc() +
-                                looking_at.face.map(|face| face.to_vec()).unwrap_or(0.into()),
-                            ErasedBidMeta::new(self.0.pre_join.game.content.stone.bid_stone, ()),
-                        )
-                    } else {
-                        (
-                            looking_at.tile.gtc(),
-                            ErasedBidMeta::new(AIR, ())
-                        )
-                    };
-                self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::SetTileBlock(
-                    PlayerMsgSetTileBlock { gtc, bid_meta }
-                )));
+                if key == KeyCode::KeyP || key == KeyCode::KeyL {
+                    let (gtc, bid_meta) =
+                        if key == KeyCode::KeyP {
+                            (
+                                looking_at.tile.gtc() +
+                                    looking_at.face.map(|face| face.to_vec()).unwrap_or(0.into()),
+                                ErasedBidMeta::new(self.0.pre_join.game.content.stone.bid_stone, ()),
+                            )
+                        } else {
+                            (
+                                looking_at.tile.gtc(),
+                                ErasedBidMeta::new(AIR, ())
+                            )
+                        };
+                    self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::SetTileBlock(
+                        PlayerMsgSetTileBlock { gtc, bid_meta }
+                    )));
+                } else {
+                    self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::SpawnSteve(
+                        looking_at.pos
+                        //looking_at.tile.gtc().map(|n| n as f32)
+                    )));
+                }
             }
+        } else if key == KeyCode::KeyK {
+            self.0.pre_join.connection.send(UpMsg::PlayerMsg(PlayerMsg::ClearSteves));
         } else if key == KeyCode::Escape {
             self.0.menu_mgr.set_menu(EscMenu::new(ctx.global()));
         } else if key == KeyCode::KeyE {
@@ -313,9 +346,11 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
     simple_blocks_cursor_impl!();
 
     fn draw(self, ctx: GuiSpatialContext<'a>, canvas: &mut Canvas2<'a, '_>) {
+        let rot = Quaternion::rotation_x(-self.inner.pitch) * Quaternion::rotation_y(-self.inner.yaw);
+        let dir = rot.conjugate() * Vec3::new(0.0, 0.0, 1.0);
         let vp = ViewProj::perspective(
             self.inner.pos,
-            Quaternion::rotation_x(-self.inner.pitch) * Quaternion::rotation_y(-self.inner.yaw),
+            rot,
             f32::to_radians(120.0),
             self.size,
         );
@@ -352,6 +387,48 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
                     .color(pig.entity.state.color)
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
             }
+        }
+        let getter = self.inner.chunks.getter();
+        if let Some(looking_at) = compute_looking_at(
+            self.inner.pos,
+            dir,
+            50.0,
+            &getter,
+            self.inner.tile_blocks,
+            ctx.game(),
+        ) {
+            const GAP: f32 = 0.002;
+
+            {
+                let mut canvas = canvas.reborrow()
+                    .translate(looking_at.tile.gtc().map(|n| n as f32))
+                    .color([0.0, 0.0, 0.0, 0.65]);
+
+                for face in FACES {
+                    for edge in face.to_edges() {
+                        let [start, end] = edge.to_corners()
+                            .map(|corner| corner.to_poles()
+                                .map(|pole| match pole {
+                                    Pole::Neg => 0.0 + GAP,
+                                    Pole::Pos => 1.0 - GAP,
+                                })
+                                + face.to_vec().map(|n| n as f32) * 2.0 * GAP);
+                        canvas.reborrow()
+                            .draw_line(start, end);
+                    }
+                }
+            }
+
+            canvas.reborrow()
+                .translate(looking_at.pos)
+                .color(Rgba::red())
+                .scale(0.1)
+                .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
+            canvas.reborrow()
+                .translate(looking_at.tile.gtc().map(|n| n as f32))
+                .color(Rgba::green())
+                .scale(0.1)
+                .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
         }
     }
 }

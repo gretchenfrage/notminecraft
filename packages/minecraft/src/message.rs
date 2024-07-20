@@ -62,6 +62,8 @@ pub enum PlayerMsg {
     CloseSyncMenu(PlayerMsgCloseSyncMenu),
     /// Player message to be processed by the currently open sync menu.
     SyncMenuMsg(SyncMenuMsg),
+    SpawnSteve(Vec3<f32>),
+    ClearSteves,
     ClockDebug(ServerRelTime),
 }
 

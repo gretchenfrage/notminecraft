@@ -50,7 +50,7 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
     
     let mut steves = Vec::new();
 
-    if rng.gen::<u32>() % 8 == 0 {
+    /*if rng.gen::<u32>() % 8 == 0 {
         steves.push(EntityData {
             uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
@@ -59,11 +59,11 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
                 vel: Default::default(),
             },
         });
-    }
+    }*/
 
     let mut pigs = Vec::new();
 
-    if rng.gen::<u32>() % 8 == 0 {
+    /*if rng.gen::<u32>() % 8 == 0 {
         pigs.push(EntityData {
             uuid: Uuid::new_v4(),
             rel_pos: Vec3::new(rng.gen(), rng.gen(), rng.gen()) * CHUNK_EXTENT.map(|n| n as f32),
@@ -72,7 +72,7 @@ pub fn generate_chunk(game: &Arc<GameData>, cc: Vec3<i64>) -> ChunkSaveVal {
                 vel: Default::default(),
             },
         });
-    }
+    }*/
 
     ChunkSaveVal {
         chunk_tile_blocks,

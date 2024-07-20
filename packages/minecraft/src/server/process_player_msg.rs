@@ -9,7 +9,9 @@ use crate::{
     },
     message::*,
     sync_state_inventory_slots,
+    sync_state_entities::SteveEntityState,
 };
+use chunk_data::*;
 use std::cmp::min;
 
 
@@ -33,6 +35,26 @@ pub fn process_player_msg(world: &mut SyncWorld, pk: JoinedPlayerKey, msg: Playe
         PlayerMsg::OpenSyncMenu(inner) => inner.process(world, pk),
         PlayerMsg::CloseSyncMenu(inner) => inner.process(world, pk),
         PlayerMsg::SyncMenuMsg(inner) => inner.process(world, pk),
+        PlayerMsg::SpawnSteve(pos) => {
+            let cc = (pos / CHUNK_EXTENT.map(|n| n as f32)).map(|n| n.floor() as i64);
+            let ci = world.getter.get(cc).expect("TODO");
+            world.chunk_steves.create_entity(
+                cc,
+                ci,
+                SteveEntityState { vel: Default::default(), name: "Steve".into() },
+                Default::default(),
+                pos % CHUNK_EXTENT.map(|n| n as f32),
+            );
+        }
+        PlayerMsg::ClearSteves => {
+            let mut chunk_steves = world.chunk_steves.iter_move_batch();
+            for (cc, ci) in world.sync_ctx.chunk_mgr.chunks().iter() {
+                let mut steves = chunk_steves.get(cc, ci);
+                while let Some(steve) = steves.next() {
+                    steve.delete();
+                }
+            }
+        }
         PlayerMsg::ClockDebug(time) => {
             use std::time::Instant;
             let now = Instant::now();

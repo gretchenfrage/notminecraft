@@ -237,6 +237,7 @@ fn do_tick(server: &mut Server) {
             )*/
             sync_state_entities::do_steve_physics(
                 TICK.as_secs_f32(),
+                0.0,
                 cc,
                 &mut rel_pos,
                 &mut vel,
@@ -254,6 +255,15 @@ fn do_tick(server: &mut Server) {
                     continue;
                 }
             }
+
+            use std::io::Write as _;
+            std::writeln!(
+                &mut steve.as_write().extra_mut().file,
+                "{}, {}, {}",
+                std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_micros(),
+                (cc.y * CHUNK_EXTENT.y) as f32 + rel_pos.y,
+                vel.y,
+            ).unwrap();
 
             steve.as_write().set_vel(vel);
             steve.set_rel_pos(rel_pos);
