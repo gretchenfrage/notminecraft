@@ -82,13 +82,24 @@ pub struct PreJoinClient {
     /// Handle for uploading data to the GPU asynchronously.
     pub gpu_vec_ctx: AsyncGpuVecContext,
 
-    /// Tick number of next tick that the server will complete.
+    /// Tick number of next tick that the server will complete (in terms of the client receiving
+    /// the consequential messages).
     pub next_tick_num: u64,
-    /// Scheduled start instant of next tick that the server will complete.
+    /// Scheduled start instant of next tick that the server will complete (in terms of the client
+    /// receiving the consequential messages).
     pub next_tick_instant: Instant,
-    /// Scheduled start instant of tick most recently completed by server, if exists and if update
-    /// has not occurred more recently than that.
-    pub just_finished_tick: Option<Instant>,
+    
+    pub caught_up_to: Instant,
+    pub next_catch_up_tick: Instant,
+    pub tick_just_finished: bool,
+    pub chunk_newly_added: PerChunk<bool>,
+
+    //pub caught_up_to: Option<Instant>,
+/*
+    /// Scheduled start instant of tick most recently completed by server (in terms of the client
+    /// receiving the consequential messages), if exists, and if update has _not_ occurred more
+    /// recently than that.
+    pub just_finished_tick: Option<Instant>,*/
 
     // TODO: factor out these meshing things
     pub item_mesh: PerItem<Mesh>,

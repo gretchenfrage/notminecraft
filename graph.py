@@ -9,7 +9,7 @@ CONNECT_LINES = False
 SHOW_BOTH = True
 
 # Load the data
-df_client = pd.read_csv('steve-client.csv', names=['timestamp', 'predicted', 'received', 'predicted_vel', 'received_vel'])
+df_client = pd.read_csv('steve-client.csv', names=['timestamp', 'predicted', 'received', 'smoothed', 'predicted_vel', 'received_vel'])
 df_server = pd.read_csv('steve-server.csv', names=['timestamp', 'value', 'velocity'])
 
 # Convert UNIX microsecond timestamps to datetime
@@ -32,6 +32,7 @@ else:
 # Primary axis for values
 ax1.plot(df_client['timestamp'], df_client['predicted'], plot_type, label='Client Predicted', linewidth=2, color='blue')
 ax1.plot(df_client['timestamp'], df_client['received'], plot_type, label='Client Received', linewidth=2, color='green')
+ax1.plot(df_client['timestamp'], df_client['smoothed'], plot_type, label='Client Smoothed', linewidth=2, color='purple')
 ax1.plot(df_server['timestamp'], df_server['value'], plot_type, label='Server', linewidth=2, color='red')
 
 # Secondary axis for velocities

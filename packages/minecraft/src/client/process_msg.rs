@@ -15,8 +15,6 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
     match msg {
         // finalize tick
         PreJoinDownMsg::TickDone { next_tick_num, skip_next } => {
-            client.just_finished_tick = Some(client.next_tick_instant);
-
             client.next_tick_num = client.next_tick_num.checked_add(1)
                 .ok_or_else(|| anyhow!("tick num overflowed"))?;
             ensure!(client.next_tick_num == next_tick_num, "unexpected tick num");
@@ -26,6 +24,12 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
                 .and_then(|i| TICK.checked_mul(i))
                 .and_then(|d| client.next_tick_instant.checked_add(d))
                 .ok_or_else(|| anyhow!("tick instant overflowed"))?;
+
+            client.caught_up_to = client.next_tick_instant - TICK;
+            client.next_catch_up_tick = client.next_tick_instant;
+            client.tick_just_finished = true;
+            /*
+            client.just_finished_tick = Some(client.next_tick_instant);*/
         },
         // add player to world
         PreJoinDownMsg::AddPlayer(DownMsgAddPlayer {
@@ -58,6 +62,7 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
             pigs,
         }) => {
             let (ci, _getter) = client.chunks.on_add_chunk(chunk_idx, cc)?.get(&client.chunks);
+            client.chunk_newly_added.add(cc, ci, true);
             client.tile_blocks.add(cc, ci, chunk_tile_blocks);
             client.chunk_mesh_mgr.add_chunk(cc, ci, &client.chunks, &client.tile_blocks);
             client.entities
@@ -80,6 +85,7 @@ pub fn process_pre_join_msg(client: &mut PreJoinClient, msg: PreJoinDownMsg) -> 
         // remove chunk from world
         PreJoinDownMsg::RemoveChunk(DownMsgRemoveChunk { chunk_idx }) => {
             let (cc, ci) = client.chunks.on_remove_chunk(chunk_idx)?;
+            client.chunk_newly_added.remove(cc, ci);
             client.tile_blocks.remove(cc, ci);
             client.chunk_mesh_mgr.remove_chunk(cc, ci);
         }

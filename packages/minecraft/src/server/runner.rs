@@ -235,7 +235,7 @@ fn do_tick(server: &mut Server) {
                 &mut vel,
 
             )*/
-            sync_state_entities::do_steve_physics(
+            /*sync_state_entities::do_steve_physics(
                 TICK.as_secs_f32(),
                 0.0,
                 cc,
@@ -245,7 +245,27 @@ fn do_tick(server: &mut Server) {
                 world.tile_blocks.as_ref(),
                 &world.sync_ctx.game,
                 Some(steve.as_write().extra_mut()),
+            );*/
+            sync_state_entities::steve_physics_continuous(
+                TICK.as_secs_f32(),
+                cc,
+                &mut rel_pos,
+                &mut vel,
+                &world.getter,
+                world.tile_blocks.as_ref(),
+                &world.sync_ctx.game,
+                Some(steve.as_write().extra_mut()),
             );
+            sync_state_entities::steve_physics_discrete(
+                cc,
+                &mut rel_pos,
+                &mut vel,
+                &world.getter,
+                world.tile_blocks.as_ref(),
+                &world.sync_ctx.game,
+                Some(steve.as_write().extra_mut()),
+            );
+
 
             let rel_cc_after = (rel_pos / CHUNK_EXTENT.map(|n| n as f32)).map(f32::floor);
             if rel_cc_after != Vec3::from(0.0) {

@@ -13,7 +13,8 @@ use crate::{
         menu_inventory::InventoryMenu,
         *,
     },
-    sync_state_entities::do_steve_physics,
+    server::tick_mgr::TICK,
+    sync_state_entities::{steve_physics_continuous, steve_physics_discrete},
     message::*,
     physics::prelude::*,
     gui::prelude::*,
@@ -25,6 +26,7 @@ use std::{
     fmt::{self, Formatter, Debug},
     time::{Instant, Duration},
     cmp::min,
+    mem::take,
 };
 use vek::*;
 use anyhow::*;
@@ -117,30 +119,219 @@ impl GuiStateFrame for ClientGuiState {
         trace!("client tick");
 
         // client-side prediction
+        /*
         let tick_catchup = self.0.pre_join.just_finished_tick.take()
             .map(|tick_start| {
                 let delta = now.checked_duration_since(tick_start).unwrap_or(Duration::ZERO);
                 delta.as_secs_f32()// + elapsed
                 //min(delta, MAX_CATCHUP).as_secs_f32()
-            });
+            });*/
+        //let just_finished_tick = self.0.pre_join.just_finished_tick.take();
 
+            /*
         let tdi = self.0.pre_join.next_tick_instant + Duration::from_secs_f32(tick_catchup.unwrap_or(elapsed));
         let tick_dst =
             if now > tdi {
                 now.duration_since(tdi).as_secs_f32()
             } else {
                 -tdi.duration_since(now).as_secs_f32()
-            } - 0.000001;
+            } - 0.000001;*/
+
+        let tick_just_finished = take(&mut self.0.pre_join.tick_just_finished);
 
         for (cc, ci, getter) in self.0.pre_join.chunks.iter() {
+            let chunk_newly_added = take(self.0.pre_join.chunk_newly_added.get_mut(cc, ci));
+
             for steve in self.0.pre_join.chunk_steves.get_mut(cc, ci) {
+                if tick_just_finished || chunk_newly_added {
+                    steve.extra.predicted_cc = cc;
+                    steve.extra.predicted_rel_pos = steve.entity.rel_pos;
+                    steve.extra.predicted_vel = steve.entity.state.vel;
+                }
+
+                let (mut caught_up_to, mut next_catch_up_tick) =
+                    if chunk_newly_added {
+                        (
+                            self.0.pre_join.next_tick_instant - TICK,
+                            self.0.pre_join.next_tick_instant,
+                        )
+                    } else {
+                        (
+                            self.0.pre_join.caught_up_to,
+                            self.0.pre_join.next_catch_up_tick,
+                        )
+                    };
+
+                //debug!("doing steve loop");
+                while caught_up_to < now {
+                    if next_catch_up_tick < now {
+                        steve_physics_continuous(
+                            next_catch_up_tick.duration_since(caught_up_to).as_secs_f32(),
+                            cc,
+                            &mut steve.extra.predicted_rel_pos,
+                            &mut steve.extra.predicted_vel,
+                            &getter,
+                            &self.0.pre_join.tile_blocks,
+                            &self.0.pre_join.game,
+                            None,
+                        );
+                        steve_physics_discrete(
+                            cc,
+                            &mut steve.extra.predicted_rel_pos,
+                            &mut steve.extra.predicted_vel,
+                            &getter,
+                            &self.0.pre_join.tile_blocks,
+                            &self.0.pre_join.game,
+                            None,
+                        );
+                        caught_up_to = next_catch_up_tick;
+                        next_catch_up_tick += TICK;
+                    } else {
+                        steve_physics_continuous(
+                            now.duration_since(caught_up_to).as_secs_f32(),
+                            cc,
+                            &mut steve.extra.predicted_rel_pos,
+                            &mut steve.extra.predicted_vel,
+                            &getter,
+                            &self.0.pre_join.tile_blocks,
+                            &self.0.pre_join.game,
+                            None,
+                        );
+                        caught_up_to = now;
+                    }
+                }
+
+                if let &mut Some((ref mut smoothed_rel_pos, ref mut smooth_vel)) = &mut steve.extra.smoothed_rel_pos_vel {
+                    let mut new_smoothed_rel_pos = *smoothed_rel_pos;
+                    
+                    /*steve_physics_continuous(
+                        elapsed,
+                        cc,
+                        &mut new_smoothed_rel_pos,
+                        smooth_vel,
+                        &getter,
+                        &self.0.pre_join.tile_blocks,
+                        &self.0.pre_join.game,
+                        None,
+                    );*/
+                    new_smoothed_rel_pos += *smooth_vel * elapsed;
+
+                    let old_to_new = new_smoothed_rel_pos - *smoothed_rel_pos;
+                    let old_to_pred = steve.extra.predicted_rel_pos - *smoothed_rel_pos;
+
+                    if old_to_new != Vec3::from(0.0) && old_to_pred != Vec3::from(0.0) {
+                        let dot = old_to_new.dot(old_to_pred);
+                        if dot / old_to_pred.magnitude() > old_to_new.magnitude() {
+                            *smoothed_rel_pos = new_smoothed_rel_pos;
+                        } else {
+                            *smoothed_rel_pos += old_to_new * (dot / old_to_new.magnitude());
+                        }
+                        /*let dot = old_to_new.normalized().dot(old_to_pred.normalized());
+                        if dot >= 1.0 {
+                            *smoothed_rel_pos = new_smoothed_rel_pos;
+                        } else if dot > 0.0 {
+                            *smoothed_rel_pos += old_to_new * dot;
+                        }*/
+                    }
+
+                    *smooth_vel = steve.extra.predicted_vel;
+
+                    /*
+                    let old_smoothed_to_pred = steve.extra.predicted_rel_pos - old_smoothed_rel_pos;
+                    if !old_smoothed_to_pred.zero() {
+                        let delta_smoothed_pos = new_smoothed_rel_pos - old_smoothed_rel_pos;
+                        let dot = delta_smoothed_pos.dot(old_smoothed_to_pred);
+                        let ideal_dist_along_dsp = dot / old_smoothed_to_pred.magnitude();
+
+                        if ideal_dist_along_dsp > 0.0 {
+                            if ideal_dist_along_dsp >= delta_smoothed_pos.magnitude() {
+                                steve.extra.smoothed_rel_pos = Some(new_smoothed_rel_pos);
+                            } else {
+                                steve.extra.smoothed_rel_pos = Some(old_smoothed_rel_pos + ideal_dist_along_dsp)
+                            }
+                        }
+                    }*/
+
+
+                    /*
+                    let a = (new_smoothed_rel_pos - old_smoothed_rel_pos).dot(steve.extra.predicted_rel_pos - old_smoothed_rel_pos);
+                    if a > 0.0 {
+                        if a * a >= (new_smoothed_rel_pos - old_smoothed_rel_pos).magnitude_squared() * (steve.extra.predicted_rel_pos - old_smoothed_rel_pos).magnitude_squared() {
+                            steve.extra.smoothed_rel_pos = Some(new_smoothed_rel_pos);
+                        } else {
+                            steve.extra.smoothed_rel_pos = Some(old_smoothed_rel_pos + (new_smoothed_rel_pos - old_smoothed_rel_pos) * a / ((steve.extra.predicted_rel_pos - old_smoothed_rel_pos).magnitude() / (new_smoothed_rel_pos - old_smoothed_rel_pos).magnitude()));
+                        }
+                    }*/
+                    
+
+
+                    /*if smooth_vel.y > -10.0 && !(
+                        (steve.extra.smoothed_rel_pos.unwrap() - steve.extra.predicted_rel_pos).magnitude()
+                        <=
+                        (old_smoothed_rel_pos - steve.extra.predicted_rel_pos).magnitude()
+                    ) {
+                        dbg!(steve.extra.predicted_rel_pos);
+                        dbg!(old_smoothed_rel_pos);
+                        dbg!(new_smoothed_rel_pos);
+                        dbg!(steve.extra.smoothed_rel_pos);
+                        dbg!(new_smoothed_rel_pos - old_smoothed_rel_pos);
+                        dbg!(steve.extra.predicted_rel_pos - old_smoothed_rel_pos);
+                        dbg!((new_smoothed_rel_pos - old_smoothed_rel_pos).magnitude_squared());
+                        dbg!((steve.extra.predicted_rel_pos - old_smoothed_rel_pos).magnitude_squared());
+                        dbg!(a);
+                        dbg!(a * a);
+                        dbg!(a * a >= (new_smoothed_rel_pos - old_smoothed_rel_pos).magnitude_squared() * (steve.extra.predicted_rel_pos - old_smoothed_rel_pos).magnitude_squared());
+                        dbg!((old_smoothed_rel_pos - steve.extra.predicted_rel_pos).magnitude());
+                        dbg!((steve.extra.smoothed_rel_pos.unwrap() - steve.extra.predicted_rel_pos).magnitude());
+                        panic!();
+                    }*/
+                } else {
+                    steve.extra.smoothed_rel_pos_vel = Some((steve.extra.predicted_rel_pos, steve.extra.predicted_vel));
+                }
+
+                /*
                 if tick_catchup.is_some() {
                     steve.extra.predicted_cc = cc;
                     steve.extra.predicted_rel_pos = steve.entity.rel_pos;
                     steve.extra.predicted_vel = steve.entity.state.vel;
                 }
-                do_steve_physics(
-                    tick_catchup.unwrap_or(elapsed), // TODO: more complete prediction limiting
+
+                let (mut caught_up_to, mut next_catch_up_tick) =
+                    if just_finished_tick.is_some() {
+                        (
+                            self.0.pre_join.next_tick_instant - TICK,
+                            self.0.pre_join.next_tick_instant,
+                        )
+                    } else {
+                        (
+                            now - Duration::from_secs_f32(elapsed),
+
+                    };
+
+
+                while caught_up_to < now {
+                    if now.duration_since(caught_up_to) < TICK {
+
+                    }
+                }*/
+                /*
+                if let Some(just_finished_tick) = just_finished_tick {
+
+                } else {
+                    steve_physics_continuous(
+                        elapsed
+                        cc,
+                        &mut steve.extra.predicted_rel_pos,
+                        &mut steve.extra.predicted_vel,
+                        &getter,
+                        &self.0.pre_join.tile_blocks,
+                        &self.0.pre_join.game,
+                        None,
+                    );
+                }*/
+                // TODO: more complete prediction limiting
+                /*do_steve_physics(
+                    tick_catchup.unwrap_or(elapsed), 
                     tick_dst,
                     cc,
                     &mut steve.extra.predicted_rel_pos,
@@ -149,21 +340,22 @@ impl GuiStateFrame for ClientGuiState {
                     &self.0.pre_join.tile_blocks,
                     &self.0.pre_join.game,
                     None,
-                );
+                );*/
 
                 use std::io::Write as _;
                 std::writeln!(
                     &mut steve.extra.file,
-                    "{}, {}, {}, {}, {}",
+                    "{}, {}, {}, {}, {}, {}",
                     std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_micros(),
                     (cc.y * CHUNK_EXTENT.y) as f32 + steve.extra.predicted_rel_pos.y,
                     (cc.y * CHUNK_EXTENT.y) as f32 + steve.entity.rel_pos.y,
+                    (cc.y * CHUNK_EXTENT.y) as f32 + steve.extra.smoothed_rel_pos_vel.unwrap().0.y,
                     steve.extra.predicted_vel.y,
                     steve.entity.state.vel.y,
                 ).unwrap();
             }
 
-            for pig in self.0.pre_join.chunk_pigs.get_mut(cc, ci) {
+            /*for pig in self.0.pre_join.chunk_pigs.get_mut(cc, ci) {
                 if tick_catchup.is_some() {
                     pig.extra.predicted_cc = cc;
                     pig.extra.predicted_rel_pos = pig.entity.rel_pos;
@@ -180,9 +372,19 @@ impl GuiStateFrame for ClientGuiState {
                     &self.0.pre_join.game,
                     None,
                 );
+            }*/
+        }
+
+        //debug!("doing post-steve loop");
+        while self.0.pre_join.caught_up_to < now {
+            if self.0.pre_join.next_catch_up_tick < now {
+                self.0.pre_join.caught_up_to = self.0.pre_join.next_catch_up_tick;
+                self.0.pre_join.next_catch_up_tick += TICK;
+            } else {
+                self.0.pre_join.caught_up_to = now;
             }
         }
-        
+
         // super basic movement logic
         if !self.0.menu_mgr.is_open_menu() {
             let mut movement = Vec3::new(0.0, 0.0, 0.0);
@@ -374,7 +576,7 @@ impl<'a> GuiNode<'a> for SimpleGuiBlock<WorldGuiBlock<'a>> {
             for steve in self.inner.chunk_steves.get(cc, ci) {
                 canvas.reborrow()
                     .translate((steve.extra.predicted_cc * CHUNK_EXTENT).map(|n| n as f32))
-                    .translate(steve.extra.predicted_rel_pos)
+                    .translate(steve.extra.smoothed_rel_pos_vel.unwrap().0)
                     .color([0.8, 0.8, 0.8, 1.0])
                     .draw_mesh(self.inner.steve_mesh, &ctx.assets().blocks);
             }

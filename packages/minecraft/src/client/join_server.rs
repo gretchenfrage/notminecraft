@@ -12,6 +12,7 @@ use crate::{
     server::{
         runner::ServerThread,
         save_db::SaveDb,
+        tick_mgr::TICK,
     },
     message::*,
     gui::prelude::*,
@@ -223,7 +224,13 @@ fn construct_pre_join_client(
         gpu_vec_ctx: gpu_vec_ctx.clone(),
         next_tick_num,
         next_tick_instant,
-        just_finished_tick: None,
+        //just_finished_tick: None,
+
+        caught_up_to: next_tick_instant - TICK,
+        next_catch_up_tick: next_tick_instant,
+        tick_just_finished: true,
+        chunk_newly_added: Default::default(),
+
         item_mesh: create_item_meshes(&game, &gpu_vec_ctx),
         chunks: Default::default(),
         tile_blocks: Default::default(),
